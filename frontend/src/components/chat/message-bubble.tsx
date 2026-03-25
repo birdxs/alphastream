@@ -1,6 +1,6 @@
-// Input: ChatMessage对象（含role、content、artifacts）
-// Output: 单条消息气泡UI（区分用户/AI，AI消息使用StreamMarkdown渲染，展示artifact标签）
-// Pos: chat-panel.tsx的子组件，负责单条消息渲染
+// Input: ChatMessage对象（含role、content、artifacts、created_at）
+// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact标签、时间戳）
+// Pos: message-list.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
@@ -17,27 +17,44 @@ export function MessageBubble({ message }: Props) {
 
   return (
     <div className={`flex gap-3 message-enter ${isUser ? "flex-row-reverse" : ""}`}>
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
-        isUser ? "bg-blue-500/20 text-blue-600" : "bg-primary/20 text-primary"
+      {/* 头像 */}
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+        isUser
+          ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white"
+          : "bg-gradient-to-br from-blue-500 to-purple-600 text-white"
       }`}>
         {isUser ? "我" : "AI"}
       </div>
-      <div className={`flex-1 ${isUser ? "text-right" : ""}`}>
-        <div className={`inline-block text-sm rounded-lg px-3 py-2 max-w-[90%] ${
-          isUser ? "bg-blue-500/10 text-foreground whitespace-pre-wrap" : "bg-muted text-foreground"
+
+      {/* 内容 */}
+      <div className={`flex-1 min-w-0 ${isUser ? "text-right" : ""}`}>
+        <div className={`inline-block text-sm rounded-2xl px-4 py-2.5 max-w-[90%] ${
+          isUser
+            ? "bg-primary text-primary-foreground rounded-br-md"
+            : "bg-muted/60 border border-border/40 rounded-bl-md"
         }`}>
-          {isUser ? message.content : <StreamMarkdown content={message.content} />}
+          {isUser ? (
+            <span className="whitespace-pre-wrap">{message.content}</span>
+          ) : (
+            <StreamMarkdown content={message.content} />
+          )}
         </div>
+
         {/* Artifact标签 */}
         {message.artifacts && message.artifacts.length > 0 && (
-          <div className="flex gap-1 mt-1 flex-wrap">
+          <div className={`flex gap-1 mt-1.5 flex-wrap ${isUser ? 'justify-end' : ''}`}>
             {message.artifacts.map((art, i) => (
-              <Badge key={i} variant="secondary" className="text-xs">
-                {art.title}
+              <Badge key={i} variant="secondary" className="text-[10px] gap-1 rounded-full">
+                {"\u{1F4CA}"} {art.title}
               </Badge>
             ))}
           </div>
         )}
+
+        {/* 时间戳 */}
+        <div className={`text-[10px] text-muted-foreground/50 mt-1 ${isUser ? 'text-right' : ''}`}>
+          {new Date(message.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+        </div>
       </div>
     </div>
   );

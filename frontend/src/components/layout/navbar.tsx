@@ -1,5 +1,5 @@
 // Input: 无（从theme-store获取状态）
-// Output: 顶部导航栏UI，含路由链接和主题/配色切换
+// Output: 顶部导航栏UI，含路由链接、主题/配色切换和移动端抽屉导航
 // Pos: 布局层，固定在页面顶部
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -7,7 +7,8 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Briefcase, Star, Settings, Menu } from "lucide-react";
+import { Sun, Moon, MessageSquare, Briefcase, Star, Settings } from "lucide-react";
+import { MobileDrawer } from "./mobile-drawer";
 
 export function Navbar() {
   const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
@@ -39,9 +40,7 @@ export function Navbar() {
             </Button>
           </Link>
         </div>
-        <Button variant="ghost" size="icon" className="sm:hidden">
-          <Menu className="h-5 w-5" />
-        </Button>
+        <MobileDrawer />
       </div>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={toggleColorScheme} title={stockColorScheme === 'cn' ? '红涨绿跌' : '绿涨红跌'}>

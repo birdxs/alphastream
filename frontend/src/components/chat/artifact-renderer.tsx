@@ -1,5 +1,5 @@
 // Input: 单个Artifact对象（含artifact_type、title、data）
-// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面、风险仪表、新闻、投资者共识、搜索结果等）
+// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面评分卡、风险雷达图、新闻列表、投资者共识、搜索结果等）
 // Pos: artifact-panel.tsx的子组件，Artifact路由渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -99,6 +99,45 @@ const SearchResultsArtifact = dynamic(
   }
 );
 
+const FundamentalScorecardArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/fundamental-scorecard").then((m) => ({
+      default: m.FundamentalScorecardArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const RiskRadarArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/risk-radar-chart").then((m) => ({
+      default: m.RiskRadarArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[300px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const NewsFeedArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/news-feed").then((m) => ({
+      default: m.NewsFeedArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
 interface Props {
   artifact: Artifact;
 }
@@ -149,64 +188,17 @@ function renderArtifactContent(artifact: Artifact) {
     case "search_results":
       return <SearchResultsArtifact data={data} />;
     case "fundamental_metrics":
-      return <FundamentalView data={data} />;
+      return <FundamentalScorecardArtifact data={data} />;
     case "risk_gauge":
-      return <RiskView data={data} />;
+      return <RiskRadarArtifact data={data} />;
     case "news_feed":
-      return <NewsView data={data} />;
+      return <NewsFeedArtifact data={data} />;
     default:
       return <GenericDataView data={data} />;
   }
 }
 
 // === 内联子组件 ===
-
-
-function FundamentalView({ data }: { data: Record<string, unknown> }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 text-sm">
-      {Object.entries(data).filter(([k]) => !["ai_commentary","tool_calls"].includes(k)).slice(0, 8).map(([k, v]) => (
-        <div key={k} className="flex justify-between bg-muted/50 rounded px-2 py-1">
-          <span className="text-muted-foreground">{k}</span>
-          <span className="font-mono">{String(v).slice(0, 20)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function RiskView({ data }: { data: Record<string, unknown> }) {
-  const riskScore = Number(data.risk_score || data.overall_risk || 50);
-  const riskLevel = String(data.risk_level || "中等");
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl font-bold">{riskScore}</span>
-        <span className="text-sm text-muted-foreground">/100 风险分 · {riskLevel}</span>
-      </div>
-      <div className="w-full bg-muted rounded-full h-3">
-        <div className={`h-3 rounded-full ${riskScore > 60 ? 'bg-red-500' : riskScore > 30 ? 'bg-yellow-500' : 'bg-green-500'}`}
-             style={{ width: `${riskScore}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function NewsView({ data }: { data: Record<string, unknown> }) {
-  const items = Array.isArray(data.items) ? data.items as Record<string, unknown>[] : [];
-  return (
-    <div className="space-y-2">
-      {items.slice(0, 5).map((item, i) => (
-        <div key={i} className="text-sm border-b pb-2">
-          <p className="font-medium">{String(item.title || "")}</p>
-          <p className="text-xs text-muted-foreground">{String(item.time || item.date || "")}</p>
-        </div>
-      ))}
-      {items.length === 0 && <p className="text-sm text-muted-foreground">暂无新闻</p>}
-    </div>
-  );
-}
 
 function GenericDataView({ data }: { data: Record<string, unknown> }) {
   return (
