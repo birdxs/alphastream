@@ -5,7 +5,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 创建数据和日志目录
-RUN mkdir -p /app/data /app/logs
+RUN mkdir -p /app/data /app/logs /app/data/news /app/data/agent_memory /app/data/agent_reflections /app/data/agent_strategies /app/data/agent_sessions
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
@@ -22,6 +22,8 @@ RUN echo 'deb http://mirrors.aliyun.com/debian/ bookworm main' > /etc/apt/source
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libxml2-dev \
+    libxslt-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制requirements.txt

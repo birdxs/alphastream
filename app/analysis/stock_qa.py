@@ -15,18 +15,15 @@ import openai
 from openai import OpenAI
 from urllib.parse import urlparse
 from datetime import datetime
+from app.core.ai_client import get_ai_client, get_ai_model, chat_completion
 
 
 class StockQA:
     def __init__(self, analyzer, openai_api_key=None):
         self.analyzer = analyzer
         self.openai_api_key = os.getenv('OPENAI_API_KEY', openai_api_key)
-        self.openai_api_url = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1')
-        self.openai_model = os.getenv('OPENAI_API_MODEL', 'gpt-4o')
-        self.client = OpenAI(
-            api_key=self.openai_api_key,
-            base_url=self.openai_api_url
-        )
+        self.client = get_ai_client()
+        self.openai_model = get_ai_model()
         self.serp_api_key = os.getenv('SERP_API_KEY')
         self.tavily_api_key = os.getenv('TAVILY_API_KEY')
         self.max_qa_rounds = int(os.getenv('MAX_QA', '10'))  # 默认保留10轮对话
@@ -134,13 +131,17 @@ class StockQA:
             
             # 调用AI API
             #第一步：调用模型，让它决定是否使用工具
-            first_response = self.client.chat.completions.create(
-                model=self.openai_model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.7
+            first_response, err = chat_completion(
+                self.client, messages,
+                tools=tools, tool_choice="auto", temperature=0.7
             )
+            if err:
+                return {
+                    "question": question,
+                    "answer": err,
+                    "stock_code": stock_code,
+                    "error": err
+                }
 
             # 获取初始响应
             assistant_message = first_response.choices[0].message
@@ -180,12 +181,17 @@ class StockQA:
                         })
                 
                 # 第二步：让模型根据工具调用结果生成最终响应
-                second_response = self.client.chat.completions.create(
-                    model=self.openai_model,
-                    messages=tool_messages,
-                    temperature=0.7
+                second_response, err2 = chat_completion(
+                    self.client, tool_messages, temperature=0.7
                 )
-                
+                if err2:
+                    return {
+                        "question": question,
+                        "answer": err2,
+                        "stock_code": stock_code,
+                        "error": err2
+                    }
+
                 response_content = second_response.choices[0].message.content
                 assistant_message = {"role": "assistant", "content": response_content}
             else:
@@ -361,7 +367,37 @@ class StockQA:
         """搜索股票相关新闻和实时信息"""
         try:
             self.logger.info(f"搜索股票新闻: {query}")
-            
+
+            # 优先使用统一搜索接口
+            try:
+                from app.core.search import search_stock_news_unified
+                unified_results = search_stock_news_unified(stock_code, stock_name, max_results=5)
+                if unified_results:
+                    # 转换为本方法的返回格式
+                    formatted = []
+                    for item in unified_results[:5]:
+                        formatted.append({
+                            "title": item.get("title", ""),
+                            "date": item.get("date", ""),
+                            "source": item.get("source", ""),
+                            "snippet": item.get("content", ""),
+                            "link": item.get("url", item.get("link", ""))
+                        })
+                    summary_text = ""
+                    for i, item in enumerate(formatted):
+                        summary_text += f"{i+1}、{item.get('title', '')}\n"
+                        summary_text += f"{item.get('snippet', '')}\n"
+                        summary_text += f"来源: {item.get('source', '')} {item.get('date', '')}\n\n"
+                    return {
+                        "message": f"找到 {len(formatted)} 条相关新闻（统一搜索）",
+                        "results": formatted,
+                        "summary": summary_text
+                    }
+            except ImportError:
+                pass  # search模块未安装，使用原有搜索逻辑
+            except Exception as e:
+                self.logger.warning(f"统一搜索失败，降级到原有搜索: {e}")
+
             # 确定市场名称
             market_name = "A股" if market_type == 'A' else "港股" if market_type == 'HK' else "美股"
             

@@ -39,6 +39,7 @@ from app.analysis.etf_analyzer import EtfAnalyzer
 
 import sys
 import os
+import re
 
 # 将 tradingagents 目录添加到系统路径
 # 这允许应用从 tradingagents 代码库中导入模块
@@ -47,6 +48,25 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../t
 
 # 加载环境变量
 load_dotenv()
+
+
+def validate_stock_code(stock_code, market_type='A'):
+    """验证股票代码格式"""
+    if not stock_code or not isinstance(stock_code, str):
+        return False, "股票代码不能为空"
+    stock_code = stock_code.strip()
+    if len(stock_code) > 10:
+        return False, "股票代码长度无效"
+    patterns = {
+        'A': r'^[0-9]{6}$',
+        'HK': r'^[0-9]{4,5}$',
+        'US': r'^[A-Za-z]{1,5}$'
+    }
+    pattern = patterns.get(market_type, patterns['A'])
+    if not re.match(pattern, stock_code):
+        return False, f"股票代码格式无效: {stock_code}"
+    return True, stock_code
+
 
 # 检查是否需要初始化数据库
 if USE_DATABASE:
@@ -64,7 +84,8 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 )
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127.0.0.1:8888').split(',')
+CORS(app, resources={r"/api/*": {"origins": allowed_origins, "methods": ["GET", "POST"], "allow_headers": ["Content-Type", "X-API-Key"]}})
 analyzer = StockAnalyzer()
 us_stock_service = USStockService()
 
@@ -82,7 +103,7 @@ if os.getenv('USE_REDIS_CACHE', 'False').lower() == 'true' and os.getenv('REDIS_
         'CACHE_DEFAULT_TIMEOUT': 300
     }
 
-cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+cache = Cache(config=cache_config)
 cache.init_app(app)
 
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
@@ -708,6 +729,11 @@ def start_stock_analysis():
         if not stock_code:
             return jsonify({'error': '请输入股票代码'}), 400
 
+        valid, result = validate_stock_code(stock_code, market_type)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
+
         app.logger.info(f"准备分析股票: {stock_code}")
 
         # 获取或创建任务
@@ -918,6 +944,11 @@ def enhanced_analysis():
         if not stock_code:
             return custom_jsonify({'error': '请输入股票代码'}), 400
 
+        valid, result = validate_stock_code(stock_code, market_type)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
+
         # 调用新的任务系统，但模拟同步行为
         # 这会导致和之前一样的超时问题，但保持兼容
         timeout = 300
@@ -1013,6 +1044,11 @@ def get_stock_data():
 
         if not stock_code:
             return custom_jsonify({'error': '请提供股票代码'}), 400
+
+        valid, result = validate_stock_code(stock_code, market_type)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
 
         # 根据period计算start_date
         end_date = datetime.now().strftime('%Y%m%d')
@@ -1426,6 +1462,11 @@ def api_fundamental_analysis():
         if not stock_code:
             return jsonify({'error': '请提供股票代码'}), 400
 
+        valid, result = validate_stock_code(stock_code)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
+
         # 获取基本面分析结果
         result = fundamental_analyzer.calculate_fundamental_score(stock_code)
 
@@ -1516,6 +1557,12 @@ def api_capital_flow():
         if not stock_code:
             return jsonify({'error': 'Stock code is required'}), 400
 
+        if market_type:
+            valid, result = validate_stock_code(stock_code, market_type)
+            if not valid:
+                return jsonify({'error': result}), 400
+            stock_code = result
+
         # Calculate capital flow score
         result = capital_flow_analyzer.calculate_capital_flow_score(stock_code, market_type)
 
@@ -1536,6 +1583,11 @@ def api_scenario_predict():
 
         if not stock_code:
             return jsonify({'error': '请提供股票代码'}), 400
+
+        valid, result = validate_stock_code(stock_code, market_type)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
 
         # 获取情景预测结果
         result = scenario_predictor.generate_scenarios(stock_code, market_type, days)
@@ -1558,6 +1610,11 @@ def api_qa():
         if not stock_code or not question:
             return jsonify({'error': '请提供股票代码和问题'}), 400
 
+        valid, result = validate_stock_code(stock_code, market_type)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
+
         # 获取智能问答结果
         result = stock_qa.answer_question(stock_code, question, market_type)
 
@@ -1577,6 +1634,11 @@ def api_risk_analysis():
 
         if not stock_code:
             return jsonify({'error': '请提供股票代码'}), 400
+
+        valid, result = validate_stock_code(stock_code, market_type)
+        if not valid:
+            return jsonify({'error': result}), 400
+        stock_code = result
 
         # 获取风险分析结果
         result = risk_monitor.analyze_stock_risk(stock_code, market_type)
@@ -1611,7 +1673,7 @@ def api_portfolio_risk():
 def api_index_analysis():
     try:
         index_code = request.args.get('index_code')
-        limit = int(request.args.get('limit', 30))
+        limit = min(max(int(request.args.get('limit', 30)), 1), 500)
 
         if not index_code:
             return jsonify({'error': '请提供指数代码'}), 400
@@ -1630,7 +1692,7 @@ def api_index_analysis():
 def api_industry_analysis():
     try:
         industry = request.args.get('industry')
-        limit = int(request.args.get('limit', 30))
+        limit = min(max(int(request.args.get('limit', 30)), 1), 500)
 
         if not industry:
             return jsonify({'error': '请提供行业名称'}), 400
@@ -1683,7 +1745,7 @@ def api_industry_detail():
 @app.route('/api/industry_compare', methods=['GET'])
 def api_industry_compare():
     try:
-        limit = int(request.args.get('limit', 10))
+        limit = min(max(int(request.args.get('limit', 10)), 1), 500)
 
         # 获取行业比较结果
         result = index_industry_analyzer.compare_industries(limit)
@@ -1735,7 +1797,7 @@ def get_history_analysis():
         return jsonify({'error': '数据库功能未启用'}), 400
 
     stock_code = request.args.get('stock_code')
-    limit = int(request.args.get('limit', 10))
+    limit = min(max(int(request.args.get('limit', 10)), 1), 500)
 
     if not stock_code:
         return jsonify({'error': '请提供股票代码'}), 400
@@ -1768,7 +1830,7 @@ def get_history_analysis():
 def get_latest_news():
     try:
         days = int(request.args.get('days', 1))  # 默认获取1天的新闻
-        limit = int(request.args.get('limit', 1000))  # 默认最多获取1000条
+        limit = min(max(int(request.args.get('limit', 1000)), 1), 500)  # 限制范围1-500
         only_important = request.args.get('important', '0') == '1'  # 是否只看重要新闻
         news_type = request.args.get('type', 'all')  # 新闻类型，可选值: all, hotspot
 
@@ -2001,6 +2063,12 @@ def start_agent_analysis():
         if not stock_code:
             return jsonify({'error': '请提供股票代码'}), 400
 
+        # 验证股票代码格式
+        is_valid, validated_code = validate_stock_code(stock_code, market_type)
+        if not is_valid:
+            return jsonify({'error': validated_code}), 400
+        stock_code = validated_code
+
         # 创建新任务
         task_id = generate_task_id()
         task = {
@@ -2028,89 +2096,116 @@ def start_agent_analysis():
         def run_agent_analysis():
             """在后台线程中运行智能体分析"""
             try:
-                from tradingagents.graph.trading_graph import TradingAgentsGraph
-                from tradingagents.default_config import DEFAULT_CONFIG
-                
-                update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=5, result={'current_step': '正在初始化智能体...'})
+                # 特性开关：使用新Agent系统或旧TradingAgents
+                use_new_agent = os.getenv('USE_AGENT_SYSTEM', 'true').lower() == 'true'
 
-                # --- 修复 Start: 强制使用主应用的OpenAI代理配置 ---
-                config = DEFAULT_CONFIG.copy()
-                config['llm_provider'] = 'openai'
-                config['backend_url'] = os.getenv('OPENAI_API_URL')
-                main_model = os.getenv('OPENAI_API_MODEL', 'gpt-4o')
-                config['deep_think_llm'] = main_model
-                config['quick_think_llm'] = main_model
-                config['memory_enabled'] = enable_memory
-                config['max_tokens'] = max_output_length
-                
-                if not os.getenv('OPENAI_API_KEY'):
-                    raise ValueError("主应用的 OPENAI_API_KEY 未在.env文件中设置")
+                if use_new_agent:
+                    # === 新Agent系统（LangGraph编排） ===
+                    from app.agents.coordinator import run_agent_analysis as agent_run
 
-                app.logger.info(f"强制使用主应用代理配置进行智能体分析: provider={config['llm_provider']}, url={config['backend_url']}, model={config['deep_think_llm']}")
+                    update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=5, result={'current_step': '正在初始化多Agent分析系统...'})
 
-                ta = TradingAgentsGraph(
-                    selected_analysts=selected_analysts,
-                    debug=True, 
-                    config=config
-                )
-                # --- 修复 End ---
-                
-                def progress_callback(progress, step):
-                    current_task = agent_session_manager.load_task(task_id)
-                    if not current_task or current_task.get('status') == TASK_CANCELLED:
-                         raise TaskCancelledException(f"任务 {task_id} 已被用户取消")
-                    update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=progress, result={'current_step': step})
+                    result_state = agent_run(
+                        stock_code=stock_code,
+                        market_type=market_type,
+                        research_depth=research_depth,
+                        selected_analysts=selected_analysts
+                    )
 
-                today = analysis_date or datetime.now().strftime('%Y-%m-%d')
+                    # 获取公司名称
+                    try:
+                        stock_info = analyzer.get_stock_info(stock_code)
+                        stock_name = stock_info.get('股票名称', '未知')
+                        result_state['company_name'] = stock_name
+                    except Exception as e:
+                        app.logger.error(f"获取公司名称时出错: {e}")
+                        result_state['company_name'] = '名称获取失败'
 
-                # Issue #34 修复: 检查propagate方法签名，兼容不同版本的tradingagents库
-                import inspect
-                propagate_sig = inspect.signature(ta.propagate)
-                propagate_params = propagate_sig.parameters
+                    # 构造前端期望的decision格式
+                    final_decision = result_state.get('final_decision', {})
+                    decision_obj = {
+                        'action': final_decision.get('action', 'HOLD'),
+                        'reasoning': final_decision.get('reasoning', '分析完成'),
+                        'confidence': final_decision.get('confidence', 0.5),
+                        'risk_score': 1.0 - final_decision.get('confidence', 0.5)
+                    }
 
-                kwargs = {}
-                if 'market_type' in propagate_params:
-                    kwargs['market_type'] = market_type
-                if 'progress_callback' in propagate_params:
-                    kwargs['progress_callback'] = progress_callback
+                    update_task_status('agent_analysis', task_id, TASK_COMPLETED, progress=100, result={
+                        'decision': decision_obj,
+                        'final_state': result_state,
+                        'current_step': '多Agent分析完成',
+                        'execution_log': result_state.get('execution_log', []),
+                        'errors': result_state.get('errors', [])
+                    })
+                    app.logger.info(f"Agent分析任务 {task_id} 完成 (新系统)")
 
-                # 由于tradingagents库不支持progress_callback，手动更新进度
-                update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=30, result={'current_step': '正在进行多智能体分析...'})
-                state, raw_decision = ta.propagate(stock_code, today, **kwargs)
-                update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=90, result={'current_step': '正在生成分析报告...'})
+                else:
+                    # === 旧TradingAgents系统（保持兼容） ===
+                    from tradingagents.graph.trading_graph import TradingAgentsGraph
+                    from tradingagents.default_config import DEFAULT_CONFIG
 
-                # 修复：在任务完成时，获取并添加公司名称到最终结果中
-                try:
-                    stock_info = analyzer.get_stock_info(stock_code)
-                    stock_name = stock_info.get('股票名称', '未知')
-                    if isinstance(state, dict):
-                        state['company_name'] = stock_name
-                except Exception as e:
-                    app.logger.error(f"为 {stock_code} 获取公司名称时出错: {e}")
-                    if isinstance(state, dict):
-                        state['company_name'] = '名称获取失败'
+                    update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=5, result={'current_step': '正在初始化智能体...'})
 
-                # 构造前端期望的decision对象格式
-                final_trade_decision = state.get('final_trade_decision', '') if isinstance(state, dict) else ''
-                action = raw_decision.strip().upper() if raw_decision else 'HOLD'
-                if action not in ['BUY', 'SELL', 'HOLD']:
-                    # 尝试从final_trade_decision中提取
-                    if 'BUY' in final_trade_decision.upper():
-                        action = 'BUY'
-                    elif 'SELL' in final_trade_decision.upper():
-                        action = 'SELL'
-                    else:
-                        action = 'HOLD'
+                    config = DEFAULT_CONFIG.copy()
+                    config['llm_provider'] = 'openai'
+                    config['backend_url'] = os.getenv('OPENAI_API_URL')
+                    main_model = os.getenv('OPENAI_API_MODEL', 'gpt-4o')
+                    config['deep_think_llm'] = main_model
+                    config['quick_think_llm'] = main_model
+                    config['memory_enabled'] = enable_memory
+                    config['max_tokens'] = max_output_length
 
-                decision_obj = {
-                    'action': action,
-                    'reasoning': final_trade_decision[:500] if final_trade_decision else '分析完成',
-                    'confidence': 0.7,
-                    'risk_score': 0.5
-                }
+                    if not os.getenv('OPENAI_API_KEY'):
+                        raise ValueError("OPENAI_API_KEY 未在.env文件中设置")
 
-                update_task_status('agent_analysis', task_id, TASK_COMPLETED, progress=100, result={'decision': decision_obj, 'final_state': state, 'current_step': '分析完成'})
-                app.logger.info(f"智能体分析任务 {task_id} 完成")
+                    ta = TradingAgentsGraph(
+                        selected_analysts=selected_analysts,
+                        debug=True,
+                        config=config
+                    )
+
+                    today = analysis_date or datetime.now().strftime('%Y-%m-%d')
+
+                    import inspect
+                    propagate_sig = inspect.signature(ta.propagate)
+                    propagate_params = propagate_sig.parameters
+                    kwargs = {}
+                    if 'market_type' in propagate_params:
+                        kwargs['market_type'] = market_type
+
+                    update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=30, result={'current_step': '正在进行多智能体分析...'})
+                    state, raw_decision = ta.propagate(stock_code, today, **kwargs)
+                    update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=90, result={'current_step': '正在生成分析报告...'})
+
+                    try:
+                        stock_info = analyzer.get_stock_info(stock_code)
+                        stock_name = stock_info.get('股票名称', '未知')
+                        if isinstance(state, dict):
+                            state['company_name'] = stock_name
+                    except Exception as e:
+                        app.logger.error(f"获取公司名称时出错: {e}")
+                        if isinstance(state, dict):
+                            state['company_name'] = '名称获取失败'
+
+                    final_trade_decision = state.get('final_trade_decision', '') if isinstance(state, dict) else ''
+                    action = raw_decision.strip().upper() if raw_decision else 'HOLD'
+                    if action not in ['BUY', 'SELL', 'HOLD']:
+                        if 'BUY' in final_trade_decision.upper():
+                            action = 'BUY'
+                        elif 'SELL' in final_trade_decision.upper():
+                            action = 'SELL'
+                        else:
+                            action = 'HOLD'
+
+                    decision_obj = {
+                        'action': action,
+                        'reasoning': final_trade_decision[:500] if final_trade_decision else '分析完成',
+                        'confidence': 0.7,
+                        'risk_score': 0.5
+                    }
+
+                    update_task_status('agent_analysis', task_id, TASK_COMPLETED, progress=100, result={'decision': decision_obj, 'final_state': state, 'current_step': '分析完成'})
+                    app.logger.info(f"智能体分析任务 {task_id} 完成 (旧系统)")
 
             except TaskCancelledException as e:
                 app.logger.info(str(e))
@@ -2220,6 +2315,35 @@ def delete_agent_analysis():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/agent_pending_approvals', methods=['GET'])
+def get_pending_approvals():
+    """获取待人工审批的Agent决策"""
+    try:
+        from app.agents.hitl import approval_manager
+        pending = approval_manager.get_pending_approvals()
+        return jsonify({'approvals': pending})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/agent_submit_approval', methods=['POST'])
+def submit_agent_approval():
+    """提交人工审批结果"""
+    try:
+        from app.agents.hitl import approval_manager
+        data = request.json
+        task_id = data.get('task_id')
+        approved = data.get('approved', False)
+        feedback = data.get('feedback', '')
+        if not task_id:
+            return jsonify({'error': '请提供task_id'}), 400
+        success = approval_manager.submit_approval(task_id, approved, feedback)
+        if success:
+            return jsonify({'message': '审批已提交', 'approved': approved})
+        return jsonify({'error': '未找到待审批任务'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/active_tasks', methods=['GET'])
 def get_active_tasks():
@@ -2241,6 +2365,33 @@ def get_active_tasks():
         return custom_jsonify({'active_tasks': active_tasks_list})
     except Exception as e:
         app.logger.error(f"获取活动任务时出错: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ===== MCP 工具服务端点 =====
+
+@app.route('/api/mcp/tools', methods=['GET'])
+def mcp_list_tools():
+    """列出MCP可用工具"""
+    try:
+        from app.mcp.stock_data_server import MCP_SERVER_CONFIG
+        return jsonify(MCP_SERVER_CONFIG)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mcp/call', methods=['POST'])
+def mcp_call_tool():
+    """调用MCP工具"""
+    try:
+        from app.mcp.stock_data_server import handle_mcp_tool_call
+        data = request.json
+        tool_name = data.get('tool')
+        arguments = data.get('arguments', {})
+        if not tool_name:
+            return jsonify({'error': '请提供tool参数'}), 400
+        result = handle_mcp_tool_call(tool_name, arguments)
+        return jsonify({'result': result})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 

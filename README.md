@@ -1,10 +1,11 @@
 # 智能分析系统
 
-![版本](https://img.shields.io/badge/版本-2.1.2-blue.svg)
-![Python](https://img.shields.io/badge/Python-3.7+-green.svg)
-![Flask](https://img.shields.io/badge/Flask-2.0+-red.svg)
-![AKShare](https://img.shields.io/badge/AKShare-1.0.0+-orange.svg)
+![版本](https://img.shields.io/badge/版本-2.2.0-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.9+-green.svg)
+![Flask](https://img.shields.io/badge/Flask-3.1-red.svg)
+![AKShare](https://img.shields.io/badge/AKShare-1.16+-orange.svg)
 ![AI](https://img.shields.io/badge/AI_API-集成-blueviolet.svg)
+![LangGraph](https://img.shields.io/badge/LangGraph-Multi_Agent-purple.svg)
 
 ![系统首页截图](./images/1.png)
 
@@ -14,7 +15,7 @@
 
 ## 📝 项目概述
 
-智能分析系统是一个基于Python和Flask的Web应用，整合了多维度股票分析能力和人工智能辅助决策功能。系统通过AKShare获取股票数据，结合技术分析、基本面分析和资金面分析，为投资者提供全方位的投资决策支持。
+智能分析系统是一个基于Python、Flask和LangGraph的Web应用，整合了多Agent协同分析能力和人工智能辅助决策功能。系统通过多数据源（AKShare/BaoStock）获取股票数据，结合13个专业Agent（技术分析、基本面、资金流、情绪分析、多空辩论、投资者人格、风险管理、智能决策），为投资者提供全方位的AI驱动投资决策支持。
 
 ## ✨ 核心功能
 
@@ -31,6 +32,16 @@
 - **支撑压力位自动识别**：智能识别关键价格区域
 - **情景预测**：生成乐观、中性、悲观多种市场情景，优化预测精度和可视化效果
 - **智能问答**：支持联网搜索实时信息和多轮对话，回答关于个股的专业问题
+
+### 多Agent协同分析（v2.2.0 新增）
+
+- **LangGraph编排引擎**：动态深度路由（1-5级），按需调用不同数量的Agent
+- **9大分析Agent**：技术分析师、基本面分析师、资金流分析师、情绪分析师、看多研究员、看空研究员、风险管理官、投资决策者、反思Agent
+- **投资者人格分析**：巴菲特（价值投资）、芒格（多元思维）、彼得·林奇（成长投资）、达摩达兰（估值大师），投票机制综合决策
+- **Agent自主进化**：反思学习 + 语义记忆 + 策略自适应演进
+- **开源搜索集成**：DuckDuckGo免费搜索（无需API Key）→ Tavily → SERP 多源降级
+- **Human-in-the-Loop**：高风险决策自动暂停等待人工审批
+- **MCP工具服务器**：5个标准化工具接口，支持跨系统调用
 
 ### 市场分析工具
 
@@ -60,8 +71,16 @@
 │
 ├── run.py                   # 应用入口
 ├── app/                     # 应用主目录
-│   ├── core/                # 核心模块
-│   │   └── database.py      # 数据库管理
+│   ├── core/                # 核心基础设施
+│   │   ├── ai_client.py      # 统一AI客户端（超时/重试/错误处理）
+│   │   ├── data_provider.py   # 统一数据层（多源故障转移）
+│   │   ├── cache.py           # Redis统一缓存（Redis/内存降级）
+│   │   ├── search.py          # 统一搜索引擎（DuckDuckGo/Tavily/SERP）
+│   │   ├── agent_memory.py    # Agent语义记忆系统
+│   │   ├── event_bus.py       # Agent事件通信总线
+│   │   ├── tools.py           # 共享工具函数
+│   │   ├── fallback_manager.py # 故障转移管理器
+│   │   └── database.py        # 数据库管理
 │   │
 │   ├── analysis/            # 分析引擎模块
 │   │   ├── stock_analyzer.py        # 股票分析核心引擎
@@ -75,6 +94,28 @@
 │   │   ├── stock_qa.py              # 智能问答（支持联网搜索）
 │   │   ├── news_fetcher.py          # 新闻获取与缓存
 │   │   └── us_stock_service.py      # 美股服务
+│   │
+│   ├── agents/             # 多Agent分析子系统（LangGraph编排）
+│   │   ├── coordinator.py          # LangGraph图编排协调器
+│   │   ├── technical_analyst.py    # 技术分析Agent
+│   │   ├── fundamental_analyst.py  # 基本面Agent
+│   │   ├── capital_flow_analyst.py # 资金流Agent
+│   │   ├── sentiment_analyst.py    # 情绪/新闻Agent
+│   │   ├── bull_researcher.py      # 看多研究员
+│   │   ├── bear_researcher.py      # 看空研究员
+│   │   ├── risk_manager.py         # 风险管理Agent
+│   │   ├── decision_maker.py       # 投资决策Agent
+│   │   ├── reflection.py           # 反思学习Agent
+│   │   ├── strategy_evolver.py     # 策略自适应演进
+│   │   ├── hitl.py                 # Human-in-the-Loop审批
+│   │   └── investors/              # 投资者人格Agent
+│   │       ├── buffett.py          # 巴菲特风格
+│   │       ├── munger.py           # 芒格风格
+│   │       ├── lynch.py            # 彼得·林奇风格
+│   │       └── damodaran.py        # 达摩达兰风格
+│   │
+│   ├── mcp/                # MCP协议工具服务器
+│   │   └── stock_data_server.py    # 股票数据MCP Server
 │   │
 │   ├── web/                 # Web服务模块
 │   │   ├── web_server.py            # Web服务器和路由控制
@@ -101,16 +142,19 @@
 
 ### 技术栈
 
-- **后端**：Python, Flask, AKShare, AI API
+- **后端**：Python 3.9+, Flask 3.1, AKShare, BaoStock
+- **AI引擎**：OpenAI兼容API, LangGraph多Agent编排, LangChain
 - **前端**：HTML5, CSS3, JavaScript, Bootstrap 5, ApexCharts
-- **数据分析**：Pandas, NumPy
-- **AI**：各种AI模型集成
+- **数据分析**：Pandas, NumPy, Scikit-learn
+- **搜索**：DuckDuckGo（免费）, Tavily, SERP API
+- **缓存**：Redis（可选）/ 内存缓存
+- **部署**：Docker, Gunicorn, docker-compose
 
 ## 📦 安装指南
 
 ### 环境要求
 
-- Python 3.7+
+- Python 3.9+
 - pip包管理器
 - 网络连接（用于获取股票数据和访问AI API）
 
@@ -161,6 +205,12 @@ NEWS_MODEL=你的可联网模型
 | `OPENAI_API_URL` | OpenAI API端点URL | `https://api.openai.com/v1` |
 | `OPENAI_API_MODEL` | 使用的OpenAI模型 | `gpt-4o` |
 | `PORT` | Web服务器端口 | `8888` |
+| `USE_AGENT_SYSTEM` | Agent系统开关 | `true` |
+| `USE_REDIS_CACHE` | Redis缓存开关 | `false` |
+| `REDIS_URL` | Redis连接地址 | `redis://localhost:6379` |
+| `TAVILY_API_KEY` | Tavily搜索API密钥（可选） | 无 |
+| `SERP_API_KEY` | SERP搜索API密钥（可选） | 无 |
+| `ALLOWED_ORIGINS` | 允许的跨域来源 | `localhost:8888` |
 
 ### 技术指标参数
 
@@ -182,6 +232,8 @@ NEWS_MODEL=你的可联网模型
 - **任务结果缓存**：保存已完成任务的结果
 - **新闻数据缓存**：按天存储新闻数据，避免重复内容
 - **自动缓存清理**：每天收盘时间(16:30左右)自动清理所有缓存，确保数据实时性
+- **Redis统一缓存**：支持Redis集群缓存和内存降级（可选）
+- **Agent记忆缓存**：分析历史持久化，支持语义检索
 
 ## 🚀 使用指南
 
@@ -293,15 +345,25 @@ bash scripts/start.sh logs       # 查看日志
 - Agent分析API：`/api/start_agent_analysis`
 - 资金流向API：`/api/capital_flow`
 - 基本面分析API：`/api/fundamental_analysis`
+- MCP工具列表API：`/api/mcp/tools`
+- MCP工具调用API：`/api/mcp/call`
+- Agent审批列表API：`/api/agent_pending_approvals`
+- Agent审批提交API：`/api/agent_submit_approval`
 
 ## 📋 版本历史
 
-### v2.1.2 (当前版本)
+### v2.2.0 (当前版本)
+- 全面Agent化改造：13个专业Agent + LangGraph编排 + 投资者人格
+- 新增开源搜索集成（DuckDuckGo免费搜索，无需API Key）
+- 新增Redis统一缓存层 + Agent记忆系统 + 事件总线
+- 新增Human-in-the-Loop高风险决策审批
+- 新增MCP工具服务器（标准化Agent工具接口）
+- 安全加固：CORS限制、输入验证、移除硬编码密钥
+- 修复10+个Issue：AI超时、数据源封禁、新闻去重等
+
+### v2.1.2
 - 实现数据接口双层冗余架构（akshare内部冗余 + baostock跨库备用）
 - 新增DataProvider统一数据层和FallbackManager故障转移管理器
-- 修复情景预测AI分析JSON解析问题
-
-查看完整更新记录：[CHANGELOG.md](./docs/CHANGELOG.md)
 
 ## 🔄 扩展开发
 
