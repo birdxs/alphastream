@@ -103,6 +103,7 @@ class BullResearcherAgent:
 
             return {
                 'bull_case': bull_case_text,
+                'progress': 50.0,
                 'execution_log': state.get('execution_log', []) + [
                     {'agent': '看多研究员', 'status': 'success'}
                 ]

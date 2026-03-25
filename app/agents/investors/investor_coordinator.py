@@ -98,6 +98,7 @@ class InvestorCoordinator:
         return {
             'investor_opinions': investor_opinions,
             'investor_consensus': consensus,
+            'progress': 80.0,
             'execution_log': execution_log
         }
 

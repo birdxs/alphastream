@@ -32,7 +32,7 @@ class AgentMemory:
             'decision': analysis_result.get('final_decision', {}),
             'technical_score': self._extract_score(analysis_result.get('technical_report', {})),
             'risk_level': analysis_result.get('risk_assessment', {}).get('risk_level', 'unknown'),
-            'investor_consensus': analysis_result.get('investor_consensus', ''),
+            'investor_consensus': analysis_result.get('investor_consensus', {}),
         }
 
         history.append(entry)

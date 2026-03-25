@@ -102,6 +102,7 @@ class BearResearcherAgent:
 
             return {
                 'bear_case': bear_case_text,
+                'progress': 50.0,
                 'execution_log': state.get('execution_log', []) + [
                     {'agent': '看空研究员', 'status': 'success'}
                 ]

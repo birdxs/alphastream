@@ -81,6 +81,7 @@ class CapitalFlowAnalystAgent:
 
             return {
                 'capital_flow_report': result,
+                'progress': 25.0,
                 'execution_log': state.get('execution_log', []) + [
                     {'agent': '资金流向分析师', 'status': 'success', 'mode': 'ai_agent', 'tools_used': len(tool_log)}
                 ]
@@ -213,6 +214,7 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         'capital_flow_report': result,
+        'progress': 25.0,
         'execution_log': state.get('execution_log', []) + [
             {'agent': '资金流向分析师', 'status': 'success', 'mode': 'fallback'}
         ]

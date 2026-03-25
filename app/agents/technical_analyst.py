@@ -72,6 +72,7 @@ class TechnicalAnalystAgent:
 
             return {
                 'technical_report': result,
+                'progress': 10.0,
                 'execution_log': state.get('execution_log', []) + [
                     {'agent': '技术分析师', 'status': 'success', 'mode': 'ai_agent', 'tools_used': len(tool_log)}
                 ]
@@ -226,6 +227,7 @@ MACD信号: {result.get('macd_signal', 'N/A')}
 
     return {
         'technical_report': result,
+        'progress': 10.0,
         'execution_log': state.get('execution_log', []) + [
             {'agent': '技术分析师', 'status': 'success', 'mode': 'fallback'}
         ]

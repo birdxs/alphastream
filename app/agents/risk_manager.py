@@ -80,6 +80,7 @@ class RiskManagerAgent:
 
             return {
                 'risk_assessment': result,
+                'progress': 70.0,
                 'execution_log': state.get('execution_log', []) + [
                     {'agent': '风险管理官', 'status': 'success', 'mode': 'ai_agent', 'tools_used': len(tool_log)}
                 ]
@@ -199,6 +200,7 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         'risk_assessment': result or {'error': '风险评估未返回结果'},
+        'progress': 70.0,
         'execution_log': state.get('execution_log', []) + [
             {'agent': '风险管理官', 'status': 'success' if result else 'partial', 'mode': 'fallback'}
         ]
