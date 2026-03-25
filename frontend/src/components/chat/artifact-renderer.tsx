@@ -1,11 +1,51 @@
 // Input: 单个Artifact对象（含artifact_type、title、data）
-// Output: 根据artifact_type路由渲染对应的React组件（决策卡、技术指标、基本面、风险仪表、新闻等）
+// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面、风险仪表、新闻等）
 // Pos: artifact-panel.tsx的子组件，Artifact路由渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import dynamic from "next/dynamic";
 import type { Artifact } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+
+const CandlestickChartArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/candlestick-chart").then((m) => ({
+      default: m.CandlestickChartArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[400px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const ScoreRadarArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/score-radar").then((m) => ({
+      default: m.ScoreRadarArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[300px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const CapitalFlowArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/capital-flow-chart").then((m) => ({
+      default: m.CapitalFlowArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
 
 interface Props {
   artifact: Artifact;
@@ -47,10 +87,19 @@ function renderArtifactContent(artifact: Artifact) {
   const { artifact_type, data } = artifact;
 
   switch (artifact_type) {
+    case "candlestick_chart":
+      return <CandlestickChartArtifact data={data} />;
+    case "technical_indicators":
+      return (
+        <div className="space-y-4">
+          <ScoreRadarArtifact data={data} />
+          <TechnicalView data={data} />
+        </div>
+      );
+    case "capital_flow_chart":
+      return <CapitalFlowArtifact data={data} />;
     case "decision_card":
       return <DecisionCardView data={data} />;
-    case "technical_indicators":
-      return <TechnicalView data={data} />;
     case "fundamental_metrics":
       return <FundamentalView data={data} />;
     case "risk_gauge":
