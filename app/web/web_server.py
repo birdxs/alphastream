@@ -2395,6 +2395,277 @@ def mcp_call_tool():
         return jsonify({'error': str(e)}), 500
 
 
+# ===== AI对话 & Agent分析 SSE流式端点 =====
+
+@app.route('/api/ai/chat', methods=['POST'])
+def ai_chat_stream():
+    """AI对话流式端点 — SSE输出Token+工具调用+Agent状态+Artifact"""
+    from flask import Response, stream_with_context
+    import queue
+    from app.core.ai_client import get_ai_client, chat_with_tools_stream
+    from app.core.tools import OPENAI_TOOLS_SCHEMA
+    from app.core.artifact_wrapper import execute_tool_with_artifact
+    from app.core.conversation import get_conversation_manager
+    from app.core.event_bus import get_event_bus, create_sse_bridge, destroy_sse_bridge
+
+    data = request.json
+    message = data.get('message', '')
+    conversation_id = data.get('conversation_id', '')
+    stock_code = data.get('stock_code', '')
+    market_type = data.get('market_type', 'A')
+    research_depth = data.get('research_depth', 3)
+
+    if not message:
+        return jsonify({'error': '请输入消息'}), 400
+
+    client = get_ai_client()
+    if not client:
+        return jsonify({'error': 'AI服务未配置'}), 503
+
+    # 获取或创建对话
+    conv_mgr = get_conversation_manager()
+    if not conversation_id:
+        conversation_id = conv_mgr.create_conversation(message[:20])
+
+    # 保存用户消息
+    conv_mgr.add_message(conversation_id, 'user', message)
+
+    # 记录股票代码
+    if stock_code:
+        conv_mgr.add_stock_code(conversation_id, stock_code)
+
+    def generate():
+        """SSE事件生成器"""
+        import json as _json
+
+        def emit(event_type, data):
+            return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
+
+        try:
+            # 构建消息历史
+            history = conv_mgr.get_messages_for_ai(conversation_id, max_messages=10)
+
+            # 系统提示
+            system_prompt = f"""你是专业的AI金融分析助手。你可以使用工具获取股票数据进行分析。
+当用户提到股票代码时，请使用对应工具获取实时数据后给出专业分析。
+当前关注股票: {stock_code or '未指定'}
+市场类型: {market_type}
+请用中文回复，分析要专业、数据要准确。"""
+
+            messages = [{"role": "system", "content": system_prompt}] + history
+
+            # 工具执行器（带artifact包装）
+            artifacts_collected = []
+            tool_calls_log = []
+
+            def artifact_tool_executor(tool_name, arguments):
+                raw_result, artifact = execute_tool_with_artifact(tool_name, arguments)
+                if artifact:
+                    artifacts_collected.append(artifact)
+                return raw_result
+
+            # 收集完整回复
+            full_content = ""
+
+            def event_callback(event_type, data):
+                nonlocal full_content
+                if event_type == 'token' and data.get('content'):
+                    full_content += data['content']
+
+            # 执行流式AI对话（带工具调用）
+            content, tools_log, error = chat_with_tools_stream(
+                client, messages, OPENAI_TOOLS_SCHEMA,
+                tool_executor=artifact_tool_executor,
+                max_tool_rounds=3,
+                event_callback=event_callback
+            )
+
+            if error:
+                yield emit('error', {'code': 'AI_ERROR', 'message': error})
+                return
+
+            final_content = content or full_content
+
+            # 推送AI文本回复
+            if final_content:
+                yield emit('token', {'content': final_content, 'finish_reason': 'stop'})
+
+            # 推送所有artifact
+            for artifact in artifacts_collected:
+                yield emit('artifact', artifact)
+
+            # 保存AI回复到对话历史
+            conv_mgr.add_message(
+                conversation_id, 'assistant', final_content or '',
+                artifacts=artifacts_collected,
+                tool_calls=tools_log
+            )
+
+            # 生成follow-up问题
+            follow_ups = _generate_follow_ups(stock_code, final_content)
+
+            # 推送完成事件
+            yield emit('done', {
+                'conversation_id': conversation_id,
+                'follow_up_questions': follow_ups
+            })
+
+        except Exception as e:
+            logger.error(f"AI对话流式处理失败: {e}")
+            yield emit('error', {'code': 'STREAM_ERROR', 'message': str(e)})
+
+    return Response(
+        stream_with_context(generate()),
+        content_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
+def _generate_follow_ups(stock_code, analysis_text):
+    """生成预判性后续问题"""
+    follow_ups = []
+    if stock_code:
+        follow_ups = [
+            f"{stock_code}的估值水平与同行业相比如何？",
+            f"{stock_code}近期主力资金流向如何？",
+            f"{stock_code}有哪些潜在的风险因素？",
+        ]
+    return follow_ups[:5]
+
+
+@app.route('/api/conversations', methods=['GET'])
+def list_conversations():
+    """获取对话列表"""
+    from app.core.conversation import get_conversation_manager
+    limit = request.args.get('limit', 20, type=int)
+    conversations = get_conversation_manager().list_conversations(limit)
+    return jsonify({'conversations': conversations})
+
+
+@app.route('/api/conversations/<conversation_id>', methods=['GET'])
+def get_conversation(conversation_id):
+    """获取单个对话详情"""
+    from app.core.conversation import get_conversation_manager
+    conv = get_conversation_manager().get_conversation(conversation_id)
+    if not conv:
+        return jsonify({'error': '对话不存在'}), 404
+    return jsonify(conv)
+
+
+@app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
+def delete_conversation(conversation_id):
+    """删除对话"""
+    from app.core.conversation import get_conversation_manager
+    success = get_conversation_manager().delete_conversation(conversation_id)
+    if success:
+        return jsonify({'message': '对话已删除'})
+    return jsonify({'error': '删除失败'}), 404
+
+
+@app.route('/api/ai/agent-analyze', methods=['POST'])
+def ai_agent_analyze_stream():
+    """Agent深度分析SSE端点 — 流式推送Agent执行过程"""
+    from flask import Response, stream_with_context
+    from app.core.event_bus import get_event_bus
+    import queue
+    import threading
+
+    data = request.json
+    stock_code = data.get('stock_code', '')
+    market_type = data.get('market_type', 'A')
+    research_depth = data.get('research_depth', 3)
+
+    if not stock_code:
+        return jsonify({'error': '请提供股票代码'}), 400
+
+    # 验证股票代码
+    is_valid, validated_code = validate_stock_code(stock_code, market_type)
+    if not is_valid:
+        return jsonify({'error': validated_code}), 400
+    stock_code = validated_code
+
+    def generate():
+        import json as _json
+
+        def emit(event_type, data):
+            return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
+
+        # 创建SSE桥接队列
+        event_bus = get_event_bus()
+        bridge_queue = event_bus.create_sse_bridge()
+
+        # 后台线程执行Agent分析
+        result_holder = [None]
+        error_holder = [None]
+
+        def run_analysis():
+            try:
+                from app.agents.coordinator import run_agent_analysis
+                result_holder[0] = run_agent_analysis(
+                    stock_code=stock_code,
+                    market_type=market_type,
+                    research_depth=research_depth
+                )
+            except Exception as e:
+                error_holder[0] = str(e)
+            finally:
+                # 发送结束信号
+                bridge_queue.put(None)
+
+        analysis_thread = threading.Thread(target=run_analysis, daemon=True)
+        analysis_thread.start()
+
+        try:
+            # 从桥接队列读取事件并推送
+            while True:
+                try:
+                    event = bridge_queue.get(timeout=300)
+                    if event is None:
+                        break
+                    yield emit(event.get('event_type', 'info'), event.get('data', {}))
+                except queue.Empty:
+                    yield emit('error', {'code': 'TIMEOUT', 'message': '分析超时'})
+                    break
+
+            # 发送最终结果
+            if error_holder[0]:
+                yield emit('error', {'code': 'ANALYSIS_ERROR', 'message': error_holder[0]})
+            elif result_holder[0]:
+                result = result_holder[0]
+                final_decision = result.get('final_decision', {})
+                yield emit('artifact', {
+                    'type': 'artifact',
+                    'artifact_type': 'decision_card',
+                    'title': f'{stock_code} 投资决策',
+                    'data': final_decision
+                })
+                yield emit('done', {
+                    'stock_code': stock_code,
+                    'execution_log': result.get('execution_log', []),
+                    'follow_up_questions': [
+                        f"对{stock_code}的技术面做更深入分析",
+                        f"{stock_code}的投资者人格分析结果如何？",
+                        f"对比{stock_code}与同行业龙头"
+                    ]
+                })
+        finally:
+            event_bus.destroy_sse_bridge(bridge_queue)
+
+    return Response(
+        stream_with_context(generate()),
+        content_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
 # 在应用启动时启动清理线程（保持原有代码不变）
 cleaner_thread = threading.Thread(target=run_task_cleaner)
 cleaner_thread.daemon = True

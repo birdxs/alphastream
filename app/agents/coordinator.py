@@ -1,7 +1,7 @@
 """
 Input: 用户请求(stock_code, market_type, research_depth, selected_analysts)
-Output: 完整的StockAnalysisState(含所有分析结果和最终决策)
-Pos: app/agents/coordinator.py - Agent系统的核心编排器，基于LangGraph动态编排（并行fan-out/fan-in + 条件路由）
+Output: 完整的StockAnalysisState(含所有分析结果和最终决策) + EventBus事件流
+Pos: app/agents/coordinator.py - Agent系统的核心编排器，基于LangGraph动态编排（并行fan-out/fan-in + 条件路由）+ EventBus事件发布
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -11,6 +11,46 @@ from langgraph.graph import StateGraph, END
 from app.agents.state import StockAnalysisState
 
 logger = logging.getLogger(__name__)
+
+
+def _wrap_with_events(agent_fn, agent_name):
+    """包装Agent节点函数，注入EventBus事件发布"""
+    def wrapped(state):
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_AGENT_STARTED, EVENT_AGENT_COMPLETED
+            event_bus = get_event_bus()
+            event_bus.publish(EVENT_AGENT_STARTED, {
+                'event_type': 'agent_progress',
+                'data': {
+                    'agent_name': agent_name,
+                    'status': 'started',
+                    'stock_code': state.get('stock_code', ''),
+                    'progress': state.get('progress', 0)
+                }
+            })
+        except Exception:
+            pass
+
+        result = agent_fn(state)
+
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_AGENT_COMPLETED
+            event_bus = get_event_bus()
+            progress = result.get('progress', state.get('progress', 0))
+            event_bus.publish(EVENT_AGENT_COMPLETED, {
+                'event_type': 'agent_progress',
+                'data': {
+                    'agent_name': agent_name,
+                    'status': 'completed',
+                    'progress': progress,
+                    'stock_code': state.get('stock_code', '')
+                }
+            })
+        except Exception:
+            pass
+
+        return result
+    return wrapped
 
 
 def _route_after_technical(state: Dict[str, Any]) -> str:
@@ -76,21 +116,21 @@ def build_analysis_graph(
         return {'router_decision': 'normal'}
 
     # === 技术分析始终包含，作为入口点 ===
-    graph.add_node("technical", TechnicalAnalystAgent.analyze)
+    graph.add_node("technical", _wrap_with_events(TechnicalAnalystAgent.analyze, "技术分析师"))
     graph.set_entry_point("technical")
 
     # === 决策节点始终存在 ===
-    graph.add_node("decision", DecisionMakerAgent.analyze)
+    graph.add_node("decision", _wrap_with_events(DecisionMakerAgent.analyze, "决策分析师"))
 
     if research_depth >= 2:
         # --- depth >= 2: fundamental 和 capital_flow 并行 (fan-out / fan-in) ---
-        graph.add_node("fundamental", FundamentalAnalystAgent.analyze)
-        graph.add_node("capital_flow", CapitalFlowAnalystAgent.analyze)
+        graph.add_node("fundamental", _wrap_with_events(FundamentalAnalystAgent.analyze, "基本面分析师"))
+        graph.add_node("capital_flow", _wrap_with_events(CapitalFlowAnalystAgent.analyze, "资金流分析师"))
 
         # 确定 fan-in 汇合点
         if research_depth >= 3:
             # fan-in 到 sentiment
-            graph.add_node("sentiment", SentimentAnalystAgent.analyze)
+            graph.add_node("sentiment", _wrap_with_events(SentimentAnalystAgent.analyze, "情绪分析师"))
             fan_in_target = "sentiment"
         elif research_depth >= 2:
             # 没有 sentiment，直接汇合到 decision
@@ -126,8 +166,8 @@ def build_analysis_graph(
 
         if research_depth >= 4:
             # --- depth >= 4: bull 和 bear 并行 (fan-out / fan-in) ---
-            graph.add_node("bull", BullResearcherAgent.analyze)
-            graph.add_node("bear", BearResearcherAgent.analyze)
+            graph.add_node("bull", _wrap_with_events(BullResearcherAgent.analyze, "多头研究员"))
+            graph.add_node("bear", _wrap_with_events(BearResearcherAgent.analyze, "空头研究员"))
 
             # fan-out: sentiment → bull 和 bear 并行
             graph.add_edge(last_node, "bull")
@@ -135,7 +175,7 @@ def build_analysis_graph(
 
             if research_depth >= 5:
                 # fan-in 到 risk
-                graph.add_node("risk", RiskManagerAgent.analyze)
+                graph.add_node("risk", _wrap_with_events(RiskManagerAgent.analyze, "风险管理师"))
                 graph.add_edge("bull", "risk")
                 graph.add_edge("bear", "risk")
                 last_node = "risk"
@@ -143,7 +183,7 @@ def build_analysis_graph(
                 # 投资者人格分析（可选，在风险评估后）
                 try:
                     from app.agents.investors.investor_coordinator import InvestorCoordinator
-                    graph.add_node("investors", InvestorCoordinator.analyze)
+                    graph.add_node("investors", _wrap_with_events(InvestorCoordinator.analyze, "投资者人格分析师"))
                     graph.add_edge("risk", "investors")
                     last_node = "investors"
                 except ImportError:
@@ -179,7 +219,7 @@ def build_analysis_graph(
     # === 反思节点（决策后执行，从历史中学习优化） ===
     try:
         from app.agents.reflection import ReflectionAgent
-        graph.add_node("reflection", ReflectionAgent.reflect)
+        graph.add_node("reflection", _wrap_with_events(ReflectionAgent.reflect, "反思分析师"))
         graph.add_edge("decision", "reflection")
         graph.add_edge("reflection", END)
     except ImportError:
