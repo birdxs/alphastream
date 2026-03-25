@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Briefcase, Star, Settings } from "lucide-react";
+import { Sun, Moon, MessageSquare, Briefcase, Star, Settings, Menu } from "lucide-react";
 
 export function Navbar() {
   const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
@@ -19,26 +19,29 @@ export function Navbar() {
           <span className="text-primary">AI</span>
           <span>金融分析</span>
         </Link>
-        <div className="flex items-center gap-1">
+        <div className="hidden sm:flex items-center gap-1">
           <Link href="/">
             <Button variant="ghost" size="sm" className="gap-2">
               <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">AI对话</span>
+              <span>AI对话</span>
             </Button>
           </Link>
           <Link href="/portfolio">
             <Button variant="ghost" size="sm" className="gap-2">
               <Briefcase className="h-4 w-4" />
-              <span className="hidden sm:inline">投资组合</span>
+              <span>投资组合</span>
             </Button>
           </Link>
           <Link href="/watchlist">
             <Button variant="ghost" size="sm" className="gap-2">
               <Star className="h-4 w-4" />
-              <span className="hidden sm:inline">自选股</span>
+              <span>自选股</span>
             </Button>
           </Link>
         </div>
+        <Button variant="ghost" size="icon" className="sm:hidden">
+          <Menu className="h-5 w-5" />
+        </Button>
       </div>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={toggleColorScheme} title={stockColorScheme === 'cn' ? '红涨绿跌' : '绿涨红跌'}>
