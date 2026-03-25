@@ -1,10 +1,10 @@
 // Input: OHLCV数据数组、股票代码、均线指标
-// Output: TradingView Lightweight Charts K线图（含成交量和MA均线）
+// Output: TradingView Lightweight Charts K线图（含成交量、MA均线、时间范围切换、十字线OHLCV信息条）
 // Pos: artifact-renderer.tsx的子组件，candlestick_chart类型Artifact渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -38,15 +38,33 @@ interface Props {
     };
     [key: string]: unknown;
   };
+  onTimeRangeChange?: (days: string) => void;
 }
 
-export function CandlestickChartArtifact({ data }: Props) {
+const TIME_RANGES = [
+  { label: '1M', days: '30' },
+  { label: '3M', days: '90' },
+  { label: '6M', days: '180' },
+  { label: '1Y', days: '365' },
+  { label: '全部', days: '0' },
+];
+
+export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<IChartApi | null>(null);
   const { theme, stockColorScheme } = useThemeStore();
+  const [timeRange, setTimeRange] = useState('120');
+  const [crosshairData, setCrosshairData] = useState<{
+    time: string; open: number; high: number; low: number; close: number; volume?: number;
+  } | null>(null);
+
+  // 根据时间范围过滤数据
+  const filteredData = timeRange === '0'
+    ? data.ohlcv
+    : data.ohlcv?.slice(-Number(timeRange));
 
   useEffect(() => {
-    if (!chartRef.current || !data.ohlcv?.length) return;
+    if (!chartRef.current || !filteredData?.length) return;
 
     // 涨跌颜色
     const upColor = stockColorScheme === "cn" ? "#ef4444" : "#22c55e";
@@ -82,7 +100,7 @@ export function CandlestickChartArtifact({ data }: Props) {
       wickDownColor: downColor,
     });
 
-    const candleData: CandlestickData<Time>[] = data.ohlcv.map((d) => ({
+    const candleData: CandlestickData<Time>[] = filteredData.map((d) => ({
       time: d.date as Time,
       open: d.open,
       high: d.high,
@@ -92,7 +110,7 @@ export function CandlestickChartArtifact({ data }: Props) {
     candleSeries.setData(candleData);
 
     // 成交量
-    if (data.ohlcv.some((d) => d.volume)) {
+    if (filteredData.some((d) => d.volume)) {
       const volumeSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
@@ -101,7 +119,7 @@ export function CandlestickChartArtifact({ data }: Props) {
         scaleMargins: { top: 0.8, bottom: 0 },
       });
       volumeSeries.setData(
-        data.ohlcv.map((d) => ({
+        filteredData.map((d) => ({
           time: d.date as Time,
           value: d.volume || 0,
           color: d.close >= d.open ? upColor + "40" : downColor + "40",
@@ -109,7 +127,8 @@ export function CandlestickChartArtifact({ data }: Props) {
       );
     }
 
-    // MA均线
+    // MA均线 — 需要对齐到filteredData的索引范围
+    const offset = (data.ohlcv?.length || 0) - filteredData.length;
     if (data.indicators?.ma5) {
       const ma5Series = chart.addSeries(LineSeries, {
         color: "#f59e0b",
@@ -117,8 +136,9 @@ export function CandlestickChartArtifact({ data }: Props) {
       });
       ma5Series.setData(
         data.indicators.ma5
+          .slice(offset)
           .map((v, i) => ({
-            time: data.ohlcv![i]?.date as Time,
+            time: filteredData[i]?.date as Time,
             value: v,
           }))
           .filter((d) => d.value > 0)
@@ -131,8 +151,9 @@ export function CandlestickChartArtifact({ data }: Props) {
       });
       ma20Series.setData(
         data.indicators.ma20
+          .slice(offset)
           .map((v, i) => ({
-            time: data.ohlcv![i]?.date as Time,
+            time: filteredData[i]?.date as Time,
             value: v,
           }))
           .filter((d) => d.value > 0)
@@ -145,13 +166,32 @@ export function CandlestickChartArtifact({ data }: Props) {
       });
       ma60Series.setData(
         data.indicators.ma60
+          .slice(offset)
           .map((v, i) => ({
-            time: data.ohlcv![i]?.date as Time,
+            time: filteredData[i]?.date as Time,
             value: v,
           }))
           .filter((d) => d.value > 0)
       );
     }
+
+    // 十字线跟随 — OHLCV信息条
+    chart.subscribeCrosshairMove((param) => {
+      if (param.time && param.seriesData) {
+        const cd = param.seriesData.get(candleSeries);
+        if (cd && 'open' in cd) {
+          setCrosshairData({
+            time: String(param.time),
+            open: cd.open,
+            high: cd.high,
+            low: cd.low,
+            close: cd.close,
+          });
+        }
+      } else {
+        setCrosshairData(null);
+      }
+    });
 
     chart.timeScale().fitContent();
     chartInstance.current = chart;
@@ -169,7 +209,7 @@ export function CandlestickChartArtifact({ data }: Props) {
       chart.remove();
       chartInstance.current = null;
     };
-  }, [data, theme, stockColorScheme]);
+  }, [data, filteredData, theme, stockColorScheme]);
 
   if (!data.ohlcv?.length) {
     return (
@@ -177,5 +217,40 @@ export function CandlestickChartArtifact({ data }: Props) {
     );
   }
 
-  return <div ref={chartRef} className="w-full" />;
+  const handleTimeRangeChange = (days: string) => {
+    setTimeRange(days);
+    onTimeRangeChange?.(days);
+  };
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1">
+          {TIME_RANGES.map((r) => (
+            <button
+              key={r.days}
+              onClick={() => handleTimeRangeChange(r.days)}
+              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                timeRange === r.days
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {crosshairData && (
+        <div className="flex items-center gap-3 text-[10px] font-finance text-muted-foreground mb-1">
+          <span>日期: {crosshairData.time}</span>
+          <span>开: <span className="text-foreground">{crosshairData.open.toFixed(2)}</span></span>
+          <span>高: <span className="stock-up">{crosshairData.high.toFixed(2)}</span></span>
+          <span>低: <span className="stock-down">{crosshairData.low.toFixed(2)}</span></span>
+          <span>收: <span className="text-foreground">{crosshairData.close.toFixed(2)}</span></span>
+        </div>
+      )}
+      <div ref={chartRef} className="w-full" />
+    </div>
+  );
 }

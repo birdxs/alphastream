@@ -38,75 +38,95 @@ class ApiClient {
     return res.json();
   }
 
-  // SSE流式请求（返回EventSource-like接口，支持AbortController取消）
+  // SSE流式请求（支持自动重连，最多重试2次）
   async streamPost(
     path: string,
     body: Record<string, unknown>,
     handlers: SSEHandlers,
     signal?: AbortSignal
   ): Promise<void> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    });
+    const MAX_RETRIES = 2;
+    const RETRY_DELAYS = [1000, 3000];
 
-    if (!res.ok || !res.body) {
-      handlers.onError?.({ code: 'FETCH_ERROR', message: `HTTP ${res.status}` });
-      return;
-    }
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`${this.baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        });
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      let eventType = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith('data: ') && eventType) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            switch (eventType) {
-              case 'token':
-                handlers.onToken?.(data);
-                break;
-              case 'tool_call_start':
-                handlers.onToolCallStart?.(data);
-                break;
-              case 'tool_call_result':
-                handlers.onToolCallResult?.(data);
-                break;
-              case 'artifact':
-                handlers.onArtifact?.(data);
-                break;
-              case 'agent_progress':
-                handlers.onAgentProgress?.(data);
-                break;
-              case 'reasoning':
-                handlers.onReasoning?.(data);
-                break;
-              case 'error':
-                handlers.onError?.(data);
-                break;
-              case 'done':
-                handlers.onDone?.(data);
-                break;
-            }
-          } catch {
-            /* ignore parse errors */
+        if (!res.ok || !res.body) {
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+            continue;
           }
-          eventType = '';
+          handlers.onError?.({ code: 'FETCH_ERROR', message: `HTTP ${res.status}` });
+          return;
         }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          let eventType = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ') && eventType) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                switch (eventType) {
+                  case 'token':
+                    handlers.onToken?.(data);
+                    break;
+                  case 'tool_call_start':
+                    handlers.onToolCallStart?.(data);
+                    break;
+                  case 'tool_call_result':
+                    handlers.onToolCallResult?.(data);
+                    break;
+                  case 'artifact':
+                    handlers.onArtifact?.(data);
+                    break;
+                  case 'agent_progress':
+                    handlers.onAgentProgress?.(data);
+                    break;
+                  case 'reasoning':
+                    handlers.onReasoning?.(data);
+                    break;
+                  case 'error':
+                    handlers.onError?.(data);
+                    break;
+                  case 'done':
+                    handlers.onDone?.(data);
+                    break;
+                }
+              } catch {
+                /* ignore parse errors */
+              }
+              eventType = '';
+            }
+          }
+        }
+        return; // 成功处理完毕，退出重试循环
+
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        throw e;
       }
     }
   }

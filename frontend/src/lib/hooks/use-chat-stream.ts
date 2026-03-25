@@ -44,7 +44,25 @@ export function useChatStream() {
 
       const handlers: SSEHandlers = {
         onToken: (data) => {
-          chatStore.appendStreamContent(data.content);
+          const content = data.content;
+          if (content.length <= 5) {
+            // 短token直接追加
+            chatStore.appendStreamContent(content);
+          } else {
+            // 长文本逐字释放（模拟打字效果）
+            let i = 0;
+            const chars = [...content]; // 支持中文字符
+            const typeChar = () => {
+              if (i < chars.length) {
+                // 每帧追加2-3个字符，平衡性能与效果
+                const batch = chars.slice(i, i + 3).join('');
+                chatStore.appendStreamContent(batch);
+                i += 3;
+                requestAnimationFrame(typeChar);
+              }
+            };
+            requestAnimationFrame(typeChar);
+          }
         },
         onToolCallStart: (data) => {
           agentStore.addToolCall(data);

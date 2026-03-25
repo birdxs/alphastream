@@ -8,6 +8,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { GlobalSearch } from "@/components/common/global-search";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
               {children}
             </main>
           </div>
+          <GlobalSearch />
         </ThemeProvider>
       </body>
     </html>
