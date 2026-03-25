@@ -58,6 +58,15 @@ export function useChatStream() {
         },
         onError: (data) => {
           console.error('Stream error:', data);
+          // 将错误展示为AI消息
+          const errorMsg: ChatMessage = {
+            message_id: `error_${Date.now()}`,
+            role: 'assistant',
+            content: `⚠️ ${data.message || '分析过程出错，请稍后重试'}`,
+            created_at: new Date().toISOString(),
+          };
+          chatStore.addMessage(errorMsg);
+          chatStore.resetStreamContent();
           chatStore.setStreaming(false);
         },
         onDone: (data) => {

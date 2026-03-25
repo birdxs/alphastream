@@ -2527,14 +2527,18 @@ def ai_chat_stream():
 
 def _generate_follow_ups(stock_code, analysis_text):
     """生成预判性后续问题"""
-    follow_ups = []
     if stock_code:
-        follow_ups = [
+        return [
             f"{stock_code}的估值水平与同行业相比如何？",
             f"{stock_code}近期主力资金流向如何？",
             f"{stock_code}有哪些潜在的风险因素？",
+            f"对{stock_code}做深度Agent分析",
         ]
-    return follow_ups[:5]
+    return [
+        "分析600519贵州茅台",
+        "今日大盘走势如何？",
+        "推荐几只低估值蓝筹股",
+    ]
 
 
 @app.route('/api/conversations', methods=['GET'])
