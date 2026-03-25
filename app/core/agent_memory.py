@@ -22,14 +22,26 @@ class AgentMemory:
     def __init__(self):
         os.makedirs(MEMORY_DIR, exist_ok=True)
 
+    def _normalize_confidence(self, val) -> float:
+        """规范化confidence为浮点数(0.0-1.0)"""
+        if isinstance(val, (int, float)):
+            return max(0.0, min(1.0, float(val)))
+        if isinstance(val, str):
+            return {'高': 0.85, '中': 0.5, '低': 0.2}.get(val.strip(), 0.5)
+        return 0.5
+
     def save_analysis(self, stock_code: str, analysis_result: Dict[str, Any]) -> None:
         """保存分析结果到记忆"""
         filename = os.path.join(MEMORY_DIR, f"{stock_code}_history.json")
         history = self._load_file(filename)
 
+        decision = analysis_result.get('final_decision', {})
         entry = {
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'decision': analysis_result.get('final_decision', {}),
+            'decision': {
+                **decision,
+                'confidence': self._normalize_confidence(decision.get('confidence', 0.5))
+            },
             'technical_score': self._extract_score(analysis_result.get('technical_report', {})),
             'risk_level': analysis_result.get('risk_assessment', {}).get('risk_level', 'unknown'),
             'investor_consensus': analysis_result.get('investor_consensus', {}),

@@ -68,7 +68,7 @@ class InvestorCoordinator:
                 results[f'investor_{key}'] = {
                     'analyst': agent_cls.name,
                     'recommendation': 'HOLD',
-                    'confidence': '低',
+                    'confidence': 0.1,
                     'reasoning': f'执行异常: {str(e)}',
                     'error': str(e)
                 }
@@ -103,6 +103,15 @@ class InvestorCoordinator:
         }
 
 
+def _confidence_to_float(val) -> float:
+    """规范化confidence为浮点数(0.0-1.0)"""
+    if isinstance(val, (int, float)):
+        return max(0.0, min(1.0, float(val)))
+    if isinstance(val, str):
+        return {'高': 0.85, '中': 0.5, '低': 0.2}.get(val.strip(), 0.5)
+    return 0.5
+
+
 def _compute_vote_stats(results: Dict[str, Any]) -> Dict[str, Any]:
     """纯统计投票结果（不做决策，仅作为AI参考数据）"""
     recommendations: List[str] = []
@@ -121,7 +130,7 @@ def _compute_vote_stats(results: Dict[str, Any]) -> Dict[str, Any]:
         individual_views.append({
             'analyst': result.get('analyst', key),
             'recommendation': rec,
-            'confidence': result.get('confidence', '中'),
+            'confidence': _confidence_to_float(result.get('confidence', 0.5)),
             'reasoning': result.get('reasoning', '无')[:200]
         })
 
@@ -171,7 +180,7 @@ def _collect_investor_analyses(results: Dict[str, Any]) -> str:
         label = investor_labels.get(key, key)
         rec = result.get('recommendation', 'HOLD').upper()
         rec_text = rec_cn.get(rec, rec)
-        confidence = result.get('confidence', '中')
+        confidence = _confidence_to_float(result.get('confidence', 0.5))
         reasoning = result.get('reasoning', '无分析')
 
         # 收集关键指标（如果有）
@@ -182,7 +191,7 @@ def _collect_investor_analyses(results: Dict[str, Any]) -> str:
 
         sections.append(
             f"【{label}】\n"
-            f"  建议: {rec_text} | 信心: {confidence}\n"
+            f"  建议: {rec_text} | 信心: {confidence:.0%}\n"
             f"  分析: {reasoning}{metrics_text}"
         )
 
@@ -205,6 +214,7 @@ def _build_consensus(results: Dict[str, Any], stock_code: str) -> Dict[str, Any]
             'stock_code': stock_code,
             'final_recommendation': 'HOLD',
             'consensus_confidence': '低',
+            'consensus_confidence_score': 0.2,
             'consensus_reasoning': '无有效投资者分析结果',
             'vote_summary': {},
             'individual_views': [],
@@ -302,6 +312,7 @@ def _parse_ai_consensus(content: str) -> Dict[str, Any]:
         return {
             'final_recommendation': final_rec,
             'consensus_confidence': confidence,
+            'consensus_confidence_score': _confidence_to_float(confidence),
             'agreement_level': agreement,
             'consensus_reasoning': result.get('consensus_reasoning', ''),
             'key_agreements': result.get('key_agreements', []),
@@ -341,6 +352,7 @@ def _fallback_consensus(vote_stats: Dict[str, Any], results: Dict[str, Any], sto
         'stock_code': stock_code,
         'final_recommendation': majority_rec,
         'consensus_confidence': consensus_confidence,
+        'consensus_confidence_score': _confidence_to_float(consensus_confidence),
         'consensus_reasoning': consensus_reasoning,
         'vote_summary': vote_count,
         'total_votes': vote_stats['total_votes'],
@@ -368,7 +380,7 @@ def _build_consensus_reasoning(
     for view in views:
         rec_text = rec_cn.get(view['recommendation'], view['recommendation'])
         lines.append(
-            f"- {view['analyst']}：{rec_text}（信心{view['confidence']}）"
+            f"- {view['analyst']}：{rec_text}（信心{view['confidence']:.0%}）"
             f"—— {view['reasoning'][:100]}"
         )
 

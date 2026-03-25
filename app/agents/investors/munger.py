@@ -89,10 +89,11 @@ class MungerAgent:
 
 ## 输出要求
 
-请以JSON格式输出你的分析结论（不要输出markdown代码块标记，直接输出JSON）：
+请以JSON格式输出你的分析结论（不要输出markdown代码块标记，直接输出JSON）。
+注意：confidence为0.0-1.0的浮点数，表示分析置信度。
 {{
     "recommendation": "BUY/SELL/HOLD",
-    "confidence": "高/中/低",
+    "confidence": 0.75,
     "reasoning": "你的核心投资论据（200字以内）",
     "inversion_analysis": "反向思维分析——最大的3个风险（150字以内）",
     "mental_models_check": "多元思维模型评估要点（150字以内）",
@@ -135,11 +136,20 @@ class MungerAgent:
             except Exception:
                 pass
 
+            # 规范化confidence为浮点数
+            raw_conf = analysis.get('confidence', 0.5)
+            if isinstance(raw_conf, str):
+                confidence = {'高': 0.85, '中': 0.5, '低': 0.2}.get(raw_conf, 0.5)
+            elif isinstance(raw_conf, (int, float)):
+                confidence = max(0.0, min(1.0, float(raw_conf)))
+            else:
+                confidence = 0.5
+
             return {
                 'investor_munger': {
                     'analyst': '芒格风格',
                     'recommendation': analysis.get('recommendation', 'HOLD'),
-                    'confidence': analysis.get('confidence', '中'),
+                    'confidence': confidence,
                     'reasoning': analysis.get('reasoning', content[:500]),
                     'details': analysis,
                     'raw_response': content
@@ -160,7 +170,7 @@ def _error_result(error_msg: str, state: Dict[str, Any]) -> Dict[str, Any]:
         'investor_munger': {
             'analyst': '芒格风格',
             'recommendation': 'HOLD',
-            'confidence': '低',
+            'confidence': 0.1,
             'reasoning': f'分析失败: {error_msg}',
             'error': error_msg
         },
