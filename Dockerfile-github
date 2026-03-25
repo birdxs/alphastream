@@ -30,6 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制requirements.txt
 COPY requirements.txt .
 
+# 升级 pip
+RUN pip install --upgrade pip
+
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
