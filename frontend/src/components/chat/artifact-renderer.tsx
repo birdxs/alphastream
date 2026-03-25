@@ -1,5 +1,5 @@
 // Input: 单个Artifact对象（含artifact_type、title、data）
-// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面、风险仪表、新闻等）
+// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面、风险仪表、新闻、投资者共识、搜索结果等）
 // Pos: artifact-panel.tsx的子组件，Artifact路由渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -43,6 +43,58 @@ const CapitalFlowArtifact = dynamic(
     ssr: false,
     loading: () => (
       <div className="h-[200px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const InvestorPersonasArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/investor-personas").then((m) => ({
+      default: m.InvestorPersonasArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[300px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const DecisionCardArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/decision-card").then((m) => ({
+      default: m.DecisionCardArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const TechnicalPanelArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/technical-panel").then((m) => ({
+      default: m.TechnicalPanelArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] animate-pulse bg-muted rounded" />
+    ),
+  }
+);
+
+const SearchResultsArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/search-results").then((m) => ({
+      default: m.SearchResultsArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[150px] animate-pulse bg-muted rounded" />
     ),
   }
 );
@@ -92,14 +144,18 @@ function renderArtifactContent(artifact: Artifact) {
     case "technical_indicators":
       return (
         <div className="space-y-4">
+          <TechnicalPanelArtifact data={data} />
           <ScoreRadarArtifact data={data} />
-          <TechnicalView data={data} />
         </div>
       );
     case "capital_flow_chart":
       return <CapitalFlowArtifact data={data} />;
     case "decision_card":
-      return <DecisionCardView data={data} />;
+      return <DecisionCardArtifact data={data} />;
+    case "investor_consensus":
+      return <InvestorPersonasArtifact data={data} />;
+    case "search_results":
+      return <SearchResultsArtifact data={data} />;
     case "fundamental_metrics":
       return <FundamentalView data={data} />;
     case "risk_gauge":
@@ -113,42 +169,6 @@ function renderArtifactContent(artifact: Artifact) {
 
 // === 内联子组件 ===
 
-function DecisionCardView({ data }: { data: Record<string, unknown> }) {
-  const action = String(data.action || "HOLD");
-  const confidence = Number(data.confidence || 0);
-  const reasoning = String(data.reasoning || "");
-
-  const colorMap: Record<string, string> = {
-    BUY: "text-green-500 bg-green-500/10",
-    SELL: "text-red-500 bg-red-500/10",
-    HOLD: "text-yellow-500 bg-yellow-500/10",
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <span className={`text-2xl font-bold px-3 py-1 rounded ${colorMap[action] || ""}`}>
-          {action === "BUY" ? "买入" : action === "SELL" ? "卖出" : "持有"}
-        </span>
-        <span className="text-sm text-muted-foreground">置信度 {(confidence * 100).toFixed(0)}%</span>
-      </div>
-      <p className="text-sm">{reasoning}</p>
-    </div>
-  );
-}
-
-function TechnicalView({ data }: { data: Record<string, unknown> }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 text-sm">
-      {Object.entries(data).filter(([k]) => !["ai_commentary","tool_calls"].includes(k)).slice(0, 8).map(([k, v]) => (
-        <div key={k} className="flex justify-between bg-muted/50 rounded px-2 py-1">
-          <span className="text-muted-foreground">{k}</span>
-          <span className="font-mono">{String(v).slice(0, 20)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function FundamentalView({ data }: { data: Record<string, unknown> }) {
   return (

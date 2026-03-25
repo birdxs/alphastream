@@ -1,18 +1,20 @@
 // Input: chat-store状态 + agent-store状态 + 用户输入
-// Output: 完整Chat对话面板UI（消息列表、流式显示、输入框、Follow-up建议、Agent进度）
+// Output: 完整Chat对话面板UI（消息列表、流式Markdown显示、输入框、快捷命令面板、Follow-up建议、Agent进度）
 // Pos: 首页左侧面板，Chat+Artifacts布局的对话侧
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { useChatStore } from "@/lib/stores/chat-store";
-import { useAgentStore } from "@/lib/stores/agent-store";
+
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { MessageBubble } from "./message-bubble";
-import { AgentProgressBar } from "./agent-progress-bar";
+import { AgentProgressPanel } from "@/components/agent/agent-progress-panel";
+import { StreamMarkdown } from "./stream-markdown";
+import { CommandPalette } from "./command-palette";
 
 export function ChatPanel() {
   const [input, setInput] = useState("");
@@ -20,7 +22,7 @@ export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { sendMessage } = useChatStream();
   const { messages, isStreaming, streamingContent, followUpQuestions } = useChatStore();
-  const { overallProgress, agentProgresses } = useAgentStore();
+
 
   // 自动滚动到底部
   useEffect(() => {
@@ -93,14 +95,14 @@ export function ChatPanel() {
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs shrink-0">
                 AI
               </div>
-              <div className="flex-1 text-sm whitespace-pre-wrap">{streamingContent}<span className="animate-pulse">▌</span></div>
+              <div className="flex-1">
+                <StreamMarkdown content={streamingContent} isStreaming={true} />
+              </div>
             </div>
           )}
 
           {/* Agent进度 */}
-          {isStreaming && agentProgresses.length > 0 && (
-            <AgentProgressBar progresses={agentProgresses} overall={overallProgress} />
-          )}
+          {isStreaming && <AgentProgressPanel />}
 
           {/* 加载指示器 */}
           {isStreaming && !streamingContent && (
@@ -126,7 +128,12 @@ export function ChatPanel() {
       )}
 
       {/* 输入区域 */}
-      <div className="p-3 border-t">
+      <div className="p-3 border-t relative">
+        <CommandPalette
+          input={input}
+          onSelect={(cmd) => { setInput(cmd); }}
+          visible={input.startsWith("/")}
+        />
         <div className="flex gap-2 items-end">
           <textarea
             value={input}

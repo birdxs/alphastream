@@ -1,11 +1,12 @@
 // Input: ChatMessage对象（含role、content、artifacts）
-// Output: 单条消息气泡UI（区分用户/AI，展示artifact标签）
+// Output: 单条消息气泡UI（区分用户/AI，AI消息使用StreamMarkdown渲染，展示artifact标签）
 // Pos: chat-panel.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import type { ChatMessage } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { StreamMarkdown } from "./stream-markdown";
 
 interface Props {
   message: ChatMessage;
@@ -22,10 +23,10 @@ export function MessageBubble({ message }: Props) {
         {isUser ? "我" : "AI"}
       </div>
       <div className={`flex-1 ${isUser ? "text-right" : ""}`}>
-        <div className={`inline-block text-sm whitespace-pre-wrap rounded-lg px-3 py-2 max-w-[90%] ${
-          isUser ? "bg-blue-500/10 text-foreground" : "bg-muted text-foreground"
+        <div className={`inline-block text-sm rounded-lg px-3 py-2 max-w-[90%] ${
+          isUser ? "bg-blue-500/10 text-foreground whitespace-pre-wrap" : "bg-muted text-foreground"
         }`}>
-          {message.content}
+          {isUser ? message.content : <StreamMarkdown content={message.content} />}
         </div>
         {/* Artifact标签 */}
         {message.artifacts && message.artifacts.length > 0 && (
