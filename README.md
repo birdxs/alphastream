@@ -1,6 +1,6 @@
 # 智能分析系统
 
-![版本](https://img.shields.io/badge/版本-2.2.0-blue.svg)
+![版本](https://img.shields.io/badge/版本-2.3.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.9+-green.svg)
 ![Flask](https://img.shields.io/badge/Flask-3.1-red.svg)
 ![AKShare](https://img.shields.io/badge/AKShare-1.16+-orange.svg)
@@ -24,7 +24,7 @@
 - **技术面分析**：趋势识别、支撑压力位、技术指标（RSI、MACD、KDJ等）
 - **基本面分析**：估值分析、财务健康、成长前景
 - **资金面分析**：主力资金流向、北向资金、机构持仓
-- **智能评分**：100分制综合评分，40-40-20权重分配
+- **AI智能评分**：Agent通过Function Calling自主获取数据并AI评分（降级时使用算术评分）
 
 ### 智能化功能
 
@@ -35,10 +35,11 @@
 
 ### 多Agent协同分析（v2.2.0 新增）
 
-- **LangGraph编排引擎**：动态深度路由（1-5级），按需调用不同数量的Agent
-- **9大分析Agent**：技术分析师、基本面分析师、资金流分析师、情绪分析师、看多研究员、看空研究员、风险管理官、投资决策者、反思Agent
-- **投资者人格分析**：巴菲特（价值投资）、芒格（多元思维）、彼得·林奇（成长投资）、达摩达兰（估值大师），投票机制综合决策
-- **Agent自主进化**：反思学习 + 语义记忆 + 策略自适应演进
+- **LangGraph动态编排**：并行fan-out/fan-in（基本面+资金流并行、多空辩论并行）+ 条件路由（技术分析失败→快速失败）
+- **13大AI Agent**：技术分析师、基本面分析师、资金流分析师、情绪分析师、看多研究员、看空研究员、风险管理官、投资决策者、反思Agent、巴菲特/芒格/林奇/达摩达兰
+- **Function Calling**：各Agent通过OpenAI tools自主决定查询什么数据，而非被动接收预设数据
+- **AI首席策略官**：投资者共识由AI综合研判论据逻辑强度（非简单投票），AI不可用时降级到投票
+- **Agent自主进化**：反思学习 + 全Agent语义记忆覆盖 + 策略自适应演进
 - **开源搜索集成**：DuckDuckGo免费搜索（无需API Key）→ Tavily → SERP 多源降级
 - **Human-in-the-Loop**：高风险决策自动暂停等待人工审批
 - **MCP工具服务器**：5个标准化工具接口，支持跨系统调用
@@ -78,7 +79,7 @@
 │   │   ├── search.py          # 统一搜索引擎（DuckDuckGo/Tavily/SERP）
 │   │   ├── agent_memory.py    # Agent语义记忆系统
 │   │   ├── event_bus.py       # Agent事件通信总线
-│   │   ├── tools.py           # 共享工具函数
+│   │   ├── tools.py           # 双格式工具注册表（LangChain + OpenAI Function Calling）
 │   │   ├── fallback_manager.py # 故障转移管理器
 │   │   └── database.py        # 数据库管理
 │   │
@@ -96,7 +97,7 @@
 │   │   └── us_stock_service.py      # 美股服务
 │   │
 │   ├── agents/             # 多Agent分析子系统（LangGraph编排）
-│   │   ├── coordinator.py          # LangGraph图编排协调器
+│   │   ├── coordinator.py          # LangGraph动态编排（并行fan-out/fan-in + 条件路由）
 │   │   ├── technical_analyst.py    # 技术分析Agent
 │   │   ├── fundamental_analyst.py  # 基本面Agent
 │   │   ├── capital_flow_analyst.py # 资金流Agent
@@ -329,31 +330,39 @@ bash scripts/start.sh logs       # 查看日志
 
 ## 📚 API文档
 
-系统提供了完整的REST API，可通过Swagger文档查看：`/api/docs`
+完整的后端API对接标准文档（含请求/响应格式、参数说明、异步轮询模式）：
 
-主要API包括：
+**[docs/API.md](docs/API.md)** — 前端开发人员后端对接标准（40+个路由）
 
-- 股票分析API：`/api/enhanced_analysis`
-- 市场扫描API：`/api/start_market_scan`
-- 指数成分股API：`/api/index_stocks`
-- 智能问答API：`/api/qa`
-- 风险分析API：`/api/risk_analysis`
-- 情景预测API：`/api/scenario_predict`
-- 行业分析API：`/api/industry_analysis`
-- 最新新闻API：`/api/latest_news`
-- ETF分析API：`/api/start_etf_analysis`
-- Agent分析API：`/api/start_agent_analysis`
-- 资金流向API：`/api/capital_flow`
-- 基本面分析API：`/api/fundamental_analysis`
-- MCP工具列表API：`/api/mcp/tools`
-- MCP工具调用API：`/api/mcp/call`
-- Agent审批列表API：`/api/agent_pending_approvals`
-- Agent审批提交API：`/api/agent_submit_approval`
+主要API分类：
+
+| 分类 | 核心API | 模式 |
+|------|---------|------|
+| Agent智能分析 | `/api/start_agent_analysis` | 异步 + Function Calling |
+| 股票分析 | `/api/start_stock_analysis` | 异步 |
+| 市场扫描 | `/api/start_market_scan` | 异步 |
+| 基本面 | `/api/fundamental_analysis` | 同步 |
+| 资金流向 | `/api/capital_flow` | 同步 |
+| 风险分析 | `/api/risk_analysis` | 同步 |
+| 行业分析 | `/api/industry_analysis` | 同步 |
+| ETF分析 | `/api/start_etf_analysis` | 异步 |
+| 智能问答 | `/api/qa` | 同步 |
+| MCP工具 | `/api/mcp/tools`, `/api/mcp/call` | 同步 |
 
 ## 📋 版本历史
 
-### v2.2.0 (当前版本)
-- 全面Agent化改造：13个专业Agent + LangGraph编排 + 投资者人格
+### v2.3.0 (当前版本)
+- 全面AI Agent化改造：Function Calling让AI自主查数据+自主评分（替代硬编码算术评分）
+- LangGraph动态编排：并行fan-out/fan-in + 条件路由（替代线性串行执行）
+- AI首席策略官：投资者共识由AI综合研判论据强度（替代Counter投票）
+- 语义记忆全覆盖：全部13个Agent接入TF-IDF历史分析记忆
+- confidence全链路统一为浮点数(0.0-1.0)
+- 各Agent progress增量上报，前端进度条流畅
+- 全链路graceful降级：AI不可用时自动回退到硬编码模式
+- 完整API对接标准文档：[docs/API.md](docs/API.md)
+
+### v2.2.0
+- Agent化改造：13个专业Agent + LangGraph编排 + 投资者人格
 - 新增开源搜索集成（DuckDuckGo免费搜索，无需API Key）
 - 新增Redis统一缓存层 + Agent记忆系统 + 事件总线
 - 新增Human-in-the-Loop高风险决策审批
