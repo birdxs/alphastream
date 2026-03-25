@@ -16,7 +16,7 @@ export function MessageBubble({ message }: Props) {
   const isUser = message.role === "user";
 
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`flex gap-3 message-enter ${isUser ? "flex-row-reverse" : ""}`}>
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
         isUser ? "bg-blue-500/20 text-blue-600" : "bg-primary/20 text-primary"
       }`}>

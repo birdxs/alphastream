@@ -105,7 +105,7 @@ interface Props {
 
 export function ArtifactRenderer({ artifact }: Props) {
   return (
-    <Card>
+    <Card className="animate-fade-in">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           {getArtifactIcon(artifact.artifact_type)}
