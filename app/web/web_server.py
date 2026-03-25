@@ -2406,7 +2406,7 @@ def ai_chat_stream():
     from app.core.tools import OPENAI_TOOLS_SCHEMA
     from app.core.artifact_wrapper import execute_tool_with_artifact
     from app.core.conversation import get_conversation_manager
-    from app.core.event_bus import get_event_bus, create_sse_bridge, destroy_sse_bridge
+    from app.core.event_bus import get_event_bus
 
     data = request.json
     message = data.get('message', '')
