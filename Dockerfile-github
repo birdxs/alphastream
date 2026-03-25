@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 
 # 升级 pip 先跟官方一致，不升级pip  20260325
-# RUN pip install --upgrade pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
