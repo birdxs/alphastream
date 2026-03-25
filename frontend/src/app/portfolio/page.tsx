@@ -1,5 +1,5 @@
-// Input: 用户持仓数据（本地状态）
-// Output: 投资组合管理页面，含添加/删除持仓、盈亏概况
+// Input: portfolio-store持久化持仓数据 + 用户操作
+// Output: 投资组合管理页面，含添加/删除持仓、盈亏概况、跳转AI分析
 // Pos: /portfolio路由页面
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,23 +8,15 @@ import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
-
-interface Holding {
-  code: string;
-  name: string;
-  shares: number;
-  costPrice: number;
-  currentPrice?: number;
-}
+import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare } from "lucide-react";
+import { usePortfolioStore } from "@/lib/stores/portfolio-store";
+import Link from "next/link";
 
 export default function PortfolioPage() {
-  const [holdings, setHoldings] = useState<Holding[]>([
-    { code: "600519", name: "贵州茅台", shares: 100, costPrice: 1800, currentPrice: 1650 },
-    { code: "000001", name: "平安银行", shares: 500, costPrice: 12.5, currentPrice: 11.8 },
-  ]);
+  const { holdings, addHolding, removeHolding } = usePortfolioStore();
   const [showAdd, setShowAdd] = useState(false);
   const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
   const [newShares, setNewShares] = useState("");
   const [newCost, setNewCost] = useState("");
 
@@ -33,19 +25,18 @@ export default function PortfolioPage() {
   const totalPnl = totalValue - totalCost;
   const totalReturn = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
 
-  const addHolding = () => {
+  const handleAdd = () => {
     if (newCode && newShares && newCost) {
-      setHoldings([...holdings, {
-        code: newCode, name: newCode, shares: Number(newShares),
-        costPrice: Number(newCost), currentPrice: Number(newCost)
-      }]);
-      setNewCode(""); setNewShares(""); setNewCost("");
+      addHolding({
+        code: newCode,
+        name: newName || newCode,
+        shares: Number(newShares),
+        costPrice: Number(newCost),
+        currentPrice: Number(newCost),
+      });
+      setNewCode(""); setNewName(""); setNewShares(""); setNewCost("");
       setShowAdd(false);
     }
-  };
-
-  const removeHolding = (code: string) => {
-    setHoldings(holdings.filter(h => h.code !== code));
   };
 
   return (
@@ -94,6 +85,10 @@ export default function PortfolioPage() {
                 <Input value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" />
               </div>
               <div className="flex-1">
+                <label className="text-xs text-muted-foreground">股票名称</label>
+                <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="贵州茅台" />
+              </div>
+              <div className="flex-1">
                 <label className="text-xs text-muted-foreground">持股数量</label>
                 <Input value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" />
               </div>
@@ -101,7 +96,7 @@ export default function PortfolioPage() {
                 <label className="text-xs text-muted-foreground">成本价</label>
                 <Input value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" />
               </div>
-              <Button onClick={addHolding}>添加</Button>
+              <Button onClick={handleAdd}>添加</Button>
             </div>
           </CardContent>
         </Card>
@@ -123,7 +118,9 @@ export default function PortfolioPage() {
                     <div className="flex items-center gap-3">
                       <div>
                         <span className="font-medium">{h.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{h.code}</span>
+                        <Link href={`/?stock=${h.code}`} className="text-xs text-primary hover:underline ml-2" title="跳转AI分析">
+                          {h.code}
+                        </Link>
                       </div>
                     </div>
                     <div className="flex items-center gap-6 text-sm">
@@ -139,6 +136,11 @@ export default function PortfolioPage() {
                           {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
                         </p>
                       </div>
+                      <Link href={`/?stock=${h.code}`}>
+                        <Button variant="ghost" size="icon" title="AI分析">
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       <Button variant="ghost" size="icon" onClick={() => removeHolding(h.code)}>
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
                       </Button>

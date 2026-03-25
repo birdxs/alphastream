@@ -10,7 +10,8 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Star } from "lucide-react";
+import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { MessageBubble } from "./message-bubble";
 import { AgentProgressPanel } from "@/components/agent/agent-progress-panel";
 import { StreamMarkdown } from "./stream-markdown";
@@ -23,6 +24,7 @@ export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { sendMessage } = useChatStream();
   const { messages, isStreaming, streamingContent, followUpQuestions } = useChatStore();
+  const { addItem, hasItem } = useWatchlistStore();
 
 
   // 自动滚动到底部
@@ -62,9 +64,18 @@ export function ChatPanel() {
       <div className="p-3 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">AI金融分析助手</h2>
         {stockCode && (
-          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-            {stockCode}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+              {stockCode}
+            </span>
+            <Button
+              variant="ghost" size="icon" className="h-6 w-6"
+              onClick={() => addItem(stockCode)}
+              title={hasItem(stockCode) ? "已在自选" : "加入自选"}
+            >
+              <Star className={`h-3 w-3 ${hasItem(stockCode) ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+            </Button>
+          </div>
         )}
       </div>
 
