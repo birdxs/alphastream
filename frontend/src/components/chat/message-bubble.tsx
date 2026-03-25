@@ -7,6 +7,7 @@
 import type { ChatMessage } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { StreamMarkdown } from "./stream-markdown";
+import { RefreshCw } from "lucide-react";
 
 interface Props {
   message: ChatMessage;
@@ -17,7 +18,7 @@ export function MessageBubble({ message }: Props) {
   const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
 
   return (
-    <div className={`flex gap-3 ${isNew ? 'animate-fade-in' : ''} ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`flex gap-3 group ${isNew ? 'animate-fade-in' : ''} ${isUser ? "flex-row-reverse" : ""}`}>
       {/* 头像 */}
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
         isUser
@@ -49,6 +50,15 @@ export function MessageBubble({ message }: Props) {
                 {"\u{1F4CA}"} {art.title}
               </Badge>
             ))}
+          </div>
+        )}
+
+        {/* AI消息：重新生成按钮 */}
+        {!isUser && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 mt-1">
+            <button className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5">
+              <RefreshCw className="h-2.5 w-2.5" /> 重新生成
+            </button>
           </div>
         )}
 

@@ -4,6 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { Bot } from "lucide-react";
 
 interface Props {
   onQuestionSelect: (message: string, options: { stock_code?: string }) => void;
@@ -23,8 +24,8 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
     <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
       <div className="text-center space-y-8 max-w-md animate-fade-in">
         <div>
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-2xl mx-auto mb-4 shadow-lg shadow-blue-500/20">
-            {"\u{1F916}"}
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20">
+            <Bot className="h-8 w-8 text-white" />
           </div>
           <h3 className="font-bold text-xl mb-1">AI金融分析助手</h3>
           <p className="text-sm text-muted-foreground">

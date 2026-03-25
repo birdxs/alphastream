@@ -33,6 +33,18 @@ export function ChatInput({ onSend, onStop }: Props) {
     }
   }, [input]);
 
+  // 移动端虚拟键盘弹出时，确保输入框不被遮挡
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      const handleResize = () => {
+        const viewport = window.visualViewport!;
+        document.documentElement.style.setProperty('--viewport-height', `${viewport.height}px`);
+      };
+      window.visualViewport.addEventListener('resize', handleResize);
+      return () => window.visualViewport?.removeEventListener('resize', handleResize);
+    }
+  }, []);
+
   const handleSend = () => {
     const msg = input.trim();
     if (!msg || isStreaming) return;

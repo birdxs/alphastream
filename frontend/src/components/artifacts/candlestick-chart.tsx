@@ -85,6 +85,8 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
         horzLines: { color: theme === "dark" ? "#2d2d44" : "#e5e7eb" },
       },
       crosshair: { mode: 0 },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
       timeScale: {
         borderColor: theme === "dark" ? "#4b5563" : "#d1d5db",
       },
@@ -196,15 +198,20 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     chart.timeScale().fitContent();
     chartInstance.current = chart;
 
-    // 响应容器大小变化
+    // 响应容器大小变化（节流~60fps）
+    let resizeTimer: ReturnType<typeof setTimeout>;
     const resizeObserver = new ResizeObserver(() => {
-      if (chartRef.current) {
-        chart.applyOptions({ width: chartRef.current.clientWidth });
-      }
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (chartRef.current) {
+          chart.applyOptions({ width: chartRef.current.clientWidth });
+        }
+      }, 16);
     });
     resizeObserver.observe(chartRef.current);
 
     return () => {
+      clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       chart.remove();
       chartInstance.current = null;
