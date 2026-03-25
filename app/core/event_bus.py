@@ -1,13 +1,14 @@
 """
 Input: 事件名称 + 数据
-Output: 事件广播到所有订阅者
-Pos: app/core/event_bus.py - Agent间事件通信总线
+Output: 事件广播到所有订阅者（含SSE桥接队列推送）
+Pos: app/core/event_bus.py - Agent间事件通信总线 + SSE流式桥接
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import logging
+import queue
 import threading
-from typing import Callable, Dict, List, Any
+from typing import Callable, Dict, List, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,8 @@ class EventBus:
             return
         self._subscribers: Dict[str, List[Callable]] = {}
         self._sub_lock = threading.Lock()
+        self._sse_bridges: List[Tuple[queue.Queue, Optional[List[str]]]] = []
+        self._bridge_lock = threading.Lock()
         self._initialized = True
 
     def subscribe(self, event_name: str, callback: Callable) -> None:
@@ -51,6 +54,20 @@ class EventBus:
             except Exception as e:
                 logger.error(f"事件处理失败({event_name}): {e}")
 
+        # 推送到SSE桥接队列
+        with self._bridge_lock:
+            bridges = self._sse_bridges.copy()
+        for bridge_queue, filter_events in bridges:
+            if filter_events is None or event_name in filter_events:
+                try:
+                    bridge_queue.put_nowait({
+                        'event': event_name,
+                        'data': data,
+                        'timestamp': __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                except queue.Full:
+                    logger.warning(f"SSE桥接队列已满，丢弃事件: {event_name}")
+
     def unsubscribe(self, event_name: str, callback: Callable) -> None:
         """取消订阅"""
         with self._sub_lock:
@@ -59,6 +76,32 @@ class EventBus:
                     cb for cb in self._subscribers[event_name] if cb != callback
                 ]
 
+    def create_sse_bridge(self, filter_events: List[str] = None) -> queue.Queue:
+        """创建SSE事件桥接队列
+
+        返回一个Queue，订阅指定事件类型。
+        SSE端点从此Queue中读取事件并推送给前端。
+
+        Args:
+            filter_events: 要订阅的事件类型列表，None表示全部
+
+        Returns:
+            queue.Queue 实例，调用方需在完成后调用 destroy_sse_bridge()
+        """
+        bridge_queue = queue.Queue(maxsize=1000)
+        with self._bridge_lock:
+            self._sse_bridges.append((bridge_queue, filter_events))
+        logger.debug(f"创建SSE桥接队列, filter={filter_events}")
+        return bridge_queue
+
+    def destroy_sse_bridge(self, bridge_queue: queue.Queue) -> None:
+        """销毁SSE桥接队列，取消所有订阅"""
+        with self._bridge_lock:
+            self._sse_bridges = [
+                (q, f) for q, f in self._sse_bridges if q is not bridge_queue
+            ]
+        logger.debug("销毁SSE桥接队列")
+
 
 # 事件名称常量
 EVENT_ANALYSIS_STARTED = 'analysis.started'
@@ -66,6 +109,15 @@ EVENT_ANALYSIS_COMPLETED = 'analysis.completed'
 EVENT_AGENT_STEP_DONE = 'agent.step.done'
 EVENT_RISK_ALERT = 'risk.alert'
 EVENT_APPROVAL_NEEDED = 'approval.needed'
+
+# AI流式事件类型
+EVENT_AGENT_STARTED = 'agent.started'
+EVENT_AGENT_COMPLETED = 'agent.completed'
+EVENT_TOOL_CALL_START = 'tool.call.start'
+EVENT_TOOL_CALL_RESULT = 'tool.call.result'
+EVENT_TOKEN_GENERATED = 'token.generated'
+EVENT_STREAM_DONE = 'stream.done'
+EVENT_REASONING = 'reasoning'
 
 
 def get_event_bus() -> EventBus:
