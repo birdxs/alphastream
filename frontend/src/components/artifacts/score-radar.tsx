@@ -10,6 +10,7 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
+  Tooltip,
   ResponsiveContainer,
 } from "recharts";
 import { useThemeStore } from "@/lib/stores/theme-store";
@@ -52,6 +53,15 @@ export function ScoreRadarArtifact({ data }: Props) {
           }}
         />
         <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} />
+        <Tooltip
+          contentStyle={{
+            background: theme === 'dark' ? '#1f2937' : '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+          formatter={(value) => [`${value}分`, '评分']}
+        />
         <Radar
           name="评分"
           dataKey="value"

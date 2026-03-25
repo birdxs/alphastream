@@ -1,5 +1,5 @@
 // Input: Next.js App Router子页面（children）
-// Output: 全局HTML骨架，含主题Provider、导航栏、字体配置
+// Output: 全局HTML骨架，含主题Provider、导航栏、字体配置、移动端TabBar
 // Pos: 应用最顶层布局入口
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -9,6 +9,7 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { GlobalSearch } from "@/components/common/global-search";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
             <main className="flex-1 overflow-hidden">
               {children}
             </main>
+            <MobileTabBar />
           </div>
           <GlobalSearch />
         </ThemeProvider>

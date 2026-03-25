@@ -1,5 +1,5 @@
 // Input: title、icon、children、defaultExpanded
-// Output: 可折叠/全屏/导出的Artifact卡片容器
+// Output: 可折叠/全屏/导出的Artifact卡片容器（slide-in-right入场动效）
 // Pos: artifact-renderer.tsx的外层包装，提供卡片操作能力
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -45,7 +45,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true }: 
   }
 
   return (
-    <Card className="animate-fade-in overflow-hidden">
+    <Card className="animate-slide-in-right overflow-hidden hover:shadow-md transition-shadow duration-300">
       <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">

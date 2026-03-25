@@ -33,8 +33,15 @@ export function TechnicalPanelArtifact({ data }: Props) {
           : "text-red-500";
 
   const indicators = [
-    { label: "RSI", value: data.rsi, format: (v: number) => v?.toFixed(1) },
-    { label: "MACD", value: data.macd_signal },
+    { label: "RSI", value: data.rsi, format: (v: number) => {
+      const color = v > 70 ? 'text-red-500' : v < 30 ? 'text-green-500' : '';
+      const label = v > 70 ? ' 超买' : v < 30 ? ' 超卖' : '';
+      return <span className={color}>{v?.toFixed(1)}{label}</span>;
+    }},
+    { label: "MACD", value: data.macd_signal, format: (v: string) => {
+      const icon = v === '金叉' ? '🔺' : v === '死叉' ? '🔻' : '';
+      return <span>{icon} {v}</span>;
+    }},
     { label: "\u8D8B\u52BF", value: data.trend },
     { label: "\u6210\u4EA4\u91CF", value: data.volume_status },
   ].filter((i) => i.value != null);
@@ -76,7 +83,8 @@ export function TechnicalPanelArtifact({ data }: Props) {
           <div key={label} className="flex justify-between items-center bg-muted/50 rounded px-3 py-2">
             <span className="text-xs text-muted-foreground">{label}</span>
             <span className="text-sm font-mono font-medium">
-              {format ? format(value as number) : String(value)}
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {format ? (format as (v: any) => React.ReactNode)(value) : String(value)}
             </span>
           </div>
         ))}

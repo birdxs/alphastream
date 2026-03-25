@@ -35,20 +35,23 @@ const markdownComponents: Components = {
   // 表格样式
   table({ children }) {
     return (
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto my-2 rounded-lg border">
         <table className="min-w-full text-sm">{children}</table>
       </div>
     );
   },
   th({ children }) {
     return (
-      <th className="border-b px-3 py-2 text-left font-medium bg-muted/50">
+      <th className="border-b-2 px-3 py-2 text-left font-semibold bg-muted/70 text-xs uppercase tracking-wider">
         {children}
       </th>
     );
   },
   td({ children }) {
-    return <td className="border-b px-3 py-1.5">{children}</td>;
+    return <td className="border-b border-border/30 px-3 py-1.5 even:bg-muted/20 tabular-nums">{children}</td>;
+  },
+  tr({ children }) {
+    return <tr className="hover:bg-accent/30 transition-colors">{children}</tr>;
   },
   // 强调数字（金融数据高亮）
   strong({ children }) {

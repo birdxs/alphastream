@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { ChatMessage, Artifact, Conversation } from '@/lib/types';
 
 interface ChatState {
@@ -30,25 +31,36 @@ interface ChatState {
   setMessages: (msgs: ChatMessage[]) => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
-  conversations: [],
-  activeConversationId: null,
-  messages: [],
-  isStreaming: false,
-  streamingContent: '',
-  artifacts: [],
-  followUpQuestions: [],
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      conversations: [],
+      activeConversationId: null,
+      messages: [],
+      isStreaming: false,
+      streamingContent: '',
+      artifacts: [],
+      followUpQuestions: [],
 
-  setActiveConversation: (id) => set({ activeConversationId: id }),
-  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
-  setStreaming: (streaming) => set({ isStreaming: streaming }),
-  appendStreamContent: (content) =>
-    set((s) => ({ streamingContent: s.streamingContent + content })),
-  resetStreamContent: () => set({ streamingContent: '' }),
-  addArtifact: (artifact) =>
-    set((s) => ({ artifacts: [...s.artifacts, artifact] })),
-  clearArtifacts: () => set({ artifacts: [] }),
-  setFollowUps: (questions) => set({ followUpQuestions: questions }),
-  setConversations: (convs) => set({ conversations: convs }),
-  setMessages: (msgs) => set({ messages: msgs }),
-}));
+      setActiveConversation: (id) => set({ activeConversationId: id }),
+      addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+      setStreaming: (streaming) => set({ isStreaming: streaming }),
+      appendStreamContent: (content) =>
+        set((s) => ({ streamingContent: s.streamingContent + content })),
+      resetStreamContent: () => set({ streamingContent: '' }),
+      addArtifact: (artifact) =>
+        set((s) => ({ artifacts: [...s.artifacts, artifact] })),
+      clearArtifacts: () => set({ artifacts: [] }),
+      setFollowUps: (questions) => set({ followUpQuestions: questions }),
+      setConversations: (convs) => set({ conversations: convs }),
+      setMessages: (msgs) => set({ messages: msgs }),
+    }),
+    {
+      name: 'chat-storage',
+      partialize: (state) => ({
+        activeConversationId: state.activeConversationId,
+        conversations: state.conversations,
+      }),
+    }
+  )
+);

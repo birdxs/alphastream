@@ -7,10 +7,12 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { useSettingsStore } from "@/lib/stores/settings-store";
 import { Sun, Moon } from "lucide-react";
 
 export default function SettingsPage() {
   const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
+  const { researchDepth, setResearchDepth, enableMemory, setEnableMemory } = useSettingsStore();
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
@@ -52,14 +54,33 @@ export default function SettingsPage() {
               <p className="font-medium text-sm">默认研究深度</p>
               <p className="text-xs text-muted-foreground">1-5级，越高分析越全面但耗时更长</p>
             </div>
-            <span className="font-mono text-lg">3</span>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((d) => (
+                <Button
+                  key={d}
+                  variant={researchDepth === d ? "default" : "outline"}
+                  size="sm"
+                  className="w-8 h-8 p-0 font-mono"
+                  onClick={() => setResearchDepth(d)}
+                >
+                  {d}
+                </Button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-sm">语义记忆</p>
               <p className="text-xs text-muted-foreground">Agent是否参考历史分析记录</p>
             </div>
-            <span className="text-sm text-green-500">已启用</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEnableMemory(!enableMemory)}
+              className={enableMemory ? 'text-green-500 border-green-500/50' : 'text-muted-foreground'}
+            >
+              {enableMemory ? '已启用' : '已关闭'}
+            </Button>
           </div>
         </CardContent>
       </Card>

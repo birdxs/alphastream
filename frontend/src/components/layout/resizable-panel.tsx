@@ -1,5 +1,5 @@
 // Input: left/right ReactNode面板, 宽度配置
-// Output: 可拖拽调整宽度的双面板布局
+// Output: 可拖拽调整宽度的双面板布局（含拖拽视觉反馈、双击重置、触摸支持）
 // Pos: components/layout/resizable-panel.tsx - 桌面端可拖拽面板分隔器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -16,31 +16,33 @@ interface Props {
 
 export function ResizablePanel({ left, right, defaultLeftWidth = 35, minLeftWidth = 25, maxLeftWidth = 50 }: Props) {
   const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
+  const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
 
-  const handleMouseDown = useCallback(() => {
-    isDragging.current = true;
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setIsDragging(true);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !containerRef.current) return;
+    const handlePointerMove = (ev: PointerEvent) => {
+      if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
       setLeftWidth(Math.max(minLeftWidth, Math.min(maxLeftWidth, pct)));
     };
 
-    const handleMouseUp = () => {
-      isDragging.current = false;
+    const handlePointerUp = () => {
+      setIsDragging(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
   }, [minLeftWidth, maxLeftWidth]);
 
   return (
@@ -49,8 +51,11 @@ export function ResizablePanel({ left, right, defaultLeftWidth = 35, minLeftWidt
         {left}
       </div>
       <div
-        className="w-1 hover:w-1.5 bg-border hover:bg-primary/30 cursor-col-resize transition-all flex-shrink-0 active:bg-primary/50"
-        onMouseDown={handleMouseDown}
+        className={`w-1 cursor-col-resize transition-all flex-shrink-0 ${
+          isDragging ? 'w-1 bg-primary shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'hover:w-1.5 bg-border hover:bg-primary/30'
+        }`}
+        onPointerDown={handlePointerDown}
+        onDoubleClick={() => setLeftWidth(defaultLeftWidth)}
       />
       <div className="flex-1 overflow-hidden">
         {right}

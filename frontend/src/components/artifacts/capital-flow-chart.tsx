@@ -15,6 +15,7 @@ import {
   Cell,
 } from "recharts";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { formatLargeNumber } from "@/lib/utils/format";
 
 interface Props {
   data: {
@@ -91,7 +92,21 @@ export function CapitalFlowArtifact({ data }: Props) {
                 fill: theme === "dark" ? "#9ca3af" : "#4b5563",
               }}
             />
-            <Tooltip />
+            <Tooltip
+              content={(props) => {
+                const { active, payload } = props as { active?: boolean; payload?: ReadonlyArray<{ value?: number; payload?: { date?: string } }> };
+                if (!active || !payload?.length) return null;
+                const val = payload[0].value as number;
+                return (
+                  <div className="bg-popover border rounded-lg px-3 py-2 text-xs shadow-lg">
+                    <p className="text-muted-foreground">{payload[0].payload?.date}</p>
+                    <p className={`font-mono font-bold ${val >= 0 ? 'stock-up' : 'stock-down'}`}>
+                      净流入: {formatLargeNumber(val * 10000)}
+                    </p>
+                  </div>
+                );
+              }}
+            />
             <Bar dataKey="value" name="净流入(万)">
               {chartData.map((entry, index) => (
                 <Cell

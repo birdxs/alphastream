@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Briefcase, Star, Settings } from "lucide-react";
+import { Sun, Moon, MessageSquare, Briefcase, Star, Settings, Search } from "lucide-react";
 import { MobileDrawer } from "./mobile-drawer";
 
 export function Navbar() {
@@ -40,6 +40,16 @@ export function Navbar() {
             </Button>
           </Link>
         </div>
+        <button
+          onClick={() => {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+          }}
+          className="hidden md:flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors border border-border/50"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span>搜索股票...</span>
+          <kbd className="ml-4 px-1 py-0.5 rounded bg-background text-[10px] border">⌘K</kbd>
+        </button>
         <MobileDrawer />
       </div>
       <div className="flex items-center gap-2">

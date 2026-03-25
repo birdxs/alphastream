@@ -235,6 +235,11 @@
   }
 }
 
+/* 移动端TabBar底部间距 */
+@media (max-width: 640px) {
+  main { padding-bottom: 56px; }
+}
+
 /* === 滚动条美化 === */
 ::-webkit-scrollbar {
   width: 6px;

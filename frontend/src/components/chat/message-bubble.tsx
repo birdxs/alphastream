@@ -1,5 +1,5 @@
 // Input: ChatMessage对象（含role、content、artifacts、created_at）
-// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact标签、时间戳）
+// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact标签、时间戳、新消息弹跳入场）
 // Pos: message-list.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -14,9 +14,10 @@ interface Props {
 
 export function MessageBubble({ message }: Props) {
   const isUser = message.role === "user";
+  const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
 
   return (
-    <div className={`flex gap-3 message-enter ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`flex gap-3 ${isNew ? 'animate-fade-in' : ''} ${isUser ? "flex-row-reverse" : ""}`}>
       {/* 头像 */}
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
         isUser

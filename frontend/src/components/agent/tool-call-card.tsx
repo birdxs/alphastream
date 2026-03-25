@@ -1,6 +1,6 @@
 /**
  * Input: 工具调用事件(ToolCallStart + 可选ToolCallResult)
- * Output: 可展开的工具调用详情卡片（图标、名称、耗时、参数、结果摘要）
+ * Output: 可展开的工具调用详情卡片（图标、名称、耗时、参数、结果摘要、执行中骨架屏）
  * Pos: tool-call-timeline.tsx子组件，展示单次工具调用的完整信息
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
@@ -8,6 +8,7 @@
 "use client";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { ToolCallStart, ToolCallResult } from "@/lib/types";
 
 interface Props {
@@ -61,6 +62,13 @@ export function ToolCallCard({ toolCall }: Props) {
           <span className="text-yellow-600">{"\u6267\u884C\u4E2D..."}</span>
         )}
       </div>
+
+      {!hasResult && (
+        <div className="mt-2 space-y-1.5">
+          <Skeleton className="h-3 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      )}
 
       {expanded && (
         <div className="mt-2 space-y-1 border-t pt-2">

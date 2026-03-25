@@ -1,5 +1,5 @@
 // Input: 后端对话列表API + chat-store状态
-// Output: 对话历史侧边栏UI，支持新建/切换/删除对话，错误可视化
+// Output: 对话历史侧边栏UI，支持新建/切换/删除（含确认）对话，加载骨架屏，错误可视化
 // Pos: 首页左侧侧边栏，三栏布局的导航侧
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api/client";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Conversation } from "@/lib/types";
 
@@ -16,6 +17,8 @@ export function ConversationSidebar() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const { activeConversationId, setActiveConversation, setMessages } = useChatStore();
 
   const showError = (msg: string) => {
@@ -29,11 +32,14 @@ export function ConversationSidebar() {
   }, []);
 
   const loadConversations = async () => {
+    setLoading(true);
     try {
       const data = await apiClient.get<{conversations: Conversation[]}>('/api/conversations');
       setConversations(data.conversations);
     } catch {
       showError('加载对话列表失败');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -59,14 +65,18 @@ export function ConversationSidebar() {
 
   const deleteConversation = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await apiClient.delete(`/api/conversations/${id}`);
-      setConversations(prev => prev.filter(c => c.conversation_id !== id));
-      if (activeConversationId === id) {
-        newConversation();
-      }
-    } catch {
-      showError('删除对话失败');
+    if (pendingDelete === id) {
+      // 已确认，执行删除
+      try {
+        await apiClient.delete(`/api/conversations/${id}`);
+        setConversations(prev => prev.filter(c => c.conversation_id !== id));
+        if (activeConversationId === id) newConversation();
+      } catch { showError('删除失败'); }
+      setPendingDelete(null);
+    } else {
+      // 首次点击，显示确认
+      setPendingDelete(id);
+      setTimeout(() => setPendingDelete(null), 3000);
     }
   };
 
@@ -100,7 +110,11 @@ export function ConversationSidebar() {
       )}
       <ScrollArea className="flex-1">
         <div className="p-1 space-y-0.5">
-          {conversations.length === 0 ? (
+          {loading ? (
+            <div className="p-2 space-y-2">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full rounded" />)}
+            </div>
+          ) : conversations.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4">暂无对话记录</p>
           ) : (
             conversations.map(conv => (
@@ -117,10 +131,10 @@ export function ConversationSidebar() {
                 <span className="flex-1 truncate">{conv.title}</span>
                 <Button
                   variant="ghost" size="icon"
-                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className={`h-5 w-5 ${pendingDelete === conv.conversation_id ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
                   onClick={(e) => deleteConversation(conv.conversation_id, e)}
                 >
-                  <Trash2 className="h-3 w-3" />
+                  {pendingDelete === conv.conversation_id ? <span className="text-[10px]">确认</span> : <Trash2 className="h-3 w-3" />}
                 </Button>
               </div>
             ))
