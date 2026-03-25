@@ -7,6 +7,7 @@
 import { useChatStore } from "@/lib/stores/chat-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArtifactRenderer } from "./artifact-renderer";
+import { AgentLogDrawer } from "@/components/agent/agent-log-drawer";
 
 export function ArtifactPanel() {
   const { artifacts } = useChatStore();
@@ -15,9 +16,12 @@ export function ArtifactPanel() {
     <div className="flex flex-col h-full">
       <div className="p-3 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">分析结果</h2>
-        {artifacts.length > 0 && (
-          <span className="text-xs text-muted-foreground">{artifacts.length}个组件</span>
-        )}
+        <div className="flex items-center gap-2">
+          {artifacts.length > 0 && (
+            <span className="text-xs text-muted-foreground">{artifacts.length}个组件</span>
+          )}
+          <AgentLogDrawer />
+        </div>
       </div>
       <ScrollArea className="flex-1 p-4">
         {artifacts.length === 0 ? (

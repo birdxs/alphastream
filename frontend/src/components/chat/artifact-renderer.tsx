@@ -6,7 +6,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import type { Artifact } from "@/lib/types";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ArtifactCard } from "@/components/artifacts/artifact-card";
 
 const CandlestickChartArtifact = dynamic(
   () =>
@@ -105,17 +105,9 @@ interface Props {
 
 export function ArtifactRenderer({ artifact }: Props) {
   return (
-    <Card className="animate-fade-in">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          {getArtifactIcon(artifact.artifact_type)}
-          {artifact.title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {renderArtifactContent(artifact)}
-      </CardContent>
-    </Card>
+    <ArtifactCard title={artifact.title} icon={getArtifactIcon(artifact.artifact_type)}>
+      {renderArtifactContent(artifact)}
+    </ArtifactCard>
   );
 }
 
