@@ -1,5 +1,11 @@
 # app/agents/ - 多Agent分析子系统
-- 9个分析Agent + 投资者人格Agent + 反思学习Agent + 策略演进器 + LangGraph协调器
+- 9个分析Agent + 投资者人格Agent + 反思学习Agent + 策略演进器 + LangGraph动态编排协调器
+- coordinator.py: 核心编排器，支持并行fan-out/fan-in（fundamental+capital_flow并行、bull+bear并行）和条件路由（技术分析error快速失败）
+- state.py: 共享状态定义，含router_decision路由决策字段，investor_consensus改为Dict类型
 - reflection.py: Agent自我反思和策略优化，从历史决策中学习
 - strategy_evolver.py: Agent自主策略演进系统，从反思记录中提炼并迭代分析策略
+- technical_analyst.py: 技术分析Agent，AI Agent模式（Function Calling自主查数据+AI评分），支持降级到硬编码模式
+- fundamental_analyst.py: 基本面分析Agent，AI Agent模式（Function Calling自主查数据+AI评分），支持降级到硬编码模式
+- capital_flow_analyst.py: 资金流向分析Agent，AI Agent模式（Function Calling自主查数据+AI评分），支持降级到硬编码模式
+- risk_manager.py: 风险管理Agent，AI Agent模式（Function Calling自主查数据+AI评分），支持降级到硬编码模式，注入前置分析上下文
 - 一旦这里的结构发生变化，请务必更新我... 就像重新标记领地一样。

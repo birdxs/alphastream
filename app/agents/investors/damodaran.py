@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (所有已完成的分析报告)
-Output: Dict 包含 investor_damodaran 字段 (recommendation + reasoning)
-Pos: app/agents/investors/damodaran.py - 达摩达兰风格投资者人格Agent
+Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
+Output: Dict 包含 investor_damodaran 字段 (recommendation + reasoning) + 保存分析记忆
+Pos: app/agents/investors/damodaran.py - 达摩达兰风格投资者人格Agent，带历史记忆注入
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -39,6 +39,15 @@ class DamodaranAgent:
                 return _error_result('AI客户端不可用', state)
 
             reports_summary = _compile_reports(state)
+
+            # === 记忆注入（分析前） ===
+            memory_context = ""
+            try:
+                from app.core.agent_memory import get_agent_memory
+                memory = get_agent_memory()
+                memory_context = memory.get_agent_context(stock_code, '达摩达兰投资风格分析')
+            except Exception:
+                pass
 
             prompt = f"""你是阿斯瓦斯·达摩达兰（Aswath Damodaran），纽约大学斯特恩商学院金融学教授，被誉为"估值教父"。
 请严格按照达摩达兰的估值框架对以下股票进行分析。
@@ -102,6 +111,10 @@ class DamodaranAgent:
     "key_assumption_risk": "最关键的假设风险"
 }}"""
 
+            # 注入历史记忆到prompt
+            if memory_context:
+                prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
             response, error = chat_completion(
                 client,
                 [{"role": "user", "content": prompt}],
@@ -117,6 +130,14 @@ class DamodaranAgent:
                 return _error_result('AI未返回分析结果', state)
 
             analysis = _parse_json_response(content)
+
+            # === 记忆保存（分析后） ===
+            try:
+                from app.core.agent_memory import get_agent_memory
+                reasoning = analysis.get('reasoning', content[:300])
+                get_agent_memory().save_agent_analysis(stock_code, '达摩达兰投资风格分析', reasoning[:300])
+            except Exception:
+                pass
 
             return {
                 'investor_damodaran': {

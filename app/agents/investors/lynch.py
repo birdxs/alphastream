@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (所有已完成的分析报告)
-Output: Dict 包含 investor_lynch 字段 (recommendation + reasoning)
-Pos: app/agents/investors/lynch.py - 彼得·林奇风格投资者人格Agent
+Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
+Output: Dict 包含 investor_lynch 字段 (recommendation + reasoning) + 保存分析记忆
+Pos: app/agents/investors/lynch.py - 彼得·林奇风格投资者人格Agent，带历史记忆注入
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -38,6 +38,15 @@ class LynchAgent:
                 return _error_result('AI客户端不可用', state)
 
             reports_summary = _compile_reports(state)
+
+            # === 记忆注入（分析前） ===
+            memory_context = ""
+            try:
+                from app.core.agent_memory import get_agent_memory
+                memory = get_agent_memory()
+                memory_context = memory.get_agent_context(stock_code, '彼得林奇投资风格分析')
+            except Exception:
+                pass
 
             prompt = f"""你是彼得·林奇（Peter Lynch），历史上最成功的共同基金经理之一，掌管富达麦哲伦基金期间年化回报29%。
 请严格按照林奇的投资哲学对以下股票进行分析。
@@ -101,6 +110,10 @@ class LynchAgent:
     "key_concern": "最大的担忧"
 }}"""
 
+            # 注入历史记忆到prompt
+            if memory_context:
+                prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
             response, error = chat_completion(
                 client,
                 [{"role": "user", "content": prompt}],
@@ -116,6 +129,14 @@ class LynchAgent:
                 return _error_result('AI未返回分析结果', state)
 
             analysis = _parse_json_response(content)
+
+            # === 记忆保存（分析后） ===
+            try:
+                from app.core.agent_memory import get_agent_memory
+                reasoning = analysis.get('reasoning', content[:300])
+                get_agent_memory().save_agent_analysis(stock_code, '彼得林奇投资风格分析', reasoning[:300])
+            except Exception:
+                pass
 
             return {
                 'investor_lynch': {

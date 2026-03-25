@@ -1,7 +1,7 @@
 """
-Input: 用户请求参数(stock_code, market_type, research_depth)
-Output: 完整的分析状态对象，各Agent共享读写
-Pos: app/agents/state.py - 所有Agent的共享状态定义
+Input: 用户请求参数(stock_code, market_type, research_depth, router_decision)
+Output: 完整的分析状态对象，各Agent共享读写，支持动态路由决策记录
+Pos: app/agents/state.py - 所有Agent的共享状态定义，含路由决策字段
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -33,11 +33,14 @@ class StockAnalysisState(TypedDict):
 
     # 投资者人格分析结果
     investor_opinions: Optional[Dict[str, Any]]  # 各投资者的建议汇总
-    investor_consensus: Optional[str]  # 投资者共识(BUY/SELL/HOLD)
+    investor_consensus: Optional[Dict[str, Any]]  # 投资者共识（实际存储dict结构）
 
     # 风险与决策
     risk_assessment: Optional[Dict[str, Any]]
     final_decision: Optional[Dict[str, Any]]  # {action, reasoning, confidence, price_targets}
+
+    # 路由决策（动态编排用）
+    router_decision: Optional[str]  # 路由决策记录，如 "fast_fail" / "normal"
 
     # 元数据
     execution_log: List[Dict[str, Any]]

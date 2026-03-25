@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (所有已完成的分析报告)
-Output: StockAnalysisState (bear_case已填充)
-Pos: 看空研究员Agent，纯LLM驱动，从悲观角度寻找风险因素
+Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
+Output: StockAnalysisState (bear_case已填充) + 保存分析记忆
+Pos: 看空研究员Agent，纯LLM驱动，从悲观角度寻找风险因素，带历史记忆注入
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
@@ -37,6 +37,15 @@ class BearResearcherAgent:
             # 汇总所有已有分析报告
             reports_summary = _compile_reports(state)
 
+            # === 记忆注入（分析前） ===
+            memory_context = ""
+            try:
+                from app.core.agent_memory import get_agent_memory
+                memory = get_agent_memory()
+                memory_context = memory.get_agent_context(stock_code, '看空研究员')
+            except Exception:
+                pass
+
             prompt = f"""你是一位资深的看空研究员（Bear Researcher）。你的职责是从所有可用分析数据中，
 找出潜在的风险因素和下跌信号。你要像一个严苛的审计师，质疑每一个乐观假设。
 
@@ -59,6 +68,10 @@ class BearResearcherAgent:
 
 请确保分析有据可依，标注数据来源。对看多观点进行有针对性的反驳。"""
 
+            # 注入历史记忆到prompt
+            if memory_context:
+                prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
             response, error = chat_completion(
                 client,
                 [{"role": "user", "content": prompt}],
@@ -79,6 +92,13 @@ class BearResearcherAgent:
 
             # State定义bear_case为str类型，直接返回分析文本
             bear_case_text = bear_analysis if isinstance(bear_analysis, str) else json.dumps(bear_analysis, ensure_ascii=False)
+
+            # === 记忆保存（分析后） ===
+            try:
+                from app.core.agent_memory import get_agent_memory
+                get_agent_memory().save_agent_analysis(stock_code, '看空研究员', bear_case_text[:300])
+            except Exception:
+                pass
 
             return {
                 'bear_case': bear_case_text,

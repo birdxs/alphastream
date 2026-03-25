@@ -1,7 +1,7 @@
 """
-Input: 各分析模块的方法调用
-Output: LangChain @tool 包装的标准工具函数
-Pos: app/core/tools.py - 所有Agent共享的工具函数注册表
+Input: 各分析模块的方法调用、OpenAI Function Calling工具调用请求
+Output: LangChain @tool 包装的标准工具函数 + OpenAI Function Calling格式schema + 工具执行分发
+Pos: app/core/tools.py - 所有Agent共享的工具函数注册表，支持LangChain和OpenAI双格式
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -129,7 +129,7 @@ def get_risk_assessment(stock_code: str, market_type: str = 'A') -> str:
         return f"风险评估失败: {str(e)}"
 
 
-# 工具注册表
+# === LangChain工具注册表（保持向后兼容） ===
 ALL_TOOLS = [
     get_stock_data,
     get_technical_indicators,
@@ -140,9 +140,243 @@ ALL_TOOLS = [
     get_risk_assessment,
 ]
 
-# 按职能分组
+# LangChain按职能分组
 TECHNICAL_TOOLS = [get_stock_data, get_technical_indicators]
 FUNDAMENTAL_TOOLS = [get_fundamental_data]
 CAPITAL_FLOW_TOOLS = [get_capital_flow]
 SENTIMENT_TOOLS = [get_stock_news, search_web_tool]
 RISK_TOOLS = [get_risk_assessment]
+
+
+# === OpenAI Function Calling 格式工具定义 ===
+
+OPENAI_TOOLS_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_data",
+            "description": "获取股票历史K线数据，返回最近N天的OHLCV数据摘要",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {
+                        "type": "string",
+                        "description": "股票代码，如 '600519'、'000001'"
+                    },
+                    "market_type": {
+                        "type": "string",
+                        "description": "市场类型，'A'为A股，'HK'为港股，'US'为美股",
+                        "default": "A"
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "获取最近多少天的数据",
+                        "default": 120
+                    }
+                },
+                "required": ["stock_code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_technical_indicators",
+            "description": "计算股票技术指标(MA/RSI/MACD/布林带等)并返回摘要",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {
+                        "type": "string",
+                        "description": "股票代码"
+                    },
+                    "market_type": {
+                        "type": "string",
+                        "description": "市场类型，'A'为A股，'HK'为港股，'US'为美股",
+                        "default": "A"
+                    }
+                },
+                "required": ["stock_code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_fundamental_data",
+            "description": "获取股票基本面数据(PE/PB/ROE/净利润等财务指标)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {
+                        "type": "string",
+                        "description": "股票代码"
+                    }
+                },
+                "required": ["stock_code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_capital_flow",
+            "description": "获取股票资金流向数据(主力/北向/机构资金)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {
+                        "type": "string",
+                        "description": "股票代码"
+                    }
+                },
+                "required": ["stock_code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_news",
+            "description": "获取股票相关的最新新闻和舆情信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {
+                        "type": "string",
+                        "description": "股票代码"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回新闻条数上限",
+                        "default": 5
+                    }
+                },
+                "required": ["stock_code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "搜索互联网获取最新信息（支持DuckDuckGo/Tavily/SERP多源降级）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "最大返回结果数",
+                        "default": 5
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_risk_assessment",
+            "description": "评估股票的多维度风险(波动率/趋势/反转/成交量风险)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stock_code": {
+                        "type": "string",
+                        "description": "股票代码"
+                    },
+                    "market_type": {
+                        "type": "string",
+                        "description": "市场类型，'A'为A股，'HK'为港股，'US'为美股",
+                        "default": "A"
+                    }
+                },
+                "required": ["stock_code"]
+            }
+        }
+    }
+]
+
+
+# === OpenAI工具按职能分组的schema ===
+
+TECHNICAL_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] in ('get_stock_data', 'get_technical_indicators')
+]
+
+FUNDAMENTAL_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] == 'get_fundamental_data'
+]
+
+CAPITAL_FLOW_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] == 'get_capital_flow'
+]
+
+SENTIMENT_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] in ('get_stock_news', 'search_web')
+]
+
+RISK_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] == 'get_risk_assessment'
+]
+
+# 全量schema（排除搜索工具，用于股票分析场景）
+STOCK_ANALYSIS_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] != 'search_web'
+]
+
+
+# === 工具执行分发 ===
+
+# 工具名称到LangChain工具实例的映射
+TOOL_EXECUTORS = {
+    "get_stock_data": get_stock_data,
+    "get_technical_indicators": get_technical_indicators,
+    "get_fundamental_data": get_fundamental_data,
+    "get_capital_flow": get_capital_flow,
+    "get_stock_news": get_stock_news,
+    "search_web": search_web_tool,
+    "get_risk_assessment": get_risk_assessment,
+}
+
+
+def execute_tool(tool_name: str, arguments: dict) -> str:
+    """
+    执行指定工具并返回结果字符串。
+
+    通过LangChain工具的 .invoke() 方法调用，兼容 @tool 装饰器的调用约定。
+
+    Args:
+        tool_name: 工具名称（需与TOOL_EXECUTORS中的key匹配）
+        arguments: 工具参数字典
+
+    Returns:
+        str: 工具执行结果的字符串表示
+
+    Raises:
+        ValueError: 未知的工具名称
+    """
+    executor = TOOL_EXECUTORS.get(tool_name)
+    if executor is None:
+        available = ', '.join(TOOL_EXECUTORS.keys())
+        raise ValueError(f"未知工具: {tool_name}，可用工具: {available}")
+
+    logger.info(f"执行工具 {tool_name}，参数: {arguments}")
+    try:
+        result = executor.invoke(arguments)
+        return result if isinstance(result, str) else str(result)
+    except Exception as e:
+        error_msg = f"工具 {tool_name} 执行失败: {str(e)}"
+        logger.error(error_msg)
+        return error_msg

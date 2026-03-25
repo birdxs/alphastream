@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (所有已完成的分析报告)
-Output: Dict 包含 investor_buffett 字段 (recommendation + reasoning)
-Pos: app/agents/investors/buffett.py - 巴菲特风格投资者人格Agent
+Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
+Output: Dict 包含 investor_buffett 字段 (recommendation + reasoning) + 保存分析记忆
+Pos: app/agents/investors/buffett.py - 巴菲特风格投资者人格Agent，带历史记忆注入
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -38,6 +38,15 @@ class BuffettAgent:
                 return _error_result('AI客户端不可用', state)
 
             reports_summary = _compile_reports(state)
+
+            # === 记忆注入（分析前） ===
+            memory_context = ""
+            try:
+                from app.core.agent_memory import get_agent_memory
+                memory = get_agent_memory()
+                memory_context = memory.get_agent_context(stock_code, '巴菲特投资风格分析')
+            except Exception:
+                pass
 
             prompt = f"""你是沃伦·巴菲特（Warren Buffett），世界上最成功的价值投资者之一。
 请严格按照巴菲特的投资哲学对以下股票进行分析。
@@ -79,6 +88,10 @@ class BuffettAgent:
     "holding_period": "建议持有期限"
 }}"""
 
+            # 注入历史记忆到prompt
+            if memory_context:
+                prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
             response, error = chat_completion(
                 client,
                 [{"role": "user", "content": prompt}],
@@ -95,6 +108,14 @@ class BuffettAgent:
 
             # 解析JSON结果
             analysis = _parse_json_response(content)
+
+            # === 记忆保存（分析后） ===
+            try:
+                from app.core.agent_memory import get_agent_memory
+                reasoning = analysis.get('reasoning', content[:300])
+                get_agent_memory().save_agent_analysis(stock_code, '巴菲特投资风格分析', reasoning[:300])
+            except Exception:
+                pass
 
             return {
                 'investor_buffett': {

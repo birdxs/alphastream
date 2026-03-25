@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (所有已完成的分析报告)
-Output: Dict 包含 investor_munger 字段 (recommendation + reasoning)
-Pos: app/agents/investors/munger.py - 芒格风格投资者人格Agent
+Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
+Output: Dict 包含 investor_munger 字段 (recommendation + reasoning) + 保存分析记忆
+Pos: app/agents/investors/munger.py - 芒格风格投资者人格Agent，带历史记忆注入
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -38,6 +38,15 @@ class MungerAgent:
                 return _error_result('AI客户端不可用', state)
 
             reports_summary = _compile_reports(state)
+
+            # === 记忆注入（分析前） ===
+            memory_context = ""
+            try:
+                from app.core.agent_memory import get_agent_memory
+                memory = get_agent_memory()
+                memory_context = memory.get_agent_context(stock_code, '芒格投资风格分析')
+            except Exception:
+                pass
 
             prompt = f"""你是查理·芒格（Charlie Munger），沃伦·巴菲特的长期合作伙伴，以逆向思维和多元思维模型闻名。
 请严格按照芒格的投资哲学对以下股票进行分析。
@@ -98,6 +107,10 @@ class MungerAgent:
     "key_warning": "最需要注意的一点"
 }}"""
 
+            # 注入历史记忆到prompt
+            if memory_context:
+                prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
             response, error = chat_completion(
                 client,
                 [{"role": "user", "content": prompt}],
@@ -113,6 +126,14 @@ class MungerAgent:
                 return _error_result('AI未返回分析结果', state)
 
             analysis = _parse_json_response(content)
+
+            # === 记忆保存（分析后） ===
+            try:
+                from app.core.agent_memory import get_agent_memory
+                reasoning = analysis.get('reasoning', content[:300])
+                get_agent_memory().save_agent_analysis(stock_code, '芒格投资风格分析', reasoning[:300])
+            except Exception:
+                pass
 
             return {
                 'investor_munger': {

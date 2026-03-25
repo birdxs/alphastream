@@ -1,7 +1,7 @@
 """
-Input: Agent分析结果、历史决策、语义查询文本
-Output: 记忆存取接口、语义相似历史检索结果
-Pos: app/core/agent_memory.py - Agent长期记忆、经验学习与语义检索
+Input: Agent分析结果、历史决策、语义查询文本、各Agent分析摘要
+Output: 记忆存取接口、语义相似历史检索结果、Agent级历史上下文
+Pos: app/core/agent_memory.py - Agent长期记忆、经验学习与语义检索（全Agent覆盖）
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -110,6 +110,83 @@ class AgentMemory:
                 f"{d.get('action', 'N/A')} - {d.get('reasoning', '')[:100]}"
             )
         return '\n'.join(lines)
+
+    def get_agent_context(self, stock_code: str, agent_name: str, current_query: str = '', top_k: int = 2) -> str:
+        """获取特定Agent的历史分析上下文
+
+        Args:
+            stock_code: 股票代码
+            agent_name: Agent名称（如 '技术分析师'、'看多研究员'等）
+            current_query: 当前分析摘要（用于语义匹配）
+            top_k: 返回最相似的历史记录数
+
+        Returns:
+            格式化的历史上下文字符串，为空则返回空字符串
+        """
+        filename = os.path.join(MEMORY_DIR, f"{stock_code}_agents.json")
+        all_records = self._load_file(filename)
+        if not all_records:
+            return ""
+
+        # 筛选该Agent的历史记录
+        agent_records = [r for r in all_records if r.get('agent_name') == agent_name]
+        if not agent_records:
+            return ""
+
+        # 如果有current_query，尝试语义匹配；否则返回最近的记录
+        if current_query:
+            try:
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                from sklearn.metrics.pairwise import cosine_similarity
+
+                texts = [r.get('summary', '') for r in agent_records]
+                all_texts = texts + [current_query]
+                vectorizer = TfidfVectorizer(max_features=300)
+                tfidf_matrix = vectorizer.fit_transform(all_texts)
+                query_vec = tfidf_matrix[-1:]
+                history_vecs = tfidf_matrix[:-1]
+                similarities = cosine_similarity(query_vec, history_vecs)[0]
+
+                top_indices = similarities.argsort()[-top_k:][::-1]
+                selected = []
+                for idx in top_indices:
+                    if similarities[idx] > 0.05:
+                        selected.append(agent_records[idx])
+            except Exception:
+                # 语义匹配失败，回退到最近记录
+                selected = agent_records[-top_k:]
+        else:
+            selected = agent_records[-top_k:]
+
+        if not selected:
+            return ""
+
+        lines = [f"=== {agent_name} 历史分析参考 ==="]
+        for r in selected:
+            lines.append(f"[{r.get('timestamp', '')}] {r.get('summary', '')[:200]}")
+        return '\n'.join(lines)
+
+    def save_agent_analysis(self, stock_code: str, agent_name: str, analysis_summary: str) -> None:
+        """保存单个Agent的分析摘要到记忆
+
+        存储到 data/agent_memory/{stock_code}_agents.json
+        格式: [{timestamp, agent_name, summary}]
+        """
+        filename = os.path.join(MEMORY_DIR, f"{stock_code}_agents.json")
+        records = self._load_file(filename)
+
+        entry = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'agent_name': agent_name,
+            'summary': analysis_summary[:500]
+        }
+        records.append(entry)
+
+        # 保留最近30条Agent级记录（防止文件无限增长）
+        if len(records) > 30:
+            records = records[-30:]
+
+        self._save_file(filename, records)
 
     def get_context_prompt(self, stock_code: str) -> str:
         """生成历史上下文提示（供Agent使用）"""

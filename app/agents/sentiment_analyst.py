@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (stock_code, market_type)
-Output: StockAnalysisState (sentiment_report已填充)
-Pos: 舆情分析Agent，包装news_fetcher提供LLM增强情绪分析
+Input: StockAnalysisState (stock_code, market_type) + 历史语义记忆
+Output: StockAnalysisState (sentiment_report已填充) + 保存分析记忆
+Pos: 舆情分析Agent，包装news_fetcher提供LLM增强情绪分析，带历史记忆注入
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import logging
@@ -57,6 +57,15 @@ class SentimentAnalystAgent:
                 except Exception as e:
                     logger.warning(f"联网搜索增强失败: {e}")
 
+                # === 记忆注入（分析前） ===
+                memory_context = ""
+                try:
+                    from app.core.agent_memory import get_agent_memory
+                    memory = get_agent_memory()
+                    memory_context = memory.get_agent_context(stock_code, '舆情分析师')
+                except Exception:
+                    pass
+
                 prompt = f"""你是资深舆情分析师。基于以下与股票 {stock_code} 相关的最新新闻，进行舆情分析：
 
 相关新闻数量: {len(relevant_news)}
@@ -70,6 +79,10 @@ class SentimentAnalystAgent:
 4. 市场情绪可能对股价的短期影响分析
 5. 需要重点关注的风险信号"""
 
+                # 注入历史记忆到prompt
+                if memory_context:
+                    prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
                 response, error = chat_completion(
                     client,
                     [{"role": "user", "content": prompt}],
@@ -77,7 +90,16 @@ class SentimentAnalystAgent:
                     max_tokens=1200
                 )
                 if not error:
-                    result['ai_commentary'] = get_completion_content(response)
+                    ai_commentary = get_completion_content(response)
+                    result['ai_commentary'] = ai_commentary
+
+                    # === 记忆保存（分析后） ===
+                    try:
+                        from app.core.agent_memory import get_agent_memory
+                        summary = ai_commentary[:300] if isinstance(ai_commentary, str) else str(ai_commentary)[:300]
+                        get_agent_memory().save_agent_analysis(stock_code, '舆情分析师', summary)
+                    except Exception:
+                        pass
 
             return {
                 'sentiment_report': result,

@@ -1,7 +1,7 @@
 """
-Input: StockAnalysisState (所有已完成的分析报告)
-Output: StockAnalysisState (bull_case已填充)
-Pos: 看多研究员Agent，纯LLM驱动，从乐观角度寻找买入理由
+Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
+Output: StockAnalysisState (bull_case已填充) + 保存分析记忆
+Pos: 看多研究员Agent，纯LLM驱动，从乐观角度寻找买入理由，带历史记忆注入
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
@@ -37,6 +37,15 @@ class BullResearcherAgent:
             # 汇总所有已有分析报告
             reports_summary = _compile_reports(state)
 
+            # === 记忆注入（分析前） ===
+            memory_context = ""
+            try:
+                from app.core.agent_memory import get_agent_memory
+                memory = get_agent_memory()
+                memory_context = memory.get_agent_context(stock_code, '看多研究员')
+            except Exception:
+                pass
+
             prompt = f"""你是一位资深的看多研究员（Bull Researcher）。你的职责是从所有可用分析数据中，
 找出最有力的买入理由和上涨催化剂。
 
@@ -59,6 +68,10 @@ class BullResearcherAgent:
 
 请确保分析有据可依，标注数据来源。"""
 
+            # 注入历史记忆到prompt
+            if memory_context:
+                prompt = f"【历史分析参考】\n{memory_context}\n\n" + prompt
+
             response, error = chat_completion(
                 client,
                 [{"role": "user", "content": prompt}],
@@ -80,6 +93,13 @@ class BullResearcherAgent:
             # State定义bull_case为str类型，直接返回分析文本
             # 如果需要保留perspective元数据，以前缀方式嵌入
             bull_case_text = bull_analysis if isinstance(bull_analysis, str) else json.dumps(bull_analysis, ensure_ascii=False)
+
+            # === 记忆保存（分析后） ===
+            try:
+                from app.core.agent_memory import get_agent_memory
+                get_agent_memory().save_agent_analysis(stock_code, '看多研究员', bull_case_text[:300])
+            except Exception:
+                pass
 
             return {
                 'bull_case': bull_case_text,

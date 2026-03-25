@@ -1,59 +1,192 @@
 """
 Input: StockAnalysisState (stock_code, market_type)
-Output: StockAnalysisState (fundamental_report已填充)
-Pos: 基本面分析Agent，包装FundamentalAnalyzer提供LLM增强分析
+Output: StockAnalysisState (fundamental_report已填充，含AI评分/财务健康度/成长性/工具调用记录)
+Pos: 基本面分析Agent，通过Function Calling让AI自主查询数据并评分分析，降级时使用硬编码模式
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
+import json
 import logging
+import re
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
 
 class FundamentalAnalystAgent:
-    """基本面分析师Agent"""
+    """基本面分析师Agent - AI通过Function Calling自主获取数据并评分分析"""
 
     name = "基本面分析师"
 
     @staticmethod
     def analyze(state: Dict[str, Any]) -> Dict[str, Any]:
-        """执行基本面分析"""
-        from app.analysis.fundamental_analyzer import FundamentalAnalyzer
-        from app.core.ai_client import get_ai_client, chat_completion, get_completion_content
+        """执行基本面分析（AI Agent模式，降级时使用硬编码模式）"""
+        from app.core.ai_client import get_ai_client, chat_with_tools
+        from app.core.tools import FUNDAMENTAL_TOOLS_SCHEMA
 
         stock_code = state['stock_code']
+        market_type = state.get('market_type', 'A')
 
         try:
-            analyzer = FundamentalAnalyzer()
+            client = get_ai_client()
+            if not client:
+                return _fallback_analyze(state)
 
-            # 获取财务指标
-            financial_data = analyzer.get_financial_indicators(stock_code)
+            system_prompt = (
+                "你是资深基本面分析师，具备查询股票财务数据的工具。"
+                "请使用工具获取真实的基本面数据后，基于数据给出专业的基本面分析和评分。"
+                "评分标准：综合盈利能力(ROE/净利润率)、偿债能力(资产负债率)、"
+                "成长性(营收/利润增速)、估值水平(PE/PB)等多维度，给出0-100分。"
+                "80分以上=优秀，60-80=良好，40-60=一般，40以下=较差。"
+            )
 
-            # 获取成长性数据
-            growth_data = analyzer.get_growth_data(stock_code)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"""请对股票 {stock_code}（市场：{market_type}）进行全面基本面分析。
 
-            # 计算基本面评分
-            score_result = analyzer.calculate_fundamental_score(stock_code)
+请先使用工具获取该股票的基本面数据，然后基于真实数据给出专业分析。
 
-            result = {
-                'financial_indicators': financial_data,
-                'growth_data': growth_data,
-                'score': score_result
+请严格以如下JSON格式输出（不要添加任何markdown代码块标记）：
+{{
+    "score": 70,
+    "financial_health": "健康/一般/较差",
+    "profitability": "强/中等/弱",
+    "growth_potential": "高/中/低",
+    "valuation": "低估/合理/高估",
+    "financial_indicators": {{
+        "pe_ratio": 15.5,
+        "pb_ratio": 2.1,
+        "roe": 18.5,
+        "debt_ratio": 45.0,
+        "revenue_growth": 12.3,
+        "profit_growth": 8.5
+    }},
+    "growth_data": {{
+        "revenue_trend": "上升/平稳/下降",
+        "profit_trend": "上升/平稳/下降"
+    }},
+    "recommendation": "买入/持有/减仓/卖出",
+    "ai_commentary": "详细的基本面分析，包括财务健康度、成长性、估值合理性、关键风险提示"
+}}
+
+其中score为0-100的基本面评分，请基于获取到的真实数据综合评估。"""}
+            ]
+
+            content, tool_log, error = chat_with_tools(
+                client, messages, FUNDAMENTAL_TOOLS_SCHEMA,
+                max_tool_rounds=2, temperature=0.7
+            )
+
+            if error:
+                logger.warning(f"基本面分析AI调用失败: {error}，降级到硬编码模式")
+                return _fallback_analyze(state)
+
+            # 解析AI输出的结构化JSON
+            result = _parse_ai_result(content)
+            result['tool_calls'] = tool_log
+
+            return {
+                'fundamental_report': result,
+                'execution_log': state.get('execution_log', []) + [
+                    {'agent': '基本面分析师', 'status': 'success', 'mode': 'ai_agent', 'tools_used': len(tool_log)}
+                ]
             }
 
-            # 检查是否有错误
-            if isinstance(score_result, dict) and 'error' in score_result:
+        except Exception as e:
+            logger.error(f"基本面分析失败: {e}，降级到硬编码模式")
+            try:
+                return _fallback_analyze(state)
+            except Exception as fallback_err:
+                logger.error(f"基本面分析降级也失败: {fallback_err}")
                 return {
-                    'fundamental_report': {'error': score_result['error']},
+                    'fundamental_report': {'error': str(e)},
                     'execution_log': state.get('execution_log', []) + [
-                        {'agent': '基本面分析师', 'status': 'failed', 'error': score_result['error']}
+                        {'agent': '基本面分析师', 'status': 'failed', 'error': str(e)}
                     ]
                 }
 
-            # 用AI增强分析
-            client = get_ai_client()
-            if client:
-                prompt = f"""你是资深基本面分析师。基于以下财务数据，给出专业分析：
+
+def _parse_ai_result(content: str) -> Dict[str, Any]:
+    """解析AI输出的JSON结果，支持处理markdown代码块"""
+    if not content:
+        return {'score': 50, 'ai_commentary': '未获取到AI分析结果', 'recommendation': '观望'}
+
+    # 尝试从markdown代码块中提取JSON
+    json_str = content
+    code_block_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?\s*```', content, re.DOTALL)
+    if code_block_match:
+        json_str = code_block_match.group(1).strip()
+
+    # 尝试直接解析JSON
+    try:
+        result = json.loads(json_str)
+        if isinstance(result, dict):
+            result.setdefault('score', 50)
+            result.setdefault('ai_commentary', content)
+            result.setdefault('recommendation', '观望')
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # 尝试从内容中提取JSON对象
+    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', content, re.DOTALL)
+    if json_match:
+        try:
+            result = json.loads(json_match.group(0))
+            if isinstance(result, dict):
+                result.setdefault('score', 50)
+                result.setdefault('ai_commentary', content)
+                result.setdefault('recommendation', '观望')
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # JSON解析完全失败
+    logger.warning("基本面分析JSON解析失败，使用纯文本模式")
+    return {
+        'score': 50,
+        'ai_commentary': content,
+        'recommendation': '观望',
+        'parse_warning': 'AI输出非标准JSON，已降级为纯文本'
+    }
+
+
+def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
+    """AI不可用时的降级分析（保留原硬编码逻辑）"""
+    from app.analysis.fundamental_analyzer import FundamentalAnalyzer
+    from app.core.ai_client import get_ai_client, chat_completion, get_completion_content
+
+    stock_code = state['stock_code']
+
+    analyzer = FundamentalAnalyzer()
+
+    # 获取财务指标
+    financial_data = analyzer.get_financial_indicators(stock_code)
+
+    # 获取成长性数据
+    growth_data = analyzer.get_growth_data(stock_code)
+
+    # 计算基本面评分
+    score_result = analyzer.calculate_fundamental_score(stock_code)
+
+    result = {
+        'financial_indicators': financial_data,
+        'growth_data': growth_data,
+        'score': score_result
+    }
+
+    # 检查是否有错误
+    if isinstance(score_result, dict) and 'error' in score_result:
+        return {
+            'fundamental_report': {'error': score_result['error']},
+            'execution_log': state.get('execution_log', []) + [
+                {'agent': '基本面分析师', 'status': 'failed', 'mode': 'fallback', 'error': score_result['error']}
+            ]
+        }
+
+    # 尝试用AI增强注释
+    client = get_ai_client()
+    if client:
+        prompt = f"""你是资深基本面分析师。基于以下财务数据，给出专业分析：
 
 股票代码: {stock_code}
 
@@ -72,30 +205,21 @@ class FundamentalAnalystAgent:
 3. 估值合理性判断（当前估值水平、相对行业位置）
 4. 关键财务风险提示"""
 
-                response, error = chat_completion(
-                    client,
-                    [{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=1200
-                )
-                if not error:
-                    result['ai_commentary'] = get_completion_content(response)
+        response, error = chat_completion(
+            client,
+            [{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1200
+        )
+        if not error:
+            result['ai_commentary'] = get_completion_content(response)
 
-            return {
-                'fundamental_report': result,
-                'execution_log': state.get('execution_log', []) + [
-                    {'agent': '基本面分析师', 'status': 'success'}
-                ]
-            }
-
-        except Exception as e:
-            logger.error(f"基本面分析失败: {e}")
-            return {
-                'fundamental_report': {'error': str(e)},
-                'execution_log': state.get('execution_log', []) + [
-                    {'agent': '基本面分析师', 'status': 'failed', 'error': str(e)}
-                ]
-            }
+    return {
+        'fundamental_report': result,
+        'execution_log': state.get('execution_log', []) + [
+            {'agent': '基本面分析师', 'status': 'success', 'mode': 'fallback'}
+        ]
+    }
 
 
 def _summarize_data(data: Any) -> str:
