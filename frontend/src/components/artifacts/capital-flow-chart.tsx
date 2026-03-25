@@ -60,7 +60,7 @@ export function CapitalFlowArtifact({ data }: Props) {
               <span className="text-muted-foreground">{item.label}</span>
               <span
                 className={`ml-2 font-mono ${
-                  Number(item.value) >= 0 ? "text-green-500" : "text-red-500"
+                  Number(item.value) >= 0 ? "stock-up" : "stock-down"
                 }`}
               >
                 {(Number(item.value) / 10000).toFixed(1)}万

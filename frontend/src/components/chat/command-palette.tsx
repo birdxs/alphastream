@@ -1,9 +1,10 @@
 // Input: 用户输入文本 + 选择回调 + 可见性标志
-// Output: 快捷命令提示面板（/开头触发，展示可用命令列表）
+// Output: 快捷命令提示面板（/开头触发，展示可用命令列表，支持键盘导航）
 // Pos: chat-panel.tsx输入框上方的浮层组件
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { useState, useEffect } from "react";
 
 interface Props {
   input: string;
@@ -21,20 +22,48 @@ const COMMANDS = [
 ];
 
 export function CommandPalette({ input, onSelect, visible }: Props) {
-  if (!visible || !input.startsWith("/")) return null;
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const filtered = COMMANDS.filter(
-    (c) => c.trigger.includes(input) || input === "/"
-  );
+  const filtered = visible && input.startsWith("/")
+    ? COMMANDS.filter((c) => c.trigger.includes(input) || input === "/")
+    : [];
 
-  if (filtered.length === 0) return null;
+  // 输入变化时重置高亮索引
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [input]);
+
+  // P0-3: 键盘导航
+  useEffect(() => {
+    if (!visible || filtered.length === 0) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex((prev) => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter' && filtered[activeIndex]) {
+        e.preventDefault();
+        onSelect(filtered[activeIndex].example);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visible, filtered, activeIndex, onSelect]);
+
+  if (!visible || !input.startsWith("/") || filtered.length === 0) return null;
 
   return (
     <div className="absolute bottom-full left-0 right-0 mb-1 bg-popover border rounded-lg shadow-lg p-1 z-50">
-      {filtered.map((cmd) => (
+      {filtered.map((cmd, i) => (
         <button
           key={cmd.trigger}
-          className="w-full text-left px-3 py-2 rounded hover:bg-accent text-sm flex justify-between items-center"
+          className={`w-full text-left px-3 py-2 rounded text-sm flex justify-between items-center ${
+            i === activeIndex ? 'bg-accent' : 'hover:bg-accent'
+          }`}
           onClick={() => onSelect(cmd.example)}
         >
           <span>

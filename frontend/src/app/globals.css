@@ -121,12 +121,18 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    font-variant-numeric: tabular-nums;
   }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+  }
+  .font-finance {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.01em;
   }
 }
 
@@ -208,21 +214,8 @@
 
 /* === 响应式适配 === */
 
-/* 移动端：单栏模式 */
+/* 移动端：Tab切换模式已由page.tsx接管布局 */
 @media (max-width: 768px) {
-  .chat-layout {
-    flex-direction: column;
-  }
-  .chat-panel {
-    width: 100% !important;
-    min-width: unset !important;
-    border-right: none !important;
-    border-bottom: 1px solid hsl(var(--border));
-    max-height: 50vh;
-  }
-  .artifact-panel {
-    max-height: 50vh;
-  }
   .conversation-sidebar {
     display: none;
   }

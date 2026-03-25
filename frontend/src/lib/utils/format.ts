@@ -10,7 +10,7 @@ export function formatPrice(price: number | string | undefined): string {
   if (price === undefined || price === null) return '--';
   const num = typeof price === 'string' ? parseFloat(price) : price;
   if (isNaN(num)) return '--';
-  return num.toFixed(2);
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** 格式化百分比（+/- 符号） */

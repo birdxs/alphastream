@@ -1,5 +1,5 @@
 // Input: 后端对话列表API + chat-store状态
-// Output: 对话历史侧边栏UI，支持新建/切换/删除对话
+// Output: 对话历史侧边栏UI，支持新建/切换/删除对话，错误可视化
 // Pos: 首页左侧侧边栏，三栏布局的导航侧
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -15,7 +15,13 @@ import type { Conversation } from "@/lib/types";
 export function ConversationSidebar() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { activeConversationId, setActiveConversation, setMessages } = useChatStore();
+
+  const showError = (msg: string) => {
+    setError(msg);
+    setTimeout(() => setError(null), 3000);
+  };
 
   // 加载对话列表
   useEffect(() => {
@@ -27,7 +33,7 @@ export function ConversationSidebar() {
       const data = await apiClient.get<{conversations: Conversation[]}>('/api/conversations');
       setConversations(data.conversations);
     } catch {
-      // 忽略错误
+      showError('加载对话列表失败');
     }
   };
 
@@ -47,7 +53,7 @@ export function ConversationSidebar() {
         setMessages(data.messages);
       }
     } catch {
-      // 忽略
+      showError('加载对话消息失败');
     }
   };
 
@@ -60,7 +66,7 @@ export function ConversationSidebar() {
         newConversation();
       }
     } catch {
-      // 忽略
+      showError('删除对话失败');
     }
   };
 
@@ -87,6 +93,11 @@ export function ConversationSidebar() {
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
+      {error && (
+        <div className="mx-2 mt-1 px-2 py-1 bg-red-500/10 text-red-500 text-[10px] rounded">
+          {error}
+        </div>
+      )}
       <ScrollArea className="flex-1">
         <div className="p-1 space-y-0.5">
           {conversations.length === 0 ? (

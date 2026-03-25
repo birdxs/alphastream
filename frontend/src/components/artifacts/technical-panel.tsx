@@ -86,11 +86,11 @@ export function TechnicalPanelArtifact({ data }: Props) {
       {(data.price || data.support_level || data.resistance_level) && (
         <div className="flex justify-between text-sm pt-1 border-t">
           {data.support_level && (
-            <span className="text-red-500">\u652F\u6491 {data.support_level}</span>
+            <span className="stock-down">\u652F\u6491 {data.support_level}</span>
           )}
           {data.price && <span className="font-bold">\u5F53\u524D {data.price}</span>}
           {data.resistance_level && (
-            <span className="text-green-500">\u963B\u529B {data.resistance_level}</span>
+            <span className="stock-up">\u963B\u529B {data.resistance_level}</span>
           )}
         </div>
       )}

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare } from "lucide-react";
 import { usePortfolioStore } from "@/lib/stores/portfolio-store";
+import { formatPrice, formatPercent, getPriceColorClass } from "@/lib/utils/format";
 import Link from "next/link";
 
 export default function PortfolioPage() {
@@ -49,27 +50,27 @@ export default function PortfolioPage() {
       </div>
 
       {/* 组合概况 */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">总市值</p>
-            <p className="text-2xl font-bold font-mono">&yen;{totalValue.toLocaleString()}</p>
+            <p className="text-2xl font-bold font-finance">&yen;{formatPrice(totalValue)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">总盈亏</p>
-            <p className={`text-2xl font-bold font-mono ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {totalPnl >= 0 ? '+' : ''}{totalPnl.toLocaleString()}
+            <p className={`text-2xl font-bold font-finance ${getPriceColorClass(totalPnl)}`}>
+              {totalPnl >= 0 ? '+' : ''}{formatPrice(totalPnl)}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">收益率</p>
-            <p className={`text-2xl font-bold font-mono flex items-center gap-1 ${totalReturn >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            <p className={`text-2xl font-bold font-finance flex items-center gap-1 ${getPriceColorClass(totalReturn)}`}>
               {totalReturn >= 0 ? <TrendingUp className="h-5 w-5"/> : <TrendingDown className="h-5 w-5"/>}
-              {totalReturn.toFixed(2)}%
+              {formatPercent(totalReturn)}
             </p>
           </CardContent>
         </Card>
@@ -129,11 +130,11 @@ export default function PortfolioPage() {
                         <p className="text-xs text-muted-foreground">成本 {h.costPrice}</p>
                       </div>
                       <div className="text-right w-24">
-                        <p className={`font-mono ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {pnl >= 0 ? '+' : ''}{pnl.toFixed(0)}
+                        <p className={`font-finance ${getPriceColorClass(pnl)}`}>
+                          {formatPrice(pnl)}
                         </p>
-                        <p className={`text-xs ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                        <p className={`text-xs ${getPriceColorClass(pnlPct)}`}>
+                          {formatPercent(pnlPct)}
                         </p>
                       </div>
                       <Link href={`/?stock=${h.code}`}>

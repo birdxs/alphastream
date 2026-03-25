@@ -38,16 +38,18 @@ class ApiClient {
     return res.json();
   }
 
-  // SSE流式请求（返回EventSource-like接口）
+  // SSE流式请求（返回EventSource-like接口，支持AbortController取消）
   async streamPost(
     path: string,
     body: Record<string, unknown>,
-    handlers: SSEHandlers
+    handlers: SSEHandlers,
+    signal?: AbortSignal
   ): Promise<void> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!res.ok || !res.body) {

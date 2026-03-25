@@ -1,5 +1,5 @@
 // Input: 后端API市场数据
-// Output: 市场指数概览条（沪指/深指/创业板/沪深300实时数据）
+// Output: 市场指数概览条（沪指/深指/创业板/沪深300实时数据），含错误提示
 // Pos: 首页顶部ticker bar，展示主要市场指数
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -22,6 +22,7 @@ export function MarketOverview() {
     { name: "沪深300", code: "000300", price: 0, change: 0 },
   ]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // 尝试从后端获取最新数据
@@ -32,6 +33,8 @@ export function MarketOverview() {
         setLoading(false);
       } catch {
         setLoading(false);
+        setError('市场数据加载失败');
+        setTimeout(() => setError(null), 3000);
       }
     };
     fetchData();
@@ -39,6 +42,11 @@ export function MarketOverview() {
 
   return (
     <div className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs">
+      {error && (
+        <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-[10px] rounded shrink-0">
+          {error}
+        </span>
+      )}
       <span className="text-muted-foreground shrink-0">市场</span>
       {indices.map(idx => (
         <div key={idx.code} className="flex items-center gap-1.5 shrink-0">

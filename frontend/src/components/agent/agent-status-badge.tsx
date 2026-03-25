@@ -15,7 +15,7 @@ interface Props {
 
 const STATUS_CONFIG = {
   pending: { icon: "\u23F3", color: "text-muted-foreground bg-muted", label: "\u7B49\u5F85\u4E2D" },
-  started: { icon: "\u26A1", color: "text-yellow-600 bg-yellow-500/10", label: "\u6267\u884C\u4E2D" },
+  started: { icon: "\u26A1", color: "text-yellow-600 bg-yellow-500/10 animate-pulse", label: "\u6267\u884C\u4E2D" },
   completed: { icon: "\u2705", color: "text-green-600 bg-green-500/10", label: "\u5B8C\u6210" },
   error: { icon: "\u274C", color: "text-red-600 bg-red-500/10", label: "\u9519\u8BEF" },
 };
@@ -23,7 +23,7 @@ const STATUS_CONFIG = {
 export function AgentStatusBadge({ name, status }: Props) {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${config.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all duration-300 ${config.color}`}>
       <span>{config.icon}</span>
       <span>{name}</span>
     </span>

@@ -1,26 +1,37 @@
-// Input: 用户键盘输入、股票代码选择、市场类型选择
-// Output: 聊天输入框UI（含股票代码快捷选择、市场切换、自选按钮）
+// Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调
+// Output: 聊天输入框UI（含股票代码快捷选择、市场切换、自选按钮、停止生成按钮、自动增高）
 // Pos: chat-panel.tsx的子组件，负责用户输入与发送
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { CommandPalette } from "./command-palette";
-import { Send, Loader2, Star } from "lucide-react";
+import { Send, Square, Star } from "lucide-react";
 
 interface Props {
   onSend: (message: string, options: { stock_code?: string; market_type?: string }) => void;
+  onStop: () => void;
 }
 
-export function ChatInput({ onSend }: Props) {
+export function ChatInput({ onSend, onStop }: Props) {
   const [input, setInput] = useState("");
   const [stockCode, setStockCode] = useState("");
   const [marketType, setMarketType] = useState("A");
   const { isStreaming } = useChatStore();
   const { addItem, hasItem } = useWatchlistStore();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // P0-1: 输入框自动增高
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = '40px'; // reset
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    }
+  }, [input]);
 
   const handleSend = () => {
     const msg = input.trim();
@@ -33,6 +44,11 @@ export function ChatInput({ onSend }: Props) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 当命令面板可见时，不处理Enter（交给CommandPalette处理）
+    if (input.startsWith("/") && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter")) {
+      // 这些键由CommandPalette的全局监听处理
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -97,6 +113,7 @@ export function ChatInput({ onSend }: Props) {
         <div className="flex gap-2 items-end">
           <div className="flex-1 relative">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -107,14 +124,25 @@ export function ChatInput({ onSend }: Props) {
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />
           </div>
-          <Button
-            size="icon"
-            className="rounded-xl h-10 w-10 shrink-0"
-            onClick={handleSend}
-            disabled={isStreaming || !input.trim()}
-          >
-            {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+          {isStreaming ? (
+            <Button
+              size="icon"
+              variant="destructive"
+              className="rounded-xl h-10 w-10 shrink-0"
+              onClick={onStop}
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              className="rounded-xl h-10 w-10 shrink-0"
+              onClick={handleSend}
+              disabled={!input.trim()}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

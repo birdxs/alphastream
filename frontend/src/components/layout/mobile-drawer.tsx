@@ -1,15 +1,76 @@
-// Input: 无
-// Output: 移动端侧边抽屉导航菜单
+// Input: chat-store对话状态 + 后端对话列表API
+// Output: 移动端侧边抽屉导航菜单，含对话历史列表
 // Pos: components/layout/mobile-drawer.tsx - 移动端导航抽屉
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Menu, MessageSquare, Briefcase, Star, Settings } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Menu, MessageSquare, Briefcase, Star, Settings, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { apiClient } from "@/lib/api/client";
+import { useChatStore } from "@/lib/stores/chat-store";
+import type { Conversation } from "@/lib/types";
 
 export function MobileDrawer() {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const { activeConversationId, setActiveConversation, setMessages } = useChatStore();
+
+  const loadConversations = async () => {
+    try {
+      const data = await apiClient.get<{conversations: Conversation[]}>('/api/conversations');
+      setConversations(data.conversations);
+    } catch {
+      setError('加载失败');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  useEffect(() => {
+    if (historyOpen && conversations.length === 0) {
+      loadConversations();
+    }
+  }, [historyOpen, conversations.length]);
+
+  const newConversation = () => {
+    setActiveConversation(null);
+    setMessages([]);
+    useChatStore.getState().clearArtifacts();
+    useChatStore.getState().resetStreamContent();
+    useChatStore.getState().setFollowUps([]);
+  };
+
+  const selectConversation = async (conv: Conversation) => {
+    setActiveConversation(conv.conversation_id);
+    try {
+      const data = await apiClient.get<{messages: Array<{message_id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string}>}>(`/api/conversations/${conv.conversation_id}`);
+      if (data.messages) {
+        setMessages(data.messages);
+      }
+    } catch {
+      setError('加载消息失败');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  const deleteConversation = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await apiClient.delete(`/api/conversations/${id}`);
+      setConversations(prev => prev.filter(c => c.conversation_id !== id));
+      if (activeConversationId === id) {
+        newConversation();
+      }
+    } catch {
+      setError('删除失败');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
   return (
     <Sheet>
       <SheetTrigger
@@ -25,6 +86,11 @@ export function MobileDrawer() {
             <span className="text-primary">AI</span>金融分析
           </h2>
         </div>
+        {error && (
+          <div className="mx-2 mt-1 px-2 py-1 bg-red-500/10 text-red-500 text-[10px] rounded">
+            {error}
+          </div>
+        )}
         <nav className="p-2 space-y-1">
           {[
             { href: "/", icon: MessageSquare, label: "AI对话" },
@@ -39,6 +105,55 @@ export function MobileDrawer() {
               </div>
             </Link>
           ))}
+
+          {/* 对话历史折叠区 */}
+          <div className="pt-2 border-t mt-2">
+            <button
+              onClick={() => setHistoryOpen(!historyOpen)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent transition-colors w-full text-left"
+            >
+              {historyOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              <span className="text-sm">对话历史</span>
+            </button>
+            {historyOpen && (
+              <div className="pl-2">
+                <button
+                  onClick={newConversation}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded text-xs hover:bg-accent transition-colors w-full text-left text-primary"
+                >
+                  <Plus className="h-3 w-3" />
+                  新对话
+                </button>
+                <ScrollArea className="max-h-48">
+                  {conversations.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground text-center py-2">暂无记录</p>
+                  ) : (
+                    conversations.map(conv => (
+                      <div
+                        key={conv.conversation_id}
+                        onClick={() => selectConversation(conv)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer group transition-colors ${
+                          activeConversationId === conv.conversation_id
+                            ? 'bg-primary/10 text-primary'
+                            : 'hover:bg-muted'
+                        }`}
+                      >
+                        <MessageSquare className="h-3 w-3 shrink-0" />
+                        <span className="flex-1 truncate">{conv.title}</span>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => deleteConversation(conv.conversation_id, e)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </ScrollArea>
+              </div>
+            )}
+          </div>
         </nav>
       </SheetContent>
     </Sheet>

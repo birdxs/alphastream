@@ -12,7 +12,7 @@ import { SuggestedQuestions } from "./suggested-questions";
 import { WelcomeScreen } from "./welcome-screen";
 
 export function ChatPanel() {
-  const { sendMessage } = useChatStream();
+  const { sendMessage, stopGeneration } = useChatStream();
   const { messages, isStreaming } = useChatStore();
 
   const handleSend = (message: string, options: { stock_code?: string; market_type?: string }) => {
@@ -40,7 +40,7 @@ export function ChatPanel() {
       <SuggestedQuestions onSelect={(q) => handleSend(q, {})} />
 
       {/* 输入框 */}
-      <ChatInput onSend={handleSend} />
+      <ChatInput onSend={handleSend} onStop={stopGeneration} />
     </div>
   );
 }
