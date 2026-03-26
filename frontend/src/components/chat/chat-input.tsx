@@ -72,6 +72,19 @@ export function ChatInput({ onSend, onStop }: Props) {
     }
   }, [isStreaming]);
 
+  // 监听 chat-prefill 事件，预填输入框文本
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (text) {
+        setInput(text);
+        setTimeout(() => textareaRef.current?.focus(), 100);
+      }
+    };
+    window.addEventListener("chat-prefill", handler);
+    return () => window.removeEventListener("chat-prefill", handler);
+  }, []);
+
   // P0-1: 输入框自动增高
   useEffect(() => {
     const ta = textareaRef.current;

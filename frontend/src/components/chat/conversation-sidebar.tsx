@@ -110,7 +110,7 @@ function SwipeableConvItem({
   );
 }
 
-export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?: boolean }) {
+export function ConversationSidebar({ isMobileSheet = false, onConversationSelect }: { isMobileSheet?: boolean; onConversationSelect?: () => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +153,8 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
 
   const selectConversation = async (conv: Conversation) => {
     setActiveConversation(conv.conversation_id);
+    // 在mobile sheet中，选择对话后立即关闭sheet
+    onConversationSelect?.();
     try {
       const data = await apiClient.get<{messages: Array<{message_id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string}>}>(`/api/conversations/${conv.conversation_id}`);
       if (data.messages) {

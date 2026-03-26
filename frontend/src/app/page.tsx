@@ -3,7 +3,7 @@
 // Pos: 应用主入口页面
 
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ArtifactPanel } from "@/components/chat/artifact-panel";
@@ -32,6 +32,7 @@ export default function HomePage() {
   const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(null);
   const [chatWidthPct, setChatWidthPct] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 移动端Tab切换动画
@@ -142,7 +143,7 @@ export default function HomePage() {
       {/* Mobile: 底部TabBar — 固定在底部 */}
       <div className="flex sm:hidden fixed bottom-0 left-0 right-0 h-14 bg-[rgba(10,10,26,0.95)] backdrop-blur-xl border-t border-white/[0.08] z-50 items-center justify-around px-2">
         {/* 左侧：侧边栏Drawer触发按钮 */}
-        <Sheet>
+        <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
           <SheetTrigger
             render={
               <Button variant="ghost" size="icon" className="h-10 w-10 text-[#8888A0] hover:bg-white/[0.08]" />
@@ -151,7 +152,7 @@ export default function HomePage() {
             <Menu className="h-5 w-5" />
           </SheetTrigger>
           <SheetContent side="left" className="w-72 p-0 bg-[rgba(15,15,35,0.98)] backdrop-blur-2xl border-r border-white/[0.08]">
-            <ConversationSidebar isMobileSheet />
+            <ConversationSidebar isMobileSheet onConversationSelect={() => setMobileSheetOpen(false)} />
           </SheetContent>
         </Sheet>
 

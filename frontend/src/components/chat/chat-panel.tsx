@@ -3,6 +3,8 @@
 // Pos: 首页中栏
 
 "use client";
+import { Suspense, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { MessageList } from "./message-list";
@@ -10,14 +12,37 @@ import { ChatInput } from "./chat-input";
 import { SuggestedQuestions } from "./suggested-questions";
 import { WelcomeScreen } from "./welcome-screen";
 
-export function ChatPanel() {
+function ChatPanelInner() {
   const { sendMessage, stopGeneration } = useChatStream();
   const messages = useChatStore(s => s.messages);
   const isStreaming = useChatStore(s => s.isStreaming);
+  const searchParams = useSearchParams();
+  const prefillHandled = useRef(false);
 
   const handleSend = (message: string, options: { stock_code?: string; market_type?: string }) => {
     sendMessage(message, options);
   };
+
+  // 处理 URL 查询参数预填充：?q= 直接发送，?prefill= 预填输入框
+  useEffect(() => {
+    if (prefillHandled.current) return;
+    const q = searchParams.get("q");
+    const prefill = searchParams.get("prefill");
+    if (q) {
+      prefillHandled.current = true;
+      // 延迟发送，确保组件完全挂载
+      setTimeout(() => sendMessage(q, {}), 300);
+      // 清除 URL 参数避免刷新重发
+      window.history.replaceState({}, "", "/");
+    } else if (prefill) {
+      prefillHandled.current = true;
+      // prefill 模式：通过自定义事件通知 ChatInput 预填文本
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("chat-prefill", { detail: prefill }));
+      }, 300);
+      window.history.replaceState({}, "", "/");
+    }
+  }, [searchParams, sendMessage]);
 
   return (
     <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20">
@@ -50,5 +75,19 @@ export function ChatPanel() {
       {/* Input */}
       <ChatInput onSend={handleSend} onStop={stopGeneration} />
     </div>
+  );
+}
+
+export function ChatPanel() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20">
+        <div className="flex items-center px-3 h-10 border-b border-white/[0.08] bg-[rgba(10,10,26,0.6)] backdrop-blur-sm shrink-0">
+          <span className="text-xs text-foreground/40">加载中...</span>
+        </div>
+      </div>
+    }>
+      <ChatPanelInner />
+    </Suspense>
   );
 }

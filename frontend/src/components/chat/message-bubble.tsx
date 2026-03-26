@@ -54,13 +54,20 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
     <div className={`flex gap-3 group ${isNew ? "animate-[glass-enter_250ms_ease-out_both]" : ""} ${isUser ? "flex-row-reverse" : ""}`}>
       {/* 头像 */}
       <div
-        className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${
+        className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
           isUser
-            ? "bg-[#3737CC] text-white"
+            ? "bg-gradient-to-br from-[#3737CC] to-[#5252E0] text-white ring-1 ring-white/10"
             : "bg-gradient-to-br from-[#6B5EE4] to-[#3737CC] text-white animate-[breathe_3s_ease-in-out_infinite]"
         }`}
       >
-        {isUser ? "我" : "AI"}
+        {isUser ? (
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="5" r="3" fill="currentColor" opacity="0.9"/>
+            <path d="M2.5 14.5C2.5 11.5 5 9.5 8 9.5C11 9.5 13.5 11.5 13.5 14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.9"/>
+          </svg>
+        ) : (
+          <span className="text-[10px] font-bold">AI</span>
+        )}
       </div>
 
       {/* 内容 */}
@@ -74,8 +81,10 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
         >
           {isUser ? (
             <span className="whitespace-pre-wrap">{message.content}</span>
-          ) : (
+          ) : message.content ? (
             <StreamMarkdown content={message.content} />
+          ) : (
+            <span className="text-[#8888A0] italic text-xs animate-pulse">(正在生成...)</span>
           )}
         </div>
 
