@@ -22,6 +22,7 @@ Pos: docs/API.md - 前端开发人员后端对接标准，所有路由/参数/�
 
 - [异步任务通用模式](#异步任务通用模式)
 - [Agent智能分析API（核心）](#agent智能分析api核心)
+- [市场行情API](#市场行情api)
 - [股票分析API](#股票分析api)
 - [市场扫描API](#市场扫描api)
 - [基本面分析API](#基本面分析api)
@@ -299,6 +300,76 @@ Pos: docs/API.md - 前端开发人员后端对接标准，所有路由/参数/�
   "active_tasks": [
     { "task_id": "agent_001", "stock_code": "600519", "progress": 40 }
   ]
+}
+```
+
+---
+
+## 市场行情API
+
+### GET /api/market_indices
+
+获取4大指数（上证指数、深证成指、创业板指、科创50）的实时行情数据。
+
+**响应**:
+```json
+{
+  "indices": [
+    {
+      "code": "000001",
+      "name": "上证指数",
+      "current": 3250.50,
+      "change": 15.30,
+      "change_pct": 0.47,
+      "volume": 3500000000,
+      "amount": 450000000000
+    }
+  ],
+  "update_time": "2026-03-26 14:30:00"
+}
+```
+
+---
+
+### GET /api/market_stream
+
+SSE (Server-Sent Events) 实时行情推送。每10秒推送一次4大指数最新行情数据。
+
+**协议**: `text/event-stream`
+**推送间隔**: 10秒
+
+**事件格式**:
+```
+data: {"indices": [...], "update_time": "2026-03-26 14:30:10"}
+```
+
+**前端使用示例**:
+```javascript
+const es = new EventSource('/api/market_stream');
+es.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // 更新行情展示
+};
+```
+
+---
+
+### POST /api/upload_image
+
+上传图片文件（用于AI图像分析等场景）。
+
+**请求**: `multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| image | file | 是 | 图片文件（支持 jpg/png/gif，最大 5MB） |
+
+**响应**:
+```json
+{
+  "url": "/static/uploads/20260326_143000_abc123.png",
+  "filename": "20260326_143000_abc123.png",
+  "size": 102400
 }
 ```
 

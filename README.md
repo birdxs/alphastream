@@ -1,4 +1,4 @@
-# 智能分析系统
+# AI-Native智能金融分析平台 -- Dark Glassmorphism设计
 
 ![版本](https://img.shields.io/badge/版本-2.3.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.9+-green.svg)
@@ -6,6 +6,8 @@
 ![AKShare](https://img.shields.io/badge/AKShare-1.16+-orange.svg)
 ![AI](https://img.shields.io/badge/AI_API-集成-blueviolet.svg)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Multi_Agent-purple.svg)
+![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
+![React](https://img.shields.io/badge/React-19-61DAFB.svg)
 
 ![系统首页截图](./images/1.png)
 
@@ -15,9 +17,11 @@
 
 ## 📝 项目概述
 
-智能分析系统是一个基于Python、Flask和LangGraph的Web应用，整合了多Agent协同分析能力和人工智能辅助决策功能。系统通过多数据源（AKShare/BaoStock）获取股票数据，结合13个专业Agent（技术分析、基本面、资金流、情绪分析、多空辩论、投资者人格、风险管理、智能决策），为投资者提供全方位的AI驱动投资决策支持。
+AI-Native智能金融分析平台是一个采用Dark Glassmorphism设计风格的全栈Web应用，基于Python、Flask和LangGraph后端，配合Next.js 16 + React 19前端，整合了多Agent协同分析能力和人工智能辅助决策功能。系统通过多数据源（AKShare/BaoStock）获取股票数据，结合14个专业Agent（技术分析、基本面、资金流、情绪分析、多空辩论、投资者人格、风险管理、智能决策），提供8个页面、10种Artifact、SSE实时推送，为投资者提供全方位的AI驱动投资决策支持。
 
 ## ✨ 核心功能
+
+> **平台规模**: 8个页面 | 10种Artifact可视化组件 | 14个AI Agent | SSE实时行情推送
 
 ### 多维度股票分析
 
@@ -143,12 +147,14 @@
 
 ### 技术栈
 
+- **前端**：Next.js 16 + React 19 + Tailwind CSS + shadcn/ui + TradingView Lightweight Charts (LWC)
 - **后端**：Python 3.9+, Flask 3.1, AKShare, BaoStock
 - **AI引擎**：OpenAI兼容API, LangGraph多Agent编排, LangChain
-- **前端**：HTML5, CSS3, JavaScript, Bootstrap 5, ApexCharts
+- **传统前端**：HTML5, CSS3, JavaScript, Bootstrap 5, ApexCharts
 - **数据分析**：Pandas, NumPy, Scikit-learn
 - **搜索**：DuckDuckGo（免费）, Tavily, SERP API
 - **缓存**：Redis（可选）/ 内存缓存
+- **实时通信**：SSE (Server-Sent Events) 实时行情推送
 - **部署**：Docker, Gunicorn, docker-compose
 
 ## 📦 安装指南
@@ -402,4 +408,8 @@ bash scripts/start.sh logs       # 查看日志
   <img src="https://contrib.rocks/image?repo=LargeCupPanda/StockAnal_Sys" />
 </a>
 
-感谢使用智能分析系统！
+---
+
+> **此项目的任何功能、架构更新，必须在结束后同步更新相关文档。这是我们契约的一部分。**
+
+感谢使用AI-Native智能金融分析平台！

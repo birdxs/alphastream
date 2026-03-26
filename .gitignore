@@ -88,4 +88,10 @@ CLAUDE.md
 akshare.md
 .server.pid
 
-eval_results/docs/AGENT_ARCHITECTURE_REPORT.md
+# Next.js
+.next/
+out/
+node_modules/
+
+# Eval results
+eval_results/
