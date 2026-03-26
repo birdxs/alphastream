@@ -116,6 +116,11 @@ export default function DashboardPage() {
   const pullStartY = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  /* ---- 页面标题 ---- */
+  useEffect(() => {
+    document.title = "投资看板 - AI金融分析";
+  }, []);
+
   /* ---- 数据加载函数 ---- */
 
   const fetchIndices = useCallback(async () => {

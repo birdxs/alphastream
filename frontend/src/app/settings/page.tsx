@@ -4,6 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useThemeStore } from "@/lib/stores/theme-store";
@@ -12,6 +13,10 @@ import { Sun, Moon, Trash2, Database, Brain, Tag } from "lucide-react";
 import { useToast } from "@/components/common/toast-provider";
 
 export default function SettingsPage() {
+  useEffect(() => {
+    document.title = "设置 - AI金融分析";
+  }, []);
+
   const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
   const { researchDepth, setResearchDepth, enableMemory, setEnableMemory } = useSettingsStore();
   const { toast } = useToast();

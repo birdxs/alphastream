@@ -2,7 +2,7 @@
 // Output: 全局HTML骨架：Navbar + main content area
 // Pos: 应用最顶层布局入口
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
@@ -20,8 +20,19 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "AI金融分析",
-  description: "AI-Native 智能金融分析平台",
+  description: "AI-Native 智能金融分析平台 — 基于多Agent协作的专业投资决策支持系统",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/icon-192.png",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#0A0A1A",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

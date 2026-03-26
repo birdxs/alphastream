@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://stockanal.example.com/sitemap.xml

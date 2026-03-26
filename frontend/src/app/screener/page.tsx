@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api/client";
 import { GlassCard } from "@/components/common/glass-card";
@@ -167,6 +167,10 @@ function GlassSelect({
 
 export default function ScreenerPage() {
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+
+  useEffect(() => {
+    document.title = "选股器 - AI金融分析";
+  }, []);
   const [results, setResults] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
