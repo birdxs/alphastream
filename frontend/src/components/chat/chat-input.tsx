@@ -55,8 +55,11 @@ export function ChatInput({ onSend, onStop }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  // 检测浏览器是否支持语音识别
-  const speechSupported = typeof window !== "undefined" && getSpeechRecognition() !== null;
+  // 检测浏览器是否支持语音识别（延迟到客户端挂载后检测，避免 Hydration mismatch）
+  const [speechSupported, setSpeechSupported] = useState(false);
+  useEffect(() => {
+    setSpeechSupported(getSpeechRecognition() !== null);
+  }, []);
 
   // P2: 流式结束后自动聚焦输入框
   useEffect(() => {
