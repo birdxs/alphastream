@@ -1,5 +1,5 @@
 // Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调、文件附件、语音输入
-// Output: 聊天输入框UI（含股票代码快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览、语音录入）
+// Output: 聊天输入框UI（含股票代码验证反馈、快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览、语音录入、空消息shake动画）
 // Pos: chat-panel.tsx的子组件，负责用户输入与发送
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -10,7 +10,7 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { useToast } from "@/components/common/toast-provider";
 import { CommandPalette } from "./command-palette";
-import { Send, Square, Star, Paperclip, Mic, X } from "lucide-react";
+import { Send, Square, Star, Paperclip, Mic, X, AlertCircle } from "lucide-react";
 
 // ── 附件类型 ──
 interface AttachedFile {
@@ -48,6 +48,8 @@ export function ChatInput({ onSend, onStop }: Props) {
   const [marketType, setMarketType] = useState("A");
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [isListening, setIsListening] = useState(false);
+  const [stockCodeError, setStockCodeError] = useState(false);
+  const [shaking, setShaking] = useState(false);
   const isStreaming = useChatStore(s => s.isStreaming);
   const { addItem, hasItem } = useWatchlistStore();
   const { toast } = useToast();
@@ -157,7 +159,14 @@ export function ChatInput({ onSend, onStop }: Props) {
 
   const handleSend = () => {
     const msg = input.trim();
-    if (!msg || isStreaming) return;
+    if (!msg || isStreaming) {
+      if (!msg && !isStreaming) {
+        // 空消息 shake 动画
+        setShaking(true);
+        setTimeout(() => setShaking(false), 300);
+      }
+      return;
+    }
     setInput("");
     // 清理附件（当前仅前端展示，后端暂不支持上传）
     attachments.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
@@ -184,14 +193,27 @@ export function ChatInput({ onSend, onStop }: Props) {
     <div className="bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-white/[0.08]">
       {/* 股票选择行 */}
       <div className="flex items-center gap-1.5 px-3 pt-2">
-        <div className="flex items-center gap-0.5 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 shadow-sm">
+        <div className={`flex items-center gap-0.5 bg-white/[0.04] border rounded-lg px-2 py-1 shadow-sm transition-colors duration-150 ${
+          stockCodeError ? 'border-[#FF8767]' : 'border-white/[0.08]'
+        }`}>
           <input
             type="text"
             value={stockCode}
-            onChange={(e) => setStockCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={(e) => {
+              const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+              setStockCode(val);
+              // 验证：有输入但不足6位时显示错误
+              setStockCodeError(val.length > 0 && val.length < 6);
+            }}
+            onBlur={() => {
+              // 失焦时验证：非空且非6位则报错
+              setStockCodeError(stockCode.length > 0 && stockCode.length !== 6);
+            }}
             placeholder="代码"
             aria-label="股票代码"
-            className="w-14 bg-transparent text-[11px] font-mono focus:outline-none placeholder:text-muted-foreground/35"
+            className={`w-14 bg-transparent text-[11px] font-mono focus:outline-none placeholder:text-muted-foreground/35 transition-colors duration-150 ${
+              stockCodeError ? 'text-[#FF8767]' : ''
+            }`}
             maxLength={6}
           />
           <div className="w-px h-3.5 bg-border/60" />
@@ -206,6 +228,12 @@ export function ChatInput({ onSend, onStop }: Props) {
             <option value="US">美股</option>
           </select>
         </div>
+        {stockCodeError && (
+          <span className="flex items-center gap-0.5 text-[10px] text-[#FF8767] animate-fade-in">
+            <AlertCircle className="h-3 w-3" />
+            请输入6位股票代码
+          </span>
+        )}
         {stockCode && stockCode.length === 6 && (
           <Button
             variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-1.5"
@@ -299,7 +327,7 @@ export function ChatInput({ onSend, onStop }: Props) {
             onChange={handleFileSelect}
           />
 
-          <div className="flex-1 relative">
+          <div className={`flex-1 relative ${shaking ? 'animate-shake' : ''}`}>
             <textarea
               ref={textareaRef}
               value={input}
@@ -349,7 +377,6 @@ export function ChatInput({ onSend, onStop }: Props) {
                   : 'bg-muted text-muted-foreground/40 cursor-not-allowed'
               }`}
               onClick={handleSend}
-              disabled={!input.trim()}
               aria-label="发送消息"
               tabIndex={11}
             >

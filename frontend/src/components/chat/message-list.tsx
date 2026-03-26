@@ -1,5 +1,5 @@
 // Input: chat-store的messages、isStreaming、streamingContent状态
-// Output: 消息列表UI（含流式渲染、Agent进度、加载指示器、新消息提示按钮、50+条虚拟滚动）
+// Output: 消息列表UI（含流式渲染、Agent进度、加载指示器、毛玻璃新消息按钮、50+条虚拟滚动(rowHeight=120)）
 // Pos: chat-panel.tsx的子组件，负责消息列表渲染与自动滚动
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble } from "./message-bubble";
 import { StreamMarkdown } from "./stream-markdown";
 import { AgentProgressPanel } from "@/components/agent/agent-progress-panel";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowDown } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 
 /** react-window v2 行渲染组件props类型 */
@@ -90,7 +90,7 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
           <List
             rowComponent={VirtualRow}
             rowCount={messages.length}
-            rowHeight={80}
+            rowHeight={120}
             rowProps={{ messages }}
             style={{ height: containerHeight, width: '100%' }}
           />
@@ -140,10 +140,11 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
       </div>
       {!isAtBottom && messages.length > 0 && (
         <button
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in"
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-[#3737CC]/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in flex items-center gap-1"
           onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
         >
-          ↓ 新消息
+          <ArrowDown className="h-3 w-3" />
+          新消息
         </button>
       )}
     </ScrollArea>

@@ -410,6 +410,14 @@
   to { transform: scale(2.5); opacity: 0; }
 }
 
+/* ── 8. 输入框抖动（空消息反馈） ── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.3s ease-in-out; }
+
 /* ── 辅助动画(保留兼容) ── */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(6px); }
