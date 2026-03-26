@@ -32,32 +32,32 @@ export function NewsFeedArtifact({ data }: Props) {
     <div className="space-y-1">
       {items.slice(0, 8).map((item, i) => {
         const sentiment = item.sentiment || 0;
-        const sentimentColor = sentiment > 0.6 ? 'text-green-500' : sentiment < 0.4 ? 'text-red-500' : 'text-muted-foreground';
+        const sentimentColor = sentiment > 0.6 ? 'text-[#46BEA3]' : sentiment < 0.4 ? 'text-[#FF8767]' : 'text-[#8888A0]';
         const sentimentLabel = sentiment > 0.6 ? '利好' : sentiment < 0.4 ? '利空' : '中性';
 
         return (
-          <div key={i} className="flex items-start gap-3 py-2.5 border-b border-border/30 last:border-0 group hover:bg-muted/30 rounded px-2 -mx-2 transition-colors">
+          <div key={i} className="flex items-start gap-3 py-2.5 border-b border-white/[0.06] last:border-0 group hover:bg-white/[0.04] rounded px-2 -mx-2 transition-colors">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors line-clamp-2">
+              <p className="text-sm font-medium leading-snug text-[#F0F0F5] group-hover:text-[#3737CC] transition-colors line-clamp-2">
                 {item.title || '无标题'}
               </p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[10px] text-[#555570] font-mono">
                   {item.time || item.date || ''}
                 </span>
                 {item.source && (
-                  <span className="text-[10px] text-muted-foreground/60">{item.source}</span>
+                  <span className="text-[10px] text-[#555570]">{item.source}</span>
                 )}
               </div>
             </div>
             {item.sentiment != null && item.sentiment !== 0 && (
               <div className="flex items-center gap-1.5 shrink-0">
-                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="w-12 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${(item.sentiment || 0.5) * 100}%`,
-                      background: `linear-gradient(90deg, #ef4444, #eab308, #22c55e)`,
+                      background: `linear-gradient(90deg, #FF8767, #F59E0B, #46BEA3)`,
                     }}
                   />
                 </div>

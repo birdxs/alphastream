@@ -47,9 +47,9 @@ export function InvestorPersonasArtifact({ data }: Props) {
 
   const recColor = (rec: string) => {
     const r = rec?.toUpperCase();
-    if (r === "BUY") return "bg-green-500/10 text-green-600 border-green-500/30";
-    if (r === "SELL") return "bg-red-500/10 text-red-600 border-red-500/30";
-    return "bg-yellow-500/10 text-yellow-600 border-yellow-500/30";
+    if (r === "BUY") return "bg-[#46BEA3]/10 text-[#46BEA3] border-[#46BEA3]/30";
+    if (r === "SELL") return "bg-[#FF8767]/10 text-[#FF8767] border-[#FF8767]/30";
+    return "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30";
   };
 
   const recText = (rec: string) => {
@@ -63,12 +63,12 @@ export function InvestorPersonasArtifact({ data }: Props) {
     <div className="space-y-4">
       {/* 共识概要 */}
       {consensus && (
-        <div className={`rounded-lg border p-4 ${recColor(consensus.final_recommendation)}`}>
+        <div className={`rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm p-4 ${recColor(consensus.final_recommendation)}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-lg font-bold">{recText(consensus.final_recommendation)}</span>
             <div className="flex items-center gap-2">
               <Badge variant="outline">{consensus.agreement_level}</Badge>
-              <span className="text-sm">
+              <span className="text-sm font-mono">
                 \u7F6E\u4FE1\u5EA6 {(consensus.consensus_confidence_score * 100).toFixed(0)}%
               </span>
             </div>
@@ -92,11 +92,9 @@ export function InvestorPersonasArtifact({ data }: Props) {
             return (
               <div key={key} className="flex items-center gap-2 text-xs">
                 <span className="w-12 text-right text-muted-foreground truncate">{meta.name}</span>
-                <div className="flex-1 bg-muted rounded-full h-2.5 overflow-hidden">
+                <div className="flex-1 bg-white/[0.06] rounded-full h-2.5 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-700 ${
-                      rec === 'BUY' ? 'bg-green-500' : rec === 'SELL' ? 'bg-red-500' : 'bg-yellow-500'
-                    }`}
+                    className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
                     style={{ width: `${conf * 100}%` }}
                   />
                 </div>
@@ -114,7 +112,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
             const meta = INVESTOR_META[key as keyof typeof INVESTOR_META];
             if (!meta || !opinion) return null;
             return (
-              <Card key={key} className="overflow-hidden">
+              <Card key={key} className="overflow-hidden bg-white/[0.03] border border-white/[0.08] rounded-xl hover:bg-white/[0.06] transition-colors">
                 <CardHeader className="pb-2 pt-3 px-3">
                   <CardTitle className="text-sm flex items-center justify-between">
                     <span>
@@ -128,13 +126,13 @@ export function InvestorPersonasArtifact({ data }: Props) {
                 </CardHeader>
                 <CardContent className="px-3 pb-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="flex-1 bg-muted rounded-full h-1.5">
+                    <div className="flex-1 bg-white/[0.06] rounded-full h-1.5">
                       <div
-                        className="bg-primary h-1.5 rounded-full"
+                        className="bg-gradient-to-r from-[#3737CC] to-[#6B5EE4] h-1.5 rounded-full"
                         style={{ width: `${opinion.confidence * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs font-mono text-muted-foreground">
                       {(opinion.confidence * 100).toFixed(0)}%
                     </span>
                   </div>
@@ -146,24 +144,28 @@ export function InvestorPersonasArtifact({ data }: Props) {
       </div>
 
       {/* 关键共识/分歧 */}
-      {consensus?.key_agreements && consensus.key_agreements.length > 0 && (
-        <div className="text-sm space-y-1">
-          <p className="font-medium text-green-600">{"\u2705"} \u4E00\u81F4\u8BA4\u540C</p>
-          {consensus.key_agreements.map((a, i) => (
-            <p key={i} className="text-xs text-muted-foreground pl-5">
-              {"\u2022"} {a}
-            </p>
-          ))}
-        </div>
-      )}
-      {consensus?.key_disagreements && consensus.key_disagreements.length > 0 && (
-        <div className="text-sm space-y-1">
-          <p className="font-medium text-orange-600">{"\u26A1"} \u4E3B\u8981\u5206\u6B67</p>
-          {consensus.key_disagreements.map((d, i) => (
-            <p key={i} className="text-xs text-muted-foreground pl-5">
-              {"\u2022"} {d}
-            </p>
-          ))}
+      {(consensus?.key_agreements?.length || consensus?.key_disagreements?.length) && (
+        <div className="bg-white/[0.04] border-t border-white/[0.08] rounded-b-xl p-4 space-y-3">
+          {consensus?.key_agreements && consensus.key_agreements.length > 0 && (
+            <div className="text-sm space-y-1">
+              <p className="font-medium text-[#46BEA3]">{"\u2705"} \u4E00\u81F4\u8BA4\u540C</p>
+              {consensus.key_agreements.map((a, i) => (
+                <p key={i} className="text-xs text-muted-foreground pl-5">
+                  {"\u2022"} {a}
+                </p>
+              ))}
+            </div>
+          )}
+          {consensus?.key_disagreements && consensus.key_disagreements.length > 0 && (
+            <div className="text-sm space-y-1">
+              <p className="font-medium text-[#FF8767]">{"\u26A1"} \u4E3B\u8981\u5206\u6B67</p>
+              {consensus.key_disagreements.map((d, i) => (
+                <p key={i} className="text-xs text-muted-foreground pl-5">
+                  {"\u2022"} {d}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

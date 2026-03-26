@@ -57,22 +57,22 @@ export function CommandPalette({ input, onSelect, visible }: Props) {
   if (!visible || !input.startsWith("/") || filtered.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 bg-popover border rounded-lg shadow-lg p-1 z-50">
+    <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#0F0F23] border border-white/[0.1] rounded-xl shadow-2xl p-1 z-50">
       {filtered.map((cmd, i) => (
         <button
           key={cmd.trigger}
-          className={`w-full text-left px-3 py-2 rounded text-sm flex justify-between items-center ${
-            i === activeIndex ? 'bg-accent' : 'hover:bg-accent'
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between items-center transition-colors ${
+            i === activeIndex ? 'bg-[#3737CC]/15 border-l-2 border-[#3737CC]' : 'hover:bg-white/[0.06]'
           }`}
           onClick={() => onSelect(cmd.example)}
         >
           <span>
             <span className="font-mono text-primary">{cmd.trigger}</span>
-            <span className="ml-2 text-muted-foreground">
+            <span className="ml-2 text-[#8888A0]">
               {cmd.description}
             </span>
           </span>
-          <span className="text-xs text-muted-foreground">{cmd.example}</span>
+          <span className="text-xs text-[#8888A0]">{cmd.example}</span>
         </button>
       ))}
     </div>

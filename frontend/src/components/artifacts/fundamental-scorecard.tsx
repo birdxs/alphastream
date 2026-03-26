@@ -35,7 +35,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
   const score = Number(data.score || 50);
   const indicators = data.financial_indicators || {};
 
-  const scoreColor = score >= 80 ? 'from-green-500 to-emerald-600' : score >= 60 ? 'from-blue-500 to-cyan-600' : score >= 40 ? 'from-yellow-500 to-orange-600' : 'from-red-500 to-rose-600';
+  const scoreColor = 'from-[#3737CC] to-[#6B5EE4]';
 
   const metrics = [
     { label: "PE(TTM)", value: indicators.pe_ratio, suffix: "倍", good: (v: number) => v > 0 && v < 30 },
@@ -58,7 +58,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
       {/* 评分头部 */}
       <div className="flex items-center gap-4">
         <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${scoreColor} flex items-center justify-center shadow-lg`}>
-          <span className="text-2xl font-bold text-white">{score}</span>
+          <span className="text-2xl font-bold font-mono text-white">{score}</span>
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -67,7 +67,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
               <Badge variant="outline" className="text-xs">{data.recommendation}</Badge>
             )}
           </div>
-          <div className="w-32 bg-muted rounded-full h-2 mt-1">
+          <div className="w-32 bg-white/[0.06] rounded-full h-2 mt-1">
             <div className={`h-2 rounded-full bg-gradient-to-r ${scoreColor} transition-all duration-1000`} style={{ width: `${score}%` }} />
           </div>
         </div>
@@ -81,9 +81,9 @@ export function FundamentalScorecardArtifact({ data }: Props) {
             const isBad = ['较差', '弱', '低', '高估'].includes(q.value || '');
             return (
               <div key={q.label} className={`px-2.5 py-1 rounded-lg text-xs border ${
-                isGood ? 'bg-green-500/10 border-green-500/30 text-green-600' :
-                isBad ? 'bg-red-500/10 border-red-500/30 text-red-600' :
-                'bg-muted/50 border-border/50'
+                isGood ? 'bg-[#46BEA3]/10 border-[#46BEA3]/30 text-[#46BEA3]' :
+                isBad ? 'bg-[#FF8767]/10 border-[#FF8767]/30 text-[#FF8767]' :
+                'bg-white/[0.03] border-white/[0.08]'
               }`}>
                 <span className="text-muted-foreground">{q.label}</span>
                 <span className="ml-1 font-medium">{q.value}</span>
@@ -100,9 +100,9 @@ export function FundamentalScorecardArtifact({ data }: Props) {
             const val = Number(m.value);
             const isGood = m.good(val);
             return (
-              <div key={m.label} className="bg-muted/30 rounded-lg p-2.5 text-center border border-border/30">
+              <div key={m.label} className="bg-white/[0.03] rounded-lg p-2.5 text-center border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                 <div className="text-[10px] text-muted-foreground mb-0.5">{m.label}</div>
-                <div className={`text-sm font-mono font-bold ${isGood ? 'text-green-500' : 'text-foreground'}`}>
+                <div className={`text-sm font-mono font-bold text-right ${isGood ? 'text-[#46BEA3]' : 'text-foreground'}`}>
                   {val.toFixed(1)}{m.suffix}
                 </div>
                 <div className="text-[8px] text-muted-foreground/50 mt-0.5">

@@ -32,8 +32,9 @@ export function RiskRadarArtifact({ data }: Props) {
   const riskScore = Number(data.risk_score || 50);
   const riskLevel = data.risk_level || '中等风险';
 
-  const riskColor = riskScore >= 70 ? 'from-red-500 to-rose-600' : riskScore >= 40 ? 'from-yellow-500 to-orange-600' : 'from-green-500 to-emerald-600';
-  const riskBg = riskScore >= 70 ? 'bg-red-500/10' : riskScore >= 40 ? 'bg-yellow-500/10' : 'bg-green-500/10';
+  const riskColor = 'from-[#3737CC] to-[#6B5EE4]';
+  const riskLevelColor = riskScore >= 70 ? 'text-[#FF8767]' : riskScore >= 40 ? 'text-[#F59E0B]' : 'text-[#46BEA3]';
+  const riskBg = riskScore >= 70 ? 'bg-[#FF8767]/10 text-[#FF8767]' : riskScore >= 40 ? 'bg-[#F59E0B]/10 text-[#F59E0B]' : 'bg-[#46BEA3]/10 text-[#46BEA3]';
 
   const riskMap: Record<string, number> = { '低': 20, '中': 50, '高': 80 };
   const radarData = {
@@ -50,7 +51,7 @@ export function RiskRadarArtifact({ data }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${riskColor} flex items-center justify-center shadow-lg`}>
-            <span className="text-xl font-bold text-white">{riskScore}</span>
+            <span className="text-xl font-bold font-mono text-white">{riskScore}</span>
           </div>
           <div>
             <span className="text-lg font-bold">风险评分</span>
@@ -65,13 +66,13 @@ export function RiskRadarArtifact({ data }: Props) {
         {data.stop_loss_suggestion && (
           <div className="text-right">
             <div className="text-[10px] text-muted-foreground">止损建议</div>
-            <div className="text-sm font-mono font-bold text-red-500">{data.stop_loss_suggestion}</div>
+            <div className="text-sm font-mono font-bold text-[#FF8767]">{data.stop_loss_suggestion}</div>
           </div>
         )}
       </div>
 
       {/* 风险进度条 */}
-      <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+      <div className="w-full bg-white/[0.06] rounded-full h-3 overflow-hidden">
         <div className={`h-3 rounded-full bg-gradient-to-r ${riskColor} transition-all duration-1000`} style={{ width: `${riskScore}%` }} />
       </div>
 
@@ -84,7 +85,7 @@ export function RiskRadarArtifact({ data }: Props) {
           <p className="text-xs font-medium text-muted-foreground">风险因素</p>
           {data.risk_factors.map((f, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
-              <span className="text-red-500 mt-0.5">&#9888;</span>
+              <span className="text-[#FF8767] mt-0.5">&#9888;</span>
               <span>{f}</span>
             </div>
           ))}

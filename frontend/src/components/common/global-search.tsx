@@ -36,11 +36,13 @@ export function GlobalSearch() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden" showCloseButton={false}>
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-[#0A0A1A]/80 backdrop-blur-sm border border-white/[0.08] rounded-2xl" showCloseButton={false}>
         <div className="p-4">
-          <StockSearch onSelect={handleSelect} placeholder="搜索股票代码或名称... (Esc关闭)" />
+          <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden">
+            <StockSearch onSelect={handleSelect} placeholder="搜索股票代码或名称... (Esc关闭)" />
+          </div>
           <div className="mt-3 text-xs text-muted-foreground text-center">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px]">&#8984;K</kbd> 打开搜索 · <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px]">Esc</kbd> 关闭
+            <kbd className="px-1.5 py-0.5 bg-white/[0.06] border border-white/[0.1] rounded text-[10px]">&#8984;K</kbd> 打开搜索 · <kbd className="px-1.5 py-0.5 bg-white/[0.06] border border-white/[0.1] rounded text-[10px]">Esc</kbd> 关闭
           </div>
         </div>
       </DialogContent>

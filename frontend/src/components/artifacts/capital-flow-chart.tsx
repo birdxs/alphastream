@@ -29,9 +29,9 @@ interface Props {
 }
 
 export function CapitalFlowArtifact({ data }: Props) {
-  const { theme, stockColorScheme } = useThemeStore();
-  const upColor = stockColorScheme === "cn" ? "#ef4444" : "#22c55e";
-  const downColor = stockColorScheme === "cn" ? "#22c55e" : "#ef4444";
+  const { theme } = useThemeStore();
+  const upColor = "#46BEA3";   // 流入 — design token --color-up
+  const downColor = "#FF8767"; // 流出 — design token --color-down
 
   // 柱状图数据
   const chartData =
@@ -56,12 +56,12 @@ export function CapitalFlowArtifact({ data }: Props) {
           {summaryItems.map((item) => (
             <div
               key={item.label}
-              className="bg-muted/50 rounded px-2 py-1.5 text-sm"
+              className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1.5 text-sm"
             >
-              <span className="text-muted-foreground">{item.label}</span>
+              <span className="text-[#8888A0]">{item.label}</span>
               <span
                 className={`ml-2 font-mono ${
-                  Number(item.value) >= 0 ? "stock-up" : "stock-down"
+                  Number(item.value) >= 0 ? "text-[#46BEA3]" : "text-[#FF8767]"
                 }`}
               >
                 {(Number(item.value) / 10000).toFixed(1)}万
@@ -77,19 +77,19 @@ export function CapitalFlowArtifact({ data }: Props) {
           <BarChart data={chartData}>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke={theme === "dark" ? "#374151" : "#e5e7eb"}
+              stroke={theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb"}
             />
             <XAxis
               dataKey="date"
               tick={{
                 fontSize: 10,
-                fill: theme === "dark" ? "#9ca3af" : "#4b5563",
+                fill: theme === "dark" ? "#8888A0" : "#4b5563",
               }}
             />
             <YAxis
               tick={{
                 fontSize: 10,
-                fill: theme === "dark" ? "#9ca3af" : "#4b5563",
+                fill: theme === "dark" ? "#8888A0" : "#4b5563",
               }}
             />
             <Tooltip
@@ -98,9 +98,9 @@ export function CapitalFlowArtifact({ data }: Props) {
                 if (!active || !payload?.length) return null;
                 const val = payload[0].value as number;
                 return (
-                  <div className="bg-popover border rounded-lg px-3 py-2 text-xs shadow-lg">
-                    <p className="text-muted-foreground">{payload[0].payload?.date}</p>
-                    <p className={`font-mono font-bold ${val >= 0 ? 'stock-up' : 'stock-down'}`}>
+                  <div className="bg-[#0A0A1A]/90 border border-white/[0.08] rounded-lg px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
+                    <p className="text-[#8888A0]">{payload[0].payload?.date}</p>
+                    <p className={`font-mono font-bold ${val >= 0 ? 'text-[#46BEA3]' : 'text-[#FF8767]'}`}>
                       净流入: {formatLargeNumber(val * 10000)}
                     </p>
                   </div>

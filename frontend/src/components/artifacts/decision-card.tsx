@@ -32,20 +32,20 @@ export function DecisionCardArtifact({ data }: Props) {
       BUY: {
         text: "\u4E70\u5165",
         emoji: "\uD83D\uDFE2",
-        bg: "bg-green-500/10 border-green-500/30",
-        text_color: "text-green-600",
+        bg: "bg-[#46BEA3]/10 border-[#46BEA3]/30",
+        text_color: "text-[#46BEA3]",
       },
       SELL: {
         text: "\u5356\u51FA",
         emoji: "\uD83D\uDD34",
-        bg: "bg-red-500/10 border-red-500/30",
-        text_color: "text-red-600",
+        bg: "bg-[#FF8767]/10 border-[#FF8767]/30",
+        text_color: "text-[#FF8767]",
       },
       HOLD: {
         text: "\u6301\u6709",
         emoji: "\uD83D\uDFE1",
-        bg: "bg-yellow-500/10 border-yellow-500/30",
-        text_color: "text-yellow-600",
+        bg: "bg-[#F59E0B]/10 border-[#F59E0B]/30",
+        text_color: "text-[#F59E0B]",
       },
     }[action] || {
       text: action,
@@ -55,7 +55,7 @@ export function DecisionCardArtifact({ data }: Props) {
     };
 
   return (
-    <div className={`rounded-lg border-2 p-4 space-y-3 ${actionConfig.bg}`}>
+    <div className={`rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.02] border border-white/[0.08] backdrop-blur-sm p-4 space-y-3`}>
       {/* 决策头部 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -67,16 +67,14 @@ export function DecisionCardArtifact({ data }: Props) {
         </div>
         <div className="text-right">
           <div className="text-sm">\u7F6E\u4FE1\u5EA6</div>
-          <div className="text-2xl font-bold font-mono">{(confidence * 100).toFixed(0)}%</div>
+          <div className="text-2xl font-bold font-mono text-[#6B5EE4]">{(confidence * 100).toFixed(0)}%</div>
         </div>
       </div>
 
       {/* 置信度进度条 */}
-      <div className="w-full bg-muted rounded-full h-2">
+      <div className="w-full bg-white/[0.06] rounded-full h-2">
         <div
-          className={`h-2 rounded-full transition-all duration-1000 ${
-            confidence > 0.7 ? "bg-green-500" : confidence > 0.4 ? "bg-yellow-500" : "bg-red-500"
-          }`}
+          className="h-2 rounded-full transition-all duration-1000 bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
           style={{ width: `${confidence * 100}%` }}
         />
       </div>
@@ -101,21 +99,21 @@ export function DecisionCardArtifact({ data }: Props) {
       {data.price_targets && (
         <div className="grid grid-cols-3 gap-2 text-center text-sm">
           {data.price_targets.support && (
-            <div className="bg-background/50 rounded p-2">
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-2 hover:bg-white/[0.06] transition-colors">
               <div className="text-xs text-muted-foreground">\u652F\u6491\u4F4D</div>
-              <div className="font-mono font-medium text-red-500">{data.price_targets.support}</div>
+              <div className="font-mono text-2xl font-medium text-[#FF8767]">{data.price_targets.support}</div>
             </div>
           )}
           {data.price_targets.target && (
-            <div className="bg-background/50 rounded p-2">
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-2 hover:bg-white/[0.06] transition-colors">
               <div className="text-xs text-muted-foreground">\u76EE\u6807\u4EF7</div>
-              <div className="font-mono font-medium text-primary">{data.price_targets.target}</div>
+              <div className="font-mono text-2xl font-medium text-[#6B5EE4]">{data.price_targets.target}</div>
             </div>
           )}
           {data.price_targets.resistance && (
-            <div className="bg-background/50 rounded p-2">
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-2 hover:bg-white/[0.06] transition-colors">
               <div className="text-xs text-muted-foreground">\u963B\u529B\u4F4D</div>
-              <div className="font-mono font-medium text-green-500">{data.price_targets.resistance}</div>
+              <div className="font-mono text-2xl font-medium text-[#46BEA3]">{data.price_targets.resistance}</div>
             </div>
           )}
         </div>

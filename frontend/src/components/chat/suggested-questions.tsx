@@ -28,9 +28,9 @@ export function SuggestedQuestions({ onSelect }: Props) {
   if (followUpQuestions.length === 0 || isStreaming) return null;
 
   return (
-    <div className="px-3 py-2 border-t bg-muted/20">
+    <div className="px-3 py-2 border-t border-white/[0.08] bg-white/[0.02]">
       <div className="flex items-center gap-1.5 mb-1.5">
-        <MessageSquare className="h-3 w-3 text-muted-foreground" />
+        <MessageSquare className="h-3 w-3 text-[#3737CC]" />
         <span className="text-[10px] text-muted-foreground font-medium">继续探索</span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -41,8 +41,8 @@ export function SuggestedQuestions({ onSelect }: Props) {
               key={i}
               variant="outline"
               size="sm"
-              style={{ animationDelay: `${i * 80}ms` }}
-              className="whitespace-nowrap text-xs h-7 rounded-full border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all animate-fade-in opacity-0 [animation-fill-mode:forwards]"
+              style={{ animationDelay: `${i * 60}ms` }}
+              className="whitespace-nowrap text-xs h-7 bg-white/[0.04] border border-white/[0.08] rounded-full hover:border-[#3737CC]/30 hover:bg-white/[0.06] transition-all animate-fade-in opacity-0 [animation-fill-mode:forwards]"
               onClick={() => onSelect(q)}
             >
               <span className="mr-1">{icon}</span>

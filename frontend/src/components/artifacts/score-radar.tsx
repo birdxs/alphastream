@@ -39,37 +39,59 @@ export function ScoreRadarArtifact({ data }: Props) {
     { subject: "综合", value: Number(data.score || 50) },
   ];
 
+  const avgScore = Math.round(radarData.reduce((sum, d) => sum + d.value, 0) / radarData.length);
+
   return (
-    <ResponsiveContainer width="100%" height={300} aria-label="多维度评分雷达图">
-      <RadarChart data={radarData}>
-        <PolarGrid
-          stroke={theme === "dark" ? "#374151" : "#e5e7eb"}
-        />
-        <PolarAngleAxis
-          dataKey="subject"
-          tick={{
-            fill: theme === "dark" ? "#9ca3af" : "#4b5563",
-            fontSize: 12,
-          }}
-        />
-        <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} />
-        <Tooltip
-          contentStyle={{
-            background: theme === 'dark' ? '#1f2937' : '#fff',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 12,
-          }}
-          formatter={(value) => [`${value}分`, '评分']}
-        />
-        <Radar
-          name="评分"
-          dataKey="value"
-          stroke="#3b82f6"
-          fill="#3b82f6"
-          fillOpacity={0.3}
-        />
-      </RadarChart>
-    </ResponsiveContainer>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[#8888A0] text-xs">综合评分</span>
+        <span className={`font-mono text-lg font-bold ${avgScore >= 60 ? 'text-[#46BEA3]' : avgScore >= 40 ? 'text-[#F59E0B]' : 'text-[#FF8767]'}`}>
+          {avgScore}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={300} aria-label="多维度评分雷达图">
+        <RadarChart data={radarData}>
+          <PolarGrid
+            stroke={theme === "dark" ? "rgba(255,255,255,0.08)" : "#e5e7eb"}
+          />
+          <PolarAngleAxis
+            dataKey="subject"
+            tick={{
+              fill: theme === "dark" ? "#8888A0" : "#4b5563",
+              fontSize: 12,
+            }}
+          />
+          <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} />
+          <Tooltip
+            contentStyle={{
+              background: theme === 'dark' ? 'rgba(10,10,26,0.9)' : '#fff',
+              border: theme === 'dark' ? '1px solid rgba(255,255,255,0.08)' : 'none',
+              borderRadius: 8,
+              fontSize: 12,
+              backdropFilter: 'blur(12px)',
+              color: theme === 'dark' ? '#F0F0F5' : undefined,
+            }}
+            formatter={(value) => [`${value}分`, '评分']}
+          />
+          <Radar
+            name="评分"
+            dataKey="value"
+            stroke="#3737CC"
+            fill="#3737CC"
+            fillOpacity={0.25}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+      <div className="grid grid-cols-3 gap-1 px-1">
+        {radarData.map((d) => (
+          <div key={d.subject} className="flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.08]">
+            <span className="text-[#8888A0]">{d.subject}</span>
+            <span className={`font-mono ${d.value >= 60 ? 'text-[#46BEA3]' : d.value >= 40 ? 'text-[#F59E0B]' : 'text-[#FF8767]'}`}>
+              {d.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

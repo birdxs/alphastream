@@ -79,19 +79,19 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
       layout: {
         background: {
           type: ColorType.Solid,
-          color: theme === "dark" ? "#1a1a2e" : "#ffffff",
+          color: theme === "dark" ? "#0A0A1A" : "#ffffff",
         },
-        textColor: theme === "dark" ? "#d1d5db" : "#374151",
+        textColor: theme === "dark" ? "#8888A0" : "#374151",
       },
       grid: {
-        vertLines: { color: theme === "dark" ? "#2d2d44" : "#e5e7eb" },
-        horzLines: { color: theme === "dark" ? "#2d2d44" : "#e5e7eb" },
+        vertLines: { color: theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb" },
+        horzLines: { color: theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb" },
       },
       crosshair: { mode: 0 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
       timeScale: {
-        borderColor: theme === "dark" ? "#4b5563" : "#d1d5db",
+        borderColor: theme === "dark" ? "rgba(255,255,255,0.08)" : "#d1d5db",
       },
     });
 
@@ -136,7 +136,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     const offset = (data.ohlcv?.length || 0) - filteredData.length;
     if (data.indicators?.ma5) {
       const ma5Series = chart.addSeries(LineSeries, {
-        color: "#f59e0b",
+        color: "#F59E0B",
         lineWidth: 1,
       });
       ma5Series.setData(
@@ -151,7 +151,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     }
     if (data.indicators?.ma20) {
       const ma20Series = chart.addSeries(LineSeries, {
-        color: "#3b82f6",
+        color: "#3737CC",
         lineWidth: 1,
       });
       ma20Series.setData(
@@ -166,7 +166,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     }
     if (data.indicators?.ma60) {
       const ma60Series = chart.addSeries(LineSeries, {
-        color: "#a855f7",
+        color: "#6B5EE4",
         lineWidth: 1,
       });
       ma60Series.setData(
@@ -227,15 +227,15 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     if (!chartInstance.current) return;
     chartInstance.current.applyOptions({
       layout: {
-        background: { type: ColorType.Solid, color: theme === 'dark' ? '#1a1a2e' : '#ffffff' },
-        textColor: theme === 'dark' ? '#d1d5db' : '#374151',
+        background: { type: ColorType.Solid, color: theme === 'dark' ? '#0A0A1A' : '#ffffff' },
+        textColor: theme === 'dark' ? '#8888A0' : '#374151',
       },
       grid: {
-        vertLines: { color: theme === 'dark' ? '#2d2d44' : '#e5e7eb' },
-        horzLines: { color: theme === 'dark' ? '#2d2d44' : '#e5e7eb' },
+        vertLines: { color: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#e5e7eb' },
+        horzLines: { color: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#e5e7eb' },
       },
       timeScale: {
-        borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db',
+        borderColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : '#d1d5db',
       },
     });
   }, [theme, stockColorScheme]);
@@ -259,10 +259,10 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
             <button
               key={r.days}
               onClick={() => handleTimeRangeChange(r.days)}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+              className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ${
                 timeRange === r.days
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted'
+                  ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30'
+                  : 'bg-white/[0.04] text-[#8888A0] border-white/[0.08] hover:bg-white/[0.08]'
               }`}
             >
               {r.label}
@@ -270,8 +270,8 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
           ))}
           <button
             onClick={() => setDrawMode(drawMode === 'trendline' ? 'none' : 'trendline')}
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ml-2 ${
-              drawMode === 'trendline' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ml-2 ${
+              drawMode === 'trendline' ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30' : 'bg-white/[0.04] text-[#8888A0] border-white/[0.08] hover:bg-white/[0.08]'
             }`}
           >
             趋势线
@@ -279,22 +279,22 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
         </div>
       </div>
       {drawMode === 'trendline' && (
-        <div className="text-[10px] text-primary bg-primary/10 rounded px-2 py-1 mb-1">
+        <div className="text-[10px] text-[#3737CC] bg-[#3737CC]/10 rounded-lg px-2 py-1 mb-1 border border-[#3737CC]/20">
           趋势线模式：点击图表两个点绘制趋势线（开发中）
         </div>
       )}
       {crosshairData && (
-        <div className="flex items-center gap-3 text-[10px] font-finance text-muted-foreground mb-1">
-          <span>日期: {crosshairData.time}</span>
-          <span>开: <span className="text-foreground">{crosshairData.open.toFixed(2)}</span></span>
-          <span>高: <span className="stock-up">{crosshairData.high.toFixed(2)}</span></span>
-          <span>低: <span className="stock-down">{crosshairData.low.toFixed(2)}</span></span>
-          <span>收: <span className="text-foreground">{crosshairData.close.toFixed(2)}</span></span>
+        <div className="flex items-center gap-3 text-[10px] font-mono text-[#8888A0] mb-1">
+          <span>日期: <span className="text-[#F0F0F5]">{crosshairData.time}</span></span>
+          <span>开: <span className="font-mono text-[#F0F0F5]">{crosshairData.open.toFixed(2)}</span></span>
+          <span>高: <span className="font-mono text-[#46BEA3]">{crosshairData.high.toFixed(2)}</span></span>
+          <span>低: <span className="font-mono text-[#FF8767]">{crosshairData.low.toFixed(2)}</span></span>
+          <span>收: <span className="font-mono text-[#F0F0F5]">{crosshairData.close.toFixed(2)}</span></span>
         </div>
       )}
       <div className="relative w-full">
         {(data.stock_code || data.stock_name) && (
-          <div className="absolute top-4 left-4 text-2xl font-bold pointer-events-none select-none z-10" style={{ color: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
+          <div className="absolute top-4 left-4 text-2xl font-bold pointer-events-none select-none z-10" style={{ color: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' }}>
             {data.stock_code || ''} {data.stock_name || ''}
           </div>
         )}

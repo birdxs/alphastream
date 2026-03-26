@@ -31,27 +31,27 @@ export function AgentProgressPanel() {
   return (
     <>
       {!expanded && (
-        <button onClick={() => setExpanded(true)} className="w-full flex items-center justify-between bg-muted/30 rounded-lg px-3 py-2 border text-xs hover:bg-muted/50 transition-colors">
+        <button onClick={() => setExpanded(true)} className="w-full flex items-center justify-between bg-white/[0.03] border border-white/[0.08] rounded-xl px-3 py-2 text-xs hover:bg-white/[0.06] transition-colors">
           <span className="flex items-center gap-2">
             <span className="animate-pulse">{"\uD83E\uDD16"}</span>
-            <span>Agent分析中... {Math.round(overallProgress)}%</span>
+            <span className="font-mono">Agent分析中... {Math.round(overallProgress)}%</span>
           </span>
-          <span className="text-muted-foreground">{agentProgresses.filter(p => p.status === 'completed').length}/{agentProgresses.length} 完成</span>
+          <span className="text-muted-foreground font-mono">{agentProgresses.filter(p => p.status === 'completed').length}/{agentProgresses.length} 完成</span>
         </button>
       )}
 
       {expanded && (
-        <div className="bg-muted/30 rounded-lg p-3 space-y-3 border">
+        <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 space-y-3">
           {/* 总进度 */}
           <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpanded(false)}>
             <span className="text-xs font-medium">{"\uD83E\uDD16 Multi-Agent\u5206\u6790"}</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{Math.round(overallProgress)}%</span>
+              <span className="text-xs text-muted-foreground font-mono">{Math.round(overallProgress)}%</span>
               <ChevronUp className="h-3 w-3 text-muted-foreground" />
             </div>
           </div>
-          <div className="w-full bg-muted rounded-full h-1.5">
-            <div className="bg-primary h-1.5 rounded-full transition-all duration-500"
+          <div className="w-full bg-white/[0.06] rounded-full h-1.5">
+            <div className="bg-[#3737CC] h-1.5 rounded-full transition-all duration-500"
                  style={{ width: `${overallProgress}%` }} />
           </div>
 
