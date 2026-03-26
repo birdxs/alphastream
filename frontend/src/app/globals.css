@@ -507,6 +507,31 @@
   animation: gradient-flow 3s ease infinite;
 }
 
+/* ── 移动端Tab滑入动画 ── */
+@keyframes mobile-slide-right {
+  from { transform: translateX(30%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+@keyframes mobile-slide-left {
+  from { transform: translateX(-30%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.animate-mobile-slide-right {
+  animation: mobile-slide-right 300ms ease-out;
+}
+.animate-mobile-slide-left {
+  animation: mobile-slide-left 300ms ease-out;
+}
+
+/* ── 流式打字渐现效果 ── */
+@keyframes char-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.streaming-fade-in {
+  animation: char-fade-in 150ms ease-in forwards;
+}
+
 /* 打字机光标 */
 .typing-cursor {
   display: inline-block;

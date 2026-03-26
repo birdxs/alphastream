@@ -29,9 +29,21 @@ function getInitialWidth(): number {
 
 export default function HomePage() {
   const [mobileTab, setMobileTab] = useState<"chat" | "artifacts">("chat");
+  const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(null);
   const [chatWidthPct, setChatWidthPct] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 移动端Tab切换动画
+  const handleMobileTabSwitch = useCallback((tab: "chat" | "artifacts") => {
+    if (tab === mobileTab) return;
+    // 从"对话"切到"分析"：内容从右侧滑入；反之从左侧滑入
+    setSlideDirection(tab === "artifacts" ? "right" : "left");
+    setMobileTab(tab);
+    // 动画结束后清除方向标记
+    const timer = setTimeout(() => setSlideDirection(null), 300);
+    return () => clearTimeout(timer);
+  }, [mobileTab]);
 
   // 客户端初始化宽度
   useEffect(() => {
@@ -111,17 +123,19 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Mobile: single panel with bottom padding for TabBar */}
-      <div className="flex sm:hidden flex-1 min-h-0 pb-14">
-        {mobileTab === "chat" ? (
-          <div className="flex-1 flex flex-col min-h-0">
-            <ChatPanel />
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col min-h-0">
-            <ArtifactPanel />
-          </div>
-        )}
+      {/* Mobile: single panel with bottom padding for TabBar + 滑入动画 */}
+      <div className="flex sm:hidden flex-1 min-h-0 pb-14 overflow-hidden">
+        <div
+          className={`flex-1 flex flex-col min-h-0 w-full ${
+            slideDirection === "right"
+              ? "animate-mobile-slide-right"
+              : slideDirection === "left"
+              ? "animate-mobile-slide-left"
+              : ""
+          }`}
+        >
+          {mobileTab === "chat" ? <ChatPanel /> : <ArtifactPanel />}
+        </div>
       </div>
 
       {/* Mobile: 底部TabBar — 固定在底部 */}
@@ -142,7 +156,7 @@ export default function HomePage() {
 
         {/* 对话Tab */}
         <button
-          onClick={() => setMobileTab("chat")}
+          onClick={() => handleMobileTabSwitch("chat")}
           className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
             mobileTab === "chat" ? "text-[#3737CC]" : "text-[#8888A0]"
           }`}
@@ -153,7 +167,7 @@ export default function HomePage() {
 
         {/* 分析Tab */}
         <button
-          onClick={() => setMobileTab("artifacts")}
+          onClick={() => handleMobileTabSwitch("artifacts")}
           className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
             mobileTab === "artifacts" ? "text-[#3737CC]" : "text-[#8888A0]"
           }`}
