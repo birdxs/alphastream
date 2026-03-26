@@ -109,6 +109,13 @@ export default function DashboardPage() {
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
+  // 下拉刷新状态
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pullStartY = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   /* ---- 数据加载函数 ---- */
 
   const fetchIndices = useCallback(async () => {
@@ -198,6 +205,41 @@ export default function DashboardPage() {
     };
   }, [fetchIndices]);
 
+  /* ---- 下拉刷新手势 ---- */
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const container = scrollContainerRef.current;
+    if (!container || container.scrollTop > 0 || isRefreshing) return;
+    pullStartY.current = e.touches[0].clientY;
+    setIsPulling(true);
+  }, [isRefreshing]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isPulling || isRefreshing) return;
+    const deltaY = e.touches[0].clientY - pullStartY.current;
+    if (deltaY > 0) {
+      // 阻尼效果：实际距离 = deltaY * 0.4
+      setPullDistance(Math.min(deltaY * 0.4, 100));
+    } else {
+      setPullDistance(0);
+    }
+  }, [isPulling, isRefreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!isPulling) return;
+    setIsPulling(false);
+    if (pullDistance >= 60) {
+      setIsRefreshing(true);
+      setPullDistance(50); // 保持在刷新指示位置
+      setIndicesLoading(true);
+      await fetchIndices();
+      fetchWatchQuotes();
+      fetchNews();
+      setIsRefreshing(false);
+    }
+    setPullDistance(0);
+  }, [isPulling, pullDistance, fetchIndices, fetchWatchQuotes, fetchNews]);
+
   /* ---- 操作 ---- */
 
   const handleAiSubmit = () => {
@@ -238,7 +280,27 @@ export default function DashboardPage() {
   /* ========== 渲染 ========== */
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div
+      ref={scrollContainerRef}
+      className="h-full overflow-y-auto"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* 下拉刷新指示器 */}
+      {pullDistance > 0 && (
+        <div
+          className="flex items-center justify-center overflow-hidden transition-[height] duration-150"
+          style={{ height: `${pullDistance}px` }}
+        >
+          <div className="flex items-center gap-2 text-xs text-[#8888A0]">
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : pullDistance >= 60 ? "text-[#6B5EE4]" : ""}`} />
+            <span className={pullDistance >= 60 ? "text-[#6B5EE4]" : ""}>
+              {isRefreshing ? "刷新中..." : pullDistance >= 60 ? "释放刷新" : "下拉刷新"}
+            </span>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* ---- 页头 ---- */}
         <div className="flex items-center justify-between">

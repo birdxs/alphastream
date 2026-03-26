@@ -106,11 +106,12 @@ export default function HomePage() {
         <div className="flex flex-col min-h-0" style={{ width: `${chatWidthPct}%` }}>
           <ChatPanel />
         </div>
-        {/* Draggable divider */}
+        {/* Draggable divider — touch-action:none 确保触摸设备可拖拽 */}
         <div
           className={`w-1 shrink-0 cursor-col-resize transition-colors ${
             isDragging ? "bg-[#3737CC]/60" : "bg-white/[0.08] hover:bg-[#3737CC]/40"
           }`}
+          style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown}
           role="separator"
           aria-orientation="vertical"

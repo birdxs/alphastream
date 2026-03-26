@@ -4,7 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { apiClient } from "@/lib/api/client";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,90 @@ const groupByDate = (convs: Conversation[]) => {
   });
   return groups;
 };
+
+/* ---------- 左滑删除项（移动端） ---------- */
+function SwipeableConvItem({
+  conv,
+  isActive,
+  pendingDelete,
+  onSelect,
+  onDelete,
+}: {
+  conv: Conversation;
+  isActive: boolean;
+  pendingDelete: string | null;
+  onSelect: (conv: Conversation) => void;
+  onDelete: (id: string) => void;
+}) {
+  const startX = useRef(0);
+  const currentX = useRef(0);
+  const [offsetX, setOffsetX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const threshold = 60;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    currentX.current = startX.current;
+    setSwiping(true);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!swiping) return;
+    currentX.current = e.touches[0].clientX;
+    const delta = startX.current - currentX.current;
+    // 只允许左滑（delta > 0），带阻尼
+    if (delta > 0) {
+      setOffsetX(Math.min(delta * 0.6, 100));
+    } else {
+      setOffsetX(0);
+    }
+  }, [swiping]);
+
+  const handleTouchEnd = useCallback(() => {
+    setSwiping(false);
+    if (offsetX >= threshold) {
+      // 超过阈值，执行删除
+      onDelete(conv.conversation_id);
+    }
+    setOffsetX(0);
+  }, [offsetX, conv.conversation_id, onDelete]);
+
+  return (
+    <div className="relative overflow-hidden rounded-lg">
+      {/* 红色删除背景 */}
+      <div
+        className="absolute inset-y-0 right-0 flex items-center justify-center bg-[#EF4444] text-white text-xs font-medium transition-opacity"
+        style={{
+          width: `${Math.max(offsetX, 0)}px`,
+          opacity: offsetX > 20 ? 1 : 0,
+        }}
+      >
+        {offsetX >= threshold ? "释放删除" : <Trash2 className="h-4 w-4" />}
+      </div>
+      {/* 前景对话项 */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={() => { if (offsetX < 5) onSelect(conv); }}
+        className={`relative flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer group transition-transform duration-150 ${
+          isActive
+            ? 'bg-[#3737CC]/10 text-[#4F4FE6]'
+            : 'text-[#F0F0F5]/80 hover:bg-white/[0.04]'
+        }`}
+        style={{ transform: `translateX(-${offsetX}px)`, backgroundColor: offsetX > 0 ? 'rgba(15,15,35,0.95)' : undefined }}
+      >
+        <MessageSquare className={`h-3 w-3 shrink-0 ${isActive ? 'text-[#3737CC]' : 'text-[#555570]'}`} />
+        <span className="flex-1 truncate">
+          {conv.stock_codes && conv.stock_codes.length > 0 && (
+            <span className="text-[#3737CC] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
+          )}
+          {conv.title}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?: boolean }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -96,6 +180,15 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
     }
   };
 
+  // 左滑删除（移动端直接执行）
+  const swipeDeleteConversation = useCallback(async (id: string) => {
+    try {
+      await apiClient.delete(`/api/conversations/${id}`);
+      setConversations(prev => prev.filter(c => c.conversation_id !== id));
+      if (activeConversationId === id) newConversation();
+    } catch { showError('删除失败'); }
+  }, [activeConversationId]);
+
   // Mobile Sheet模式下不支持折叠
   if (collapsed && !isMobileSheet) {
     return (
@@ -157,6 +250,16 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
                   label === '今天' ? 'text-[#3737CC]' : label === '昨天' ? 'text-[#8888A0]/70' : 'text-[#555570]'
                 }`}>{label}</div>
                 {convs.map(conv => (
+                  isMobileSheet ? (
+                    <SwipeableConvItem
+                      key={conv.conversation_id}
+                      conv={conv}
+                      isActive={activeConversationId === conv.conversation_id}
+                      pendingDelete={pendingDelete}
+                      onSelect={selectConversation}
+                      onDelete={swipeDeleteConversation}
+                    />
+                  ) : (
                   <div
                     key={conv.conversation_id}
                     onClick={() => selectConversation(conv)}
@@ -185,6 +288,7 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
                       {pendingDelete === conv.conversation_id ? <span className="text-[10px] font-medium">确认</span> : <Trash2 className="h-3 w-3" />}
                     </Button>
                   </div>
+                  )
                 ))}
               </div>
             ))
