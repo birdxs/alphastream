@@ -49,79 +49,88 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ═══════════════════════════════════════════════
+   LIGHT THEME — Clean financial white
+   ═══════════════════════════════════════════════ */
 :root {
-  --brand-primary: 217 91% 60%;    /* 金融蓝 #2563eb */
-  --brand-secondary: 220 70% 50%;
-  --brand-accent: 38 92% 50%;      /* 金色点缀 */
-
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #1e40af;
+  --primary-foreground: #f8fafc;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #1e293b;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #1e293b;
+  --destructive: #dc2626;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #3b82f6;
+  --chart-1: #3b82f6;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #8b5cf6;
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #1e40af;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #1e293b;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #3b82f6;
+  /* Stock colors */
+  --stock-up: 0 84% 60%;
+  --stock-down: 142 71% 45%;
 }
 
+/* ═══════════════════════════════════════════════
+   DARK THEME — Bloomberg Terminal inspired
+   Deep navy-black with blue accents
+   ═══════════════════════════════════════════════ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0b1120;
+  --foreground: #e2e8f0;
+  --card: #111827;
+  --card-foreground: #e2e8f0;
+  --popover: #1e293b;
+  --popover-foreground: #e2e8f0;
+  --primary: #3b82f6;
+  --primary-foreground: #f8fafc;
+  --secondary: #1e293b;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e3a5f;
+  --accent-foreground: #e2e8f0;
+  --destructive: #ef4444;
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #3b82f6;
+  --chart-1: #3b82f6;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #8b5cf6;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: #1e293b;
+  --sidebar-ring: #3b82f6;
 }
 
+/* ═══════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════ */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -133,217 +142,59 @@
   html {
     @apply font-sans;
   }
-  .font-finance {
-    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
-    font-variant-numeric: tabular-nums lining-nums;
-    letter-spacing: -0.01em;
-  }
 }
 
-/* 金融主题色 */
-@layer base {
-  :root {
-    --stock-up: 220 90% 56%;      /* 默认涨色（蓝色中性） */
-    --stock-down: 0 84% 60%;      /* 默认跌色（红色） */
-  }
-
-  /* 中国市场：红涨绿跌 */
-  [data-color-scheme="cn"] {
-    --stock-up: 0 84% 60%;        /* 红色涨 */
-    --stock-down: 142 71% 45%;    /* 绿色跌 */
-  }
-
-  /* 国际市场：绿涨红跌 */
-  [data-color-scheme="us"] {
-    --stock-up: 142 71% 45%;      /* 绿色涨 */
-    --stock-down: 0 84% 60%;      /* 红色跌 */
-  }
+/* Financial monospace for numbers */
+.font-finance {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.02em;
 }
 
-/* === 动画效果 === */
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-20px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes pulse-gentle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.animate-slide-in-right {
-  animation: slideInRight 0.3s ease-out;
-}
-
-.animate-slide-in-left {
-  animation: slideInLeft 0.3s ease-out;
-}
-
-.animate-pulse-gentle {
-  animation: pulse-gentle 2s ease-in-out infinite;
-}
-
-/* 消息气泡入场动画 */
-.message-enter {
-  animation: fadeIn 0.2s ease-out;
-}
-
-/* 金融数字闪烁（价格变化时） */
-@keyframes flash-green {
-  0% { background-color: rgba(34, 197, 94, 0.3); }
-  100% { background-color: transparent; }
-}
-
-@keyframes flash-red {
-  0% { background-color: rgba(239, 68, 68, 0.3); }
-  100% { background-color: transparent; }
-}
-
-.flash-up { animation: flash-green 1s ease-out; }
-.flash-down { animation: flash-red 1s ease-out; }
-
-/* === 响应式适配 === */
-
-/* 移动端：Tab切换模式已由page.tsx接管布局 */
-@media (max-width: 768px) {
-  .conversation-sidebar {
-    display: none;
-  }
-}
-
-/* 平板：隐藏侧边栏 */
-@media (min-width: 768px) and (max-width: 1024px) {
-  .conversation-sidebar {
-    display: none;
-  }
-}
-
-/* 大屏优化 */
-@media (min-width: 1920px) {
-  .chat-panel {
-    max-width: 500px;
-  }
-}
-
-/* 移动端TabBar底部间距 */
-@media (max-width: 640px) {
-  main { padding-bottom: 56px; }
-}
-
-/* === 滚动条美化 === */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
-}
-
-/* === Prose 样式优化（Markdown渲染） === */
-.prose {
-  --tw-prose-body: hsl(var(--foreground));
-  --tw-prose-headings: hsl(var(--foreground));
-  --tw-prose-links: hsl(var(--primary));
-  --tw-prose-bold: hsl(var(--foreground));
-  --tw-prose-code: hsl(var(--primary));
-  --tw-prose-pre-bg: hsl(var(--muted));
-}
-
-.dark .prose {
-  --tw-prose-invert-body: hsl(var(--foreground));
-  --tw-prose-invert-headings: hsl(var(--foreground));
-}
-
-/* === 金融数据样式 === */
+/* ═══════════════════════════════════════════════
+   STOCK COLORS (涨跌色)
+   ═══════════════════════════════════════════════ */
 .stock-up { color: hsl(var(--stock-up)); }
 .stock-down { color: hsl(var(--stock-down)); }
-.stock-up-bg { background-color: hsl(var(--stock-up) / 0.1); }
-.stock-down-bg { background-color: hsl(var(--stock-down) / 0.1); }
 
-/* === 金融级暗色主题增强 === */
-.dark {
-  --background: oklch(0.13 0.015 250);
-  --foreground: oklch(0.95 0.01 250);
-  --muted: oklch(0.2 0.015 250);
-  --muted-foreground: oklch(0.6 0.02 250);
-  --card: oklch(0.16 0.015 250);
-  --card-foreground: oklch(0.95 0.01 250);
-  --border: oklch(0.25 0.015 250);
-  --primary: oklch(0.65 0.2 250);
+[data-color-scheme="cn"] { --stock-up: 0 84% 60%; --stock-down: 142 71% 45%; }
+[data-color-scheme="us"] { --stock-up: 142 71% 45%; --stock-down: 0 84% 60%; }
+
+/* ═══════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--muted-foreground); opacity: 0.2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { opacity: 0.4; }
+
+/* ═══════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════ */
+@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slide-in-right { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+@keyframes flash-green { from { background-color: rgba(34, 197, 94, 0.25); } to { background-color: transparent; } }
+@keyframes flash-red { from { background-color: rgba(239, 68, 68, 0.25); } to { background-color: transparent; } }
+
+.animate-fade-in { animation: fade-in 0.25s ease-out; }
+.animate-slide-in-right { animation: slide-in-right 0.25s ease-out; }
+.flash-up { animation: flash-green 0.8s ease-out; }
+.flash-down { animation: flash-red 0.8s ease-out; }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+@media (min-width: 641px) {
+  .show-mobile-only { display: none !important; }
 }
 
-/* 暗色模式下的图表区域背景 */
-.dark .chart-area {
-  background: linear-gradient(180deg, oklch(0.16 0.015 250) 0%, oklch(0.13 0.015 250) 100%);
-}
-
-/* 暗色模式下的卡片微光效果 */
-.dark .artifact-card:hover {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.08);
-}
-
-/* === 阴影层级系统（Elevation） === */
-.elevation-0 { box-shadow: none; }
-.elevation-1 { box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06); }
-.elevation-2 { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.06); }
-.elevation-3 { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.06); }
-
-.dark .elevation-1 { box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 1px 3px rgba(0,0,0,0.3); }
-.dark .elevation-2 { box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 4px 6px rgba(0,0,0,0.4); }
-.dark .elevation-3 { box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 10px 15px rgba(0,0,0,0.5); }
-
-/* === 暗色主题Surface层级 === */
-.dark {
-  --surface-0: oklch(0.13 0.015 250);  /* 最深 - 背景 */
-  --surface-1: oklch(0.16 0.015 250);  /* 卡片 */
-  --surface-2: oklch(0.19 0.015 250);  /* 悬浮面板 */
-  --surface-3: oklch(0.22 0.015 250);  /* 弹窗 */
-  --surface-4: oklch(0.25 0.015 250);  /* 高亮元素 */
-}
-
-.surface-0 { background: var(--surface-0); }
-.surface-1 { background: var(--surface-1); }
-.surface-2 { background: var(--surface-2); }
-.surface-3 { background: var(--surface-3); }
-
-/* === 减弱动效（色觉/前庭障碍辅助） === */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* === 移动端虚拟键盘适配 === */
-@supports (height: 100dvh) {
-  .h-full { height: 100dvh; }
 }

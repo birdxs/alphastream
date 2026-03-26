@@ -1,73 +1,72 @@
-// Input: 无（从theme-store获取状态）
-// Output: 顶部导航栏UI，含路由链接、主题/配色切换和移动端抽屉导航
-// Pos: 布局层，固定在页面顶部
-// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+// Input: theme-store状态
+// Output: 紧凑导航栏 (h-12)
+// Pos: 页面顶部固定导航
 
 "use client";
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Briefcase, Star, Settings, Search, BarChart3 } from "lucide-react";
+import { Sun, Moon, MessageSquare, Briefcase, Star, Search, BarChart3, Settings } from "lucide-react";
 import { MobileDrawer } from "./mobile-drawer";
 
 export function Navbar() {
-  const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
-  
+  const theme = useThemeStore(s => s.theme);
+  const toggleTheme = useThemeStore(s => s.toggleTheme);
+  const stockColorScheme = useThemeStore(s => s.stockColorScheme);
+  const toggleColorScheme = useThemeStore(s => s.toggleColorScheme);
+
   return (
-    <nav aria-label="主导航" className="flex h-14 items-center justify-between border-b bg-background px-4">
-      <div className="flex items-center gap-6">
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-          <span className="text-primary">AI</span>
-          <span>金融分析</span>
+    <nav
+      aria-label="主导航"
+      className="flex h-12 items-center justify-between border-b border-border/60 bg-background/95 backdrop-blur-sm px-3 shrink-0"
+    >
+      {/* Left: Logo + Nav */}
+      <div className="flex items-center gap-1">
+        <Link href="/" className="flex items-center gap-1.5 font-bold text-sm mr-3 px-1">
+          <span className="text-primary">◆</span>
+          <span>AI金融</span>
         </Link>
-        <div className="hidden sm:flex items-center gap-1">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <MessageSquare className="h-4 w-4" />
-              <span>AI对话</span>
-            </Button>
-          </Link>
-          <Link href="/portfolio">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <Briefcase className="h-4 w-4" />
-              <span>投资组合</span>
-            </Button>
-          </Link>
-          <Link href="/watchlist">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <Star className="h-4 w-4" />
-              <span>自选股</span>
-            </Button>
-          </Link>
-          <Link href="/compare">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">对比</span>
-            </Button>
-          </Link>
+
+        <div className="hidden sm:flex items-center">
+          {[
+            { href: "/", icon: MessageSquare, label: "对话" },
+            { href: "/portfolio", icon: Briefcase, label: "组合" },
+            { href: "/watchlist", icon: Star, label: "自选" },
+            { href: "/compare", icon: BarChart3, label: "对比" },
+          ].map(item => (
+            <Link key={item.href} href={item.href}>
+              <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                <item.icon className="h-3.5 w-3.5" />
+                {item.label}
+              </Button>
+            </Link>
+          ))}
         </div>
-        <button
-          onClick={() => {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
-          }}
-          className="hidden md:flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted transition-colors border border-border/50"
-        >
-          <Search className="h-3.5 w-3.5" />
-          <span>搜索股票...</span>
-          <kbd className="ml-4 px-1 py-0.5 rounded bg-background text-[10px] border">⌘K</kbd>
-        </button>
+
         <MobileDrawer />
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={toggleColorScheme} title={stockColorScheme === 'cn' ? '红涨绿跌' : '绿涨红跌'} aria-label="切换涨跌色">
-          <span className="text-xs font-mono">{stockColorScheme === 'cn' ? '🔴涨' : '🟢涨'}</span>
+
+      {/* Center: Search */}
+      <button
+        onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+        className="hidden md:flex items-center gap-2 bg-muted/60 rounded-md px-3 py-1 text-xs text-muted-foreground hover:bg-muted border border-border/40 transition-colors"
+      >
+        <Search className="h-3 w-3" />
+        <span>搜索股票</span>
+        <kbd className="ml-3 px-1 py-px rounded bg-background/80 text-[9px] border border-border/60">⌘K</kbd>
+      </button>
+
+      {/* Right: Controls */}
+      <div className="flex items-center gap-0.5">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleColorScheme} aria-label="切换涨跌色">
+          <span className="text-[10px]">{stockColorScheme === 'cn' ? '🔴' : '🟢'}</span>
         </Button>
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="切换主题">
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme} aria-label="切换主题">
+          {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </Button>
         <Link href="/settings">
-          <Button variant="ghost" size="icon">
-            <Settings className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 hidden sm:flex">
+            <Settings className="h-3.5 w-3.5" />
           </Button>
         </Link>
       </div>

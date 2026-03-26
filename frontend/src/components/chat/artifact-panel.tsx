@@ -1,71 +1,80 @@
-// Input: chat-store中的artifacts数组
-// Output: Artifacts工作区UI，展示AI生成的图表和数据卡片
-// Pos: 首页右侧面板，Chat+Artifacts布局的展示侧
-// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+// Input: chat-store artifacts数组
+// Output: Artifacts工作区 — 头部 + 内容/空态
+// Pos: 首页右栏
 
 "use client";
 import { useChatStore } from "@/lib/stores/chat-store";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArtifactRenderer } from "./artifact-renderer";
 import { AgentLogDrawer } from "@/components/agent/agent-log-drawer";
-import { Trash2 } from "lucide-react";
+import { Trash2, TrendingUp, DollarSign, Users, Bot } from "lucide-react";
 
 export function ArtifactPanel() {
   const artifacts = useChatStore(s => s.artifacts);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="p-3 border-b flex items-center justify-between shrink-0">
-        <h2 className="font-semibold text-sm">分析结果</h2>
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 h-10 border-b border-border/40 bg-background shrink-0">
+        <span className="text-xs font-medium text-foreground/80">分析结果</span>
+        <div className="flex items-center gap-1">
           {artifacts.length > 0 && (
-            <span className="text-xs text-muted-foreground">{artifacts.length}个组件</span>
-          )}
-          {artifacts.length > 0 && (
-            <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => useChatStore.getState().clearArtifacts()}>
-              <Trash2 className="h-3 w-3" />
-              清空
-            </Button>
+            <>
+              <span className="text-[10px] text-muted-foreground">{artifacts.length}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => useChatStore.getState().clearArtifacts()}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </>
           )}
           <AgentLogDrawer />
         </div>
       </div>
-      <ScrollArea className="flex-1 p-4">
+
+      {/* Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
         {artifacts.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-6 max-w-sm">
-              <div className="text-5xl">🤖</div>
+            <div className="text-center max-w-xs space-y-5">
+              <div className="flex justify-center">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Bot className="h-6 w-6 text-primary" />
+                </div>
+              </div>
               <div>
-                <h3 className="font-semibold text-lg mb-2">AI智能金融分析</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  在左侧对话框输入问题，AI将实时生成分析图表
+                <h3 className="text-sm font-semibold mb-1">AI智能分析</h3>
+                <p className="text-xs text-muted-foreground">
+                  在左侧输入问题，分析结果将在此展示
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-left">
+              <div className="grid grid-cols-2 gap-2">
                 {[
-                  { icon: "📈", title: "K线分析", desc: "技术指标+趋势判断" },
-                  { icon: "💰", title: "基本面", desc: "财务指标+估值评估" },
-                  { icon: "🤖", title: "Multi-Agent", desc: "13个AI Agent协作" },
-                  { icon: "👥", title: "投资大师", desc: "巴菲特/芒格/林奇/达摩达兰" },
+                  { icon: TrendingUp, title: "K线分析", desc: "技术指标" },
+                  { icon: DollarSign, title: "基本面", desc: "财务评估" },
+                  { icon: Bot, title: "Agent", desc: "13个协作" },
+                  { icon: Users, title: "大师", desc: "四大视角" },
                 ].map(item => (
-                  <div key={item.title} className="bg-muted/50 rounded-lg p-3">
-                    <span className="text-2xl">{item.icon}</span>
-                    <p className="font-medium text-sm mt-1">{item.title}</p>
-                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  <div key={item.title} className="bg-muted/40 rounded-lg p-2.5 text-left">
+                    <item.icon className="h-4 w-4 text-muted-foreground mb-1" />
+                    <p className="text-xs font-medium">{item.title}</p>
+                    <p className="text-[10px] text-muted-foreground">{item.desc}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+          <div className="space-y-3">
             {artifacts.map((artifact, i) => (
               <ArtifactRenderer key={`${artifact.artifact_type}_${i}`} artifact={artifact} />
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
