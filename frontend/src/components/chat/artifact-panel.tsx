@@ -56,7 +56,7 @@ export function ArtifactPanel() {
         <div className="flex items-center gap-1">
           {artifacts.length > 0 && (
             <>
-              <span className="text-[10px] text-[#8888A0]">{artifacts.length}</span>
+              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-[#3737CC]/20 text-[10px] font-medium text-[#3737CC]">{artifacts.length}</span>
               <button
                 className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
                 onClick={() => useChatStore.getState().clearArtifacts()}

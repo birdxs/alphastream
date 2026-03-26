@@ -478,20 +478,26 @@ export default function StockDetailPage({
       </GlassCard>
 
       {/* ======= Tab 切换栏 ======= */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hide">
         {TABS.map((tab) => {
           const active = activeTab === tab.key;
           return (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all border ${
+              className={`relative px-4 py-2 text-sm font-medium whitespace-nowrap transition-all duration-200 rounded-lg ${
                 active
-                  ? "bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30 shadow-[0_0_12px_rgba(55,55,204,0.15)]"
-                  : "bg-white/[0.04] text-white/50 border-white/[0.08] hover:bg-white/[0.08] hover:text-white/70"
+                  ? "text-[#3737CC] bg-[#3737CC]/10"
+                  : "text-white/50 hover:bg-white/[0.06] hover:text-white/70"
               }`}
             >
               {tab.label}
+              {/* 底部品牌色指示线 — 带滑动过渡 */}
+              <span
+                className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 rounded-full bg-[#3737CC] transition-all duration-300 ${
+                  active ? "w-4 opacity-100" : "w-0 opacity-0"
+                }`}
+              />
             </button>
           );
         })}

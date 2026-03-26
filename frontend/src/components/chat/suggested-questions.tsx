@@ -54,7 +54,7 @@ export function SuggestedQuestions({ onSelect }: Props) {
               variant="outline"
               size="sm"
               style={{ animationDelay: `${i * 60}ms`, ['--cat-color' as string]: color }}
-              className="whitespace-nowrap text-xs h-7 bg-white/[0.04] border border-white/[0.08] rounded-full hover:bg-white/[0.06] transition-all animate-[glass-enter_300ms_ease-out_both] opacity-0 [animation-fill-mode:forwards]"
+              className="whitespace-nowrap text-xs h-7 bg-white/[0.04] border border-white/[0.08] rounded-full hover:bg-white/[0.06] hover:-translate-x-0.5 transition-all duration-200 animate-[glass-enter_300ms_ease-out_both] opacity-0 [animation-fill-mode:forwards]"
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = borderColor; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = ''; }}
               onClick={() => onSelect(q)}

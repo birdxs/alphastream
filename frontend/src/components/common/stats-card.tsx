@@ -74,7 +74,7 @@ export function StatsCard({
     change !== undefined && change >= 0 ? "\u2191" : "\u2193";
 
   return (
-    <GlassCard padding="md" className={className}>
+    <GlassCard padding="md" className={`hover:scale-[1.02] hover:shadow-lg transition-transform duration-200 ${className}`}>
       <div className="flex flex-col gap-1.5">
         {/* 顶部: icon + label */}
         <div className="flex items-center gap-1.5">

@@ -467,7 +467,7 @@ export default function DashboardPage() {
                   <button
                     key={item.code}
                     onClick={() => router.push(`/stock/${item.code}`)}
-                    className="group flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-[#6B5EE4]/30 backdrop-blur-sm transition-all duration-200"
+                    className="group flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-[#6B5EE4]/30 hover:scale-[1.02] hover:shadow-lg hover:shadow-[#6B5EE4]/5 backdrop-blur-sm transition-all duration-200"
                   >
                     <div className="h-8 w-8 rounded-lg bg-[#6B5EE4]/10 flex items-center justify-center text-[#6B5EE4] text-xs font-bold shrink-0">
                       {item.name.slice(0, 1)}

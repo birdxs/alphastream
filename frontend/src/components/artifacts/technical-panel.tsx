@@ -23,14 +23,22 @@ interface Props {
 
 export function TechnicalPanelArtifact({ data }: Props) {
   const score = Number(data.score || 50);
-  const scoreColor =
+  const scoreGradient =
     score >= 80
-      ? "text-[#46BEA3]"
+      ? "bg-gradient-to-r from-[#46BEA3] to-[#34D399] bg-clip-text text-transparent"
       : score >= 60
-        ? "text-[#3737CC]"
+        ? "bg-gradient-to-r from-[#3737CC] to-[#6B5EE4] bg-clip-text text-transparent"
         : score >= 40
-          ? "text-[#F59E0B]"
-          : "text-[#FF8767]";
+          ? "bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] bg-clip-text text-transparent"
+          : "bg-gradient-to-r from-[#FF8767] to-[#EF4444] bg-clip-text text-transparent";
+  const barGradient =
+    score >= 80
+      ? "bg-gradient-to-r from-[#46BEA3] to-[#34D399]"
+      : score >= 60
+        ? "bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
+        : score >= 40
+          ? "bg-gradient-to-r from-[#F59E0B] to-[#FBBF24]"
+          : "bg-gradient-to-r from-[#FF8767] to-[#EF4444]";
 
   const indicators = [
     { label: "RSI", value: data.rsi, format: (v: number) => {
@@ -51,7 +59,7 @@ export function TechnicalPanelArtifact({ data }: Props) {
       {/* 评分 */}
       <div className="flex items-center justify-between">
         <div>
-          <span className={`text-4xl font-bold font-mono ${scoreColor}`}>{score}</span>
+          <span className={`text-4xl font-bold font-mono ${scoreGradient}`}>{score}</span>
           <span className="text-muted-foreground text-sm">/100</span>
         </div>
         {data.recommendation && (
@@ -64,15 +72,7 @@ export function TechnicalPanelArtifact({ data }: Props) {
       {/* 评分条 */}
       <div className="w-full bg-muted rounded-full h-2.5">
         <div
-          className={`h-2.5 rounded-full transition-all duration-700 ${
-            score >= 80
-              ? "bg-[#46BEA3]"
-              : score >= 60
-                ? "bg-[#3737CC]"
-                : score >= 40
-                  ? "bg-[#F59E0B]"
-                  : "bg-[#FF8767]"
-          }`}
+          className={`h-2.5 rounded-full transition-all duration-700 ${barGradient}`}
           style={{ width: `${score}%` }}
         />
       </div>

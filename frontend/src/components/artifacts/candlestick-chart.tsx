@@ -274,7 +274,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 bg-white/[0.03] rounded-xl p-1">
           {TIME_RANGES.map((r) => (
             <button
               key={r.days}
@@ -282,7 +282,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
               className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ${
                 timeRange === r.days
                   ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30'
-                  : 'bg-white/[0.04] text-[#8888A0] border-white/[0.08] hover:bg-white/[0.08]'
+                  : 'bg-transparent text-[#8888A0] border-transparent hover:bg-white/[0.06]'
               }`}
             >
               {r.label}
@@ -315,7 +315,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
           )}
         </div>
       )}
-      <div className="relative w-full">
+      <div className="relative w-full border-b border-[#3737CC]/10">
         {(data.stock_code || data.stock_name) && (
           <div className="absolute top-4 left-4 text-2xl font-bold pointer-events-none select-none z-10" style={{ color: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' }}>
             {data.stock_code || ''} {data.stock_name || ''}
