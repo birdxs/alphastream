@@ -110,7 +110,7 @@ export function ConversationSidebar() {
   return (
     <div className="w-56 border-r flex flex-col bg-muted/20">
       <div className="p-2 border-b flex items-center justify-between">
-        <Button variant="outline" size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs" aria-label="创建新对话">
+        <Button variant="outline" size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
         </Button>
         <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7">
@@ -124,6 +124,7 @@ export function ConversationSidebar() {
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="搜索对话..."
           aria-label="搜索对话"
+          tabIndex={1}
           className="w-full bg-muted/50 rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
         />
       </div>
@@ -152,6 +153,9 @@ export function ConversationSidebar() {
                   <div
                     key={conv.conversation_id}
                     onClick={() => selectConversation(conv)}
+                    tabIndex={3}
+                    role="button"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectConversation(conv); } }}
                     className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs cursor-pointer group transition-colors ${
                       activeConversationId === conv.conversation_id
                         ? 'bg-primary/10 text-primary'

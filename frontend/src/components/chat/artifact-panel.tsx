@@ -10,7 +10,7 @@ import { ArtifactRenderer } from "./artifact-renderer";
 import { AgentLogDrawer } from "@/components/agent/agent-log-drawer";
 
 export function ArtifactPanel() {
-  const { artifacts } = useChatStore();
+  const artifacts = useChatStore(s => s.artifacts);
 
   return (
     <div className="flex flex-col h-full">

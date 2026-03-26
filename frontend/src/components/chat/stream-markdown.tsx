@@ -4,6 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
@@ -60,11 +61,21 @@ const markdownComponents: Components = {
 };
 
 export function StreamMarkdown({ content, isStreaming }: Props) {
+  const memoizedContent = useMemo(() => (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      {content}
+    </ReactMarkdown>
+  ), [content]);
+
   return (
     <div className="prose prose-sm dark:prose-invert max-w-none">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-        {content}
-      </ReactMarkdown>
+      {isStreaming ? (
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {content}
+        </ReactMarkdown>
+      ) : (
+        memoizedContent
+      )}
       {isStreaming && (
         <span className="inline-block w-[2px] h-[1.1em] bg-primary ml-0.5 align-text-bottom" style={{ animation: 'blink 1s step-end infinite' }} />
       )}

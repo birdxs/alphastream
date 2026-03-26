@@ -10,7 +10,7 @@ import { useAgentStore } from "@/lib/stores/agent-store";
 import { ToolCallCard } from "./tool-call-card";
 
 export function ToolCallTimeline() {
-  const { toolCalls } = useAgentStore();
+  const toolCalls = useAgentStore(s => s.toolCalls);
 
   if (toolCalls.length === 0) return null;
 

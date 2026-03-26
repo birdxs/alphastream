@@ -40,7 +40,7 @@ export function ScoreRadarArtifact({ data }: Props) {
   ];
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={300} aria-label="多维度评分雷达图">
       <RadarChart data={radarData}>
         <PolarGrid
           stroke={theme === "dark" ? "#374151" : "#e5e7eb"}

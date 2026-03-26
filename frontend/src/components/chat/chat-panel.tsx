@@ -13,7 +13,8 @@ import { WelcomeScreen } from "./welcome-screen";
 
 export function ChatPanel() {
   const { sendMessage, stopGeneration } = useChatStream();
-  const { messages, isStreaming } = useChatStore();
+  const messages = useChatStore(s => s.messages);
+  const isStreaming = useChatStore(s => s.isStreaming);
 
   const handleSend = (message: string, options: { stock_code?: string; market_type?: string }) => {
     sendMessage(message, options);

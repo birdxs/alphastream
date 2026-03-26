@@ -20,7 +20,10 @@ const AGENT_ORDER = [
 ];
 
 export function AgentProgressPanel() {
-  const { agentProgresses, overallProgress, isAnalyzing, toolCalls } = useAgentStore();
+  const agentProgresses = useAgentStore(s => s.agentProgresses);
+  const overallProgress = useAgentStore(s => s.overallProgress);
+  const isAnalyzing = useAgentStore(s => s.isAnalyzing);
+  const toolCalls = useAgentStore(s => s.toolCalls);
   const [expanded, setExpanded] = useState(false);
 
   if (!isAnalyzing && agentProgresses.length === 0) return null;

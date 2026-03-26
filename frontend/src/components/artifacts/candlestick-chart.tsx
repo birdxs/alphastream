@@ -52,7 +52,8 @@ const TIME_RANGES = [
 export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<IChartApi | null>(null);
-  const { theme, stockColorScheme } = useThemeStore();
+  const theme = useThemeStore(s => s.theme);
+  const stockColorScheme = useThemeStore(s => s.stockColorScheme);
   const [timeRange, setTimeRange] = useState('120');
   const [crosshairData, setCrosshairData] = useState<{
     time: string; open: number; high: number; low: number; close: number; volume?: number;
@@ -63,10 +64,11 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     ? data.ohlcv
     : data.ohlcv?.slice(-Number(timeRange));
 
+  // Effect 1: 仅在data变化时创建/重建图表
   useEffect(() => {
     if (!chartRef.current || !filteredData?.length) return;
 
-    // 涨跌颜色
+    // 涨跌颜色（创建时使用当前值）
     const upColor = stockColorScheme === "cn" ? "#ef4444" : "#22c55e";
     const downColor = stockColorScheme === "cn" ? "#22c55e" : "#ef4444";
 
@@ -216,7 +218,26 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
       chart.remove();
       chartInstance.current = null;
     };
-  }, [data, filteredData, theme, stockColorScheme]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, filteredData]);
+
+  // Effect 2: theme/color变化时仅更新样式，避免重建整个图表
+  useEffect(() => {
+    if (!chartInstance.current) return;
+    chartInstance.current.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: theme === 'dark' ? '#1a1a2e' : '#ffffff' },
+        textColor: theme === 'dark' ? '#d1d5db' : '#374151',
+      },
+      grid: {
+        vertLines: { color: theme === 'dark' ? '#2d2d44' : '#e5e7eb' },
+        horzLines: { color: theme === 'dark' ? '#2d2d44' : '#e5e7eb' },
+      },
+      timeScale: {
+        borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db',
+      },
+    });
+  }, [theme, stockColorScheme]);
 
   if (!data.ohlcv?.length) {
     return (
@@ -263,7 +284,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
             {data.stock_code || ''} {data.stock_name || ''}
           </div>
         )}
-        <div ref={chartRef} className="w-full" />
+        <div ref={chartRef} className="w-full" role="img" aria-label={`${data.stock_code || ''} ${data.stock_name || ''} K线走势图，显示${filteredData?.length || 0}根K线`} />
       </div>
     </div>
   );

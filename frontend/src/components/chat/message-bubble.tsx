@@ -4,6 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { memo } from "react";
 import type { ChatMessage } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { StreamMarkdown } from "./stream-markdown";
@@ -13,7 +14,7 @@ interface Props {
   message: ChatMessage;
 }
 
-export function MessageBubble({ message }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message }: Props) {
   const isUser = message.role === "user";
   const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
 
@@ -69,4 +70,4 @@ export function MessageBubble({ message }: Props) {
       </div>
     </div>
   );
-}
+});

@@ -12,8 +12,18 @@ interface Props {
   onSelect: (question: string) => void;
 }
 
+function getQuestionCategory(q: string): { icon: string; category: string } {
+  if (q.includes('估值') || q.includes('基本面') || q.includes('财务')) return { icon: '💰', category: '深入' };
+  if (q.includes('对比') || q.includes('行业')) return { icon: '🔍', category: '对比' };
+  if (q.includes('风险') || q.includes('止损')) return { icon: '⚠️', category: '风险' };
+  if (q.includes('资金') || q.includes('主力')) return { icon: '💹', category: '资金' };
+  if (q.includes('重试')) return { icon: '🔄', category: '重试' };
+  return { icon: '💡', category: '相关' };
+}
+
 export function SuggestedQuestions({ onSelect }: Props) {
-  const { followUpQuestions, isStreaming } = useChatStore();
+  const followUpQuestions = useChatStore(s => s.followUpQuestions);
+  const isStreaming = useChatStore(s => s.isStreaming);
 
   if (followUpQuestions.length === 0 || isStreaming) return null;
 
@@ -24,18 +34,22 @@ export function SuggestedQuestions({ onSelect }: Props) {
         <span className="text-[10px] text-muted-foreground font-medium">继续探索</span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {followUpQuestions.map((q, i) => (
-          <Button
-            key={i}
-            variant="outline"
-            size="sm"
-            style={{ animationDelay: `${i * 80}ms` }}
-            className="whitespace-nowrap text-xs h-7 rounded-full border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all animate-fade-in opacity-0 [animation-fill-mode:forwards]"
-            onClick={() => onSelect(q)}
-          >
-            {q}
-          </Button>
-        ))}
+        {followUpQuestions.map((q, i) => {
+          const { icon } = getQuestionCategory(q);
+          return (
+            <Button
+              key={i}
+              variant="outline"
+              size="sm"
+              style={{ animationDelay: `${i * 80}ms` }}
+              className="whitespace-nowrap text-xs h-7 rounded-full border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all animate-fade-in opacity-0 [animation-fill-mode:forwards]"
+              onClick={() => onSelect(q)}
+            >
+              <span className="mr-1">{icon}</span>
+              {q}
+            </Button>
+          );
+        })}
       </div>
     </div>
   );

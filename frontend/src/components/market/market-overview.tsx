@@ -4,7 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "@/lib/api/client";
 
 interface MarketIndex {
@@ -15,6 +15,7 @@ interface MarketIndex {
 }
 
 export function MarketOverview() {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [indices, setIndices] = useState<MarketIndex[]>([
     { name: "上证指数", code: "000001", price: 0, change: 0 },
     { name: "深证成指", code: "399001", price: 0, change: 0 },
@@ -40,8 +41,27 @@ export function MarketOverview() {
     fetchData();
   }, []);
 
+  // 自动轮播滚动
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let scrollPos = 0;
+    const interval = setInterval(() => {
+      scrollPos += 1;
+      if (scrollPos >= el.scrollWidth - el.clientWidth) scrollPos = 0;
+      el.scrollTo({ left: scrollPos, behavior: 'auto' });
+    }, 50);
+
+    // 用户手动交互时暂停
+    const pause = () => clearInterval(interval);
+    el.addEventListener('touchstart', pause, { once: true });
+    el.addEventListener('mouseenter', pause, { once: true });
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs"
+    <div ref={scrollRef} className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs"
       style={{
         maskImage: 'linear-gradient(90deg, transparent, black 40px, black calc(100% - 40px), transparent)',
         WebkitMaskImage: 'linear-gradient(90deg, transparent, black 40px, black calc(100% - 40px), transparent)',

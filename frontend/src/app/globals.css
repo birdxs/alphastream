@@ -334,6 +334,15 @@
 .surface-2 { background: var(--surface-2); }
 .surface-3 { background: var(--surface-3); }
 
+/* === 减弱动效（色觉/前庭障碍辅助） === */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* === 移动端虚拟键盘适配 === */
 @supports (height: 100dvh) {
   .h-full { height: 100dvh; }

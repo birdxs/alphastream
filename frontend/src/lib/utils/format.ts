@@ -18,8 +18,9 @@ export function formatPercent(value: number | string | undefined, decimals = 2):
   if (value === undefined || value === null) return '--';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '--';
-  const prefix = num > 0 ? '+' : '';
-  return `${prefix}${num.toFixed(decimals)}%`;
+  if (num > 0) return `\u25B2 +${num.toFixed(decimals)}%`;
+  if (num < 0) return `\u25BC ${num.toFixed(decimals)}%`;
+  return `${num.toFixed(decimals)}%`;
 }
 
 /** 格式化大数字（万/亿） */

@@ -20,7 +20,7 @@ export function ChatInput({ onSend, onStop }: Props) {
   const [input, setInput] = useState("");
   const [stockCode, setStockCode] = useState("");
   const [marketType, setMarketType] = useState("A");
-  const { isStreaming } = useChatStore();
+  const isStreaming = useChatStore(s => s.isStreaming);
   const { addItem, hasItem } = useWatchlistStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -141,6 +141,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               placeholder="输入股票代码或分析问题... (Shift+Enter换行)"
               aria-label="消息输入框"
               rows={1}
+              tabIndex={10}
               className="w-full resize-none rounded-xl border border-border/60 bg-muted/30 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all placeholder:text-muted-foreground/50"
               disabled={isStreaming}
               style={{ minHeight: '40px', maxHeight: '120px' }}
@@ -163,6 +164,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               onClick={handleSend}
               disabled={!input.trim()}
               aria-label="发送消息"
+              tabIndex={11}
             >
               <Send className="h-4 w-4" />
             </Button>

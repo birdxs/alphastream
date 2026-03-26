@@ -16,7 +16,9 @@ export function MessageList() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const { messages, isStreaming, streamingContent } = useChatStore();
+  const messages = useChatStore(s => s.messages);
+  const isStreaming = useChatStore(s => s.isStreaming);
+  const streamingContent = useChatStore(s => s.streamingContent);
 
   const handleScroll = useCallback(() => {
     const el = scrollAreaRef.current;
@@ -34,7 +36,7 @@ export function MessageList() {
 
   return (
     <ScrollArea className="flex-1 p-4">
-      <div className="space-y-4" ref={scrollAreaRef} onScroll={handleScroll}>
+      <div className="space-y-4" ref={scrollAreaRef} onScroll={handleScroll} role="log" aria-live="polite" aria-label="对话消息">
         {messages.map((msg) => (
           <MessageBubble key={msg.message_id} message={msg} />
         ))}

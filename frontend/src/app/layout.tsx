@@ -28,11 +28,14 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2">
+          跳到主内容
+        </a>
         <ThemeProvider>
           <div className="flex h-screen flex-col">
             <Navbar />
             <NetworkStatus />
-            <main className="flex-1 overflow-hidden">
+            <main id="main-content" className="flex-1 overflow-hidden">
               {children}
             </main>
             <MobileTabBar />

@@ -93,20 +93,20 @@ export default function PortfolioPage() {
           <CardContent className="pt-4">
             <div className="flex gap-2 items-end">
               <div className="flex-1">
-                <label className="text-xs text-muted-foreground">股票代码</label>
-                <Input value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={formError.includes('代码') ? 'border-red-500' : ''} />
+                <label htmlFor="stock-code" className="text-xs text-muted-foreground">股票代码</label>
+                <Input id="stock-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={formError.includes('代码') ? 'border-red-500' : ''} />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-muted-foreground">股票名称</label>
-                <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="贵州茅台" />
+                <label htmlFor="stock-name" className="text-xs text-muted-foreground">股票名称</label>
+                <Input id="stock-name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="贵州茅台" />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-muted-foreground">持股数量</label>
-                <Input value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={formError.includes('数量') ? 'border-red-500' : ''} />
+                <label htmlFor="stock-shares" className="text-xs text-muted-foreground">持股数量</label>
+                <Input id="stock-shares" value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={formError.includes('数量') ? 'border-red-500' : ''} />
               </div>
               <div className="flex-1">
-                <label className="text-xs text-muted-foreground">成本价</label>
-                <Input value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={formError.includes('成本') ? 'border-red-500' : ''} />
+                <label htmlFor="stock-cost" className="text-xs text-muted-foreground">成本价</label>
+                <Input id="stock-cost" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={formError.includes('成本') ? 'border-red-500' : ''} />
               </div>
               <Button onClick={handleAdd}>添加</Button>
             </div>
