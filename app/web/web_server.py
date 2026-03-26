@@ -1308,9 +1308,8 @@ def cancel_scan(task_id):
         return jsonify({'message': '任务已取消'})
 
 
-@app.route('/api/market_indices', methods=['GET'])
-def get_market_indices():
-    """获取主要市场指数实时行情（上证/深证/创业板/沪深300）"""
+def _fetch_market_indices_data():
+    """内部函数：获取主要市场指数数据（上证/深证/创业板/沪深300），供API和SSE共用"""
     import akshare as ak
 
     # 方案1: 尝试实时行情接口
@@ -1329,7 +1328,7 @@ def get_market_indices():
                     'change_pct': float(r['涨跌幅'])
                 })
         if result:
-            return jsonify({'indices': result})
+            return {'indices': result}
     except Exception as e:
         app.logger.warning(f"实时指数接口失败: {e}")
 
@@ -1359,11 +1358,42 @@ def get_market_indices():
             except Exception:
                 continue
         if result:
-            return jsonify({'indices': result})
+            return {'indices': result}
     except Exception as e:
         app.logger.error(f"历史指数数据也失败: {e}")
 
-    return jsonify({'indices': []})
+    return {'indices': []}
+
+
+@app.route('/api/market_indices', methods=['GET'])
+def get_market_indices():
+    """获取主要市场指数实时行情（上证/深证/创业板/沪深300）"""
+    return jsonify(_fetch_market_indices_data())
+
+
+@app.route('/api/market_stream')
+def market_stream():
+    """SSE端点：每10秒推送一次市场指数实时数据流"""
+    from flask import Response
+
+    def generate():
+        while True:
+            try:
+                data = _fetch_market_indices_data()
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+            except Exception:
+                yield f"data: {json.dumps({'indices': []})}\n\n"
+            time.sleep(10)
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        }
+    )
 
 
 @app.route('/api/index_stocks', methods=['GET'])

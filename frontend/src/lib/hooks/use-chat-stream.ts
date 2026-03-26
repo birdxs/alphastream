@@ -1,6 +1,6 @@
 /**
  * Input: 用户消息文本 + 可选参数（股票代码、市场类型、研究深度）
- * Output: 发送消息函数 + 停止生成函数，自动处理SSE流并更新store
+ * Output: 发送消息函数 + 停止生成函数，自动处理SSE流并更新store，完成时支持浏览器Notification推送
  * Pos: lib/hooks/use-chat-stream.ts - 聊天流式请求Hook，连接API客户端与状态管理
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
@@ -104,7 +104,7 @@ export function useChatStream() {
           chatStore.setStreaming(false);
           chatStore.setFollowUps(data.follow_up_questions || []);
 
-          // Tab标题闪烁提醒
+          // Tab标题闪烁提醒 + 浏览器通知
           if (document.hidden) {
             const originalTitle = document.title;
             let blinking = true;
@@ -119,6 +119,26 @@ export function useChatStream() {
             };
             document.addEventListener('visibilitychange', stopBlink);
             setTimeout(stopBlink, 10000);
+
+            // 浏览器Notification推送
+            const stockLabel = options.stock_code || '分析';
+            if (typeof Notification !== 'undefined') {
+              if (Notification.permission === 'granted') {
+                new Notification(`AI分析完成 — ${stockLabel}`, {
+                  body: '点击返回查看结果',
+                  icon: '/favicon.ico',
+                });
+              } else if (Notification.permission === 'default') {
+                Notification.requestPermission().then((perm) => {
+                  if (perm === 'granted') {
+                    new Notification(`AI分析完成 — ${stockLabel}`, {
+                      body: '点击返回查看结果',
+                      icon: '/favicon.ico',
+                    });
+                  }
+                });
+              }
+            }
           }
         },
       };

@@ -1,4 +1,4 @@
-// Input: 后端 /api/market_indices API 返回的实时指数数据
+// Input: 后端 /api/market_stream SSE 实时推送 或 /api/market_indices 轮询(降级)
 // Output: 紧凑市场ticker条 (h-7)，显示上证/深证/创业板/沪深300实时行情
 // Pos: 首页顶部，显示主要市场指数数据
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
@@ -62,11 +62,83 @@ export function MarketOverview() {
     }
   }, []);
 
+  // SSE实时推送，失败时降级为30秒轮询
   useEffect(() => {
-    fetchIndices();
-    // 每30秒自动刷新
-    const interval = setInterval(fetchIndices, 30000);
-    return () => clearInterval(interval);
+    let eventSource: EventSource | null = null;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+
+    const handleSSEData = (rawData: string) => {
+      try {
+        const res: MarketIndicesResponse = JSON.parse(rawData);
+        if (res?.indices && res.indices.length > 0) {
+          const prev = prevQuotesRef.current;
+          if (prev.length > 0) {
+            const newFlash: Record<string, 'up' | 'down' | null> = {};
+            res.indices.forEach(q => {
+              const old = prev.find(p => p.name === q.name);
+              if (old && q.price !== old.price) {
+                newFlash[q.name] = q.price > old.price ? 'up' : 'down';
+              }
+            });
+            if (Object.keys(newFlash).length > 0) {
+              setFlashMap(newFlash);
+              setTimeout(() => setFlashMap({}), 800);
+            }
+          }
+          prevQuotesRef.current = res.indices;
+          setQuotes(res.indices);
+          setError(false);
+          setLoading(false);
+        }
+      } catch {
+        // 解析失败忽略，等待下一次推送
+      }
+    };
+
+    const connectSSE = () => {
+      if (disposed) return;
+      eventSource = new EventSource(`${apiBase}/api/market_stream`);
+
+      eventSource.onmessage = (event) => {
+        handleSSEData(event.data);
+      };
+
+      eventSource.onerror = () => {
+        // SSE连接失败，关闭并降级为轮询
+        eventSource?.close();
+        eventSource = null;
+        if (!disposed) {
+          // 3秒后尝试重连，同时启用轮询作为降级
+          if (!fallbackInterval) {
+            fetchIndices(); // 立即获取一次
+            fallbackInterval = setInterval(fetchIndices, 30000);
+          }
+          reconnectTimer = setTimeout(() => {
+            if (fallbackInterval) {
+              clearInterval(fallbackInterval);
+              fallbackInterval = null;
+            }
+            connectSSE();
+          }, 3000);
+        }
+      };
+    };
+
+    // 先用fetch获取一次数据（快速首屏），然后连接SSE
+    fetchIndices().then(() => {
+      if (!disposed) connectSSE();
+    });
+
+    return () => {
+      disposed = true;
+      eventSource?.close();
+      if (fallbackInterval) clearInterval(fallbackInterval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
   }, [fetchIndices]);
 
   // 加载中或错误时显示占位
