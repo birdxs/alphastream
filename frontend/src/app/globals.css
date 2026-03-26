@@ -378,6 +378,19 @@
   box-shadow: 0 0 30px rgba(55, 55, 204, 0.2), 0 0 60px rgba(55, 55, 204, 0.1);
 }
 
+/* 科技感网格纹理 — 微妙的品牌色线条网格 */
+.tech-grid {
+  background-image:
+    linear-gradient(rgba(55,55,204,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(55,55,204,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* 顶部滚动阴影 — 暗示可向上滚动 */
+.scroll-shadow-top {
+  box-shadow: inset 0 8px 8px -8px rgba(0,0,0,0.3);
+}
+
 /* 噪点纹理叠加 — 微妙grain效果增加质感 */
 .glass-noise {
   position: relative;

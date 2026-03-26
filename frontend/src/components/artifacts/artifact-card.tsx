@@ -1,5 +1,5 @@
 // Input: title、icon(ReactNode)、children、defaultExpanded
-// Output: 可折叠/全屏/导出的Dark Glassmorphism Artifact卡片容器（glass-enter入场 + 全屏过渡 + 折叠高度动画 + 导出下拉菜单含复制/截图）
+// Output: 可折叠/全屏/导出的Dark Glassmorphism Artifact卡片容器（glass-enter入场 + 全屏过渡 + ESC退出全屏 + 折叠高度动画 + 导出下拉菜单含复制/截图）
 // Pos: artifact-renderer.tsx的外层包装，提供卡片操作能力
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -43,6 +43,18 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
       setContentHeight(contentRef.current.scrollHeight);
     }
   }, [children, expanded]);
+
+  // 全屏模式下 Escape 键退出
+  useEffect(() => {
+    if (!fullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setFullscreen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [fullscreen]);
 
   // 点击外部关闭导出菜单
   useEffect(() => {

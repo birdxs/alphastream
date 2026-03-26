@@ -1,5 +1,5 @@
 // Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调、文件附件（图片上传至后端/api/upload_image）、语音输入
-// Output: 聊天输入框UI（含股票代码验证反馈、快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览与上传、语音录入、空消息shake动画）
+// Output: 聊天输入框UI（含股票代码验证反馈、快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览与上传、语音录入、空消息shake动画、自动聚焦）
 // Pos: chat-panel.tsx的子组件，负责用户输入与发送（含多模态图片上传）
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -59,11 +59,23 @@ export function ChatInput({ onSend, onStop }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
+  const activeConversationId = useChatStore(s => s.activeConversationId);
+
   // 检测浏览器是否支持语音识别（延迟到客户端挂载后检测，避免 Hydration mismatch）
   const [speechSupported, setSpeechSupported] = useState(false);
   useEffect(() => {
     setSpeechSupported(getSpeechRecognition() !== null);
   }, []);
+
+  // 页面加载后自动聚焦
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  // 切换对话后自动聚焦
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [activeConversationId]);
 
   // P2: 流式结束后自动聚焦输入框
   useEffect(() => {
@@ -256,6 +268,8 @@ export function ChatInput({ onSend, onStop }: Props) {
       finalMsg = `${msg}\n${fileInfo}`;
     }
     onSend(finalMsg, { stock_code: code, market_type: marketType });
+    // 发送消息后自动聚焦
+    setTimeout(() => textareaRef.current?.focus(), 50);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

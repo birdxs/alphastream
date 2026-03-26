@@ -1,5 +1,5 @@
 // Input: chat-store + useChatStream
-// Output: 完整Chat面板 — 头部 + 消息/欢迎 + 建议 + 输入
+// Output: 完整Chat面板 — 头部 + 消息/欢迎 + 建议 + 输入，含微妙渐变背景与滚动阴影
 // Pos: 首页中栏
 
 "use client";
@@ -45,7 +45,7 @@ function ChatPanelInner() {
   }, [searchParams, sendMessage]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20">
+    <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20 bg-gradient-to-b from-white/[0.02] to-transparent">
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-10 border-b border-white/[0.08] bg-[rgba(10,10,26,0.6)] backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2">
@@ -61,7 +61,7 @@ function ChatPanelInner() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-shadow-top">
         {messages.length === 0 && !isStreaming ? (
           <WelcomeScreen onQuestionSelect={handleSend} />
         ) : (

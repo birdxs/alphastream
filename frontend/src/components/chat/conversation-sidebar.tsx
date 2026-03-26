@@ -1,5 +1,5 @@
 // Input: 后端对话列表API + chat-store状态
-// Output: 对话历史侧边栏UI，支持新建/切换/删除（含确认）对话，加载骨架屏，错误可视化
+// Output: 对话历史侧边栏UI，支持新建/切换/删除（含确认）对话，加载骨架屏，错误可视化，搜索高亮
 // Pos: 首页左侧侧边栏，三栏布局的导航侧
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -12,6 +12,22 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Conversation } from "@/lib/types";
+
+/** 搜索关键词高亮：将匹配部分用品牌色 span 包裹 */
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const idx = lowerText.indexOf(lowerQuery);
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <span className="text-[#3737CC] font-medium">{text.slice(idx, idx + query.length)}</span>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
 
 const groupByDate = (convs: Conversation[]) => {
   const today = new Date().toDateString();
@@ -33,12 +49,14 @@ function SwipeableConvItem({
   pendingDelete,
   onSelect,
   onDelete,
+  searchQuery = '',
 }: {
   conv: Conversation;
   isActive: boolean;
   pendingDelete: string | null;
   onSelect: (conv: Conversation) => void;
   onDelete: (id: string) => void;
+  searchQuery?: string;
 }) {
   const startX = useRef(0);
   const currentX = useRef(0);
@@ -103,7 +121,7 @@ function SwipeableConvItem({
           {conv.stock_codes && conv.stock_codes.length > 0 && (
             <span className="text-[#3737CC] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
           )}
-          {conv.title}
+          <HighlightText text={conv.title} query={searchQuery} />
         </span>
       </div>
     </div>
@@ -263,6 +281,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
                       pendingDelete={pendingDelete}
                       onSelect={selectConversation}
                       onDelete={swipeDeleteConversation}
+                      searchQuery={searchQuery}
                     />
                   ) : (
                   <div
@@ -282,7 +301,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
                       {conv.stock_codes && conv.stock_codes.length > 0 && (
                         <span className="text-[#3737CC] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
                       )}
-                      {conv.title}
+                      <HighlightText text={conv.title} query={searchQuery} />
                     </span>
                     <Button
                       variant="ghost" size="icon"

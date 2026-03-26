@@ -1,16 +1,18 @@
 // Input: ChatMessage对象（含role、content、artifacts、created_at）
-// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact专业badge、数据溯源引用、时间戳、新消息弹跳入场）
+// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact专业badge、数据溯源引用、时间戳、新消息弹跳入场、AI消息hover复制按钮）
 // Pos: message-list.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { memo } from "react";
+import { memo, useState, useCallback } from "react";
 import type { ChatMessage } from "@/lib/types";
 import type { ArtifactType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { StreamMarkdown } from "./stream-markdown";
 import {
   RefreshCw,
+  Copy,
+  Check,
   BarChart3,
   Activity,
   Building2,
@@ -49,6 +51,15 @@ interface Props {
 export const MessageBubble = memo(function MessageBubble({ message, onRegenerate }: Props) {
   const isUser = message.role === "user";
   const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (!message.content) return;
+    navigator.clipboard.writeText(message.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [message.content]);
 
   return (
     <div className={`flex gap-3 group ${isNew ? "animate-[glass-enter_250ms_ease-out_both]" : ""} ${isUser ? "flex-row-reverse" : ""}`}>
@@ -72,8 +83,20 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
 
       {/* 内容 */}
       <div className={`flex-1 min-w-0 ${isUser ? "text-right" : ""}`}>
+        <div className="relative inline-block max-w-[90%]">
+          {/* AI消息hover复制按钮 */}
+          {!isUser && message.content && (
+            <button
+              onClick={handleCopy}
+              className="absolute -top-2 -right-2 z-10 h-6 w-6 rounded-md flex items-center justify-center bg-[#14142B]/90 border border-white/[0.12] text-[#8888A0] hover:text-[#F0F0F5] hover:bg-white/[0.12] opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
+              aria-label="复制消息"
+              title="复制消息"
+            >
+              {copied ? <Check className="h-3 w-3 text-[#10B981]" /> : <Copy className="h-3 w-3" />}
+            </button>
+          )}
         <div
-          className={`inline-block text-sm px-4 py-2.5 max-w-[90%] shadow-sm ${
+          className={`text-sm px-4 py-2.5 shadow-sm ${
             isUser
               ? "bg-gradient-to-br from-[#3737CC] to-[#4F4FE6] text-white rounded-2xl rounded-br-md"
               : "glass-gradient-border bg-white/[0.04] backdrop-blur-sm text-foreground rounded-2xl rounded-bl-md"
@@ -86,6 +109,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
           ) : (
             <span className="text-[#8888A0] italic text-xs animate-pulse">(正在生成...)</span>
           )}
+        </div>
         </div>
 
         {/* Artifact标签 */}

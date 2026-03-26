@@ -1,5 +1,5 @@
 // Input: onQuestionSelect回调
-// Output: Dark Glassmorphism风格欢迎屏（径向渐变Hero+毛玻璃图标+渐变标题+glass卡片+stagger动画+热门pills）
+// Output: Dark Glassmorphism风格欢迎屏（径向渐变Hero+科技网格纹理+毛玻璃图标+渐变标题+glass卡片+stagger动画+热门pills）
 // Pos: ChatPanel子组件，无消息时显示
 
 "use client";
@@ -79,6 +79,8 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
             "radial-gradient(ellipse 120% 80% at 50% 0%, rgba(55,55,204,0.35) 0%, rgba(33,33,133,0.2) 35%, rgba(107,94,228,0.08) 55%, transparent 75%)",
         }}
       />
+      {/* --- 科技感网格纹理叠加 --- */}
+      <div className="absolute inset-0 tech-grid pointer-events-none" />
 
       <div className="relative w-full max-w-[360px] space-y-5 animate-fade-in z-10">
         {/* --- 顶部Hero标识区 --- */}

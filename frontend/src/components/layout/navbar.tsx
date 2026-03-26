@@ -1,24 +1,35 @@
-// Input: theme-store状态
-// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，移动端精简（隐藏搜索+导航链接）
+// Input: theme-store状态 + usePathname路由
+// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，品牌色底部边线，当前路径高亮，移动端精简
 // Pos: 页面顶部固定导航
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter, Briefcase, Star, BarChart3 } from "lucide-react";
+
+const NAV_ITEMS = [
+  { href: "/", label: "对话", icon: MessageSquare },
+  { href: "/dashboard", label: "看板", icon: LayoutDashboard },
+  { href: "/screener", label: "选股", icon: Filter },
+  { href: "/portfolio", label: "持仓", icon: Briefcase },
+  { href: "/watchlist", label: "自选", icon: Star },
+  { href: "/compare", label: "对比", icon: BarChart3 },
+];
 
 export function Navbar() {
   const theme = useThemeStore(s => s.theme);
   const toggleTheme = useThemeStore(s => s.toggleTheme);
   const stockColorScheme = useThemeStore(s => s.stockColorScheme);
   const toggleColorScheme = useThemeStore(s => s.toggleColorScheme);
+  const pathname = usePathname();
 
   return (
     <nav
       aria-label="主导航"
-      className="flex h-12 items-center justify-between bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-b border-white/[0.08] px-3 shrink-0"
+      className="flex h-12 items-center justify-between bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-b border-[#3737CC]/20 px-3 shrink-0"
     >
       {/* Left: Logo + Nav */}
       <div className="flex items-center gap-1">
@@ -30,42 +41,28 @@ export function Navbar() {
         </Link>
 
         <div className="hidden sm:flex items-center">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
-              <MessageSquare className="h-3.5 w-3.5" />
-              对话
-            </Button>
-          </Link>
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
-              <LayoutDashboard className="h-3.5 w-3.5" />
-              看板
-            </Button>
-          </Link>
-          <Link href="/screener">
-            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
-              <Filter className="h-3.5 w-3.5" />
-              选股
-            </Button>
-          </Link>
-          <Link href="/portfolio">
-            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
-              <Briefcase className="h-3.5 w-3.5" />
-              持仓
-            </Button>
-          </Link>
-          <Link href="/watchlist">
-            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
-              <Star className="h-3.5 w-3.5" />
-              自选
-            </Button>
-          </Link>
-          <Link href="/compare">
-            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
-              <BarChart3 className="h-3.5 w-3.5" />
-              对比
-            </Button>
-          </Link>
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            return (
+              <Link key={href} href={href}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-8 px-2.5 gap-1.5 text-xs hover:bg-white/[0.08] relative ${
+                    isActive
+                      ? "text-[#3737CC] font-semibold"
+                      : "text-foreground"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4/5 h-[2px] rounded-full bg-[#3737CC] shadow-[0_0_6px_rgba(55,55,204,0.6)]" />
+                  )}
+                </Button>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
