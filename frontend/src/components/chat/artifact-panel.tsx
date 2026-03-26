@@ -51,7 +51,7 @@ export function ArtifactPanel() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
             {artifacts.map((artifact, i) => (
               <ArtifactRenderer key={`${artifact.artifact_type}_${i}`} artifact={artifact} />
             ))}

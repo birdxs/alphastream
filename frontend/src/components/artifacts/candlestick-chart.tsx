@@ -257,7 +257,14 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
           <span>收: <span className="text-foreground">{crosshairData.close.toFixed(2)}</span></span>
         </div>
       )}
-      <div ref={chartRef} className="w-full" />
+      <div className="relative w-full">
+        {(data.stock_code || data.stock_name) && (
+          <div className="absolute top-4 left-4 text-2xl font-bold pointer-events-none select-none z-10" style={{ color: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
+            {data.stock_code || ''} {data.stock_name || ''}
+          </div>
+        )}
+        <div ref={chartRef} className="w-full" />
+      </div>
     </div>
   );
 }

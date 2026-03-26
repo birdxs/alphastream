@@ -107,6 +107,23 @@ export function useChatStream() {
           chatStore.resetStreamContent();
           chatStore.setStreaming(false);
           chatStore.setFollowUps(data.follow_up_questions || []);
+
+          // Tab标题闪烁提醒
+          if (document.hidden) {
+            const originalTitle = document.title;
+            let blinking = true;
+            const interval = setInterval(() => {
+              document.title = blinking ? '\u2705 分析完成!' : originalTitle;
+              blinking = !blinking;
+            }, 1000);
+            const stopBlink = () => {
+              clearInterval(interval);
+              document.title = originalTitle;
+              document.removeEventListener('visibilitychange', stopBlink);
+            };
+            document.addEventListener('visibilitychange', stopBlink);
+            setTimeout(stopBlink, 10000);
+          }
         },
       };
 

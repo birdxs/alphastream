@@ -7,7 +7,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, X, MessageSquare } from "lucide-react";
+import { Plus, X, MessageSquare, Star } from "lucide-react";
 import Link from "next/link";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { useState } from "react";
@@ -45,7 +45,11 @@ export default function WatchlistPage() {
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">暂无自选股</p>
+            <div className="text-center py-12 space-y-4">
+              <Star className="h-12 w-12 text-muted-foreground/30 mx-auto" />
+              <p className="text-muted-foreground">暂无自选股</p>
+              <p className="text-sm text-muted-foreground/60">按 <kbd className="px-1 py-0.5 rounded bg-muted text-xs">{"\u2318"}K</kbd> 搜索并添加第一只自选股</p>
+            </div>
           ) : (
             <div className="space-y-1">
               {items.map(item => (

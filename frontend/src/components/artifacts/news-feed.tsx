@@ -4,7 +4,6 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { Badge } from "@/components/ui/badge";
 
 interface NewsItem {
   title?: string;
@@ -51,10 +50,19 @@ export function NewsFeedArtifact({ data }: Props) {
                 )}
               </div>
             </div>
-            {sentiment !== 0 && (
-              <Badge variant="outline" className={`text-[10px] shrink-0 ${sentimentColor}`}>
-                {sentimentLabel}
-              </Badge>
+            {item.sentiment != null && item.sentiment !== 0 && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${(item.sentiment || 0.5) * 100}%`,
+                      background: `linear-gradient(90deg, #ef4444, #eab308, #22c55e)`,
+                    }}
+                  />
+                </div>
+                <span className={`text-[10px] ${sentimentColor}`}>{sentimentLabel}</span>
+              </div>
             )}
           </div>
         );

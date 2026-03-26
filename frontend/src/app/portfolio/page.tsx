@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare, Briefcase } from "lucide-react";
 import { usePortfolioStore } from "@/lib/stores/portfolio-store";
 import { formatPrice, formatPercent, getPriceColorClass } from "@/lib/utils/format";
 import Link from "next/link";
@@ -20,6 +20,7 @@ export default function PortfolioPage() {
   const [newName, setNewName] = useState("");
   const [newShares, setNewShares] = useState("");
   const [newCost, setNewCost] = useState("");
+  const [formError, setFormError] = useState("");
 
   const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice || h.costPrice) * h.shares, 0);
   const totalCost = holdings.reduce((sum, h) => sum + h.costPrice * h.shares, 0);
@@ -27,17 +28,25 @@ export default function PortfolioPage() {
   const totalReturn = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
 
   const handleAdd = () => {
-    if (newCode && newShares && newCost) {
-      addHolding({
-        code: newCode,
-        name: newName || newCode,
-        shares: Number(newShares),
-        costPrice: Number(newCost),
-        currentPrice: Number(newCost),
-      });
-      setNewCode(""); setNewName(""); setNewShares(""); setNewCost("");
-      setShowAdd(false);
+    setFormError("");
+    if (!newCode || !/^\d{6}$/.test(newCode)) {
+      setFormError("请输入6位股票代码"); return;
     }
+    if (!newShares || Number(newShares) <= 0) {
+      setFormError("持股数量必须大于0"); return;
+    }
+    if (!newCost || Number(newCost) <= 0) {
+      setFormError("成本价必须大于0"); return;
+    }
+    addHolding({
+      code: newCode,
+      name: newName || newCode,
+      shares: Number(newShares),
+      costPrice: Number(newCost),
+      currentPrice: Number(newCost),
+    });
+    setNewCode(""); setNewName(""); setNewShares(""); setNewCost("");
+    setShowAdd(false);
   };
 
   return (
@@ -83,7 +92,7 @@ export default function PortfolioPage() {
             <div className="flex gap-2 items-end">
               <div className="flex-1">
                 <label className="text-xs text-muted-foreground">股票代码</label>
-                <Input value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" />
+                <Input value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={formError.includes('代码') ? 'border-red-500' : ''} />
               </div>
               <div className="flex-1">
                 <label className="text-xs text-muted-foreground">股票名称</label>
@@ -91,14 +100,15 @@ export default function PortfolioPage() {
               </div>
               <div className="flex-1">
                 <label className="text-xs text-muted-foreground">持股数量</label>
-                <Input value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" />
+                <Input value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={formError.includes('数量') ? 'border-red-500' : ''} />
               </div>
               <div className="flex-1">
                 <label className="text-xs text-muted-foreground">成本价</label>
-                <Input value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" />
+                <Input value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={formError.includes('成本') ? 'border-red-500' : ''} />
               </div>
               <Button onClick={handleAdd}>添加</Button>
             </div>
+            {formError && <p className="text-xs text-red-500 mt-1">{formError}</p>}
           </CardContent>
         </Card>
       )}
@@ -109,7 +119,11 @@ export default function PortfolioPage() {
         <CardContent>
           <div className="space-y-2">
             {holdings.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">暂无持仓，点击上方&ldquo;添加持仓&rdquo;</p>
+              <div className="text-center py-12 space-y-4">
+                <Briefcase className="h-12 w-12 text-muted-foreground/30 mx-auto" />
+                <p className="text-muted-foreground">暂无持仓</p>
+                <p className="text-sm text-muted-foreground/60">点击上方"添加持仓"开始管理您的投资组合</p>
+              </div>
             ) : (
               holdings.map(h => {
                 const pnl = ((h.currentPrice || h.costPrice) - h.costPrice) * h.shares;

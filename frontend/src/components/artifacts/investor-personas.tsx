@@ -80,6 +80,33 @@ export function InvestorPersonasArtifact({ data }: Props) {
         </div>
       )}
 
+      {/* 置信度对比条 */}
+      {opinions && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground font-medium">投资者置信度对比</p>
+          {Object.entries(opinions).map(([key, opinion]) => {
+            const meta = INVESTOR_META[key as keyof typeof INVESTOR_META];
+            if (!meta || !opinion) return null;
+            const conf = Number(opinion.confidence || 0.5);
+            const rec = String(opinion.recommendation || 'HOLD').toUpperCase();
+            return (
+              <div key={key} className="flex items-center gap-2 text-xs">
+                <span className="w-12 text-right text-muted-foreground truncate">{meta.name}</span>
+                <div className="flex-1 bg-muted rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      rec === 'BUY' ? 'bg-green-500' : rec === 'SELL' ? 'bg-red-500' : 'bg-yellow-500'
+                    }`}
+                    style={{ width: `${conf * 100}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right font-mono">{(conf * 100).toFixed(0)}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* 四位投资者卡片 */}
       <div className="grid grid-cols-2 gap-3">
         {opinions &&

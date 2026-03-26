@@ -9,6 +9,7 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { GlobalSearch } from "@/components/common/global-search";
+import { KeyboardShortcuts } from "@/components/common/keyboard-shortcuts";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -35,6 +36,7 @@ export default function RootLayout({
             <MobileTabBar />
           </div>
           <GlobalSearch />
+          <KeyboardShortcuts />
         </ThemeProvider>
       </body>
     </html>

@@ -1,5 +1,5 @@
 // Input: ChatMessage对象（含role、content、artifacts、created_at）
-// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact标签、时间戳、新消息弹跳入场）
+// Output: 单条消息气泡UI（纯色+首字母头像、圆角气泡、artifact标签、时间戳、新消息弹跳入场）
 // Pos: message-list.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -22,8 +22,8 @@ export function MessageBubble({ message }: Props) {
       {/* 头像 */}
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
         isUser
-          ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white"
-          : "bg-gradient-to-br from-blue-500 to-purple-600 text-white"
+          ? "bg-blue-600 text-white"
+          : "bg-primary text-primary-foreground"
       }`}>
         {isUser ? "我" : "AI"}
       </div>

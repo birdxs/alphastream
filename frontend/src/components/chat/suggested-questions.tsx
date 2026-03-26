@@ -29,7 +29,8 @@ export function SuggestedQuestions({ onSelect }: Props) {
             key={i}
             variant="outline"
             size="sm"
-            className="whitespace-nowrap text-xs h-7 rounded-full border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all"
+            style={{ animationDelay: `${i * 80}ms` }}
+            className="whitespace-nowrap text-xs h-7 rounded-full border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all animate-fade-in opacity-0 [animation-fill-mode:forwards]"
             onClick={() => onSelect(q)}
           >
             {q}

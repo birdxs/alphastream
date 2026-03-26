@@ -41,7 +41,12 @@ export function MarketOverview() {
   }, []);
 
   return (
-    <div className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs">
+    <div className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs"
+      style={{
+        maskImage: 'linear-gradient(90deg, transparent, black 40px, black calc(100% - 40px), transparent)',
+        WebkitMaskImage: 'linear-gradient(90deg, transparent, black 40px, black calc(100% - 40px), transparent)',
+      }}
+    >
       {error && (
         <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-[10px] rounded shrink-0">
           {error}

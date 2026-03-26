@@ -6,9 +6,11 @@
  */
 
 "use client";
+import { useState } from "react";
 import { useAgentStore } from "@/lib/stores/agent-store";
 import { AgentStatusBadge } from "./agent-status-badge";
 import { ToolCallTimeline } from "./tool-call-timeline";
+import { ChevronUp } from "lucide-react";
 
 // 10个Agent的标准顺序
 const AGENT_ORDER = [
@@ -19,37 +21,55 @@ const AGENT_ORDER = [
 
 export function AgentProgressPanel() {
   const { agentProgresses, overallProgress, isAnalyzing, toolCalls } = useAgentStore();
+  const [expanded, setExpanded] = useState(false);
 
   if (!isAnalyzing && agentProgresses.length === 0) return null;
 
   return (
-    <div className="bg-muted/30 rounded-lg p-3 space-y-3 border">
-      {/* 总进度 */}
-      <div className="flex justify-between items-center">
-        <span className="text-xs font-medium">{"\uD83E\uDD16 Multi-Agent\u5206\u6790"}</span>
-        <span className="text-xs text-muted-foreground">{Math.round(overallProgress)}%</span>
-      </div>
-      <div className="w-full bg-muted rounded-full h-1.5">
-        <div className="bg-primary h-1.5 rounded-full transition-all duration-500"
-             style={{ width: `${overallProgress}%` }} />
-      </div>
+    <>
+      {!expanded && (
+        <button onClick={() => setExpanded(true)} className="w-full flex items-center justify-between bg-muted/30 rounded-lg px-3 py-2 border text-xs hover:bg-muted/50 transition-colors">
+          <span className="flex items-center gap-2">
+            <span className="animate-pulse">{"\uD83E\uDD16"}</span>
+            <span>Agent分析中... {Math.round(overallProgress)}%</span>
+          </span>
+          <span className="text-muted-foreground">{agentProgresses.filter(p => p.status === 'completed').length}/{agentProgresses.length} 完成</span>
+        </button>
+      )}
 
-      {/* Agent状态网格 */}
-      <div className="flex flex-wrap gap-1">
-        {AGENT_ORDER.map((agentName) => {
-          const progress = agentProgresses.find(p => p.agent_name === agentName);
-          return (
-            <AgentStatusBadge
-              key={agentName}
-              name={agentName.replace('\u5206\u6790\u5E08', '').replace('\u7814\u7A76\u5458', '')}
-              status={progress?.status || 'pending'}
-            />
-          );
-        })}
-      </div>
+      {expanded && (
+        <div className="bg-muted/30 rounded-lg p-3 space-y-3 border">
+          {/* 总进度 */}
+          <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpanded(false)}>
+            <span className="text-xs font-medium">{"\uD83E\uDD16 Multi-Agent\u5206\u6790"}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{Math.round(overallProgress)}%</span>
+              <ChevronUp className="h-3 w-3 text-muted-foreground" />
+            </div>
+          </div>
+          <div className="w-full bg-muted rounded-full h-1.5">
+            <div className="bg-primary h-1.5 rounded-full transition-all duration-500"
+                 style={{ width: `${overallProgress}%` }} />
+          </div>
 
-      {/* 工具调用Timeline */}
-      {toolCalls.length > 0 && <ToolCallTimeline />}
-    </div>
+          {/* Agent状态网格 */}
+          <div className="flex flex-wrap gap-1">
+            {AGENT_ORDER.map((agentName) => {
+              const progress = agentProgresses.find(p => p.agent_name === agentName);
+              return (
+                <AgentStatusBadge
+                  key={agentName}
+                  name={agentName.replace('\u5206\u6790\u5E08', '').replace('\u7814\u7A76\u5458', '')}
+                  status={progress?.status || 'pending'}
+                />
+              );
+            })}
+          </div>
+
+          {/* 工具调用Timeline */}
+          {toolCalls.length > 0 && <ToolCallTimeline />}
+        </div>
+      )}
+    </>
   );
 }

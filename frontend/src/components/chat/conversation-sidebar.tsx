@@ -13,6 +13,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, MessageSquare, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Conversation } from "@/lib/types";
 
+const groupByDate = (convs: Conversation[]) => {
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  const groups: Record<string, Conversation[]> = {};
+
+  convs.forEach(c => {
+    const date = new Date(c.updated_at || c.created_at).toDateString();
+    const label = date === today ? '今天' : date === yesterday ? '昨天' : '更早';
+    (groups[label] ??= []).push(c);
+  });
+  return groups;
+};
+
 export function ConversationSidebar() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -117,25 +130,30 @@ export function ConversationSidebar() {
           ) : conversations.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-4">暂无对话记录</p>
           ) : (
-            conversations.map(conv => (
-              <div
-                key={conv.conversation_id}
-                onClick={() => selectConversation(conv)}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs cursor-pointer group transition-colors ${
-                  activeConversationId === conv.conversation_id
-                    ? 'bg-primary/10 text-primary'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <MessageSquare className="h-3 w-3 shrink-0" />
-                <span className="flex-1 truncate">{conv.title}</span>
-                <Button
-                  variant="ghost" size="icon"
-                  className={`h-5 w-5 ${pendingDelete === conv.conversation_id ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
-                  onClick={(e) => deleteConversation(conv.conversation_id, e)}
-                >
-                  {pendingDelete === conv.conversation_id ? <span className="text-[10px]">确认</span> : <Trash2 className="h-3 w-3" />}
-                </Button>
+            Object.entries(groupByDate(conversations)).map(([label, convs]) => (
+              <div key={label}>
+                <div className="px-2 py-1 text-[10px] text-muted-foreground/60 font-medium uppercase">{label}</div>
+                {convs.map(conv => (
+                  <div
+                    key={conv.conversation_id}
+                    onClick={() => selectConversation(conv)}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs cursor-pointer group transition-colors ${
+                      activeConversationId === conv.conversation_id
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    <MessageSquare className="h-3 w-3 shrink-0" />
+                    <span className="flex-1 truncate">{conv.title}</span>
+                    <Button
+                      variant="ghost" size="icon"
+                      className={`h-5 w-5 ${pendingDelete === conv.conversation_id ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
+                      onClick={(e) => deleteConversation(conv.conversation_id, e)}
+                    >
+                      {pendingDelete === conv.conversation_id ? <span className="text-[10px]">确认</span> : <Trash2 className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                ))}
               </div>
             ))
           )}
