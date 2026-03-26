@@ -4,9 +4,14 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { ReactNode } from "react";
 import dynamic from "next/dynamic";
 import type { Artifact } from "@/lib/types";
 import { ArtifactCard } from "@/components/artifacts/artifact-card";
+import {
+  TrendingUp, BarChart3, DollarSign, ArrowDownUp,
+  Newspaper, AlertTriangle, Search, Target, Users, Bot, ClipboardList,
+} from "lucide-react";
 
 const CandlestickChartArtifact = dynamic(
   () =>
@@ -161,20 +166,21 @@ export function ArtifactRenderer({ artifact }: Props) {
   );
 }
 
-function getArtifactIcon(type: string): string {
-  const icons: Record<string, string> = {
-    candlestick_chart: "\uD83D\uDCC8",
-    technical_indicators: "\uD83D\uDCCA",
-    fundamental_metrics: "\uD83D\uDCB0",
-    capital_flow_chart: "\uD83D\uDCB9",
-    news_feed: "\uD83D\uDCF0",
-    risk_gauge: "\u26A0\uFE0F",
-    search_results: "\uD83D\uDD0D",
-    decision_card: "\uD83C\uDFAF",
-    investor_consensus: "\uD83D\uDC65",
-    agent_pipeline: "\uD83E\uDD16",
+function getArtifactIcon(type: string): ReactNode {
+  const iconClass = "h-4 w-4";
+  const icons: Record<string, ReactNode> = {
+    candlestick_chart: <TrendingUp className={iconClass} />,
+    technical_indicators: <BarChart3 className={iconClass} />,
+    fundamental_metrics: <DollarSign className={iconClass} />,
+    capital_flow_chart: <ArrowDownUp className={iconClass} />,
+    news_feed: <Newspaper className={iconClass} />,
+    risk_gauge: <AlertTriangle className={iconClass} />,
+    search_results: <Search className={iconClass} />,
+    decision_card: <Target className={iconClass} />,
+    investor_consensus: <Users className={iconClass} />,
+    agent_pipeline: <Bot className={iconClass} />,
   };
-  return icons[type] || "\uD83D\uDCCB";
+  return icons[type] || <ClipboardList className={iconClass} />;
 }
 
 function renderArtifactContent(artifact: Artifact) {

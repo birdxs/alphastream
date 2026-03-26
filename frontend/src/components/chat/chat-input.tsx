@@ -75,25 +75,25 @@ export function ChatInput({ onSend, onStop }: Props) {
   };
 
   return (
-    <div className="border-t bg-background/95 backdrop-blur-sm">
+    <div className="border-t bg-gradient-to-t from-background via-background to-background/80 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
       {/* 股票选择行 */}
-      <div className="flex items-center gap-2 px-3 pt-2">
-        <div className="flex items-center gap-1 bg-muted/70 rounded-lg px-2.5 py-1.5 border border-border/50">
+      <div className="flex items-center gap-1.5 px-3 pt-2">
+        <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg px-2 py-1 border border-border/40 shadow-sm">
           <input
             type="text"
             value={stockCode}
             onChange={(e) => setStockCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder="代码"
             aria-label="股票代码"
-            className="w-16 bg-transparent text-xs font-mono focus:outline-none placeholder:text-muted-foreground/50"
+            className="w-14 bg-transparent text-[11px] font-mono focus:outline-none placeholder:text-muted-foreground/35"
             maxLength={6}
           />
-          <div className="w-px h-4 bg-border" />
+          <div className="w-px h-3.5 bg-border/60" />
           <select
             value={marketType}
             onChange={(e) => setMarketType(e.target.value)}
             aria-label="市场类型"
-            className="bg-transparent text-xs focus:outline-none cursor-pointer text-muted-foreground"
+            className="bg-transparent text-[11px] focus:outline-none cursor-pointer text-muted-foreground/70 pr-0.5"
           >
             <option value="A">A股</option>
             <option value="HK">港股</option>
@@ -102,20 +102,20 @@ export function ChatInput({ onSend, onStop }: Props) {
         </div>
         {stockCode && stockCode.length === 6 && (
           <Button
-            variant="ghost" size="sm" className="h-7 gap-1 text-xs"
+            variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-1.5"
             onClick={() => addItem(stockCode)}
           >
-            <Star className={`h-3 w-3 ${hasItem(stockCode) ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground'}`} />
+            <Star className={`h-3 w-3 ${hasItem(stockCode) ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground/50'}`} />
             {hasItem(stockCode) ? '已自选' : '自选'}
           </Button>
         )}
-        <div className="flex gap-1 ml-auto">
+        <div className="flex gap-0.5 ml-auto">
           {["600519", "000001"].map(code => (
             <button
               key={code}
               onClick={() => setStockCode(code)}
-              className={`text-[10px] px-1.5 py-0.5 rounded-md transition-colors ${
-                stockCode === code ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted'
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md transition-all duration-150 ${
+                stockCode === code ? 'bg-primary/15 text-primary ring-1 ring-primary/20' : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
               }`}
             >
               {code}
@@ -142,7 +142,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               aria-label="消息输入框"
               rows={1}
               tabIndex={10}
-              className="w-full resize-none rounded-xl border border-border/60 bg-muted/30 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all placeholder:text-muted-foreground/50"
+              className="w-full resize-none rounded-2xl border border-border/50 bg-muted/20 px-4 py-2.5 text-sm shadow-inner focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 focus:bg-background transition-all duration-200 placeholder:text-muted-foreground/35"
               disabled={isStreaming}
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />
@@ -151,23 +151,26 @@ export function ChatInput({ onSend, onStop }: Props) {
             <Button
               size="icon"
               variant="destructive"
-              className="rounded-xl h-10 w-10 shrink-0"
+              className="rounded-2xl h-10 w-10 shrink-0 shadow-md"
               onClick={onStop}
               aria-label="停止生成"
             >
               <Square className="h-4 w-4" />
             </Button>
           ) : (
-            <Button
-              size="icon"
-              className="rounded-xl h-10 w-10 shrink-0"
+            <button
+              className={`rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center transition-all duration-200 ${
+                input.trim()
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95'
+                  : 'bg-muted text-muted-foreground/40 cursor-not-allowed'
+              }`}
               onClick={handleSend}
               disabled={!input.trim()}
               aria-label="发送消息"
               tabIndex={11}
             >
               <Send className="h-4 w-4" />
-            </Button>
+            </button>
           )}
         </div>
       </div>

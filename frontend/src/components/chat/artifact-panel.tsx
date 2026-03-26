@@ -1,5 +1,5 @@
 // Input: chat-store artifacts数组
-// Output: Artifacts工作区 — 头部 + 内容/空态
+// Output: Artifacts工作区 — 头部 + 内容/空态（精致capability卡片 + 脉冲动画）
 // Pos: 首页右栏
 
 "use client";
@@ -8,6 +8,37 @@ import { Button } from "@/components/ui/button";
 import { ArtifactRenderer } from "./artifact-renderer";
 import { AgentLogDrawer } from "@/components/agent/agent-log-drawer";
 import { Trash2, TrendingUp, DollarSign, Users, Bot } from "lucide-react";
+
+const capabilities = [
+  {
+    icon: TrendingUp,
+    title: "K线分析",
+    desc: "AI驱动技术指标识别",
+    bg: "bg-emerald-500/8",
+    iconColor: "text-emerald-500",
+  },
+  {
+    icon: DollarSign,
+    title: "基本面",
+    desc: "智能财务健康评估",
+    bg: "bg-amber-500/8",
+    iconColor: "text-amber-500",
+  },
+  {
+    icon: Bot,
+    title: "Agent协作",
+    desc: "13个专业Agent联动",
+    bg: "bg-blue-500/8",
+    iconColor: "text-blue-500",
+  },
+  {
+    icon: Users,
+    title: "大师视角",
+    desc: "四大投资风格解读",
+    bg: "bg-purple-500/8",
+    iconColor: "text-purple-500",
+  },
+] as const;
 
 export function ArtifactPanel() {
   const artifacts = useChatStore(s => s.artifacts);
@@ -40,31 +71,40 @@ export function ArtifactPanel() {
         {artifacts.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-xs space-y-5">
+              {/* 主图标 — 带脉冲动画表示等待中 */}
               <div className="flex justify-center">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Bot className="h-6 w-6 text-primary" />
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-xl bg-primary/20 animate-pulse" />
+                  <div className="relative w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Bot className="h-6 w-6 text-primary" />
+                  </div>
                 </div>
               </div>
+
               <div>
-                <h3 className="text-sm font-semibold mb-1">AI智能分析</h3>
-                <p className="text-xs text-muted-foreground">
-                  在左侧输入问题，分析结果将在此展示
+                <h3 className="text-sm font-semibold mb-1">AI智能分析工作区</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  AI将为您生成交互式分析组件
                 </p>
               </div>
+
+              {/* Capability 卡片 — 视觉层次差异化 */}
               <div className="grid grid-cols-2 gap-2">
-                {[
-                  { icon: TrendingUp, title: "K线分析", desc: "技术指标" },
-                  { icon: DollarSign, title: "基本面", desc: "财务评估" },
-                  { icon: Bot, title: "Agent", desc: "13个协作" },
-                  { icon: Users, title: "大师", desc: "四大视角" },
-                ].map(item => (
-                  <div key={item.title} className="bg-muted/40 rounded-lg p-2.5 text-left">
-                    <item.icon className="h-4 w-4 text-muted-foreground mb-1" />
+                {capabilities.map(item => (
+                  <div
+                    key={item.title}
+                    className={`${item.bg} rounded-lg p-2.5 text-left border border-border/10 transition-colors duration-200 hover:border-border/30`}
+                  >
+                    <item.icon className={`h-4 w-4 ${item.iconColor} mb-1.5`} />
                     <p className="text-xs font-medium">{item.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+                    <p className="text-[10px] text-muted-foreground leading-snug">{item.desc}</p>
                   </div>
                 ))}
               </div>
+
+              <p className="text-[10px] text-muted-foreground/60">
+                在左侧输入问题即可开始
+              </p>
             </div>
           </div>
         ) : (

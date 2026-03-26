@@ -1,9 +1,18 @@
 /**
- * Input: 原始数字/字符串
- * Output: 格式化的显示文本
- * Pos: lib/utils/format.ts - 金融数据格式化工具函数
+ * Input: 原始数字
+ * Output: 金融格式化字符串
+ * Pos: lib/utils/format.ts - 全局数据格式化工具
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
+
+/** 格式化金融数字（千位分隔符 + 指定小数位） */
+export function formatNumber(value: number | null | undefined, decimals = 2): string {
+  if (value === undefined || value === null || isNaN(value)) return '--';
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
 
 /** 格式化价格（保留2位小数） */
 export function formatPrice(price: number | string | undefined): string {
@@ -13,14 +22,22 @@ export function formatPrice(price: number | string | undefined): string {
   return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** 格式化百分比（+/- 符号） */
-export function formatPercent(value: number | string | undefined, decimals = 2): string {
+/** 格式化百分比（+X.XX% / -X.XX% / 0.00%） */
+export function formatPercent(value: number | string | null | undefined, decimals = 2): string {
   if (value === undefined || value === null) return '--';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '--';
-  if (num > 0) return `\u25B2 +${num.toFixed(decimals)}%`;
-  if (num < 0) return `\u25BC ${num.toFixed(decimals)}%`;
+  if (num > 0) return `+${num.toFixed(decimals)}%`;
+  if (num < 0) return `${num.toFixed(decimals)}%`;
   return `${num.toFixed(decimals)}%`;
+}
+
+/** 格式化价格变动（带颜色class） */
+export function formatChange(value: number | null | undefined): { text: string; className: string } {
+  if (value === undefined || value === null || isNaN(value)) return { text: '--', className: '' };
+  if (value > 0) return { text: `+${value.toFixed(2)}%`, className: 'stock-up' };
+  if (value < 0) return { text: `${value.toFixed(2)}%`, className: 'stock-down' };
+  return { text: '0.00%', className: '' };
 }
 
 /** 格式化大数字（万/亿） */
