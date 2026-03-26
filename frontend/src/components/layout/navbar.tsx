@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Briefcase, Star, Search, BarChart3, Settings } from "lucide-react";
+import { Sun, Moon, MessageSquare, Search, Settings } from "lucide-react";
 import { MobileDrawer } from "./mobile-drawer";
 
 export function Navbar() {
@@ -28,19 +28,12 @@ export function Navbar() {
         </Link>
 
         <div className="hidden sm:flex items-center">
-          {[
-            { href: "/", icon: MessageSquare, label: "对话" },
-            { href: "/portfolio", icon: Briefcase, label: "组合" },
-            { href: "/watchlist", icon: Star, label: "自选" },
-            { href: "/compare", icon: BarChart3, label: "对比" },
-          ].map(item => (
-            <Link key={item.href} href={item.href}>
-              <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                <item.icon className="h-3.5 w-3.5" />
-                {item.label}
-              </Button>
-            </Link>
-          ))}
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground">
+              <MessageSquare className="h-3.5 w-3.5" />
+              对话
+            </Button>
+          </Link>
         </div>
 
         <MobileDrawer />

@@ -18,11 +18,12 @@ class ApiClient {
 
   // 通用GET请求
   async get<T>(path: string, params?: Record<string, string>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${path}`);
+    let url = `${this.baseUrl}${path}`;
     if (params) {
-      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      const sp = new URLSearchParams(params);
+      url += `?${sp.toString()}`;
     }
-    const res = await fetch(url.toString());
+    const res = await fetch(url);
     if (!res.ok) throw new ApiError(res.status, await res.text());
     return res.json();
   }

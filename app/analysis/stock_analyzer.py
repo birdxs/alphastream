@@ -106,7 +106,9 @@ class StockAnalyzer:
             }
             df.rename(columns=rename_map, inplace=True)
 
-            # 2. 验证关键列是否存在
+            # 2. 验证关键列是否存在（amount可替代volume）
+            if 'volume' not in df.columns and 'amount' in df.columns:
+                df['volume'] = df['amount']
             essential_columns = ['date', 'open', 'close', 'high', 'low', 'volume']
             missing_cols = [col for col in essential_columns if col not in df.columns]
             if missing_cols:
