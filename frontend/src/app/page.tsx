@@ -43,10 +43,12 @@ export default function HomePage() {
       <div className="hidden sm:flex flex-1 min-h-0">
         {/* Sidebar */}
         <ConversationSidebar />
-        {/* Chat panel — fixed 380px */}
-        <div className="w-[380px] min-w-[320px] max-w-[480px] border-r border-border/60 flex flex-col min-h-0">
+        {/* Chat panel — 35% width */}
+        <div className="w-[35%] min-w-[320px] max-w-[480px] flex flex-col min-h-0">
           <ChatPanel />
         </div>
+        {/* Visual divider */}
+        <div className="w-px bg-white/[0.08] shrink-0" />
         {/* Artifacts — fills remaining */}
         <div className="flex-1 flex flex-col min-h-0">
           <ArtifactPanel />

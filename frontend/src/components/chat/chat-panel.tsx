@@ -22,9 +22,12 @@ export function ChatPanel() {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 h-10 border-b border-border/40 bg-background shrink-0">
+      <div className="flex items-center justify-between px-3 h-10 border-b border-white/[0.08] bg-[rgba(10,10,26,0.6)] backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <div className="relative w-1.5 h-1.5">
+            <div className="absolute inset-0 rounded-full bg-[#3737CC] animate-ping opacity-75" />
+            <div className="relative w-1.5 h-1.5 rounded-full bg-[#3737CC]" />
+          </div>
           <span className="text-xs font-medium text-foreground/80">AI分析助手</span>
         </div>
       </div>

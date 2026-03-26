@@ -28,16 +28,16 @@ const artifactMeta: Record<
   ArtifactType,
   { icon: React.ElementType; color: string; label?: string }
 > = {
-  candlestick_chart: { icon: BarChart3, color: "text-orange-500 bg-orange-500/10 border-orange-500/20" },
-  technical_indicators: { icon: Activity, color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20" },
-  fundamental_metrics: { icon: Building2, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
-  capital_flow_chart: { icon: ArrowDownUp, color: "text-violet-500 bg-violet-500/10 border-violet-500/20" },
-  news_feed: { icon: Newspaper, color: "text-amber-500 bg-amber-500/10 border-amber-500/20" },
-  risk_gauge: { icon: ShieldAlert, color: "text-rose-500 bg-rose-500/10 border-rose-500/20" },
-  search_results: { icon: Search, color: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
-  decision_card: { icon: Lightbulb, color: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20" },
-  investor_consensus: { icon: Users, color: "text-teal-500 bg-teal-500/10 border-teal-500/20" },
-  agent_pipeline: { icon: Workflow, color: "text-purple-500 bg-purple-500/10 border-purple-500/20" },
+  candlestick_chart: { icon: BarChart3, color: "text-[#3737CC] bg-[#3737CC]/10 border-[#3737CC]/20" },
+  technical_indicators: { icon: Activity, color: "text-[#46BEA3] bg-[#46BEA3]/10 border-[#46BEA3]/20" },
+  fundamental_metrics: { icon: Building2, color: "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/20" },
+  capital_flow_chart: { icon: ArrowDownUp, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
+  news_feed: { icon: Newspaper, color: "text-[#46BEA3] bg-[#46BEA3]/10 border-[#46BEA3]/20" },
+  risk_gauge: { icon: ShieldAlert, color: "text-[#FF8767] bg-[#FF8767]/10 border-[#FF8767]/20" },
+  search_results: { icon: Search, color: "text-[#3737CC] bg-[#3737CC]/10 border-[#3737CC]/20" },
+  decision_card: { icon: Lightbulb, color: "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/20" },
+  investor_consensus: { icon: Users, color: "text-[#46BEA3] bg-[#46BEA3]/10 border-[#46BEA3]/20" },
+  agent_pipeline: { icon: Workflow, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
 };
 
 interface Props {
@@ -54,8 +54,8 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
       <div
         className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${
           isUser
-            ? "bg-blue-600 text-white"
-            : "bg-gradient-to-br from-blue-500 to-purple-600 text-white"
+            ? "bg-[#3737CC] text-white"
+            : "bg-gradient-to-br from-[#6B5EE4] to-[#3737CC] text-white"
         }`}
       >
         {isUser ? "我" : "AI"}
@@ -66,8 +66,8 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
         <div
           className={`inline-block text-sm px-4 py-2.5 max-w-[90%] shadow-sm ${
             isUser
-              ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl rounded-br-md"
-              : "bg-card border border-border/30 text-foreground rounded-2xl rounded-bl-md"
+              ? "bg-gradient-to-br from-[#3737CC] to-[#4F4FE6] text-white rounded-2xl rounded-br-md"
+              : "bg-white/[0.04] backdrop-blur-sm border border-white/[0.08] text-foreground rounded-2xl rounded-bl-md"
           }`}
         >
           {isUser ? (
@@ -103,14 +103,14 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
         {/* AI消息：重新生成按钮 */}
         {!isUser && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 mt-1.5">
-            <button className="text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors">
+            <button className="text-[10px] text-muted-foreground hover:text-primary hover:bg-white/[0.06] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors">
               <RefreshCw className="h-2.5 w-2.5" /> 重新生成
             </button>
           </div>
         )}
 
         {/* 时间戳 */}
-        <div className={`text-[10px] text-muted-foreground/50 mt-1 font-finance ${isUser ? "text-right" : ""}`}>
+        <div className={`text-[10px] text-[#555570] mt-1 font-mono ${isUser ? "text-right" : ""}`}>
           {new Date(message.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
         </div>
       </div>

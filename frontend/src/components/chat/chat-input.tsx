@@ -75,10 +75,10 @@ export function ChatInput({ onSend, onStop }: Props) {
   };
 
   return (
-    <div className="border-t bg-gradient-to-t from-background via-background to-background/80 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+    <div className="bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-white/[0.08]">
       {/* 股票选择行 */}
       <div className="flex items-center gap-1.5 px-3 pt-2">
-        <div className="flex items-center gap-0.5 bg-muted/50 rounded-lg px-2 py-1 border border-border/40 shadow-sm">
+        <div className="flex items-center gap-0.5 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 shadow-sm">
           <input
             type="text"
             value={stockCode}
@@ -115,7 +115,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               key={code}
               onClick={() => setStockCode(code)}
               className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md transition-all duration-150 ${
-                stockCode === code ? 'bg-primary/15 text-primary ring-1 ring-primary/20' : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
+                stockCode === code ? 'bg-[#3737CC]/15 text-[#3737CC] ring-1 ring-[#3737CC]/20' : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
               }`}
             >
               {code}
@@ -142,7 +142,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               aria-label="消息输入框"
               rows={1}
               tabIndex={10}
-              className="w-full resize-none rounded-2xl border border-border/50 bg-muted/20 px-4 py-2.5 text-sm shadow-inner focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 focus:bg-background transition-all duration-200 placeholder:text-muted-foreground/35"
+              className="w-full resize-none rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3737CC]/20 focus:border-[#3737CC] transition-all duration-200 placeholder:text-muted-foreground/35"
               disabled={isStreaming}
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />
@@ -161,7 +161,7 @@ export function ChatInput({ onSend, onStop }: Props) {
             <button
               className={`rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center transition-all duration-200 ${
                 input.trim()
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95'
+                  ? 'bg-gradient-to-r from-[#3737CC] to-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/25 hover:scale-105 transition-transform active:scale-95'
                   : 'bg-muted text-muted-foreground/40 cursor-not-allowed'
               }`}
               onClick={handleSend}
