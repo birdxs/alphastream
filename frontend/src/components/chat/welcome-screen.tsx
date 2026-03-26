@@ -71,12 +71,12 @@ const HOT_TOPICS = [
 export function WelcomeScreen({ onQuestionSelect }: Props) {
   return (
     <div className="relative flex items-center justify-center h-full p-3 overflow-hidden">
-      {/* --- 径向渐变背景（只覆盖上半部分） --- */}
+      {/* --- 径向渐变背景（覆盖上半部分+更强烈） --- */}
       <div
-        className="absolute inset-x-0 top-0 h-[60%] pointer-events-none"
+        className="absolute inset-x-0 top-0 h-[70%] pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at 50% 0%, #3737CC 0%, #212185 40%, transparent 70%)",
+            "radial-gradient(ellipse 120% 80% at 50% 0%, rgba(55,55,204,0.35) 0%, rgba(33,33,133,0.2) 35%, rgba(107,94,228,0.08) 55%, transparent 75%)",
         }}
       />
 
