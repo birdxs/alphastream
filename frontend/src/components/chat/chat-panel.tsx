@@ -37,7 +37,7 @@ export function ChatPanel() {
         {messages.length === 0 && !isStreaming ? (
           <WelcomeScreen onQuestionSelect={handleSend} />
         ) : (
-          <MessageList />
+          <MessageList onRegenerate={(content) => handleSend(content, {})} />
         )}
       </div>
 

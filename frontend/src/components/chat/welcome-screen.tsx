@@ -109,7 +109,7 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
                 onClick={() =>
                   onQuestionSelect(q.text, { stock_code: q.stock })
                 }
-                className={`group relative text-left p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] ${q.borderHover} hover:bg-white/[0.08] hover:border-white/[0.15] hover:-translate-y-0.5 backdrop-blur-sm transition-all duration-300 animate-fade-in opacity-0`}
+                className={`group relative text-left p-3 rounded-xl glass-gradient-border bg-white/[0.04] ${q.borderHover} hover:bg-white/[0.08] hover:border-white/[0.15] hover:-translate-y-0.5 backdrop-blur-sm transition-all duration-300 animate-fade-in opacity-0`}
                 style={{
                   animationDelay: `${i * 60}ms`,
                   animationFillMode: "forwards",

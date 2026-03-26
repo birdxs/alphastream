@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { GlobalSearch } from "@/components/common/global-search";
 import { KeyboardShortcuts } from "@/components/common/keyboard-shortcuts";
 import { NetworkStatus } from "@/components/common/network-status";
+import { ToastProvider } from "@/components/common/toast-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,19 +31,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           跳到主内容
         </a>
         <ThemeProvider>
-          {/*
-            Fixed height shell: navbar (48px) + content (rest).
-            Uses 100dvh for mobile keyboard awareness.
-          */}
-          <div className="flex flex-col" style={{ height: '100dvh' }}>
-            <Navbar />
-            <NetworkStatus />
-            <main id="main-content" className="flex-1 min-h-0">
-              {children}
-            </main>
-          </div>
-          <GlobalSearch />
-          <KeyboardShortcuts />
+          <ToastProvider>
+            {/*
+              Fixed height shell: navbar (48px) + content (rest).
+              Uses 100dvh for mobile keyboard awareness.
+            */}
+            <div className="flex flex-col" style={{ height: '100dvh' }}>
+              <Navbar />
+              <NetworkStatus />
+              <main id="main-content" className="flex-1 min-h-0">
+                {children}
+              </main>
+            </div>
+            <GlobalSearch />
+            <KeyboardShortcuts />
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

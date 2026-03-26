@@ -34,7 +34,11 @@ function VirtualRow({ index, style, messages }: {
   );
 }
 
-export function MessageList() {
+interface MessageListProps {
+  onRegenerate?: (userContent: string) => void;
+}
+
+export function MessageList({ onRegenerate }: MessageListProps = {}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,7 +97,21 @@ export function MessageList() {
         ) : (
           messages.map((msg, i) => (
             <div key={msg.message_id} className="animate-[glass-enter_300ms_ease-out_both]" style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}>
-              <MessageBubble message={msg} />
+              <MessageBubble
+                message={msg}
+                onRegenerate={
+                  msg.role === "assistant" && onRegenerate
+                    ? () => {
+                        // 找到该AI消息之前最近的用户消息
+                        const prevMsgs = messages.slice(0, i);
+                        const lastUserMsg = [...prevMsgs].reverse().find((m) => m.role === "user");
+                        if (lastUserMsg) {
+                          onRegenerate(lastUserMsg.content);
+                        }
+                      }
+                    : undefined
+                }
+              />
             </div>
           ))
         )}
