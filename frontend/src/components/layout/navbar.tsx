@@ -14,7 +14,7 @@ export function Navbar() {
   const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
   
   return (
-    <nav className="flex h-14 items-center justify-between border-b bg-background px-4">
+    <nav aria-label="主导航" className="flex h-14 items-center justify-between border-b bg-background px-4">
       <div className="flex items-center gap-6">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg">
           <span className="text-primary">AI</span>
@@ -53,10 +53,10 @@ export function Navbar() {
         <MobileDrawer />
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={toggleColorScheme} title={stockColorScheme === 'cn' ? '红涨绿跌' : '绿涨红跌'}>
+        <Button variant="ghost" size="icon" onClick={toggleColorScheme} title={stockColorScheme === 'cn' ? '红涨绿跌' : '绿涨红跌'} aria-label="切换涨跌色">
           <span className="text-xs font-mono">{stockColorScheme === 'cn' ? '🔴涨' : '🟢涨'}</span>
         </Button>
-        <Button variant="ghost" size="icon" onClick={toggleTheme}>
+        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="切换主题">
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
         <Link href="/settings">

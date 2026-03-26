@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { GlobalSearch } from "@/components/common/global-search";
 import { KeyboardShortcuts } from "@/components/common/keyboard-shortcuts";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
+import { NetworkStatus } from "@/components/common/network-status";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,6 +31,7 @@ export default function RootLayout({
         <ThemeProvider>
           <div className="flex h-screen flex-col">
             <Navbar />
+            <NetworkStatus />
             <main className="flex-1 overflow-hidden">
               {children}
             </main>

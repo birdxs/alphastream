@@ -13,6 +13,8 @@ import { usePortfolioStore } from "@/lib/stores/portfolio-store";
 import { formatPrice, formatPercent, getPriceColorClass } from "@/lib/utils/format";
 import Link from "next/link";
 
+// TODO: 接入后端 POST /analyze 获取持仓股票的实时价格
+// 当前使用本地localStorage持久化，未来可同步到服务端
 export default function PortfolioPage() {
   const { holdings, addHolding, removeHolding } = usePortfolioStore();
   const [showAdd, setShowAdd] = useState(false);

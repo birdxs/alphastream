@@ -24,6 +24,13 @@ export function ChatInput({ onSend, onStop }: Props) {
   const { addItem, hasItem } = useWatchlistStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // P2: 流式结束后自动聚焦输入框
+  useEffect(() => {
+    if (!isStreaming) {
+      textareaRef.current?.focus();
+    }
+  }, [isStreaming]);
+
   // P0-1: 输入框自动增高
   useEffect(() => {
     const ta = textareaRef.current;
@@ -77,6 +84,7 @@ export function ChatInput({ onSend, onStop }: Props) {
             value={stockCode}
             onChange={(e) => setStockCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder="代码"
+            aria-label="股票代码"
             className="w-16 bg-transparent text-xs font-mono focus:outline-none placeholder:text-muted-foreground/50"
             maxLength={6}
           />
@@ -84,6 +92,7 @@ export function ChatInput({ onSend, onStop }: Props) {
           <select
             value={marketType}
             onChange={(e) => setMarketType(e.target.value)}
+            aria-label="市场类型"
             className="bg-transparent text-xs focus:outline-none cursor-pointer text-muted-foreground"
           >
             <option value="A">A股</option>
@@ -130,6 +139,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="输入股票代码或分析问题... (Shift+Enter换行)"
+              aria-label="消息输入框"
               rows={1}
               className="w-full resize-none rounded-xl border border-border/60 bg-muted/30 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all placeholder:text-muted-foreground/50"
               disabled={isStreaming}
@@ -142,6 +152,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               variant="destructive"
               className="rounded-xl h-10 w-10 shrink-0"
               onClick={onStop}
+              aria-label="停止生成"
             >
               <Square className="h-4 w-4" />
             </Button>
@@ -151,6 +162,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               className="rounded-xl h-10 w-10 shrink-0"
               onClick={handleSend}
               disabled={!input.trim()}
+              aria-label="发送消息"
             >
               <Send className="h-4 w-4" />
             </Button>

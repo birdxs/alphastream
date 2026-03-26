@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  experimental: {
+    optimizePackageImports: ['recharts', 'lucide-react'],
+  },
   async rewrites() {
     // 仅开发环境使用rewrites代理
     // 生产环境由Nginx反代处理
