@@ -27,7 +27,7 @@ export default function ComparePage() {
     setCodes(codes.filter(c => c !== code));
   };
 
-  const TAG_COLORS = ['bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-purple-500'];
+  const TAG_COLORS = ['bg-[#3737CC]', 'bg-[#46BEA3]', 'bg-[#FF8767]', 'bg-[#6B5EE4]'];
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">

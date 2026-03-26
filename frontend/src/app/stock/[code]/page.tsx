@@ -315,7 +315,7 @@ export default function StockDetailPage({
     if (error && !getTabData(tab)) {
       return (
         <div className="flex flex-col items-center justify-center py-20 gap-2">
-          <span className="text-red-400/80 text-sm">{error}</span>
+          <span className="text-[#FF8767]/80 text-sm">{error}</span>
           <button
             className="text-xs text-[#3737CC] hover:underline"
             onClick={() => {
@@ -379,8 +379,8 @@ export default function StockDetailPage({
     changePercent === null
       ? "text-white/70"
       : changePercent >= 0
-        ? "text-red-400"
-        : "text-green-400";
+        ? "text-[#FF8767]"
+        : "text-[#46BEA3]";
 
   const changeStr =
     changePercent !== null
@@ -454,8 +454,8 @@ export default function StockDetailPage({
               onClick={toggleWatchlist}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all border ${
                 isWatched
-                  ? "bg-yellow-500/15 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/25"
-                  : "bg-white/[0.06] border-white/[0.08] text-white/50 hover:bg-white/[0.12] hover:text-yellow-400"
+                  ? "bg-[#F59E0B]/15 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#F59E0B]/25"
+                  : "bg-white/[0.06] border-white/[0.08] text-white/50 hover:bg-white/[0.12] hover:text-[#F59E0B]"
               }`}
             >
               {isWatched ? (

@@ -102,7 +102,7 @@ export default function WatchlistPage() {
                           </Button>
                         </Link>
                         <Button variant="ghost" size="icon" onClick={() => removeItem(item.code)} className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/[0.08]">
-                          <X className="h-3.5 w-3.5 text-white/40 hover:text-red-400" />
+                          <X className="h-3.5 w-3.5 text-white/40 hover:text-[#FF8767]" />
                         </Button>
                       </div>
                     </td>
@@ -115,7 +115,7 @@ export default function WatchlistPage() {
                           <Link href={`/stock/${item.code}`} className="block w-full px-4 py-2 text-sm hover:bg-white/[0.06] text-left">
                             查看详情
                           </Link>
-                          <button className="w-full px-4 py-2 text-sm hover:bg-white/[0.06] text-left text-red-400" onClick={() => { removeItem(item.code); setLongPressItem(null); }}>
+                          <button className="w-full px-4 py-2 text-sm hover:bg-white/[0.06] text-left text-[#FF8767]" onClick={() => { removeItem(item.code); setLongPressItem(null); }}>
                             删除
                           </button>
                         </div>

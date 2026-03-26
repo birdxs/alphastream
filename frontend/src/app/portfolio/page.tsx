@@ -87,7 +87,7 @@ export default function PortfolioPage() {
           <div className="flex gap-2 items-end flex-wrap">
             <div className="flex-1 min-w-[120px]">
               <label htmlFor="stock-code" className="text-xs text-white/50">股票代码</label>
-              <Input id="stock-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('代码') ? 'border-red-500' : ''}`} />
+              <Input id="stock-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('代码') ? 'border-[#FF8767]' : ''}`} />
             </div>
             <div className="flex-1 min-w-[120px]">
               <label htmlFor="stock-name" className="text-xs text-white/50">股票名称</label>
@@ -95,15 +95,15 @@ export default function PortfolioPage() {
             </div>
             <div className="flex-1 min-w-[100px]">
               <label htmlFor="stock-shares" className="text-xs text-white/50">持股数量</label>
-              <Input id="stock-shares" value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('数量') ? 'border-red-500' : ''}`} />
+              <Input id="stock-shares" value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('数量') ? 'border-[#FF8767]' : ''}`} />
             </div>
             <div className="flex-1 min-w-[100px]">
               <label htmlFor="stock-cost" className="text-xs text-white/50">成本价</label>
-              <Input id="stock-cost" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('成本') ? 'border-red-500' : ''}`} />
+              <Input id="stock-cost" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('成本') ? 'border-[#FF8767]' : ''}`} />
             </div>
             <Button onClick={handleAdd} className="bg-[#3737CC] hover:bg-[#4545DD] text-white">添加</Button>
           </div>
-          {formError && <p className="text-xs text-red-500 mt-1">{formError}</p>}
+          {formError && <p className="text-xs text-[#FF8767] mt-1">{formError}</p>}
         </GlassCard>
       )}
 
@@ -164,7 +164,7 @@ export default function PortfolioPage() {
                       </Button>
                     </Link>
                     <Button variant="ghost" size="icon" onClick={() => removeHolding(h.code)} className="hover:bg-white/[0.08]">
-                      <Trash2 className="h-4 w-4 text-white/40 hover:text-red-400" />
+                      <Trash2 className="h-4 w-4 text-white/40 hover:text-[#FF8767]" />
                     </Button>
                   </div>
                 </div>
