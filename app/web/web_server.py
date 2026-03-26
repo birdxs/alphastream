@@ -1311,8 +1311,10 @@ def cancel_scan(task_id):
 @app.route('/api/market_indices', methods=['GET'])
 def get_market_indices():
     """获取主要市场指数实时行情（上证/深证/创业板/沪深300）"""
+    import akshare as ak
+
+    # 方案1: 尝试实时行情接口
     try:
-        import akshare as ak
         df = ak.stock_zh_index_spot_em()
         target_codes = ['000001', '399001', '399006', '000300']
         result = []
@@ -1326,10 +1328,42 @@ def get_market_indices():
                     'price': float(r['最新价']),
                     'change_pct': float(r['涨跌幅'])
                 })
-        return jsonify({'indices': result})
+        if result:
+            return jsonify({'indices': result})
     except Exception as e:
-        app.logger.error(f"获取市场指数失败: {e}")
-        return jsonify({'indices': []})
+        app.logger.warning(f"实时指数接口失败: {e}")
+
+    # 方案2: 用历史日线数据的最后一条（更稳定）
+    try:
+        indices_config = [
+            ('sh000001', '上证指数'),
+            ('sz399001', '深证成指'),
+            ('sz399006', '创业板指'),
+            ('sh000300', '沪深300'),
+        ]
+        result = []
+        for symbol, name in indices_config:
+            try:
+                df = ak.stock_zh_index_daily(symbol=symbol)
+                if df is not None and len(df) >= 2:
+                    latest = df.iloc[-1]
+                    prev = df.iloc[-2]
+                    price = float(latest['close'])
+                    change_pct = round((price - float(prev['close'])) / float(prev['close']) * 100, 2)
+                    result.append({
+                        'name': name,
+                        'code': symbol[2:],
+                        'price': price,
+                        'change_pct': change_pct
+                    })
+            except Exception:
+                continue
+        if result:
+            return jsonify({'indices': result})
+    except Exception as e:
+        app.logger.error(f"历史指数数据也失败: {e}")
+
+    return jsonify({'indices': []})
 
 
 @app.route('/api/index_stocks', methods=['GET'])
