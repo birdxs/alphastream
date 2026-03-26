@@ -90,7 +90,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
       },
       crosshair: { mode: 0 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
-      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
       timeScale: {
         borderColor: theme === "dark" ? "rgba(255,255,255,0.08)" : "#d1d5db",
       },

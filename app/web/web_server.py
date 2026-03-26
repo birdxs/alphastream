@@ -2483,6 +2483,36 @@ def mcp_call_tool():
         return jsonify({'error': str(e)}), 500
 
 
+# ===== 多模态图片上传接口 =====
+
+@app.route('/api/upload_image', methods=['POST'])
+def upload_image():
+    """接收图片并返回描述（用于多模态分析）"""
+    if 'file' not in request.files:
+        return jsonify({'error': '未找到文件'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': '未选择文件'}), 400
+    # 校验文件类型
+    allowed_ext = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_ext:
+        return jsonify({'error': f'不支持的文件类型: {ext}'}), 400
+    # 保存到临时目录
+    import tempfile
+    temp_dir = tempfile.mkdtemp()
+    filepath = os.path.join(temp_dir, file.filename)
+    file.save(filepath)
+    # 返回成功（实际图片分析需要多模态AI模型，暂返回占位）
+    return jsonify({
+        'success': True,
+        'filename': file.filename,
+        'size': os.path.getsize(filepath),
+        'filepath': filepath,
+        'message': '图片已上传，多模态分析功能开发中'
+    })
+
+
 # ===== AI对话 & Agent分析 SSE流式端点 =====
 
 @app.route('/api/ai/chat', methods=['POST'])
@@ -2628,6 +2658,28 @@ def ai_chat_stream():
 
             # 生成follow-up问题
             follow_ups = _generate_follow_ups(stock_code, final_content)
+
+            # 对话摘要生成 — 消息超过10条时自动生成摘要
+            try:
+                msg_count = conv_mgr.get_message_count(conversation_id)
+                if msg_count > 10 and final_content:
+                    # 用最近几条消息生成简短摘要
+                    recent = conv_mgr.get_messages_for_ai(conversation_id, max_messages=10)
+                    summary_prompt = [
+                        {"role": "system", "content": "请用50字以内概括以下对话的核心主题和关键结论，仅输出摘要文本："},
+                        {"role": "user", "content": "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent if m.get('content')])}
+                    ]
+                    from app.core.ai_client import chat_completion_stream
+                    summary_stream, summary_err = chat_completion_stream(client, summary_prompt)
+                    if not summary_err and summary_stream:
+                        summary_text = ""
+                        for chunk in summary_stream:
+                            if chunk.choices and chunk.choices[0].delta.content:
+                                summary_text += chunk.choices[0].delta.content
+                        if summary_text.strip():
+                            conv_mgr.update_summary(conversation_id, summary_text.strip())
+            except Exception as sum_err:
+                app.logger.warning(f"生成对话摘要失败: {sum_err}")
 
             # 推送完成事件
             yield emit('done', {

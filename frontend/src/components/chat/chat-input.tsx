@@ -1,6 +1,6 @@
-// Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调、文件附件、语音输入
-// Output: 聊天输入框UI（含股票代码验证反馈、快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览、语音录入、空消息shake动画）
-// Pos: chat-panel.tsx的子组件，负责用户输入与发送
+// Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调、文件附件（图片上传至后端/api/upload_image）、语音输入
+// Output: 聊天输入框UI（含股票代码验证反馈、快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览与上传、语音录入、空消息shake动画）
+// Pos: chat-panel.tsx的子组件，负责用户输入与发送（含多模态图片上传）
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
@@ -181,7 +181,7 @@ export function ChatInput({ onSend, onStop }: Props) {
     setIsListening(true);
   }, [isListening]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const msg = input.trim();
     if (!msg || isStreaming) {
       if (!msg && !isStreaming) {
@@ -204,13 +204,45 @@ export function ChatInput({ onSend, onStop }: Props) {
         }, 80);
       });
     }
-    // 清理附件（当前仅前端展示，后端暂不支持上传）
+
+    // 上传图片附件到后端
+    const uploadedFiles: { filename: string; size: number; filepath: string }[] = [];
+    const imageAttachments = attachments.filter((a) => a.file.type.startsWith("image/"));
+    if (imageAttachments.length > 0) {
+      for (const att of imageAttachments) {
+        try {
+          const formData = new FormData();
+          formData.append("file", att.file);
+          const res = await fetch("/api/upload_image", { method: "POST", body: formData });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "上传失败" }));
+            toast(`图片上传失败: ${err.error || "未知错误"}`, "error");
+            continue;
+          }
+          const result = await res.json();
+          if (result.success) {
+            uploadedFiles.push({ filename: result.filename, size: result.size, filepath: result.filepath });
+          }
+        } catch {
+          toast("图片上传失败: 网络错误", "error");
+        }
+      }
+    }
+
+    // 清理附件
     attachments.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
     setAttachments([]);
     const codeMatch = msg.match(/(\d{6})/);
     const code = codeMatch ? codeMatch[1] : stockCode;
     if (code) setStockCode(code);
-    onSend(msg, { stock_code: code, market_type: marketType });
+
+    // 将上传文件信息附加到消息中
+    let finalMsg = msg;
+    if (uploadedFiles.length > 0) {
+      const fileInfo = uploadedFiles.map((f) => `[图片: ${f.filename}]`).join(" ");
+      finalMsg = `${msg}\n${fileInfo}`;
+    }
+    onSend(finalMsg, { stock_code: code, market_type: marketType });
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

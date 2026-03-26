@@ -71,18 +71,49 @@ class ConversationManager:
         return msg_id
 
     def get_messages_for_ai(self, conversation_id: str, max_messages: int = 20) -> List[Dict]:
-        """获取对话历史，转换为OpenAI messages格式"""
+        """获取对话历史，转换为OpenAI messages格式（优先使用摘要压缩上下文）"""
         conv = self._load_conversation(conversation_id)
         if not conv:
             return []
 
         messages = []
-        for msg in conv['messages'][-max_messages:]:
+        # 如果有摘要且消息超过10条，使用摘要 + 最近几条消息
+        summary = conv.get('summary', '')
+        all_msgs = conv['messages']
+        if summary and len(all_msgs) > 10:
+            # 注入摘要作为系统级上下文提示
             messages.append({
-                'role': msg['role'],
-                'content': msg['content']
+                'role': 'system',
+                'content': f'以下是之前对话的摘要：{summary}'
             })
+            # 仅取最近的消息
+            for msg in all_msgs[-max_messages:]:
+                messages.append({
+                    'role': msg['role'],
+                    'content': msg['content']
+                })
+        else:
+            for msg in all_msgs[-max_messages:]:
+                messages.append({
+                    'role': msg['role'],
+                    'content': msg['content']
+                })
         return messages
+
+    def update_summary(self, conversation_id: str, summary: str):
+        """更新对话摘要"""
+        conv = self._load_conversation(conversation_id)
+        if conv:
+            conv['summary'] = summary
+            conv['summary_updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self._save_conversation(conversation_id, conv)
+
+    def get_message_count(self, conversation_id: str) -> int:
+        """获取对话消息数量"""
+        conv = self._load_conversation(conversation_id)
+        if conv:
+            return len(conv.get('messages', []))
+        return 0
 
     def get_conversation(self, conversation_id: str) -> Optional[Dict]:
         """获取完整对话"""
