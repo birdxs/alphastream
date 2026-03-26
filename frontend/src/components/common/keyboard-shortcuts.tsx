@@ -83,13 +83,13 @@ export function KeyboardShortcuts() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm bg-[var(--glass-bg,rgba(30,30,50,0.85))] backdrop-blur-xl border border-[var(--glass-border,rgba(255,255,255,0.08))]">
         <h3 className="font-semibold text-sm mb-3">快捷键</h3>
         <div className="space-y-2">
           {SHORTCUTS.map(s => (
             <div key={s.keys} className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{s.desc}</span>
-              <kbd className="px-2 py-1 rounded bg-muted text-xs font-mono">{s.keys}</kbd>
+              <kbd className="px-2 py-1 rounded bg-white/[0.08] border border-white/[0.12] text-xs font-mono text-foreground">{s.keys}</kbd>
             </div>
           ))}
         </div>

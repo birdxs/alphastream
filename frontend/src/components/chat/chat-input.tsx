@@ -334,7 +334,7 @@ export function ChatInput({ onSend, onStop }: Props) {
             variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-1.5"
             onClick={() => addItem(stockCode)}
           >
-            <Star className={`h-3 w-3 ${hasItem(stockCode) ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground/50'}`} />
+            <Star className={`h-3 w-3 ${hasItem(stockCode) ? 'fill-[#F59E0B] text-[#F59E0B]' : 'text-muted-foreground/50'}`} />
             {hasItem(stockCode) ? '已自选' : '自选'}
           </Button>
         )}

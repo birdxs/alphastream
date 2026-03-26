@@ -24,9 +24,9 @@ export function AgentProgressBar({ progresses, overall }: Props) {
       <div className="flex flex-wrap gap-1">
         {progresses.map((p) => (
           <span key={p.agent_name} className={`text-xs px-1.5 py-0.5 rounded ${
-            p.status === 'completed' ? 'bg-green-500/20 text-green-600' :
-            p.status === 'started' ? 'bg-yellow-500/20 text-yellow-600' :
-            'bg-red-500/20 text-red-600'
+            p.status === 'completed' ? 'bg-[#46BEA3]/20 text-[#46BEA3]' :
+            p.status === 'started' ? 'bg-[#F59E0B]/20 text-[#F59E0B]' :
+            'bg-[#FF8767]/20 text-[#FF8767]'
           }`}>
             {p.agent_name}
             {p.status === 'completed' ? ' \u2713' : p.status === 'started' ? ' \u22EF' : ' \u2717'}

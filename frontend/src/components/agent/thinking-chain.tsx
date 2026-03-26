@@ -21,7 +21,7 @@ export function ThinkingChain({ content, agent }: Props) {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2 bg-muted/50 hover:bg-muted transition-colors"
       >
-        <Brain className="h-3 w-3 text-purple-500" />
+        <Brain className="h-3 w-3 text-[#6B5EE4]" />
         <span className="text-muted-foreground">
           {agent ? `${agent} 思考过程` : 'AI思考过程'}
         </span>

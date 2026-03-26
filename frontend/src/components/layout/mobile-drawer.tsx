@@ -89,7 +89,7 @@ export function MobileDrawer() {
           </h2>
         </div>
         {error && (
-          <div className="mx-2 mt-1 px-2 py-1 bg-red-500/10 text-red-500 text-[10px] rounded">
+          <div className="mx-2 mt-1 px-2 py-1 bg-[#FF8767]/10 text-[#FF8767] text-[10px] rounded">
             {error}
           </div>
         )}

@@ -42,8 +42,8 @@ export class ErrorBoundary extends Component<Props, State> {
       const title = this.props.fallbackTitle || "组件渲染出错";
       return (
         <div className="bg-white/[0.04] backdrop-blur-md border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.36)] p-5 flex flex-col items-center gap-3 text-center">
-          <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-            <AlertTriangle className="h-5 w-5 text-red-400" />
+          <div className="w-10 h-10 rounded-full bg-[#FF8767]/10 flex items-center justify-center">
+            <AlertTriangle className="h-5 w-5 text-[#FF8767]" />
           </div>
           <div>
             <p className="text-sm font-medium text-foreground">{title}</p>
