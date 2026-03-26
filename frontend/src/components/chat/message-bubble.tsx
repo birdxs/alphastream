@@ -1,5 +1,5 @@
 // Input: ChatMessage对象（含role、content、artifacts、created_at）
-// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact专业badge、时间戳、新消息弹跳入场）
+// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact专业badge、数据溯源引用、时间戳、新消息弹跳入场）
 // Pos: message-list.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -97,6 +97,13 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
                 </Badge>
               );
             })}
+          </div>
+        )}
+
+        {/* 数据溯源引用 */}
+        {!isUser && message.artifacts && message.artifacts.length > 0 && (
+          <div className="text-[10px] text-[#555570] mt-1.5">
+            数据来源: akshare · 东方财富 · 财联社
           </div>
         )}
 
