@@ -1,6 +1,6 @@
 /**
  * Input: 工具调用事件(ToolCallStart + 可选ToolCallResult)
- * Output: glass-card风格的工具调用详情卡片（时间线节点内容：名称、耗时、状态、可展开参数/结果）
+ * Output: glass-card风格的工具调用详情卡片（时间线节点内容：名称、耗时、状态圆点、可展开参数/结果）
  * Pos: tool-call-timeline.tsx子组件，展示单次工具调用的完整信息
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
@@ -16,39 +16,51 @@ interface Props {
 }
 
 const TOOL_ICONS: Record<string, string> = {
-  get_stock_data: "📊",
-  get_technical_indicators: "📈",
-  get_fundamental_data: "💰",
-  get_capital_flow: "💹",
-  get_stock_news: "📰",
-  search_web: "🔍",
-  get_risk_assessment: "⚠️",
+  get_stock_data: "\u{1F4CA}",
+  get_technical_indicators: "\u{1F4C8}",
+  get_fundamental_data: "\u{1F4B0}",
+  get_capital_flow: "\u{1F4B9}",
+  get_stock_news: "\u{1F4F0}",
+  search_web: "\u{1F50D}",
+  get_risk_assessment: "\u26A0\uFE0F",
 };
 
 const TOOL_NAMES: Record<string, string> = {
-  get_stock_data: "获取K线数据",
-  get_technical_indicators: "计算技术指标",
-  get_fundamental_data: "获取基本面数据",
-  get_capital_flow: "获取资金流向",
-  get_stock_news: "获取新闻",
-  search_web: "搜索网络",
-  get_risk_assessment: "评估风险",
+  get_stock_data: "\u83B7\u53D6K\u7EBF\u6570\u636E",
+  get_technical_indicators: "\u8BA1\u7B97\u6280\u672F\u6307\u6807",
+  get_fundamental_data: "\u83B7\u53D6\u57FA\u672C\u9762\u6570\u636E",
+  get_capital_flow: "\u83B7\u53D6\u8D44\u91D1\u6D41\u5411",
+  get_stock_news: "\u83B7\u53D6\u65B0\u95FB",
+  search_web: "\u641C\u7D22\u7F51\u7EDC",
+  get_risk_assessment: "\u8BC4\u4F30\u98CE\u9669",
 };
+
+function formatDuration(ms: number | undefined): string {
+  if (!ms) return "";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
 export function ToolCallCard({ toolCall }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const icon = TOOL_ICONS[toolCall.tool_name] || "🔧";
+  const icon = TOOL_ICONS[toolCall.tool_name] || "\u{1F527}";
   const name = TOOL_NAMES[toolCall.tool_name] || toolCall.tool_name;
   const hasResult = !!toolCall.result;
-  // 通过 result_summary 判断是否为错误（包含"error"/"失败"/"异常"关键词）
-  const isError = hasResult && /error|失败|异常|错误/i.test(toolCall.result?.result_summary || "");
+  const isError = hasResult && /error|\u5931\u8D25|\u5F02\u5E38|\u9519\u8BEF/i.test(toolCall.result?.result_summary || "");
+
+  // 状态圆点颜色
+  const dotColor = !hasResult
+    ? "bg-[#3737CC] animate-[pulse_1.2s_ease-in-out_infinite]"
+    : isError
+      ? "bg-[#FF8767]"
+      : "bg-[#46BEA3]";
 
   // 状态标签
   const statusLabel = !hasResult
-    ? "执行中..."
+    ? "\u6267\u884C\u4E2D..."
     : isError
-      ? "失败"
-      : "完成";
+      ? "\u5931\u8D25"
+      : "\u5B8C\u6210";
 
   const statusColor = !hasResult
     ? "text-[#3737CC]"
@@ -67,9 +79,10 @@ export function ToolCallCard({ toolCall }: Props) {
       `}
       onClick={() => setExpanded(!expanded)}
     >
-      {/* 主行：工具名称 | 耗时 | 状态 */}
+      {/* 主行：状态圆点 | 工具名称 | 耗时 | 状态 */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
           <span className="shrink-0">{icon}</span>
           <span className="font-medium truncate">{name}</span>
           {toolCall.agent && (
@@ -80,8 +93,8 @@ export function ToolCallCard({ toolCall }: Props) {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasResult && toolCall.result?.duration_ms && (
-            <span className="text-muted-foreground tabular-nums">
-              {toolCall.result.duration_ms}ms
+            <span className="font-mono text-muted-foreground tabular-nums">
+              {formatDuration(toolCall.result.duration_ms)}
             </span>
           )}
           <span className={`font-medium ${statusColor}`}>{statusLabel}</span>
@@ -101,19 +114,21 @@ export function ToolCallCard({ toolCall }: Props) {
         </div>
       )}
 
-      {/* 展开详情：输入参数 + 结果摘要 */}
+      {/* 展开详情：glass-card背景 + 代码块样式 */}
       {expanded && hasResult && (
-        <div className="mt-2 space-y-1.5 border-t border-white/[0.08] pt-2">
-          <div>
-            <span className="text-muted-foreground">{"参数: "}</span>
-            <code className="text-[10px] bg-white/[0.06] px-1 py-0.5 rounded break-all">
-              {JSON.stringify(toolCall.arguments)}
-            </code>
+        <div className="mt-2 space-y-2 border-t border-white/[0.08] pt-2">
+          <div className="backdrop-blur-sm bg-white/[0.03] rounded-lg p-2 border border-white/[0.06]">
+            <span className="text-[10px] text-muted-foreground block mb-1">{"\u53C2\u6570"}</span>
+            <pre className="bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(toolCall.arguments, null, 2)}
+            </pre>
           </div>
           {toolCall.result?.result_summary && (
-            <div>
-              <span className="text-muted-foreground">{"结果: "}</span>
-              <span className="text-foreground/80">{toolCall.result.result_summary}</span>
+            <div className="backdrop-blur-sm bg-white/[0.03] rounded-lg p-2 border border-white/[0.06]">
+              <span className="text-[10px] text-muted-foreground block mb-1">{"\u7ED3\u679C"}</span>
+              <pre className="bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
+                {toolCall.result.result_summary}
+              </pre>
             </div>
           )}
         </div>

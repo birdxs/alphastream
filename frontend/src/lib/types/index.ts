@@ -43,6 +43,7 @@ export type ArtifactType =
   | 'search_results'
   | 'decision_card'
   | 'investor_consensus'
+  | 'investor_opinions'
   | 'agent_pipeline';
 
 // Agent进度

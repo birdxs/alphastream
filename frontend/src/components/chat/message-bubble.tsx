@@ -37,6 +37,7 @@ const artifactMeta: Record<
   search_results: { icon: Search, color: "text-[#3737CC] bg-[#3737CC]/10 border-[#3737CC]/20" },
   decision_card: { icon: Lightbulb, color: "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/20" },
   investor_consensus: { icon: Users, color: "text-[#46BEA3] bg-[#46BEA3]/10 border-[#46BEA3]/20" },
+  investor_opinions: { icon: Users, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
   agent_pipeline: { icon: Workflow, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
 };
 

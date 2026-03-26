@@ -1,5 +1,5 @@
 // Input: 单个Artifact对象（含artifact_type、title、data）
-// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面评分卡、风险雷达图、新闻列表、投资者共识、搜索结果等），每个artifact由ErrorBoundary包裹防白屏
+// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面评分卡、风险雷达图、新闻列表、投资者共识、大师视角、搜索结果等），每个artifact由ErrorBoundary包裹防白屏
 // Pos: artifact-panel.tsx的子组件，Artifact路由渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -305,6 +305,7 @@ function getArtifactIcon(type: string): ReactNode {
     search_results: <Search className={iconClass} />,
     decision_card: <Target className={iconClass} />,
     investor_consensus: <Users className={iconClass} />,
+    investor_opinions: <Users className={iconClass} />,
     agent_pipeline: <Bot className={iconClass} />,
   };
   return icons[type] || <ClipboardList className={iconClass} />;
@@ -328,7 +329,11 @@ function renderArtifactContent(artifact: Artifact) {
     case "decision_card":
       return <DecisionCardArtifact data={data} />;
     case "investor_consensus":
-      return <InvestorPersonasArtifact data={data} />;
+      // 后端直接传consensus对象作为data，需包装为 { consensus: data }
+      return <InvestorPersonasArtifact data={data.consensus ? data : { consensus: data }} />;
+    case "investor_opinions":
+      // 后端直接传opinions对象（含buffett/munger等）作为data，需包装为 { opinions: data }
+      return <InvestorPersonasArtifact data={data.opinions ? data : { opinions: data }} />;
     case "search_results":
       return <SearchResultsArtifact data={data} />;
     case "fundamental_metrics":
