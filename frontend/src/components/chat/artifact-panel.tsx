@@ -42,11 +42,16 @@ const capabilities = [
 
 export function ArtifactPanel() {
   const artifacts = useChatStore(s => s.artifacts);
+  const isStreaming = useChatStore(s => s.isStreaming);
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header — Dark Glassmorphism */}
-      <div className="flex items-center justify-between px-3 h-10 bg-[rgba(10,10,26,0.6)] backdrop-blur-sm border-b border-white/[0.08] shrink-0">
+      <div className="relative flex items-center justify-between px-3 h-10 bg-[rgba(10,10,26,0.6)] backdrop-blur-sm border-b border-white/[0.08] shrink-0">
+        {/* 不确定进度条 — AI分析中时显示 */}
+        {isStreaming && (
+          <div className="progress-indeterminate absolute bottom-0 left-0 right-0" />
+        )}
         <span className="text-xs font-medium text-[#F0F0F5]/80">分析结果</span>
         <div className="flex items-center gap-1">
           {artifacts.length > 0 && (

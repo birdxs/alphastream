@@ -163,8 +163,8 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectConversation(conv); } }}
                     className={`relative flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer group transition-all duration-150 ${
                       activeConversationId === conv.conversation_id
-                        ? 'bg-[#3737CC]/10 text-[#4F4FE6] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:bg-[#3737CC] before:rounded-full'
-                        : 'text-[#F0F0F5]/80 hover:bg-white/[0.04]'
+                        ? 'bg-[#3737CC]/10 text-[#4F4FE6] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:bg-[#3737CC] before:rounded-full before:transition-all before:duration-300 before:ease-out animate-[glass-enter_250ms_ease-out_both]'
+                        : 'text-[#F0F0F5]/80 hover:bg-white/[0.04] active:animate-[glass-enter_200ms_ease-out_both]'
                     }`}
                   >
                     <MessageSquare className={`h-3 w-3 shrink-0 ${activeConversationId === conv.conversation_id ? 'text-[#3737CC]' : 'text-[#555570]'}`} />

@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiClient } from "@/lib/api/client";
 
 interface IndexQuote {
@@ -25,11 +25,31 @@ export function MarketOverview() {
   const [quotes, setQuotes] = useState<IndexQuote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // 记录每个指数的价格变化方向: 'up' | 'down' | null
+  const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down' | null>>({});
+  const prevQuotesRef = useRef<IndexQuote[]>([]);
 
   const fetchIndices = useCallback(async () => {
     try {
       const res = await apiClient.get<MarketIndicesResponse>("/api/market_indices");
       if (res?.indices && res.indices.length > 0) {
+        // 比较新旧价格，触发flash动画
+        const prev = prevQuotesRef.current;
+        if (prev.length > 0) {
+          const newFlash: Record<string, 'up' | 'down' | null> = {};
+          res.indices.forEach(q => {
+            const old = prev.find(p => p.name === q.name);
+            if (old && q.price !== old.price) {
+              newFlash[q.name] = q.price > old.price ? 'up' : 'down';
+            }
+          });
+          if (Object.keys(newFlash).length > 0) {
+            setFlashMap(newFlash);
+            // 动画结束后清除flash状态
+            setTimeout(() => setFlashMap({}), 800);
+          }
+        }
+        prevQuotesRef.current = res.indices;
         setQuotes(res.indices);
         setError(false);
       } else {
@@ -70,7 +90,7 @@ export function MarketOverview() {
   return (
     <div className="flex items-center gap-3 px-3 h-7 bg-[#06060F]/80 backdrop-blur-sm border-b border-white/[0.06] text-[11px] shrink-0 overflow-x-auto">
       {displayItems.map((q, i) => (
-        <div key={q.name} className="flex items-center gap-1 shrink-0">
+        <div key={q.name} className={`flex items-center gap-1 shrink-0 ${!q.isError && flashMap[q.name] === 'up' ? 'flash-up' : ''} ${!q.isError && flashMap[q.name] === 'down' ? 'flash-down' : ''}`}>
           <span className="text-[#8888A0]">{q.name}</span>
           {q.isError ? (
             <span className="text-[#F0F0F5]/60 font-mono">---</span>
