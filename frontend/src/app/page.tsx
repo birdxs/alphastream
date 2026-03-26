@@ -15,7 +15,13 @@ export default function HomePage() {
   const [mobileTab, setMobileTab] = useState<"chat" | "artifacts">("chat");
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative overflow-hidden">
+      {/* 渐变背景层 — 为毛玻璃提供可模糊内容 */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#3737CC]/[0.07] rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-[#6B5EE4]/[0.05] rounded-full blur-[100px]" />
+        <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-[#46BEA3]/[0.04] rounded-full blur-[80px]" />
+      </div>
       {/* Market ticker — fixed height */}
       <MarketOverview />
 

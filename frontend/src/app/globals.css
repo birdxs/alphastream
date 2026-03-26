@@ -108,11 +108,11 @@
   --bg-surface-3: #1A1A35;
 
   /* ── 毛玻璃系统 ── */
-  --glass-bg:           rgba(255, 255, 255, 0.04);
-  --glass-bg-hover:     rgba(255, 255, 255, 0.08);
-  --glass-border:       rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.15);
-  --glass-blur:         12px;
+  --glass-bg:           rgba(255, 255, 255, 0.06);
+  --glass-bg-hover:     rgba(255, 255, 255, 0.10);
+  --glass-border:       rgba(255, 255, 255, 0.10);
+  --glass-border-hover: rgba(255, 255, 255, 0.18);
+  --glass-blur:         16px;
   --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.36);
 
   /* ── 品牌色 ── */
@@ -194,6 +194,13 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  .dark body {
+    background: #0A0A1A;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(55, 55, 204, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(107, 94, 228, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, rgba(70, 190, 163, 0.04) 0%, transparent 50%);
   }
   html {
     @apply font-sans;
