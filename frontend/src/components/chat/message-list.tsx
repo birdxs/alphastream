@@ -132,7 +132,14 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
         {isStreaming && !streamingContent && (
           <div className="flex items-center gap-2 text-sm animate-[glass-enter_300ms_ease-out_both]">
             <div className="ai-thinking h-5 w-5 rounded-full" />
-            <span className="text-muted-foreground">AI正在分析中...</span>
+            <span className="bg-gradient-to-r from-[#3737CC] to-[#46BEA3] bg-clip-text text-transparent font-medium">
+              AI正在分析中
+              <span className="inline-flex ml-0.5">
+                <span className="inline-block w-1 h-1 rounded-full bg-[#3737CC] animate-[ai-dot-bounce_1.2s_ease-in-out_infinite]" />
+                <span className="inline-block w-1 h-1 rounded-full bg-[#4F4FE6] ml-0.5 animate-[ai-dot-bounce_1.2s_ease-in-out_0.2s_infinite]" />
+                <span className="inline-block w-1 h-1 rounded-full bg-[#46BEA3] ml-0.5 animate-[ai-dot-bounce_1.2s_ease-in-out_0.4s_infinite]" />
+              </span>
+            </span>
           </div>
         )}
 

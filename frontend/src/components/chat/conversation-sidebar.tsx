@@ -242,7 +242,10 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
               ? conversations.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
               : conversations;
             return filteredConversations.length === 0 ? (
-            <p className="text-xs text-[#555570] text-center py-4">{searchQuery ? '无匹配对话' : '暂无对话记录'}</p>
+            <div className="flex flex-col items-center text-center py-6 px-3 gap-2">
+              <MessageSquare className="h-6 w-6 text-[#3737CC]/30" />
+              <p className="text-xs text-[#555570] leading-relaxed">{searchQuery ? '无匹配对话' : '开始一段新对话，探索AI金融分析的无限可能'}</p>
+            </div>
           ) : (
             Object.entries(groupByDate(filteredConversations)).map(([label, convs]) => (
               <div key={label} className="mb-1" role="list" aria-label={`${label}的对话`}>

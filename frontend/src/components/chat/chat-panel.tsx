@@ -20,13 +20,16 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20">
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-10 border-b border-white/[0.08] bg-[rgba(10,10,26,0.6)] backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2">
-          <div className="relative w-1.5 h-1.5">
+          <div className="relative w-1.5 h-1.5 group/indicator cursor-default">
             <div className="absolute inset-0 rounded-full bg-[#3737CC] animate-ping opacity-75" />
             <div className="relative w-1.5 h-1.5 rounded-full bg-[#3737CC]" />
+            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 rounded-md bg-[#1a1a2e] border border-white/[0.1] text-[10px] text-[#46BEA3] whitespace-nowrap opacity-0 group-hover/indicator:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg">
+              AI服务在线
+            </div>
           </div>
           <span className="text-xs font-medium text-foreground/80">AI分析助手</span>
         </div>

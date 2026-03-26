@@ -192,6 +192,18 @@ export function ChatInput({ onSend, onStop }: Props) {
       return;
     }
     setInput("");
+    // 发送后输入框微缩放过渡
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.transform = 'scale(0.98)';
+      ta.style.opacity = '0.7';
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          ta.style.transform = 'scale(1)';
+          ta.style.opacity = '1';
+        }, 80);
+      });
+    }
     // 清理附件（当前仅前端展示，后端暂不支持上传）
     attachments.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
     setAttachments([]);
@@ -361,7 +373,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               aria-label="消息输入框"
               rows={1}
               tabIndex={10}
-              className="w-full resize-none rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3737CC]/20 focus:border-[#3737CC] transition-all duration-200 placeholder:text-muted-foreground/35"
+              className="w-full resize-none rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3737CC]/30 focus:border-[#3737CC] focus:shadow-[0_0_12px_rgba(55,55,204,0.15)] transition-all duration-300 placeholder:text-muted-foreground/35"
               disabled={isStreaming}
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />

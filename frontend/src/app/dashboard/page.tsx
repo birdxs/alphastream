@@ -387,7 +387,7 @@ export default function DashboardPage() {
                   onChange={(e) => setAiInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAiSubmit()}
                   placeholder="如：600519、分析比亚迪..."
-                  className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-[#F0F0F5] placeholder:text-[#8888A0]/60 focus:outline-none focus:border-[#6B5EE4]/50 focus:ring-1 focus:ring-[#6B5EE4]/20 transition-colors"
+                  className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-[#F0F0F5] placeholder:text-[#8888A0]/60 placeholder:animate-pulse focus:outline-none focus:border-[#6B5EE4]/50 focus:ring-1 focus:ring-[#6B5EE4]/20 transition-colors"
                 />
                 <button
                   onClick={handleAiSubmit}
@@ -399,16 +399,22 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex flex-wrap gap-1.5 mt-3">
-                {["600519", "300750", "000858", "688981"].map((code) => (
+                {([
+                  { code: "600519", name: "贵州茅台" },
+                  { code: "300750", name: "宁德时代" },
+                  { code: "000858", name: "五粮液" },
+                  { code: "688981", name: "中芯国际" },
+                ] as const).map((item) => (
                   <button
-                    key={code}
+                    key={item.code}
                     onClick={() => {
-                      setAiInput(`分析 ${code}`);
-                      router.push(`/?q=${encodeURIComponent(`分析 ${code}`)}`);
+                      setAiInput(`分析 ${item.code}`);
+                      router.push(`/?q=${encodeURIComponent(`分析 ${item.code}`)}`);
                     }}
+                    title={item.name}
                     className="px-2 py-1 text-[10px] bg-white/[0.04] border border-white/[0.06] rounded-md text-[#8888A0] hover:text-[#F0F0F5] hover:bg-white/[0.08] transition-colors"
                   >
-                    {code}
+                    {item.code}
                   </button>
                 ))}
               </div>

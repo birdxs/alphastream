@@ -680,6 +680,12 @@
   animation: indeterminate-progress 1.5s ease-in-out infinite;
 }
 
+/* ── AI分析中3个点依次弹跳 ── */
+@keyframes ai-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
 /* ── 按钮按压微交互反馈 ── */
 .btn-press {
   transition: transform 100ms ease;

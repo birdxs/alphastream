@@ -97,6 +97,13 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
           <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
             13个智能Agent协同 · 实时市场数据 · 大师级投研视角
           </p>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#46BEA3] opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#46BEA3]" />
+            </span>
+            <span className="text-[10px] text-[#46BEA3]/80 font-medium">13个AI Agent待命中</span>
+          </div>
         </div>
 
         {/* --- 快速开始卡片 2×2 (glass-card + stagger动画) --- */}
