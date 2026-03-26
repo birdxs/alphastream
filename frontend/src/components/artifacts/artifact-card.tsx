@@ -30,7 +30,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true }: 
 
   if (fullscreen) {
     return (
-      <div className="fixed inset-0 z-50 bg-background p-6 overflow-auto">
+      <div className="fixed inset-0 z-50 bg-background p-6 overflow-auto animate-fade-in">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             {icon && <span>{icon}</span>}{title}

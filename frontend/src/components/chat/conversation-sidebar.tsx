@@ -32,6 +32,7 @@ export function ConversationSidebar() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const { activeConversationId, setActiveConversation, setMessages } = useChatStore();
 
   const showError = (msg: string) => {
@@ -116,6 +117,15 @@ export function ConversationSidebar() {
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
+      <div className="px-2 py-1">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索对话..."
+          className="w-full bg-muted/50 rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+        />
+      </div>
       {error && (
         <div className="mx-2 mt-1 px-2 py-1 bg-red-500/10 text-red-500 text-[10px] rounded">
           {error}
@@ -127,10 +137,14 @@ export function ConversationSidebar() {
             <div className="p-2 space-y-2">
               {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full rounded" />)}
             </div>
-          ) : conversations.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">暂无对话记录</p>
+          ) : (() => {
+            const filteredConversations = searchQuery
+              ? conversations.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+              : conversations;
+            return filteredConversations.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">{searchQuery ? '无匹配对话' : '暂无对话记录'}</p>
           ) : (
-            Object.entries(groupByDate(conversations)).map(([label, convs]) => (
+            Object.entries(groupByDate(filteredConversations)).map(([label, convs]) => (
               <div key={label}>
                 <div className="px-2 py-1 text-[10px] text-muted-foreground/60 font-medium uppercase">{label}</div>
                 {convs.map(conv => (
@@ -156,7 +170,8 @@ export function ConversationSidebar() {
                 ))}
               </div>
             ))
-          )}
+          );
+          })()}
         </div>
       </ScrollArea>
     </div>

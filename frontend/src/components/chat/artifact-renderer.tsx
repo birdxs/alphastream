@@ -16,7 +16,18 @@ const CandlestickChartArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[400px] animate-pulse bg-muted rounded" />
+      <div className="h-[400px] bg-muted rounded relative overflow-hidden">
+        <div className="absolute bottom-0 left-0 right-0 h-3/4 flex items-end gap-1 px-4 pb-4">
+          {Array.from({length: 20}).map((_, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center">
+              <div className="w-px bg-muted-foreground/10" style={{height: `${20 + (i * 7 + 13) % 40}%`}} />
+              <div className="w-full bg-muted-foreground/10 rounded-sm" style={{height: `${10 + (i * 11 + 7) % 30}%`}} />
+              <div className="w-px bg-muted-foreground/10" style={{height: `${10 + (i * 5 + 3) % 20}%`}} />
+            </div>
+          ))}
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-muted-foreground/5 to-transparent animate-pulse" />
+      </div>
     ),
   }
 );

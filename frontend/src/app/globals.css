@@ -230,7 +230,7 @@
 }
 
 /* 平板：隐藏侧边栏 */
-@media (max-width: 1024px) {
+@media (min-width: 768px) and (max-width: 1024px) {
   .conversation-sidebar {
     display: none;
   }

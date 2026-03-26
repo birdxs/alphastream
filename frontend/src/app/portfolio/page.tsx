@@ -141,7 +141,7 @@ export default function PortfolioPage() {
                     <div className="flex items-center gap-6 text-sm">
                       <div className="text-right">
                         <p className="font-mono">{h.shares}股</p>
-                        <p className="text-xs text-muted-foreground">成本 {h.costPrice}</p>
+                        <p className="text-xs text-muted-foreground">成本 {formatPrice(h.costPrice)}</p>
                       </div>
                       <div className="text-right w-24">
                         <p className={`font-finance ${getPriceColorClass(pnl)}`}>

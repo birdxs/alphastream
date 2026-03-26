@@ -32,8 +32,8 @@ export function MessageBubble({ message }: Props) {
       <div className={`flex-1 min-w-0 ${isUser ? "text-right" : ""}`}>
         <div className={`inline-block text-sm rounded-2xl px-4 py-2.5 max-w-[90%] ${
           isUser
-            ? "bg-primary text-primary-foreground rounded-br-md"
-            : "bg-muted/60 border border-border/40 rounded-bl-md"
+            ? "bg-primary text-primary-foreground rounded-br-lg"
+            : "bg-muted/60 border border-border/40 rounded-bl-lg"
         }`}>
           {isUser ? (
             <span className="whitespace-pre-wrap">{message.content}</span>

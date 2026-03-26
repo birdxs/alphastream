@@ -60,7 +60,7 @@ export function MarketOverview() {
             <span className="text-muted-foreground">--</span>
           ) : (
             <>
-              <span className="font-mono">{idx.price || '--'}</span>
+              <span className="font-mono font-finance">{idx.price || '--'}</span>
               {idx.change !== 0 && (
                 <span className={idx.change > 0 ? 'stock-up' : 'stock-down'}>
                   {idx.change > 0 ? '+' : ''}{idx.change.toFixed(2)}%

@@ -26,6 +26,11 @@ interface Props {
   };
 }
 
+// 行业均值参考（硬编码基准，后续可接API）
+const INDUSTRY_AVG: Record<string, number> = {
+  'PE(TTM)': 25, 'PB': 3, 'ROE': 12, '资产负债率': 50, '营收增长': 8, '利润增长': 8
+};
+
 export function FundamentalScorecardArtifact({ data }: Props) {
   const score = Number(data.score || 50);
   const indicators = data.financial_indicators || {};
@@ -99,6 +104,9 @@ export function FundamentalScorecardArtifact({ data }: Props) {
                 <div className="text-[10px] text-muted-foreground mb-0.5">{m.label}</div>
                 <div className={`text-sm font-mono font-bold ${isGood ? 'text-green-500' : 'text-foreground'}`}>
                   {val.toFixed(1)}{m.suffix}
+                </div>
+                <div className="text-[8px] text-muted-foreground/50 mt-0.5">
+                  行业 {INDUSTRY_AVG[m.label] ?? '--'}{m.suffix}
                 </div>
               </div>
             );
