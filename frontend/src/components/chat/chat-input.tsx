@@ -50,6 +50,8 @@ export function ChatInput({ onSend, onStop }: Props) {
   const [isListening, setIsListening] = useState(false);
   const [stockCodeError, setStockCodeError] = useState(false);
   const [shaking, setShaking] = useState(false);
+  const [detectedCode, setDetectedCode] = useState<string | null>(null);
+  const detectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStreaming = useChatStore(s => s.isStreaming);
   const { addItem, hasItem } = useWatchlistStore();
   const { toast } = useToast();
@@ -89,6 +91,28 @@ export function ChatInput({ onSend, onStop }: Props) {
       window.visualViewport.addEventListener('resize', handleResize);
       return () => window.visualViewport?.removeEventListener('resize', handleResize);
     }
+  }, []);
+
+  // ── 智能股票代码识别 ──
+  useEffect(() => {
+    // 匹配输入中独立的6位数字
+    const match = input.match(/(?:^|\s)(\d{6})(?:\s|$)/);
+    if (match && match[1] && match[1] !== stockCode) {
+      const code = match[1];
+      setStockCode(code);
+      setDetectedCode(code);
+      setStockCodeError(false);
+      // 清除上一个计时器
+      if (detectedTimerRef.current) clearTimeout(detectedTimerRef.current);
+      detectedTimerRef.current = setTimeout(() => setDetectedCode(null), 2000);
+    }
+  }, [input, stockCode]);
+
+  // 清理计时器
+  useEffect(() => {
+    return () => {
+      if (detectedTimerRef.current) clearTimeout(detectedTimerRef.current);
+    };
   }, []);
 
   // ── 附件处理 ──
@@ -342,6 +366,13 @@ export function ChatInput({ onSend, onStop }: Props) {
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />
           </div>
+
+          {/* 股票代码自动识别气泡 */}
+          {detectedCode && (
+            <div className="absolute -top-7 left-12 bg-[#3737CC]/10 text-[#3737CC] text-xs px-2 py-1 rounded-full animate-fade-in z-10">
+              检测到股票代码 {detectedCode}，已自动设置
+            </div>
+          )}
 
           {/* 语音按钮 — 不支持时隐藏 */}
           {speechSupported && (

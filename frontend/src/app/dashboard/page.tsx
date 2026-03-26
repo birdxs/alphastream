@@ -58,6 +58,16 @@ interface WatchQuote extends WatchItem {
   loading?: boolean;
 }
 
+/* ---------- 智能问候 ---------- */
+
+function getGreeting(): { text: string; sub: string } {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 12) return { text: "早上好", sub: "今日市场开盘情况" };
+  if (h >= 12 && h < 18) return { text: "下午好", sub: "关注盘中动态" };
+  if (h >= 18 && h < 24) return { text: "晚间好", sub: "回顾今日行情" };
+  return { text: "夜深了", sub: "注意休息" };
+}
+
 /* ---------- 工具函数 ---------- */
 
 function formatTime(timeStr?: string): string {
@@ -237,6 +247,10 @@ export default function DashboardPage() {
               Dashboard · 投资看板
             </h1>
             <p className="text-xs text-[#8888A0] mt-0.5">
+              <span className="text-[#6B5EE4] font-medium">{getGreeting().text}</span>
+              <span className="mx-1.5">·</span>
+              <span>{getGreeting().sub}</span>
+              <span className="mx-1.5">·</span>
               {lastRefresh
                 ? `最后刷新 ${lastRefresh.toLocaleTimeString("zh-CN")}`
                 : "加载中..."}

@@ -387,6 +387,17 @@ export default function StockDetailPage({
       ? `${changePercent >= 0 ? "+" : ""}${changePercent}%`
       : "";
 
+  /* ---------- AI智能提示 ---------- */
+  const getAiHint = (): { text: string; color: string; bg: string } | null => {
+    if (changePercent === null) return null;
+    if (changePercent > 3) return { text: "大幅上涨，注意追高风险", color: "#EF4444", bg: "rgba(239,68,68,0.12)" };
+    if (changePercent >= 1) return { text: "温和上涨", color: "#F59E0B", bg: "rgba(245,158,11,0.12)" };
+    if (changePercent < -3) return { text: "大幅下跌，关注支撑位", color: "#10B981", bg: "rgba(16,185,129,0.12)" };
+    if (changePercent <= -1) return { text: "小幅调整", color: "#6B7280", bg: "rgba(107,114,128,0.12)" };
+    return { text: "横盘整理", color: "#8888A0", bg: "rgba(136,136,160,0.12)" };
+  };
+  const aiHint = getAiHint();
+
   /* ---------- JSX ---------- */
   return (
     <div className="min-h-screen w-full px-4 py-4 md:px-8 md:py-6 space-y-4 max-w-7xl mx-auto">
@@ -423,6 +434,14 @@ export default function StockDetailPage({
                 {changeStr && (
                   <span className={`text-sm font-medium ${priceColor}`}>
                     {changeStr}
+                  </span>
+                )}
+                {aiHint && (
+                  <span
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-full ml-1 whitespace-nowrap"
+                    style={{ color: aiHint.color, backgroundColor: aiHint.bg }}
+                  >
+                    {aiHint.text}
                   </span>
                 )}
               </div>
