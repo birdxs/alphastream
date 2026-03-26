@@ -24,6 +24,7 @@ interface OHLCVData {
   low: number;
   close: number;
   volume?: number;
+  amount?: number;
 }
 
 interface Props {
@@ -114,8 +115,8 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     }));
     candleSeries.setData(candleData);
 
-    // 成交量
-    if (filteredData.some((d) => d.volume)) {
+    // 成交量（兼容volume和amount字段）
+    if (filteredData.some((d) => d.volume || d.amount)) {
       const volumeSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
@@ -126,8 +127,8 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
       volumeSeries.setData(
         filteredData.map((d) => ({
           time: d.date as Time,
-          value: d.volume || 0,
-          color: d.close >= d.open ? upColor + "40" : downColor + "40",
+          value: d.volume || d.amount || 0,
+          color: d.close >= d.open ? "rgba(70,190,163,0.5)" : "rgba(255,135,103,0.5)",
         }))
       );
     }
@@ -180,17 +181,36 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
       );
     }
 
-    // 十字线跟随 — OHLCV信息条
+    // 当前最新价格标注线
+    const lastBar = filteredData[filteredData.length - 1];
+    if (lastBar) {
+      candleSeries.createPriceLine({
+        price: lastBar.close,
+        color: '#3737CC',
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        axisLabelVisible: true,
+        title: '最新',
+        axisLabelColor: '#3737CC',
+        axisLabelTextColor: '#ffffff',
+      });
+    }
+
+    // 十字线跟随 — OHLCV信息条（含成交量）
     chart.subscribeCrosshairMove((param) => {
       if (param.time && param.seriesData) {
         const cd = param.seriesData.get(candleSeries);
         if (cd && 'open' in cd) {
+          // 查找对应日期的volume数据
+          const dateStr = String(param.time);
+          const matchedBar = filteredData.find(d => d.date === dateStr);
           setCrosshairData({
-            time: String(param.time),
+            time: dateStr,
             open: cd.open,
             high: cd.high,
             low: cd.low,
             close: cd.close,
+            volume: matchedBar?.volume || matchedBar?.amount,
           });
         }
       } else {
@@ -284,12 +304,15 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
         </div>
       )}
       {crosshairData && (
-        <div className="flex items-center gap-3 text-[10px] font-mono text-[#8888A0] mb-1">
-          <span>日期: <span className="text-[#F0F0F5]">{crosshairData.time}</span></span>
-          <span>开: <span className="font-mono text-[#F0F0F5]">{crosshairData.open.toFixed(2)}</span></span>
-          <span>高: <span className="font-mono text-[#46BEA3]">{crosshairData.high.toFixed(2)}</span></span>
-          <span>低: <span className="font-mono text-[#FF8767]">{crosshairData.low.toFixed(2)}</span></span>
-          <span>收: <span className="font-mono text-[#F0F0F5]">{crosshairData.close.toFixed(2)}</span></span>
+        <div className="bg-white/[0.04] rounded-lg px-3 py-1 font-mono text-xs flex items-center gap-3 text-[#8888A0] mb-1">
+          <span>{crosshairData.time}</span>
+          <span>O:<span className={crosshairData.close >= crosshairData.open ? 'text-[#46BEA3]' : 'text-[#FF8767]'}>{crosshairData.open.toFixed(2)}</span></span>
+          <span>H:<span className="text-[#46BEA3]">{crosshairData.high.toFixed(2)}</span></span>
+          <span>L:<span className="text-[#FF8767]">{crosshairData.low.toFixed(2)}</span></span>
+          <span>C:<span className={crosshairData.close >= crosshairData.open ? 'text-[#46BEA3]' : 'text-[#FF8767]'}>{crosshairData.close.toFixed(2)}</span></span>
+          {crosshairData.volume != null && (
+            <span>V:<span className="text-[#F0F0F5]">{crosshairData.volume >= 1e8 ? (crosshairData.volume / 1e8).toFixed(2) + '亿' : crosshairData.volume >= 1e4 ? (crosshairData.volume / 1e4).toFixed(0) + '万' : crosshairData.volume.toLocaleString()}</span></span>
+          )}
         </div>
       )}
       <div className="relative w-full">

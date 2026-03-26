@@ -108,7 +108,9 @@ export function ArtifactPanel() {
         ) : (
           <div className="space-y-3">
             {artifacts.map((artifact, i) => (
-              <ArtifactRenderer key={`${artifact.artifact_type}_${i}`} artifact={artifact} />
+              <div key={`${artifact.artifact_type}_${i}`} className="animate-[glass-enter_300ms_ease-out_both]" style={{ animationDelay: `${i * 80}ms` }}>
+                <ArtifactRenderer artifact={artifact} />
+              </div>
             ))}
           </div>
         )}

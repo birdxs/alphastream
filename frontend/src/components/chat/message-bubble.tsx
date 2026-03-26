@@ -49,13 +49,13 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
   const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
 
   return (
-    <div className={`flex gap-3 group ${isNew ? "animate-fade-in" : ""} ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`flex gap-3 group ${isNew ? "animate-[glass-enter_250ms_ease-out_both]" : ""} ${isUser ? "flex-row-reverse" : ""}`}>
       {/* 头像 */}
       <div
         className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${
           isUser
             ? "bg-[#3737CC] text-white"
-            : "bg-gradient-to-br from-[#6B5EE4] to-[#3737CC] text-white"
+            : "bg-gradient-to-br from-[#6B5EE4] to-[#3737CC] text-white animate-[breathe_3s_ease-in-out_infinite]"
         }`}
       >
         {isUser ? "我" : "AI"}

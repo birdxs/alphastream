@@ -26,7 +26,7 @@ const groupByDate = (convs: Conversation[]) => {
   return groups;
 };
 
-export function ConversationSidebar() {
+export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?: boolean }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,9 +94,10 @@ export function ConversationSidebar() {
     }
   };
 
-  if (collapsed) {
+  // Mobile Sheet模式下不支持折叠
+  if (collapsed && !isMobileSheet) {
     return (
-      <div className="w-10 bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-white/[0.08] flex flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
+      <div className="hidden sm:flex w-10 bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
         <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-[#8888A0] hover:bg-white/[0.06]">
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -108,14 +109,16 @@ export function ConversationSidebar() {
   }
 
   return (
-    <div className="w-56 flex flex-col bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-white/[0.08] transition-all duration-300 ease-in-out">
+    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56'} flex flex-col bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
       <div className="p-2 border-b border-white/[0.08] flex items-center justify-between shrink-0">
         <Button size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs bg-[#3737CC] hover:bg-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/20" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7 text-[#8888A0] hover:bg-white/[0.06]">
-          <ChevronLeft className="h-3 w-3" />
-        </Button>
+        {!isMobileSheet && (
+          <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7 text-[#8888A0] hover:bg-white/[0.06]">
+            <ChevronLeft className="h-3 w-3" />
+          </Button>
+        )}
       </div>
       <div className="px-2 py-1.5 shrink-0">
         <input

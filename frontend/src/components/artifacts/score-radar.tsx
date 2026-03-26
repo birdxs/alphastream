@@ -64,14 +64,24 @@ export function ScoreRadarArtifact({ data }: Props) {
           <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} />
           <Tooltip
             contentStyle={{
-              background: theme === 'dark' ? 'rgba(10,10,26,0.9)' : '#fff',
-              border: theme === 'dark' ? '1px solid rgba(255,255,255,0.08)' : 'none',
-              borderRadius: 8,
+              background: theme === 'dark' ? 'rgba(10,10,26,0.85)' : 'rgba(255,255,255,0.85)',
+              border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.08)',
+              borderRadius: 12,
               fontSize: 12,
-              backdropFilter: 'blur(12px)',
-              color: theme === 'dark' ? '#F0F0F5' : undefined,
+              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              color: theme === 'dark' ? '#F0F0F5' : '#1f2937',
+              padding: '8px 12px',
+              boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.1)',
             }}
-            formatter={(value) => [`${value}分`, '评分']}
+            formatter={(value, _name, entry) => {
+              const score = Number(value);
+              const color = score >= 60 ? '#46BEA3' : score >= 40 ? '#F59E0B' : '#FF8767';
+              return [`${value}分`, entry.payload?.subject || '评分'];
+            }}
+            labelStyle={{ display: 'none' }}
+            itemStyle={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace' }}
           />
           <Radar
             name="评分"

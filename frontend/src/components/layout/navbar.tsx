@@ -1,5 +1,5 @@
 // Input: theme-store状态
-// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格
+// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，移动端精简（隐藏搜索+导航链接）
 // Pos: 页面顶部固定导航
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,7 +8,6 @@ import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon, MessageSquare, Search, TrendingUp, TrendingDown, Activity } from "lucide-react";
-import { MobileDrawer } from "./mobile-drawer";
 
 export function Navbar() {
   const theme = useThemeStore(s => s.theme);
@@ -38,11 +37,9 @@ export function Navbar() {
             </Button>
           </Link>
         </div>
-
-        <MobileDrawer />
       </div>
 
-      {/* Center: Search */}
+      {/* Center: Search — 移动端隐藏 */}
       <button
         onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
         className="hidden md:flex items-center gap-2 bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-white/[0.08] transition-colors"
@@ -57,7 +54,7 @@ export function Navbar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 hover:bg-white/[0.08]"
+          className="hidden sm:inline-flex h-8 w-8 hover:bg-white/[0.08]"
           onClick={toggleColorScheme}
           aria-label="切换涨跌色"
           title={stockColorScheme === 'cn' ? '中国标准（红涨绿跌）' : '国际标准（绿涨红跌）'}

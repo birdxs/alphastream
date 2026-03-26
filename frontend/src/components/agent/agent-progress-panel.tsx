@@ -31,9 +31,9 @@ export function AgentProgressPanel() {
   return (
     <>
       {!expanded && (
-        <button onClick={() => setExpanded(true)} className="w-full flex items-center justify-between bg-white/[0.03] border border-white/[0.08] rounded-xl px-3 py-2 text-xs hover:bg-white/[0.06] transition-colors">
+        <button onClick={() => setExpanded(true)} className="glass-card w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-white/[0.06] transition-colors animate-[glass-enter_300ms_ease-out_both]">
           <span className="flex items-center gap-2">
-            <span className="animate-pulse">{"\uD83E\uDD16"}</span>
+            <span className="agent-pending">{"\uD83E\uDD16"}</span>
             <span className="font-mono">Agent分析中... {Math.round(overallProgress)}%</span>
           </span>
           <span className="text-muted-foreground font-mono">{agentProgresses.filter(p => p.status === 'completed').length}/{agentProgresses.length} 完成</span>
@@ -41,7 +41,7 @@ export function AgentProgressPanel() {
       )}
 
       {expanded && (
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 space-y-3">
+        <div className="glass-card rounded-xl p-3 space-y-3 animate-[glass-enter_300ms_ease-out_both]">
           {/* 总进度 */}
           <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpanded(false)}>
             <span className="text-xs font-medium">{"\uD83E\uDD16 Multi-Agent\u5206\u6790"}</span>
@@ -55,16 +55,19 @@ export function AgentProgressPanel() {
                  style={{ width: `${overallProgress}%` }} />
           </div>
 
-          {/* Agent状态网格 */}
+          {/* Agent状态网格 — stagger入场 + 状态动效 */}
           <div className="flex flex-wrap gap-1">
-            {AGENT_ORDER.map((agentName) => {
+            {AGENT_ORDER.map((agentName, i) => {
               const progress = agentProgresses.find(p => p.agent_name === agentName);
+              const status = progress?.status || 'pending';
+              const statusClass = status === 'pending' ? 'agent-pending' : status === 'started' ? 'agent-running' : status === 'completed' ? 'agent-done' : '';
               return (
-                <AgentStatusBadge
-                  key={agentName}
-                  name={agentName.replace('\u5206\u6790\u5E08', '').replace('\u7814\u7A76\u5458', '')}
-                  status={progress?.status || 'pending'}
-                />
+                <div key={agentName} className={`animate-[glass-enter_300ms_ease-out_both] ${statusClass}`} style={{ animationDelay: `${i * 60}ms` }}>
+                  <AgentStatusBadge
+                    name={agentName.replace('\u5206\u6790\u5E08', '').replace('\u7814\u7A76\u5458', '')}
+                    status={status}
+                  />
+                </div>
               );
             })}
           </div>

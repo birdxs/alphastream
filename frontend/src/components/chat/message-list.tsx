@@ -91,8 +91,10 @@ export function MessageList() {
             style={{ height: containerHeight, width: '100%' }}
           />
         ) : (
-          messages.map((msg) => (
-            <MessageBubble key={msg.message_id} message={msg} />
+          messages.map((msg, i) => (
+            <div key={msg.message_id} className="animate-[glass-enter_300ms_ease-out_both]" style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}>
+              <MessageBubble message={msg} />
+            </div>
           ))
         )}
 
@@ -110,9 +112,9 @@ export function MessageList() {
         {isStreaming && <AgentProgressPanel />}
 
         {isStreaming && !streamingContent && (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm animate-pulse-gentle">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>AI正在分析中...</span>
+          <div className="flex items-center gap-2 text-sm animate-[glass-enter_300ms_ease-out_both]">
+            <div className="ai-thinking h-5 w-5 rounded-full" />
+            <span className="text-muted-foreground">AI正在分析中...</span>
           </div>
         )}
 

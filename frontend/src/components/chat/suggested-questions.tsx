@@ -42,7 +42,7 @@ export function SuggestedQuestions({ onSelect }: Props) {
               variant="outline"
               size="sm"
               style={{ animationDelay: `${i * 60}ms` }}
-              className="whitespace-nowrap text-xs h-7 bg-white/[0.04] border border-white/[0.08] rounded-full hover:border-[#3737CC]/30 hover:bg-white/[0.06] transition-all animate-fade-in opacity-0 [animation-fill-mode:forwards]"
+              className="whitespace-nowrap text-xs h-7 bg-white/[0.04] border border-white/[0.08] rounded-full hover:border-[#3737CC]/30 hover:bg-white/[0.06] transition-all animate-[glass-enter_300ms_ease-out_both] opacity-0 [animation-fill-mode:forwards]"
               onClick={() => onSelect(q)}
             >
               <span className="mr-1">{icon}</span>

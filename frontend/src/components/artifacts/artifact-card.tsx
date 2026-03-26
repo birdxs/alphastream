@@ -63,7 +63,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true }: 
 
       {/* 普通卡片 — Dark Glassmorphism */}
       <div
-        className="animate-[glass-enter_300ms_ease-out_both] overflow-hidden bg-white/[0.04] backdrop-blur-sm border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.36)] hover:border-white/[0.15] hover:shadow-[0_12px_40px_rgba(0,0,0,0.45)] transition-all duration-300"
+        className="glass-card-elevated glass-gradient-border animate-[glass-enter_300ms_ease-out_both] overflow-hidden rounded-2xl transition-all duration-300"
       >
         {/* 标题栏 — 微弱分层 */}
         <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02] border-b border-white/[0.06] rounded-t-2xl">
