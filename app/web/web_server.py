@@ -2472,13 +2472,36 @@ def ai_chat_stream():
                 if event_type == 'token' and data.get('content'):
                     full_content += data['content']
 
-            # 执行流式AI对话（带工具调用）
-            content, tools_log, error = chat_with_tools_stream(
-                client, messages, OPENAI_TOOLS_SCHEMA,
-                tool_executor=artifact_tool_executor,
-                max_tool_rounds=3,
-                event_callback=event_callback
-            )
+            # 执行流式AI对话（带工具调用，模型不支持时降级）
+            content, tools_log, error = None, [], None
+            try:
+                content, tools_log, error = chat_with_tools_stream(
+                    client, messages, OPENAI_TOOLS_SCHEMA,
+                    tool_executor=artifact_tool_executor,
+                    max_tool_rounds=3,
+                    event_callback=event_callback
+                )
+            except Exception as tool_err:
+                app.logger.warning(f"带工具的流式调用失败，降级为普通对话: {tool_err}")
+                error = None  # 清除错误，尝试降级
+
+            # 工具调用失败时降级为不带tools的普通对话
+            if error and ('400' in str(error) or 'tool' in str(error).lower()):
+                app.logger.info("降级为不带工具的普通对话")
+                full_content = ""
+                from app.core.ai_client import chat_completion_stream, get_completion_content
+                stream, stream_err = chat_completion_stream(client, messages)
+                if stream_err:
+                    yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
+                    return
+                # 收集流式响应
+                collected = ""
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        collected += chunk.choices[0].delta.content
+                content = collected
+                error = None
+                tools_log = []
 
             if error:
                 yield emit('error', {'code': 'AI_ERROR', 'message': error})
