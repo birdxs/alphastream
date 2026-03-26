@@ -8,11 +8,23 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Trash2, Database, Brain, Tag } from "lucide-react";
+import { useToast } from "@/components/common/toast-provider";
 
 export default function SettingsPage() {
   const { theme, toggleTheme, stockColorScheme, toggleColorScheme } = useThemeStore();
   const { researchDepth, setResearchDepth, enableMemory, setEnableMemory } = useSettingsStore();
+  const { toast } = useToast();
+
+  const handleClearCache = () => {
+    try {
+      localStorage.clear();
+      toast("缓存已清除，页面即将刷新", "success");
+      setTimeout(() => window.location.reload(), 1000);
+    } catch {
+      toast("清除缓存失败", "error");
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
@@ -88,11 +100,41 @@ export default function SettingsPage() {
       {/* 系统信息 */}
       <Card className="glass-card">
         <CardHeader><CardTitle className="text-sm">系统信息</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <div className="flex justify-between"><span>前端版本</span><span className="font-mono">v2.3.0-ai-native</span></div>
-          <div className="flex justify-between"><span>后端版本</span><span className="font-mono">v2.3.0</span></div>
-          <div className="flex justify-between"><span>Agent数量</span><span>13个</span></div>
-          <div className="flex justify-between"><span>技术栈</span><span>Next.js + Flask + LangGraph</span></div>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Brain className="h-4 w-4 opacity-60" />
+              <span>AI模型</span>
+            </div>
+            <span className="font-mono text-xs">DeepSeek / OpenAI GPT</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Database className="h-4 w-4 opacity-60" />
+              <span>数据源</span>
+            </div>
+            <span className="font-mono text-xs">akshare &middot; 东方财富</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Tag className="h-4 w-4 opacity-60" />
+              <span>版本号</span>
+            </div>
+            <span className="font-mono text-xs">StockAnal v1.0</span>
+          </div>
+          <div className="flex justify-between text-muted-foreground"><span>Agent数量</span><span>13个</span></div>
+          <div className="flex justify-between text-muted-foreground"><span>技术栈</span><span>Next.js + Flask + LangGraph</span></div>
+          <div className="pt-2 border-t border-white/[0.06]">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2 text-[#FF8767] border-[#FF8767]/30 hover:bg-[#FF8767]/10 hover:border-[#FF8767]/50"
+              onClick={handleClearCache}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              清除缓存
+            </Button>
+          </div>
         </CardContent>
       </Card>
       {/* 关于 */}

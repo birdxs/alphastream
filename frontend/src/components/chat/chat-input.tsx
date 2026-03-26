@@ -10,7 +10,7 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { useToast } from "@/components/common/toast-provider";
 import { CommandPalette } from "./command-palette";
-import { Send, Square, Star, Paperclip, Mic, X, AlertCircle } from "lucide-react";
+import { Send, Square, Star, Paperclip, Mic, X, AlertCircle, Loader2 } from "lucide-react";
 
 // ── 附件类型 ──
 interface AttachedFile {
@@ -435,15 +435,14 @@ export function ChatInput({ onSend, onStop }: Props) {
           )}
 
           {isStreaming ? (
-            <Button
-              size="icon"
-              variant="destructive"
-              className="rounded-2xl h-10 w-10 shrink-0 shadow-md"
+            <button
+              className="rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#3737CC] to-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/25 transition-all duration-200 hover:scale-105 active:scale-95"
               onClick={onStop}
               aria-label="停止生成"
+              title="停止生成"
             >
-              <Square className="h-4 w-4" />
-            </Button>
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </button>
           ) : (
             <button
               className={`rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center transition-all duration-200 ${

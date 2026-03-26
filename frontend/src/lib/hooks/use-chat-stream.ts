@@ -39,6 +39,14 @@ export function useChatStream() {
         created_at: new Date().toISOString(),
       };
       chatStore.addMessage(userMsg);
+
+      // 新对话第一条消息：自动设置对话标题为前20个字符
+      const isFirstMessage = chatStore.messages.filter((m) => m.role === 'user').length === 0;
+      if (isFirstMessage && chatStore.activeConversationId) {
+        const autoTitle = message.slice(0, 20) + (message.length > 20 ? '...' : '');
+        chatStore.updateConversationTitle(chatStore.activeConversationId, autoTitle);
+      }
+
       chatStore.setStreaming(true);
       chatStore.resetStreamContent();
       chatStore.clearArtifacts();

@@ -4,6 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { Newspaper } from "lucide-react";
 
 interface NewsItem {
   title?: string;
@@ -25,7 +26,12 @@ export function NewsFeedArtifact({ data }: Props) {
   const items = Array.isArray(data.items) ? data.items : [];
 
   if (items.length === 0) {
-    return <p className="text-sm text-muted-foreground text-center py-4">暂无相关新闻</p>;
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-[#8888A0]">
+        <Newspaper className="h-8 w-8 mb-2 opacity-40" />
+        <p className="text-sm">暂无相关新闻</p>
+      </div>
+    );
   }
 
   return (

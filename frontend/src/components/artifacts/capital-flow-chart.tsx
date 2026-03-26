@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { formatLargeNumber } from "@/lib/utils/format";
+import { TrendingDown } from "lucide-react";
 
 interface DailyFlowItem {
   date: string;
@@ -184,8 +185,9 @@ export function CapitalFlowArtifact({ data }: Props) {
 
       {/* 无数据提示 */}
       {chartData.length === 0 && summaryItems.length === 0 && (
-        <div className="text-center text-sm text-[#8888A0] py-8">
-          暂无资金流向数据
+        <div className="flex flex-col items-center justify-center py-10 text-[#8888A0]">
+          <TrendingDown className="h-8 w-8 mb-2 opacity-40" />
+          <p className="text-sm">暂无资金流向数据</p>
         </div>
       )}
     </div>

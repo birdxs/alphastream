@@ -4,18 +4,39 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { Copy, Check } from "lucide-react";
 
 interface Props {
   content: string;
   isStreaming?: boolean;
 }
 
+/** 代码块复制按钮 */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [text]);
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute top-2 right-2 bg-white/[0.08] hover:bg-white/[0.15] rounded p-1 transition-colors duration-200"
+      aria-label="复制代码"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-[#46BEA3]" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground/70" />}
+    </button>
+  );
+}
+
 const markdownComponents: Components = {
-  // 自定义代码块渲染 — glass效果
+  // 自定义代码块渲染 — glass效果 + 一键复制
   code({ className, children, ...props }) {
     const isInline = !className;
     if (isInline) {
@@ -25,8 +46,11 @@ const markdownComponents: Components = {
         </code>
       );
     }
+    // 提取纯文本用于复制
+    const codeText = String(children).replace(/\n$/, '');
     return (
-      <pre className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-xl p-3 overflow-x-auto backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <pre className="relative bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-xl p-3 overflow-x-auto backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] group">
+        <CopyButton text={codeText} />
         <code className="text-xs font-mono leading-relaxed" {...props}>
           {children}
         </code>

@@ -29,6 +29,7 @@ interface ChatState {
   setFollowUps: (questions: string[]) => void;
   setConversations: (convs: Conversation[]) => void;
   setMessages: (msgs: ChatMessage[]) => void;
+  updateConversationTitle: (id: string, title: string) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -54,6 +55,12 @@ export const useChatStore = create<ChatState>()(
       setFollowUps: (questions) => set({ followUpQuestions: questions }),
       setConversations: (convs) => set({ conversations: convs }),
       setMessages: (msgs) => set({ messages: msgs }),
+      updateConversationTitle: (id, title) =>
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.conversation_id === id ? { ...c, title } : c
+          ),
+        })),
     }),
     {
       name: 'chat-storage',
