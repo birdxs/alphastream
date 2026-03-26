@@ -1,5 +1,5 @@
 // Input: 单个Artifact对象（含artifact_type、title、data）
-// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面评分卡、风险雷达图、新闻列表、投资者共识、搜索结果等）
+// Output: 根据artifact_type路由渲染对应的React组件（K线图、雷达评分、资金流向、决策卡、技术指标、基本面评分卡、风险雷达图、新闻列表、投资者共识、搜索结果等），每个artifact由ErrorBoundary包裹防白屏
 // Pos: artifact-panel.tsx的子组件，Artifact路由渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,6 +8,7 @@ import { ReactNode } from "react";
 import dynamic from "next/dynamic";
 import type { Artifact } from "@/lib/types";
 import { ArtifactCard } from "@/components/artifacts/artifact-card";
+import { ErrorBoundary } from "@/components/common/error-boundary";
 import {
   TrendingUp, BarChart3, DollarSign, ArrowDownUp,
   Newspaper, AlertTriangle, Search, Target, Users, Bot, ClipboardList,
@@ -284,9 +285,11 @@ interface Props {
 
 export function ArtifactRenderer({ artifact }: Props) {
   return (
-    <ArtifactCard title={artifact.title} icon={getArtifactIcon(artifact.artifact_type)} confidence={artifact.confidence}>
-      {renderArtifactContent(artifact)}
-    </ArtifactCard>
+    <ErrorBoundary fallbackTitle={`"${artifact.title}" 渲染出错`}>
+      <ArtifactCard title={artifact.title} icon={getArtifactIcon(artifact.artifact_type)} confidence={artifact.confidence}>
+        {renderArtifactContent(artifact)}
+      </ArtifactCard>
+    </ErrorBoundary>
   );
 }
 
