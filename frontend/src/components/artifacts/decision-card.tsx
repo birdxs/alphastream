@@ -23,6 +23,14 @@ interface Props {
 }
 
 export function DecisionCardArtifact({ data }: Props) {
+  if (!data || Object.keys(data).length === 0) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        暂无决策数据
+      </div>
+    );
+  }
+
   const action = String(data.action || "HOLD").toUpperCase();
   const confidence = Number(data.confidence || 0);
   const riskScore = Number(data.risk_score || 1 - confidence);

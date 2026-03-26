@@ -36,11 +36,10 @@ export function GlassCard({
   padding = "md",
   onClick,
 }: GlassCardProps) {
-  const base =
-    "bg-white/[0.04] backdrop-blur-sm border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.36)]";
+  const base = "glass-card-auto rounded-2xl";
 
   const hoverStyles = hover
-    ? "hover:bg-white/[0.08] hover:border-white/[0.15] hover:shadow-[0_12px_40px_rgba(0,0,0,0.45)] hover:-translate-y-px"
+    ? "glass-card-auto-hover"
     : "";
 
   const glowStyle = glowMap[glow] ?? "";
@@ -48,7 +47,7 @@ export function GlassCard({
 
   return (
     <div
-      className={`${base} ${hoverStyles} ${glowStyle} ${pad} transition-all duration-300 ${className}`}
+      className={`${base} ${hoverStyles} ${glowStyle} ${pad} ${className}`}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}

@@ -32,6 +32,14 @@ const INDUSTRY_AVG: Record<string, number> = {
 };
 
 export function FundamentalScorecardArtifact({ data }: Props) {
+  if (!data || Object.keys(data).length === 0) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        暂无基本面评分数据
+      </div>
+    );
+  }
+
   const score = Number(data.score || 50);
   const indicators = data.financial_indicators || {};
 

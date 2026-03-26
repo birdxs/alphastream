@@ -43,6 +43,14 @@ const INVESTOR_META = {
 };
 
 export function InvestorPersonasArtifact({ data }: Props) {
+  if (!data || (!data.consensus && !data.opinions)) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        暂无投资者共识数据
+      </div>
+    );
+  }
+
   const { consensus, opinions } = data;
 
   const recColor = (rec: string) => {

@@ -19,6 +19,13 @@ interface Props {
 }
 
 export function SearchResultsArtifact({ data }: Props) {
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        暂无搜索结果数据
+      </div>
+    );
+  }
   const items = data.items || [];
   return (
     <div className="space-y-2">

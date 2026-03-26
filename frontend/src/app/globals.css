@@ -66,6 +66,15 @@
   --space-lg: 16px;
   --space-xl: 24px;
   --space-2xl: 32px;
+
+  /* ── Light模式 毛玻璃系统 ── */
+  --glass-bg:           rgba(255, 255, 255, 0.7);
+  --glass-bg-hover:     rgba(255, 255, 255, 0.85);
+  --glass-border:       rgba(0, 0, 0, 0.08);
+  --glass-border-hover: rgba(0, 0, 0, 0.15);
+  --glass-blur:         20px;
+  --glass-shadow:       0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+
   --background: #ffffff;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -249,6 +258,21 @@
 /* ═══════════════════════════════════════════════
    GLASS UTILITIES — 毛玻璃工具类
    ═══════════════════════════════════════════════ */
+
+/* 自适应主题玻璃卡片 — GlassCard组件使用 */
+.glass-card-auto {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur, 20px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: all 300ms ease-out;
+}
+.glass-card-auto-hover:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+  transform: translateY(-1px);
+}
 
 /* 标准玻璃卡片 */
 .glass-card {
