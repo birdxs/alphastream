@@ -33,7 +33,9 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const { activeConversationId, setActiveConversation, setMessages } = useChatStore();
+  const activeConversationId = useChatStore(s => s.activeConversationId);
+  const setActiveConversation = useChatStore(s => s.setActiveConversation);
+  const setMessages = useChatStore(s => s.setMessages);
 
   const showError = (msg: string) => {
     setError(msg);
@@ -98,10 +100,10 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
   if (collapsed && !isMobileSheet) {
     return (
       <div className="hidden sm:flex w-10 bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
-        <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-[#8888A0] hover:bg-white/[0.06]">
+        <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-[#8888A0] hover:bg-white/[0.06]" aria-label="展开侧边栏">
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={newConversation} title="新对话" className="text-white hover:bg-[#4F4FE6]/20">
+        <Button variant="ghost" size="icon" onClick={newConversation} title="新对话" className="text-white hover:bg-[#4F4FE6]/20" aria-label="新建对话">
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -115,7 +117,7 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
           <Plus className="h-3 w-3" />新对话
         </Button>
         {!isMobileSheet && (
-          <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7 text-[#8888A0] hover:bg-white/[0.06]">
+          <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7 text-[#8888A0] hover:bg-white/[0.06]" aria-label="收起侧边栏">
             <ChevronLeft className="h-3 w-3" />
           </Button>
         )}
@@ -150,7 +152,7 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
             <p className="text-xs text-[#555570] text-center py-4">{searchQuery ? '无匹配对话' : '暂无对话记录'}</p>
           ) : (
             Object.entries(groupByDate(filteredConversations)).map(([label, convs]) => (
-              <div key={label} className="mb-1">
+              <div key={label} className="mb-1" role="list" aria-label={`${label}的对话`}>
                 <div className={`px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase ${
                   label === '今天' ? 'text-[#3737CC]' : label === '昨天' ? 'text-[#8888A0]/70' : 'text-[#555570]'
                 }`}>{label}</div>
@@ -178,6 +180,7 @@ export function ConversationSidebar({ isMobileSheet = false }: { isMobileSheet?:
                       variant="ghost" size="icon"
                       className={`h-5 w-5 rounded-md transition-all duration-150 ${pendingDelete === conv.conversation_id ? 'opacity-100 bg-[#FF8767]/10 text-[#FF8767] hover:bg-[#FF8767]/20' : 'opacity-0 group-hover:opacity-100 hover:bg-[#FF8767]/10 hover:text-[#FF8767]'}`}
                       onClick={(e) => deleteConversation(conv.conversation_id, e)}
+                      aria-label={pendingDelete === conv.conversation_id ? `确认删除对话: ${conv.title}` : `删除对话: ${conv.title}`}
                     >
                       {pendingDelete === conv.conversation_id ? <span className="text-[10px] font-medium">确认</span> : <Trash2 className="h-3 w-3" />}
                     </Button>

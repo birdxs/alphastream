@@ -12,7 +12,11 @@ import { KeyboardShortcuts } from "@/components/common/keyboard-shortcuts";
 import { NetworkStatus } from "@/components/common/network-status";
 import { ToastProvider } from "@/components/common/toast-provider";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "AI金融分析",

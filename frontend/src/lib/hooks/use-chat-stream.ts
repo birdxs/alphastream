@@ -12,8 +12,7 @@ import { useAgentStore } from '@/lib/stores/agent-store';
 import type { SSEHandlers, ChatMessage } from '@/lib/types';
 
 export function useChatStream() {
-  const chatStore = useChatStore();
-  const agentStore = useAgentStore();
+  // 不订阅store — 通过getState()在回调内获取最新状态，避免全量重渲染
   const abortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
@@ -28,6 +27,9 @@ export function useChatStream() {
       // 取消之前的请求
       abortRef.current?.abort();
       abortRef.current = new AbortController();
+
+      const chatStore = useChatStore.getState();
+      const agentStore = useAgentStore.getState();
 
       // 添加用户消息
       const userMsg: ChatMessage = {
@@ -154,7 +156,8 @@ export function useChatStream() {
         console.error('Chat stream error:', e);
       }
     },
-    [chatStore, agentStore]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const stopGeneration = useCallback(() => {

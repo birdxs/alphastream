@@ -104,6 +104,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
             <button
               className="h-8 w-8 flex items-center justify-center rounded-lg text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setFullscreen(false)}
+              aria-label="退出全屏"
             >
               <Minimize2 className="h-4 w-4" />
             </button>
@@ -129,6 +130,9 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
                 className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
                 onClick={() => setExportMenuOpen(!exportMenuOpen)}
                 title="导出"
+                aria-label="导出菜单"
+                aria-expanded={exportMenuOpen}
+                aria-haspopup="true"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
@@ -156,6 +160,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
               className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setFullscreen(true)}
               title="全屏"
+              aria-label="全屏查看"
             >
               <Maximize2 className="h-3.5 w-3.5" />
             </button>
@@ -163,6 +168,8 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
               className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setExpanded(!expanded)}
               title={expanded ? "折叠" : "展开"}
+              aria-label={expanded ? "折叠内容" : "展开内容"}
+              aria-expanded={expanded}
             >
               {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>

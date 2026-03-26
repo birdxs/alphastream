@@ -142,6 +142,7 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
         <button
           className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-[#3737CC]/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in flex items-center gap-1"
           onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+          aria-label="滚动到最新消息"
         >
           <ArrowDown className="h-3 w-3" />
           新消息

@@ -18,7 +18,9 @@ export function MobileDrawer() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const { activeConversationId, setActiveConversation, setMessages } = useChatStore();
+  const activeConversationId = useChatStore(s => s.activeConversationId);
+  const setActiveConversation = useChatStore(s => s.setActiveConversation);
+  const setMessages = useChatStore(s => s.setMessages);
 
   const loadConversations = async () => {
     try {
