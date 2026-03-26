@@ -355,10 +355,23 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
         for tc_msg in tool_calls_for_message:
             tool_name = tc_msg['function']['name']
             try:
-                arguments = json.loads(tc_msg['function']['arguments'])
+                raw_args = tc_msg['function']['arguments']
+                arguments = json.loads(raw_args)
             except json.JSONDecodeError:
-                arguments = {}
-                logger.warning(f"工具 {tool_name} 参数解析失败: {tc_msg['function']['arguments']}")
+                # 尝试提取第一个有效JSON对象（AI可能返回多个JSON连在一起）
+                raw_args = tc_msg['function']['arguments']
+                import re
+                match = re.search(r'\{[^{}]*\}', raw_args)
+                if match:
+                    try:
+                        arguments = json.loads(match.group(0))
+                        logger.warning(f"工具 {tool_name} 参数修复：从多JSON中提取第一个")
+                    except json.JSONDecodeError:
+                        arguments = {}
+                        logger.warning(f"工具 {tool_name} 参数解析彻底失败: {raw_args[:200]}")
+                else:
+                    arguments = {}
+                    logger.warning(f"工具 {tool_name} 参数解析失败: {raw_args[:200]}")
 
             logger.info(f"[流式 Round {round_idx + 1}] 执行工具: {tool_name}({arguments})")
 

@@ -2453,6 +2453,8 @@ def ai_chat_stream():
 请用中文回复，分析要专业、数据要准确。"""
 
             messages = [{"role": "system", "content": system_prompt}] + history
+            # 保存原始messages副本，降级时使用（chat_with_tools_stream会修改messages）
+            original_messages = [dict(m) for m in messages]
 
             # 工具执行器（带artifact包装）
             artifacts_collected = []
@@ -2490,7 +2492,8 @@ def ai_chat_stream():
                 app.logger.info("降级为不带工具的普通对话")
                 full_content = ""
                 from app.core.ai_client import chat_completion_stream, get_completion_content
-                stream, stream_err = chat_completion_stream(client, messages)
+                # 用干净的原始messages，避免残留的tool_call消息导致API错误
+                stream, stream_err = chat_completion_stream(client, original_messages)
                 if stream_err:
                     yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
                     return
