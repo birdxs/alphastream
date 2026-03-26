@@ -163,7 +163,12 @@ export function ConversationSidebar() {
                     }`}
                   >
                     <MessageSquare className="h-3 w-3 shrink-0" />
-                    <span className="flex-1 truncate">{conv.title}</span>
+                    <span className="flex-1 truncate">
+                      {conv.stock_codes && conv.stock_codes.length > 0 && (
+                        <span className="text-primary font-mono mr-1">{conv.stock_codes[0]}</span>
+                      )}
+                      {conv.title}
+                    </span>
                     <Button
                       variant="ghost" size="icon"
                       className={`h-5 w-5 ${pendingDelete === conv.conversation_id ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}

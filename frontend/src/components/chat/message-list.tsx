@@ -37,6 +37,11 @@ export function MessageList() {
   return (
     <ScrollArea className="flex-1 p-4">
       <div className="space-y-4" ref={scrollAreaRef} onScroll={handleScroll} role="log" aria-live="polite" aria-label="对话消息">
+        {messages.length > 30 && (
+          <div className="text-center text-[10px] text-muted-foreground py-1">
+            显示最近 {messages.length} 条消息
+          </div>
+        )}
         {messages.map((msg) => (
           <MessageBubble key={msg.message_id} message={msg} />
         ))}

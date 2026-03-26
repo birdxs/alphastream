@@ -10,11 +10,20 @@ import { Input } from "@/components/ui/input";
 import { Plus, X, MessageSquare, Star } from "lucide-react";
 import Link from "next/link";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 export default function WatchlistPage() {
   const { items, addItem, removeItem } = useWatchlistStore();
   const [newCode, setNewCode] = useState("");
+  const [longPressItem, setLongPressItem] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleTouchStart = (code: string) => {
+    longPressTimer.current = setTimeout(() => setLongPressItem(code), 500);
+  };
+  const handleTouchEnd = () => {
+    clearTimeout(longPressTimer.current);
+  };
 
   const handleAdd = () => {
     if (newCode) {
@@ -53,7 +62,13 @@ export default function WatchlistPage() {
           ) : (
             <div className="space-y-1">
               {items.map(item => (
-                <div key={item.code} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group">
+                <div
+                  key={item.code}
+                  className="relative flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                  onTouchStart={() => handleTouchStart(item.code)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchCancel={handleTouchEnd}
+                >
                   <div>
                     <span className="font-medium">{item.name}</span>
                     <span className="text-xs text-muted-foreground ml-2">{item.code}</span>
@@ -71,6 +86,16 @@ export default function WatchlistPage() {
                       <X className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </div>
+                  {longPressItem === item.code && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border rounded-lg shadow-lg z-10 py-1 animate-fade-in">
+                      <Link href={`/?stock=${item.code}`} className="block w-full px-4 py-2 text-sm hover:bg-accent text-left">
+                        🤖 AI分析
+                      </Link>
+                      <button className="w-full px-4 py-2 text-sm hover:bg-accent text-left text-red-500" onClick={() => { removeItem(item.code); setLongPressItem(null); }}>
+                        🗑️ 删除
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

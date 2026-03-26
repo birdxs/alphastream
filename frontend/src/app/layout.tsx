@@ -4,7 +4,6 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -13,7 +12,8 @@ import { KeyboardShortcuts } from "@/components/common/keyboard-shortcuts";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { NetworkStatus } from "@/components/common/network-status";
 
-const inter = Inter({ subsets: ["latin"] });
+// 使用系统字体栈，避免Google Fonts CDN依赖
+const fontClassName = "font-sans";
 
 export const metadata: Metadata = {
   title: "智能金融分析 — AI-Native",
@@ -27,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${fontClassName} antialiased`}>
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-[100] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2">
           跳到主内容
         </a>

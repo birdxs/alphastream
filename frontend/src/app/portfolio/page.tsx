@@ -115,6 +115,17 @@ export default function PortfolioPage() {
         </Card>
       )}
 
+      {/* AI分析全部持仓 */}
+      {holdings.length > 0 && (
+        <div className="flex justify-end">
+          <Link href={`/?stock=${holdings.map(h => h.code).join(',')}`}>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+              🤖 AI分析全部持仓
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* 持仓列表 */}
       <Card>
         <CardHeader><CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4"/>持仓明细</CardTitle></CardHeader>

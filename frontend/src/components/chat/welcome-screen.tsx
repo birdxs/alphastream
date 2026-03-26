@@ -49,6 +49,21 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
           ))}
         </div>
 
+        <div className="mt-6 pt-4 border-t">
+          <p className="text-xs text-muted-foreground mb-2 text-center">📰 热门分析</p>
+          <div className="flex gap-2 justify-center">
+            {["沪深300走势", "北向资金动向", "热门板块轮动"].map(topic => (
+              <button
+                key={topic}
+                onClick={() => onQuestionSelect(topic, {})}
+                className="text-[10px] px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted text-muted-foreground transition-colors"
+              >
+                {topic}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <p className="text-[10px] text-muted-foreground">
           输入 <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">/</kbd> 查看快捷命令 · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">Enter</kbd> 发送 · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">Shift+Enter</kbd> 换行
         </p>

@@ -95,6 +95,23 @@ export default function SettingsPage() {
           <div className="flex justify-between"><span>技术栈</span><span>Next.js + Flask + LangGraph</span></div>
         </CardContent>
       </Card>
+      {/* 关于 */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">关于</CardTitle></CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            AI-Native 智能金融分析平台，基于多Agent协作系统，提供专业级投资决策支持。
+          </p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {['Next.js', 'React', 'TradingView', 'LangGraph', 'Flask', 'OpenAI'].map(tech => (
+              <span key={tech} className="px-2 py-0.5 bg-muted rounded-full text-[10px]">{tech}</span>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground/50 mt-2">
+            ⚠️ AI生成的内容仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

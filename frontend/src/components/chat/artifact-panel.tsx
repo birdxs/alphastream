@@ -6,8 +6,10 @@
 "use client";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { ArtifactRenderer } from "./artifact-renderer";
 import { AgentLogDrawer } from "@/components/agent/agent-log-drawer";
+import { Trash2 } from "lucide-react";
 
 export function ArtifactPanel() {
   const artifacts = useChatStore(s => s.artifacts);
@@ -19,6 +21,12 @@ export function ArtifactPanel() {
         <div className="flex items-center gap-2">
           {artifacts.length > 0 && (
             <span className="text-xs text-muted-foreground">{artifacts.length}个组件</span>
+          )}
+          {artifacts.length > 0 && (
+            <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => useChatStore.getState().clearArtifacts()}>
+              <Trash2 className="h-3 w-3" />
+              清空
+            </Button>
           )}
           <AgentLogDrawer />
         </div>
