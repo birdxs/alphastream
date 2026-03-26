@@ -1308,6 +1308,30 @@ def cancel_scan(task_id):
         return jsonify({'message': '任务已取消'})
 
 
+@app.route('/api/market_indices', methods=['GET'])
+def get_market_indices():
+    """获取主要市场指数实时行情（上证/深证/创业板/沪深300）"""
+    try:
+        import akshare as ak
+        df = ak.stock_zh_index_spot_em()
+        target_codes = ['000001', '399001', '399006', '000300']
+        result = []
+        for code in target_codes:
+            row = df[df['代码'] == code]
+            if not row.empty:
+                r = row.iloc[0]
+                result.append({
+                    'name': str(r['名称']),
+                    'code': code,
+                    'price': float(r['最新价']),
+                    'change_pct': float(r['涨跌幅'])
+                })
+        return jsonify({'indices': result})
+    except Exception as e:
+        app.logger.error(f"获取市场指数失败: {e}")
+        return jsonify({'indices': []})
+
+
 @app.route('/api/index_stocks', methods=['GET'])
 def get_index_stocks():
     """获取指数成分股 - 使用DataProvider统一数据层"""

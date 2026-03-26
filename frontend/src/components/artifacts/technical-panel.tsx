@@ -25,16 +25,16 @@ export function TechnicalPanelArtifact({ data }: Props) {
   const score = Number(data.score || 50);
   const scoreColor =
     score >= 80
-      ? "text-green-500"
+      ? "text-[#46BEA3]"
       : score >= 60
-        ? "text-blue-500"
+        ? "text-[#3737CC]"
         : score >= 40
-          ? "text-yellow-500"
-          : "text-red-500";
+          ? "text-[#F59E0B]"
+          : "text-[#FF8767]";
 
   const indicators = [
     { label: "RSI", value: data.rsi, format: (v: number) => {
-      const color = v > 70 ? 'text-red-500' : v < 30 ? 'text-green-500' : '';
+      const color = v > 70 ? 'text-[#FF8767]' : v < 30 ? 'text-[#46BEA3]' : '';
       const label = v > 70 ? ' 超买' : v < 30 ? ' 超卖' : '';
       return <span className={color}>{v?.toFixed(1)}{label}</span>;
     }},
@@ -42,8 +42,8 @@ export function TechnicalPanelArtifact({ data }: Props) {
       const icon = v === '金叉' ? '🔺' : v === '死叉' ? '🔻' : '';
       return <span>{icon} {v}</span>;
     }},
-    { label: "\u8D8B\u52BF", value: data.trend },
-    { label: "\u6210\u4EA4\u91CF", value: data.volume_status },
+    { label: "趋势", value: data.trend },
+    { label: "成交量", value: data.volume_status },
   ].filter((i) => i.value != null);
 
   return (
@@ -66,12 +66,12 @@ export function TechnicalPanelArtifact({ data }: Props) {
         <div
           className={`h-2.5 rounded-full transition-all duration-700 ${
             score >= 80
-              ? "bg-green-500"
+              ? "bg-[#46BEA3]"
               : score >= 60
-                ? "bg-blue-500"
+                ? "bg-[#3737CC]"
                 : score >= 40
-                  ? "bg-yellow-500"
-                  : "bg-red-500"
+                  ? "bg-[#F59E0B]"
+                  : "bg-[#FF8767]"
           }`}
           style={{ width: `${score}%` }}
         />
@@ -80,7 +80,7 @@ export function TechnicalPanelArtifact({ data }: Props) {
       {/* 指标网格 */}
       <div className="grid grid-cols-2 gap-2">
         {indicators.map(({ label, value, format }) => (
-          <div key={label} className="flex justify-between items-center bg-muted/50 rounded px-3 py-2">
+          <div key={label} className="flex justify-between items-center bg-white/[0.04] rounded px-3 py-2">
             <span className="text-xs text-muted-foreground">{label}</span>
             <span className="text-sm font-mono font-medium">
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -92,13 +92,13 @@ export function TechnicalPanelArtifact({ data }: Props) {
 
       {/* 价格&支撑阻力 */}
       {(data.price || data.support_level || data.resistance_level) && (
-        <div className="flex justify-between text-sm pt-1 border-t">
+        <div className="flex justify-between text-sm pt-1 border-t border-white/[0.08]">
           {data.support_level && (
-            <span className="stock-down">\u652F\u6491 {data.support_level}</span>
+            <span className="stock-down">支撑 {data.support_level}</span>
           )}
-          {data.price && <span className="font-bold">\u5F53\u524D {data.price}</span>}
+          {data.price && <span className="font-bold">当前 {data.price}</span>}
           {data.resistance_level && (
-            <span className="stock-up">\u963B\u529B {data.resistance_level}</span>
+            <span className="stock-up">阻力 {data.resistance_level}</span>
           )}
         </div>
       )}
