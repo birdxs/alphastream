@@ -18,11 +18,17 @@ export interface SSEHandlers {
 }
 
 // Artifact类型
+export interface ArtifactSource {
+  name: string;
+  type: string;
+}
+
 export interface Artifact {
   type: 'artifact';
   artifact_type: ArtifactType;
   title: string;
   data: Record<string, unknown>;
+  sources?: ArtifactSource[];
   metadata?: { source_tool: string; stock_code: string; generated_at: string };
 }
 

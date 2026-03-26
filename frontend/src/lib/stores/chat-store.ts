@@ -60,6 +60,7 @@ export const useChatStore = create<ChatState>()(
       partialize: (state) => ({
         activeConversationId: state.activeConversationId,
         conversations: state.conversations,
+        messages: state.messages,
       }),
     }
   )

@@ -42,9 +42,10 @@ const artifactMeta: Record<
 
 interface Props {
   message: ChatMessage;
+  onRegenerate?: () => void;
 }
 
-export const MessageBubble = memo(function MessageBubble({ message }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, onRegenerate }: Props) {
   const isUser = message.role === "user";
   const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
 
@@ -67,7 +68,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
           className={`inline-block text-sm px-4 py-2.5 max-w-[90%] shadow-sm ${
             isUser
               ? "bg-gradient-to-br from-[#3737CC] to-[#4F4FE6] text-white rounded-2xl rounded-br-md"
-              : "bg-white/[0.04] backdrop-blur-sm border border-white/[0.08] text-foreground rounded-2xl rounded-bl-md"
+              : "glass-gradient-border bg-white/[0.04] backdrop-blur-sm text-foreground rounded-2xl rounded-bl-md"
           }`}
         >
           {isUser ? (
@@ -100,17 +101,46 @@ export const MessageBubble = memo(function MessageBubble({ message }: Props) {
           </div>
         )}
 
-        {/* 数据溯源引用 */}
-        {!isUser && message.artifacts && message.artifacts.length > 0 && (
-          <div className="text-[10px] text-[#555570] mt-1.5">
-            数据来源: akshare · 东方财富 · 财联社
-          </div>
-        )}
+        {/* 数据溯源引用 — 从artifacts动态提取唯一来源 */}
+        {!isUser && message.artifacts && message.artifacts.length > 0 && (() => {
+          const seen = new Set<string>();
+          const uniqueSources: { name: string; type: string }[] = [];
+          for (const art of message.artifacts) {
+            if (art.sources) {
+              for (const src of art.sources) {
+                if (!seen.has(src.name)) {
+                  seen.add(src.name);
+                  uniqueSources.push(src);
+                }
+              }
+            }
+          }
+          if (uniqueSources.length === 0) return null;
+          return (
+            <div className="text-[10px] text-[#8888A0] mt-1.5">
+              数据来源:{" "}
+              {uniqueSources.map((src, idx) => (
+                <span
+                  key={src.name}
+                  className="cursor-default hover:text-[#6B5EE4] transition-colors"
+                  title={src.type}
+                >
+                  <span className="text-[#6B5EE4] font-medium">[{idx + 1}]</span>
+                  {src.name}
+                  {idx < uniqueSources.length - 1 ? " " : ""}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* AI消息：重新生成按钮 */}
         {!isUser && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 mt-1.5">
-            <button className="text-[10px] text-muted-foreground hover:text-primary hover:bg-white/[0.06] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors">
+            <button
+              onClick={onRegenerate}
+              className="text-[10px] text-muted-foreground hover:text-primary hover:bg-white/[0.06] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors"
+            >
               <RefreshCw className="h-2.5 w-2.5" /> 重新生成
             </button>
           </div>

@@ -23,6 +23,17 @@ ARTIFACT_TYPE_MAP = {
     "get_risk_assessment": "risk_gauge",
 }
 
+# 数据溯源映射：工具名称 → 数据来源列表
+ARTIFACT_SOURCE_MAP = {
+    "get_stock_data": [{"name": "东方财富", "type": "行情数据"}],
+    "get_technical_indicators": [{"name": "akshare", "type": "技术分析"}],
+    "get_fundamental_data": [{"name": "东方财富", "type": "财务数据"}, {"name": "巨潮资讯", "type": "年报"}],
+    "get_capital_flow": [{"name": "东方财富", "type": "资金流向"}],
+    "get_stock_news": [{"name": "财联社", "type": "新闻"}, {"name": "东方财富", "type": "新闻"}],
+    "get_risk_assessment": [{"name": "akshare", "type": "风险模型"}],
+    "search_web": [{"name": "Bing", "type": "网络搜索"}],
+}
+
 # 中文标题映射
 ARTIFACT_TITLE_MAP = {
     "candlestick_chart": "K线走势图",
@@ -65,6 +76,7 @@ def execute_tool_with_artifact(tool_name: str, arguments: dict) -> Tuple[str, Op
         "artifact_type": artifact_type,
         "title": f"{stock_code} {ARTIFACT_TITLE_MAP.get(artifact_type, tool_name)}",
         "data": structured_data,
+        "sources": ARTIFACT_SOURCE_MAP.get(tool_name, []),
         "metadata": {
             "source_tool": tool_name,
             "stock_code": stock_code,
