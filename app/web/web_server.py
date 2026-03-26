@@ -2530,17 +2530,28 @@ def ai_chat_stream():
             return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
 
         try:
-            # 构建消息历史
-            history = conv_mgr.get_messages_for_ai(conversation_id, max_messages=10)
+            # 构建消息历史 — 跨会话记忆增强
+            # 加载对话中除当前消息外的最近5条历史消息作为上下文
+            all_history = conv_mgr.get_messages_for_ai(conversation_id, max_messages=6)
+            # 分离历史消息（排除刚保存的当前用户消息）和当前消息
+            if all_history and all_history[-1].get('role') == 'user' and all_history[-1].get('content') == message:
+                prior_history = all_history[:-1][-5:]  # 最近5条历史消息
+                current_msg = [all_history[-1]]
+            else:
+                prior_history = all_history[-5:]
+                current_msg = [{"role": "user", "content": message}]
 
             # 系统提示
+            history_hint = ""
+            if prior_history:
+                history_hint = "\n你可以参考之前的对话历史来保持上下文连贯性。"
             system_prompt = f"""你是专业的AI金融分析助手。你可以使用工具获取股票数据进行分析。
 当用户提到股票代码时，请使用对应工具获取实时数据后给出专业分析。
 当前关注股票: {stock_code or '未指定'}
 市场类型: {market_type}
-请用中文回复，分析要专业、数据要准确。"""
+请用中文回复，分析要专业、数据要准确。{history_hint}"""
 
-            messages = [{"role": "system", "content": system_prompt}] + history
+            messages = [{"role": "system", "content": system_prompt}] + prior_history + current_msg
             # 保存原始messages副本，降级时使用（chat_with_tools_stream会修改messages）
             original_messages = [dict(m) for m in messages]
 
