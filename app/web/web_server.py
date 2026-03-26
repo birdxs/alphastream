@@ -722,7 +722,9 @@ def make_cache_key_with_stock():
 def start_stock_analysis():
     """启动个股分析任务"""
     try:
-        data = request.json
+        data = request.get_json(silent=True)
+        if not data or not isinstance(data, dict):
+            return jsonify({'error': '请求体必须为有效的JSON格式'}), 400
         stock_code = data.get('stock_code')
         market_type = data.get('market_type', 'A')
 
@@ -1377,13 +1379,19 @@ def market_stream():
     from flask import Response
 
     def generate():
-        while True:
-            try:
-                data = _fetch_market_indices_data()
-                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-            except Exception:
-                yield f"data: {json.dumps({'indices': []})}\n\n"
-            time.sleep(10)
+        try:
+            while True:
+                try:
+                    data = _fetch_market_indices_data()
+                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                except Exception:
+                    yield f"data: {json.dumps({'indices': []})}\n\n"
+                time.sleep(10)
+        except GeneratorExit:
+            # 客户端断开SSE连接，优雅退出
+            app.logger.debug("市场数据SSE连接已断开")
+        except Exception as e:
+            app.logger.warning(f"市场数据SSE流异常退出: {e}")
 
     return Response(
         generate(),
@@ -2472,7 +2480,9 @@ def mcp_call_tool():
     """调用MCP工具"""
     try:
         from app.mcp.stock_data_server import handle_mcp_tool_call
-        data = request.json
+        data = request.get_json(silent=True)
+        if not data or not isinstance(data, dict):
+            return jsonify({'error': '请求体必须为有效的JSON格式'}), 400
         tool_name = data.get('tool')
         arguments = data.get('arguments', {})
         if not tool_name:
@@ -2480,7 +2490,8 @@ def mcp_call_tool():
         result = handle_mcp_tool_call(tool_name, arguments)
         return jsonify({'result': result})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"MCP工具调用失败: {traceback.format_exc()}")
+        return jsonify({'error': '工具调用失败，请稍后重试'}), 500
 
 
 # ===== 多模态图片上传接口 =====
@@ -2493,6 +2504,13 @@ def upload_image():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': '未选择文件'}), 400
+    # 校验文件大小（最大10MB）
+    MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+    if file_size > MAX_IMAGE_SIZE:
+        return jsonify({'error': f'文件大小超过限制（最大10MB），当前: {round(file_size / 1024 / 1024, 1)}MB'}), 413
     # 校验文件类型
     allowed_ext = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
     ext = os.path.splitext(file.filename)[1].lower()
@@ -2526,15 +2544,19 @@ def ai_chat_stream():
     from app.core.conversation import get_conversation_manager
     from app.core.event_bus import get_event_bus
 
-    data = request.json
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({'error': '请求体必须为有效的JSON格式'}), 400
+
     message = data.get('message', '')
     conversation_id = data.get('conversation_id', '')
     stock_code = data.get('stock_code', '')
     market_type = data.get('market_type', 'A')
     research_depth = data.get('research_depth', 3)
 
-    if not message:
+    if not message or not isinstance(message, str) or not message.strip():
         return jsonify({'error': '请输入消息'}), 400
+    message = message.strip()
 
     client = get_ai_client()
     if not client:
@@ -2555,6 +2577,16 @@ def ai_chat_stream():
     def generate():
         """SSE事件生成器"""
         import json as _json
+
+        # AI对话总超时（120秒）
+        AI_CHAT_TIMEOUT = 120
+        chat_start_time = time.time()
+
+        def check_timeout():
+            """检查是否超时，超时则抛出TimeoutError"""
+            elapsed = time.time() - chat_start_time
+            if elapsed > AI_CHAT_TIMEOUT:
+                raise TimeoutError(f"AI对话处理超时（已耗时{int(elapsed)}秒，限制{AI_CHAT_TIMEOUT}秒）")
 
         def emit(event_type, data):
             return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
@@ -2604,6 +2636,7 @@ def ai_chat_stream():
                     full_content += data['content']
 
             # 执行流式AI对话（带工具调用，模型不支持时降级）
+            check_timeout()
             content, tools_log, error = None, [], None
             try:
                 content, tools_log, error = chat_with_tools_stream(
@@ -2687,9 +2720,14 @@ def ai_chat_stream():
                 'follow_up_questions': follow_ups
             })
 
+        except TimeoutError as te:
+            app.logger.warning(f"AI对话超时: {te}")
+            yield emit('error', {'code': 'TIMEOUT', 'message': 'AI响应超时，请稍后重试或缩短问题长度'})
+        except GeneratorExit:
+            app.logger.debug("AI对话SSE连接已断开")
         except Exception as e:
-            logger.error(f"AI对话流式处理失败: {e}")
-            yield emit('error', {'code': 'STREAM_ERROR', 'message': str(e)})
+            app.logger.error(f"AI对话流式处理失败: {traceback.format_exc()}")
+            yield emit('error', {'code': 'STREAM_ERROR', 'message': 'AI服务处理异常，请稍后重试'})
 
     return Response(
         stream_with_context(generate()),
@@ -2755,7 +2793,9 @@ def ai_agent_analyze_stream():
     import queue
     import threading
 
-    data = request.json
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({'error': '请求体必须为有效的JSON格式'}), 400
     stock_code = data.get('stock_code', '')
     market_type = data.get('market_type', 'A')
     research_depth = data.get('research_depth', 3)
