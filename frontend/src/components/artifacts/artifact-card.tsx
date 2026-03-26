@@ -1,11 +1,12 @@
 // Input: title、icon(ReactNode)、children、defaultExpanded
-// Output: 可折叠/全屏/导出的Dark Glassmorphism Artifact卡片容器（glass-enter入场 + 全屏过渡 + 折叠高度动画）
+// Output: 可折叠/全屏/导出的Dark Glassmorphism Artifact卡片容器（glass-enter入场 + 全屏过渡 + 折叠高度动画 + 导出下拉菜单含复制/截图）
 // Pos: artifact-renderer.tsx的外层包装，提供卡片操作能力
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState, useRef, useEffect, ReactNode } from "react";
-import { Maximize2, Minimize2, ChevronUp, ChevronDown, Download } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, ReactNode } from "react";
+import { Maximize2, Minimize2, ChevronUp, ChevronDown, Download, Copy, Camera } from "lucide-react";
+import { useToast } from "@/components/common/toast-provider";
 
 interface Props {
   title: string;
@@ -31,7 +32,10 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [fullscreen, setFullscreen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | undefined>(undefined);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   // 测量内容高度用于折叠动画
   useEffect(() => {
@@ -40,12 +44,46 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
     }
   }, [children, expanded]);
 
-  const handleExport = () => {
+  // 点击外部关闭导出菜单
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [exportMenuOpen]);
+
+  const handleCopyData = useCallback(() => {
     const text = document.getElementById(`artifact-${title}`)?.innerText;
     if (text) {
-      navigator.clipboard.writeText(text).catch(() => {});
+      navigator.clipboard.writeText(text).then(
+        () => toast("已复制到剪贴板", "success"),
+        () => toast("复制失败", "error"),
+      );
     }
-  };
+    setExportMenuOpen(false);
+  }, [title, toast]);
+
+  const handleSaveImage = useCallback(async () => {
+    setExportMenuOpen(false);
+    const el = document.getElementById(`artifact-${title}`);
+    if (!el) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const html2canvas = (await import(/* webpackIgnore: true */ "html2canvas" as string)).default as (el: HTMLElement, opts: Record<string, unknown>) => Promise<HTMLCanvasElement>;
+      const canvas = await html2canvas(el, { backgroundColor: "#0A0A1A", scale: 2 });
+      const link = document.createElement("a");
+      link.download = `${title.replace(/\s+/g, "_")}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      toast("图片已保存", "success");
+    } catch {
+      toast("浏览器不支持截图导出", "error");
+    }
+  }, [title, toast]);
 
   return (
     <>
@@ -86,13 +124,34 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {confidence !== undefined && <ConfidenceBadge value={confidence} />}
-            <button
-              className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
-              onClick={handleExport}
-              title="导出"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </button>
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
+                onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                title="导出"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+              {/* 导出下拉菜单 — 毛玻璃 */}
+              {exportMenuOpen && (
+                <div className="absolute right-0 top-8 z-50 min-w-[150px] rounded-xl border border-white/[0.12] bg-[#14142B]/80 backdrop-blur-2xl shadow-2xl shadow-black/40 py-1 animate-[glass-enter_150ms_ease-out_both]">
+                  <button
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-white/[0.08] transition-colors"
+                    onClick={handleCopyData}
+                  >
+                    <Copy className="h-3.5 w-3.5 text-[#8888A0]" />
+                    复制数据
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-white/[0.08] transition-colors"
+                    onClick={handleSaveImage}
+                  >
+                    <Camera className="h-3.5 w-3.5 text-[#8888A0]" />
+                    保存图片
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setFullscreen(true)}

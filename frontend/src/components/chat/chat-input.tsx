@@ -1,15 +1,41 @@
-// Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调
-// Output: 聊天输入框UI（含股票代码快捷选择、市场切换、自选按钮、停止生成按钮、自动增高）
+// Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调、文件附件、语音输入
+// Output: 聊天输入框UI（含股票代码快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览、语音录入）
 // Pos: chat-panel.tsx的子组件，负责用户输入与发送
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
+import { useToast } from "@/components/common/toast-provider";
 import { CommandPalette } from "./command-palette";
-import { Send, Square, Star } from "lucide-react";
+import { Send, Square, Star, Paperclip, Mic, X } from "lucide-react";
+
+// ── 附件类型 ──
+interface AttachedFile {
+  file: File;
+  previewUrl: string | null; // 图片有 objectURL，PDF 为 null
+}
+
+// ── 语音识别类型（兼容 webkit 前缀） ──
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((e: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null;
+  onerror: ((e: unknown) => void) | null;
+  onend: (() => void) | null;
+}
+
+function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === "undefined") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
 
 interface Props {
   onSend: (message: string, options: { stock_code?: string; market_type?: string }) => void;
@@ -20,9 +46,17 @@ export function ChatInput({ onSend, onStop }: Props) {
   const [input, setInput] = useState("");
   const [stockCode, setStockCode] = useState("");
   const [marketType, setMarketType] = useState("A");
+  const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [isListening, setIsListening] = useState(false);
   const isStreaming = useChatStore(s => s.isStreaming);
   const { addItem, hasItem } = useWatchlistStore();
+  const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  // 检测浏览器是否支持语音识别
+  const speechSupported = typeof window !== "undefined" && getSpeechRecognition() !== null;
 
   // P2: 流式结束后自动聚焦输入框
   useEffect(() => {
@@ -52,10 +86,79 @@ export function ChatInput({ onSend, onStop }: Props) {
     }
   }, []);
 
+  // ── 附件处理 ──
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newAttachments: AttachedFile[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isImage = file.type.startsWith("image/");
+      newAttachments.push({
+        file,
+        previewUrl: isImage ? URL.createObjectURL(file) : null,
+      });
+    }
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    // 重置 input 以允许再次选择同一文件
+    e.target.value = "";
+  }, []);
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => {
+      const removed = prev[index];
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
+  // 清理 objectURL
+  useEffect(() => {
+    return () => {
+      attachments.forEach((a) => {
+        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── 语音识别 ──
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const SpeechRec = getSpeechRecognition();
+    if (!SpeechRec) return;
+    const recognition = new SpeechRec();
+    recognition.lang = "zh-CN";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (e) => {
+      const transcript = e.results[0]?.[0]?.transcript ?? "";
+      if (transcript) {
+        setInput((prev) => prev + transcript);
+      }
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening]);
+
   const handleSend = () => {
     const msg = input.trim();
     if (!msg || isStreaming) return;
     setInput("");
+    // 清理附件（当前仅前端展示，后端暂不支持上传）
+    attachments.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
+    setAttachments([]);
     const codeMatch = msg.match(/(\d{6})/);
     const code = codeMatch ? codeMatch[1] : stockCode;
     if (code) setStockCode(code);
@@ -131,7 +234,68 @@ export function ChatInput({ onSend, onStop }: Props) {
           onSelect={(cmd) => setInput(cmd)}
           visible={input.startsWith("/")}
         />
+
+        {/* 附件预览区 */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {attachments.map((att, idx) => (
+              <div
+                key={idx}
+                className="relative group flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.06] backdrop-blur-xl shadow-sm max-w-[180px]"
+              >
+                {att.previewUrl ? (
+                  <img
+                    src={att.previewUrl}
+                    alt={att.file.name}
+                    className="h-10 w-10 rounded-lg object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-lg bg-white/[0.08] flex items-center justify-center text-[10px] font-mono text-muted-foreground/70 shrink-0">
+                    PDF
+                  </div>
+                )}
+                <span className="text-[11px] text-muted-foreground/80 truncate">
+                  {att.file.name}
+                </span>
+                <button
+                  onClick={() => removeAttachment(idx)}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[#0A0A1A] border border-white/[0.15] flex items-center justify-center text-muted-foreground/70 hover:text-[#EF4444] hover:border-[#EF4444]/30 transition-colors opacity-0 group-hover:opacity-100"
+                  aria-label="移除附件"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 语音聆听提示 */}
+        {isListening && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] text-xs font-medium animate-pulse">
+            <Mic className="h-3.5 w-3.5" />
+            正在聆听...
+          </div>
+        )}
+
         <div className="flex gap-2 items-end">
+          {/* 附件按钮 */}
+          <button
+            className="rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-white/[0.06] transition-all duration-200"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="添加附件"
+            title="上传图片或PDF"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
           <div className="flex-1 relative">
             <textarea
               ref={textareaRef}
@@ -147,6 +311,23 @@ export function ChatInput({ onSend, onStop }: Props) {
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />
           </div>
+
+          {/* 语音按钮 — 不支持时隐藏 */}
+          {speechSupported && (
+            <button
+              className={`rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center transition-all duration-200 ${
+                isListening
+                  ? 'bg-[#EF4444] text-white shadow-lg shadow-[#EF4444]/30 animate-pulse'
+                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-white/[0.06]'
+              }`}
+              onClick={toggleListening}
+              aria-label={isListening ? "停止录音" : "语音输入"}
+              title={isListening ? "停止录音" : "语音输入"}
+            >
+              <Mic className="h-4 w-4" />
+            </button>
+          )}
+
           {isStreaming ? (
             <Button
               size="icon"

@@ -59,6 +59,13 @@
    ═══════════════════════════════════════════════ */
 :root {
   --radius: 0.5rem;
+  /* ── 间距Token (V7) ── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
   --background: #ffffff;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -618,7 +625,23 @@
 }
 
 /* ═══════════════════════════════════════════════
-   RESPONSIVE
+   ELEVATION — 阴影层次系统 (V5)
+   ═══════════════════════════════════════════════ */
+.elevation-1 { box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.elevation-2 { box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+.elevation-3 { box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.elevation-4 { box-shadow: 0 16px 48px rgba(0,0,0,0.5); }
+
+/* ═══════════════════════════════════════════════
+   TYPOGRAPHY — 字体层级 (V6)
+   ═══════════════════════════════════════════════ */
+.text-caption { font-size: 10px; line-height: 1.4; }
+.text-body    { font-size: 14px; line-height: 1.5; }
+.text-heading { font-size: 16px; line-height: 1.3; font-weight: 600; }
+.text-display { font-size: 28px; line-height: 1.2; font-weight: 700; }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — 响应式断点 (V12)
    ═══════════════════════════════════════════════ */
 @media (max-width: 640px) {
   .hide-mobile { display: none !important; }
@@ -631,6 +654,15 @@
 }
 @media (min-width: 641px) {
   .show-mobile-only { display: none !important; }
+}
+@media (min-width: 768px) {
+  /* md断点 — 平板及以上 */
+}
+@media (min-width: 1280px) {
+  /* xl断点 — 大屏 */
+}
+@media (min-width: 1920px) {
+  /* 2xl断点 — 超宽屏 */
 }
 
 /* ═══════════════════════════════════════════════

@@ -78,7 +78,7 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
   const useVirtualScroll = messages.length > 50;
 
   return (
-    <ScrollArea className="flex-1 p-4" ref={containerRef}>
+    <ScrollArea className="flex-1 p-4 relative" ref={containerRef}>
       <div className="space-y-4" ref={scrollAreaRef} onScroll={handleScroll} role="log" aria-live="polite" aria-label="对话消息">
         {messages.length > 30 && (
           <div className="text-center text-[10px] text-muted-foreground py-1">
@@ -140,7 +140,7 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
       </div>
       {!isAtBottom && messages.length > 0 && (
         <button
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in"
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in"
           onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
         >
           ↓ 新消息
