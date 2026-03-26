@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Search, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity } from "lucide-react";
 
 export function Navbar() {
   const theme = useThemeStore(s => s.theme);
@@ -34,6 +34,12 @@ export function Navbar() {
             <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
               <MessageSquare className="h-3.5 w-3.5" />
               对话
+            </Button>
+          </Link>
+          <Link href="/dashboard">
+            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              看板
             </Button>
           </Link>
         </div>
