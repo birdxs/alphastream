@@ -1,14 +1,14 @@
 // Input: portfolio-store持久化持仓数据 + 用户操作
-// Output: 投资组合管理页面，含添加/删除持仓、盈亏概况、跳转AI分析
+// Output: 投资组合管理页面，含添加/删除持仓、盈亏概况、跳转AI分析，Dark Glassmorphism风格
 // Pos: /portfolio路由页面
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare, Briefcase } from "lucide-react";
+import { GlassCard } from "@/components/common/glass-card";
 import { usePortfolioStore } from "@/lib/stores/portfolio-store";
 import { formatPrice, formatPercent, getPriceColorClass } from "@/lib/utils/format";
 import Link from "next/link";
@@ -55,131 +55,124 @@ export default function PortfolioPage() {
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">投资组合</h1>
-        <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+        <Button size="sm" onClick={() => setShowAdd(!showAdd)} className="bg-white/[0.08] border border-white/[0.12] hover:bg-white/[0.15] text-foreground">
           <Plus className="h-4 w-4 mr-1" />添加持仓
         </Button>
       </div>
 
       {/* 组合概况 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">总市值</p>
-            <p className="text-2xl font-bold font-finance">&yen;{formatPrice(totalValue)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">总盈亏</p>
-            <p className={`text-2xl font-bold font-finance ${getPriceColorClass(totalPnl)}`}>
-              {totalPnl >= 0 ? '+' : ''}{formatPrice(totalPnl)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">收益率</p>
-            <p className={`text-2xl font-bold font-finance flex items-center gap-1 ${getPriceColorClass(totalReturn)}`}>
-              {totalReturn >= 0 ? <TrendingUp className="h-5 w-5"/> : <TrendingDown className="h-5 w-5"/>}
-              {formatPercent(totalReturn)}
-            </p>
-          </CardContent>
-        </Card>
+        <GlassCard padding="md">
+          <p className="text-sm text-white/50">总市值</p>
+          <p className="text-2xl font-bold font-mono">&yen;{formatPrice(totalValue)}</p>
+        </GlassCard>
+        <GlassCard padding="md">
+          <p className="text-sm text-white/50">总盈亏</p>
+          <p className={`text-2xl font-bold font-mono ${getPriceColorClass(totalPnl)}`}>
+            {totalPnl >= 0 ? '+' : ''}{formatPrice(totalPnl)}
+          </p>
+        </GlassCard>
+        <GlassCard padding="md">
+          <p className="text-sm text-white/50">收益率</p>
+          <p className={`text-2xl font-bold font-mono flex items-center gap-1 ${getPriceColorClass(totalReturn)}`}>
+            {totalReturn >= 0 ? <TrendingUp className="h-5 w-5"/> : <TrendingDown className="h-5 w-5"/>}
+            {formatPercent(totalReturn)}
+          </p>
+        </GlassCard>
       </div>
 
       {/* 添加表单 */}
       {showAdd && (
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <label htmlFor="stock-code" className="text-xs text-muted-foreground">股票代码</label>
-                <Input id="stock-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={formError.includes('代码') ? 'border-red-500' : ''} />
-              </div>
-              <div className="flex-1">
-                <label htmlFor="stock-name" className="text-xs text-muted-foreground">股票名称</label>
-                <Input id="stock-name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="贵州茅台" />
-              </div>
-              <div className="flex-1">
-                <label htmlFor="stock-shares" className="text-xs text-muted-foreground">持股数量</label>
-                <Input id="stock-shares" value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={formError.includes('数量') ? 'border-red-500' : ''} />
-              </div>
-              <div className="flex-1">
-                <label htmlFor="stock-cost" className="text-xs text-muted-foreground">成本价</label>
-                <Input id="stock-cost" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={formError.includes('成本') ? 'border-red-500' : ''} />
-              </div>
-              <Button onClick={handleAdd}>添加</Button>
+        <GlassCard padding="md">
+          <div className="flex gap-2 items-end flex-wrap">
+            <div className="flex-1 min-w-[120px]">
+              <label htmlFor="stock-code" className="text-xs text-white/50">股票代码</label>
+              <Input id="stock-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('代码') ? 'border-red-500' : ''}`} />
             </div>
-            {formError && <p className="text-xs text-red-500 mt-1">{formError}</p>}
-          </CardContent>
-        </Card>
+            <div className="flex-1 min-w-[120px]">
+              <label htmlFor="stock-name" className="text-xs text-white/50">股票名称</label>
+              <Input id="stock-name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="贵州茅台" className="bg-white/[0.04] border-white/[0.1]" />
+            </div>
+            <div className="flex-1 min-w-[100px]">
+              <label htmlFor="stock-shares" className="text-xs text-white/50">持股数量</label>
+              <Input id="stock-shares" value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('数量') ? 'border-red-500' : ''}`} />
+            </div>
+            <div className="flex-1 min-w-[100px]">
+              <label htmlFor="stock-cost" className="text-xs text-white/50">成本价</label>
+              <Input id="stock-cost" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={`bg-white/[0.04] border-white/[0.1] ${formError.includes('成本') ? 'border-red-500' : ''}`} />
+            </div>
+            <Button onClick={handleAdd} className="bg-[#3737CC] hover:bg-[#4545DD] text-white">添加</Button>
+          </div>
+          {formError && <p className="text-xs text-red-500 mt-1">{formError}</p>}
+        </GlassCard>
       )}
 
       {/* AI分析全部持仓 */}
       {holdings.length > 0 && (
         <div className="flex justify-end">
           <Link href={`/?stock=${holdings.map(h => h.code).join(',')}`}>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-              🤖 AI分析全部持仓
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs bg-white/[0.04] border-white/[0.12] hover:bg-white/[0.1]">
+              AI分析全部持仓
             </Button>
           </Link>
         </div>
       )}
 
       {/* 持仓列表 */}
-      <Card>
-        <CardHeader><CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4"/>持仓明细</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {holdings.length === 0 ? (
-              <div className="text-center py-12 space-y-4">
-                <Briefcase className="h-12 w-12 text-muted-foreground/30 mx-auto" />
-                <p className="text-muted-foreground">暂无持仓</p>
-                <p className="text-sm text-muted-foreground/60">点击上方"添加持仓"开始管理您的投资组合</p>
-              </div>
-            ) : (
-              holdings.map(h => {
-                const pnl = ((h.currentPrice || h.costPrice) - h.costPrice) * h.shares;
-                const pnlPct = ((h.currentPrice || h.costPrice) - h.costPrice) / h.costPrice * 100;
-                return (
-                  <div key={h.code} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <span className="font-medium">{h.name}</span>
-                        <Link href={`/?stock=${h.code}`} className="text-xs text-primary hover:underline ml-2" title="跳转AI分析">
-                          {h.code}
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div className="text-right">
-                        <p className="font-mono">{h.shares}股</p>
-                        <p className="text-xs text-muted-foreground">成本 {formatPrice(h.costPrice)}</p>
-                      </div>
-                      <div className="text-right w-24">
-                        <p className={`font-finance ${getPriceColorClass(pnl)}`}>
-                          {formatPrice(pnl)}
-                        </p>
-                        <p className={`text-xs ${getPriceColorClass(pnlPct)}`}>
-                          {formatPercent(pnlPct)}
-                        </p>
-                      </div>
-                      <Link href={`/?stock=${h.code}`}>
-                        <Button variant="ghost" size="icon" title="AI分析">
-                          <MessageSquare className="h-4 w-4" />
-                        </Button>
+      <GlassCard padding="lg">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 className="h-4 w-4 text-white/60" />
+          <h2 className="text-sm font-semibold">持仓明细</h2>
+        </div>
+        <div className="space-y-2">
+          {holdings.length === 0 ? (
+            <div className="text-center py-12 space-y-4">
+              <Briefcase className="h-12 w-12 text-white/15 mx-auto" />
+              <p className="text-white/40">暂无持仓</p>
+              <p className="text-sm text-white/25">点击上方"添加持仓"开始管理您的投资组合</p>
+            </div>
+          ) : (
+            holdings.map(h => {
+              const pnl = ((h.currentPrice || h.costPrice) - h.costPrice) * h.shares;
+              const pnlPct = ((h.currentPrice || h.costPrice) - h.costPrice) / h.costPrice * 100;
+              return (
+                <div key={h.code} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.07] transition-all duration-200">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <span className="font-medium">{h.name}</span>
+                      <Link href={`/stock/${h.code}`} className="text-xs text-[#6B5EE4] hover:underline ml-2 font-mono" title="查看详情">
+                        {h.code}
                       </Link>
-                      <Button variant="ghost" size="icon" onClick={() => removeHolding(h.code)}>
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
-                      </Button>
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                  <div className="flex items-center gap-6 text-sm">
+                    <div className="text-right">
+                      <p className="font-mono">{h.shares}股</p>
+                      <p className="text-xs text-white/40">成本 {formatPrice(h.costPrice)}</p>
+                    </div>
+                    <div className="text-right w-24">
+                      <p className={`font-mono ${getPriceColorClass(pnl)}`}>
+                        {formatPrice(pnl)}
+                      </p>
+                      <p className={`text-xs font-mono ${getPriceColorClass(pnlPct)}`}>
+                        {formatPercent(pnlPct)}
+                      </p>
+                    </div>
+                    <Link href={`/?stock=${h.code}`}>
+                      <Button variant="ghost" size="icon" title="AI分析" className="hover:bg-white/[0.08]">
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <Button variant="ghost" size="icon" onClick={() => removeHolding(h.code)} className="hover:bg-white/[0.08]">
+                      <Trash2 className="h-4 w-4 text-white/40 hover:text-red-400" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </GlassCard>
     </div>
   );
 }

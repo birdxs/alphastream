@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter } from "lucide-react";
+import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter, Briefcase, Star, BarChart3 } from "lucide-react";
 
 export function Navbar() {
   const theme = useThemeStore(s => s.theme);
@@ -46,6 +46,24 @@ export function Navbar() {
             <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
               <Filter className="h-3.5 w-3.5" />
               选股
+            </Button>
+          </Link>
+          <Link href="/portfolio">
+            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
+              <Briefcase className="h-3.5 w-3.5" />
+              持仓
+            </Button>
+          </Link>
+          <Link href="/watchlist">
+            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
+              <Star className="h-3.5 w-3.5" />
+              自选
+            </Button>
+          </Link>
+          <Link href="/compare">
+            <Button variant="ghost" size="sm" className="h-8 px-2.5 gap-1.5 text-xs text-foreground hover:bg-white/[0.08]">
+              <BarChart3 className="h-3.5 w-3.5" />
+              对比
             </Button>
           </Link>
         </div>
