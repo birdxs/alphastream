@@ -55,6 +55,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
   const theme = useThemeStore(s => s.theme);
   const stockColorScheme = useThemeStore(s => s.stockColorScheme);
   const [timeRange, setTimeRange] = useState('120');
+  const [drawMode, setDrawMode] = useState<'none' | 'trendline'>('none');
   const [crosshairData, setCrosshairData] = useState<{
     time: string; open: number; high: number; low: number; close: number; volume?: number;
   } | null>(null);
@@ -267,8 +268,21 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
               {r.label}
             </button>
           ))}
+          <button
+            onClick={() => setDrawMode(drawMode === 'trendline' ? 'none' : 'trendline')}
+            className={`px-2 py-0.5 text-[10px] rounded transition-colors ml-2 ${
+              drawMode === 'trendline' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            趋势线
+          </button>
         </div>
       </div>
+      {drawMode === 'trendline' && (
+        <div className="text-[10px] text-primary bg-primary/10 rounded px-2 py-1 mb-1">
+          趋势线模式：点击图表两个点绘制趋势线（开发中）
+        </div>
+      )}
       {crosshairData && (
         <div className="flex items-center gap-3 text-[10px] font-finance text-muted-foreground mb-1">
           <span>日期: {crosshairData.time}</span>

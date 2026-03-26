@@ -1,0 +1,12 @@
+{
+  "name": "AI金融分析",
+  "short_name": "AI金融",
+  "description": "AI-Native智能金融分析平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a1a",
+  "theme_color": "#2563eb",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }
+  ]
+}

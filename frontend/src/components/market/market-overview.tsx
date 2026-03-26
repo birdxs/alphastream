@@ -26,16 +26,26 @@ export function MarketOverview() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 尝试从后端获取最新数据
     const fetchData = async () => {
       try {
-        await apiClient.get<{news: unknown[]}>('/api/latest_news?limit=1');
-        // 如果有数据返回则更新，否则使用默认值
-        setLoading(false);
+        // 尝试从后端获取上证指数数据
+        const data = await apiClient.get<Record<string, unknown>>('/api/stock_data?stock_code=000001&market_type=A&period=1m');
+        if (data && Array.isArray((data as Record<string, unknown>).data) && ((data as Record<string, unknown>).data as unknown[]).length > 0) {
+          const dataArr = (data as Record<string, unknown>).data as Record<string, number>[];
+          const latest = dataArr[dataArr.length - 1];
+          const prev = dataArr.length > 1 ? dataArr[dataArr.length - 2] : latest;
+          setIndices(prevIndices => prevIndices.map((idx, i) => {
+            if (i === 0 && latest.close) {
+              return { ...idx, price: latest.close, change: ((latest.close - prev.close) / prev.close) * 100 };
+            }
+            return idx;
+          }));
+        }
       } catch {
-        setLoading(false);
         setError('市场数据加载失败');
         setTimeout(() => setError(null), 3000);
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();

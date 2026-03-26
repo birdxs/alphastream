@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, Briefcase, Star, Settings, Search } from "lucide-react";
+import { Sun, Moon, MessageSquare, Briefcase, Star, Settings, Search, BarChart3 } from "lucide-react";
 import { MobileDrawer } from "./mobile-drawer";
 
 export function Navbar() {
@@ -37,6 +37,12 @@ export function Navbar() {
             <Button variant="ghost" size="sm" className="gap-2">
               <Star className="h-4 w-4" />
               <span>自选股</span>
+            </Button>
+          </Link>
+          <Link href="/compare">
+            <Button variant="ghost" size="sm" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">对比</span>
             </Button>
           </Link>
         </div>

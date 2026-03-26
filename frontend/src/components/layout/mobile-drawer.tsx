@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Menu, MessageSquare, Briefcase, Star, Settings, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Menu, MessageSquare, Briefcase, Star, Settings, Plus, Trash2, ChevronDown, ChevronRight, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api/client";
 import { useChatStore } from "@/lib/stores/chat-store";
@@ -96,6 +96,7 @@ export function MobileDrawer() {
             { href: "/", icon: MessageSquare, label: "AI对话" },
             { href: "/portfolio", icon: Briefcase, label: "投资组合" },
             { href: "/watchlist", icon: Star, label: "自选股" },
+            { href: "/compare", icon: BarChart3, label: "多股对比" },
             { href: "/settings", icon: Settings, label: "设置" },
           ].map(item => (
             <Link key={item.href} href={item.href}>

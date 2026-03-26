@@ -18,6 +18,7 @@ const fontClassName = "font-sans";
 export const metadata: Metadata = {
   title: "智能金融分析 — AI-Native",
   description: "AI驱动的智能金融分析平台",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

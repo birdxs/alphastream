@@ -6,11 +6,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, BarChart3, Briefcase, Settings } from "lucide-react";
+import { MessageSquare, BarChart3, Briefcase, Settings, Star } from "lucide-react";
 
 const TABS = [
   { href: "/", icon: MessageSquare, label: "对话" },
-  { href: "/watchlist", icon: BarChart3, label: "自选" },
+  { href: "/watchlist", icon: Star, label: "自选" },
+  { href: "/compare", icon: BarChart3, label: "对比" },
   { href: "/portfolio", icon: Briefcase, label: "组合" },
   { href: "/settings", icon: Settings, label: "设置" },
 ];
