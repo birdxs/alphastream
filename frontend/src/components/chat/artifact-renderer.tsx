@@ -45,7 +45,33 @@ const ScoreRadarArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[300px] animate-pulse bg-muted rounded" />
+      <div className="h-[300px] bg-muted rounded relative overflow-hidden flex items-center justify-center">
+        {/* 六边形轮廓圆形骨架 */}
+        <svg viewBox="0 0 200 200" className="w-40 h-40 animate-pulse">
+          <polygon
+            points="100,20 175,60 175,140 100,180 25,140 25,60"
+            fill="none"
+            stroke="currentColor"
+            className="text-white/[0.08]"
+            strokeWidth="2"
+          />
+          <polygon
+            points="100,50 150,75 150,125 100,150 50,125 50,75"
+            fill="none"
+            stroke="currentColor"
+            className="text-white/[0.06]"
+            strokeWidth="1.5"
+          />
+          <polygon
+            points="100,80 125,90 125,110 100,120 75,110 75,90"
+            fill="none"
+            stroke="currentColor"
+            className="text-white/[0.04]"
+            strokeWidth="1"
+          />
+          <circle cx="100" cy="100" r="4" className="fill-white/[0.08]" />
+        </svg>
+      </div>
     ),
   }
 );
@@ -58,7 +84,16 @@ const CapitalFlowArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] animate-pulse bg-muted rounded" />
+      <div className="h-[200px] bg-muted rounded relative overflow-hidden flex items-end justify-center gap-3 px-6 pb-4 pt-8">
+        {/* 资金流向柱状图骨架：5根高低不同的竖条 */}
+        {[65, 85, 45, 70, 55].map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 bg-white/[0.04] rounded-t animate-pulse"
+            style={{ height: `${h}%` }}
+          />
+        ))}
+      </div>
     ),
   }
 );
@@ -71,7 +106,20 @@ const InvestorPersonasArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[300px] animate-pulse bg-muted rounded" />
+      <div className="h-[300px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        {/* 投资者画像：4个并排卡片轮廓 */}
+        <div className="grid grid-cols-4 gap-3 h-full">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white/[0.04] rounded-lg p-3 flex flex-col items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/[0.06]" />
+              <div className="w-3/4 h-2.5 bg-white/[0.06] rounded" />
+              <div className="w-full h-2 bg-white/[0.04] rounded" />
+              <div className="w-2/3 h-2 bg-white/[0.04] rounded" />
+              <div className="mt-auto w-full h-6 bg-white/[0.04] rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
     ),
   }
 );
@@ -84,7 +132,14 @@ const DecisionCardArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] animate-pulse bg-muted rounded" />
+      <div className="h-[200px] bg-muted rounded relative overflow-hidden p-6 flex flex-col items-center justify-center gap-4 animate-pulse">
+        {/* 决策卡：居中大文字 + 进度条 */}
+        <div className="w-20 h-10 bg-white/[0.06] rounded-lg" />
+        <div className="w-32 h-3 bg-white/[0.04] rounded" />
+        <div className="w-48 h-2.5 bg-white/[0.04] rounded-full">
+          <div className="w-1/2 h-full bg-white/[0.06] rounded-full" />
+        </div>
+      </div>
     ),
   }
 );
@@ -97,7 +152,23 @@ const TechnicalPanelArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] animate-pulse bg-muted rounded" />
+      <div className="h-[200px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        {/* 技术面板：大数字 + 进度条 + 2x2网格 */}
+        <div className="flex flex-col gap-3 h-full">
+          <div className="w-24 h-8 bg-white/[0.06] rounded" />
+          <div className="w-full h-2 bg-white/[0.04] rounded-full">
+            <div className="w-2/3 h-full bg-white/[0.06] rounded-full" />
+          </div>
+          <div className="grid grid-cols-2 gap-2 flex-1">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white/[0.04] rounded p-2 flex flex-col gap-1.5">
+                <div className="w-1/2 h-2 bg-white/[0.06] rounded" />
+                <div className="w-3/4 h-2.5 bg-white/[0.06] rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     ),
   }
 );
@@ -110,7 +181,20 @@ const SearchResultsArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[150px] animate-pulse bg-muted rounded" />
+      <div className="h-[150px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        {/* 搜索结果：3个链接条 */}
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="w-4 h-4 rounded bg-white/[0.06] shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-2.5 bg-white/[0.06] rounded" style={{ width: `${75 - i * 10}%` }} />
+                <div className="h-2 bg-white/[0.04] rounded w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     ),
   }
 );
@@ -123,7 +207,24 @@ const FundamentalScorecardArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] animate-pulse bg-muted rounded" />
+      <div className="h-[200px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        {/* 基本面评分卡：圆形评分 + 3行指标条 */}
+        <div className="flex gap-4 h-full items-center">
+          <div className="w-20 h-20 rounded-full border-4 border-white/[0.08] shrink-0 flex items-center justify-center">
+            <div className="w-10 h-5 bg-white/[0.06] rounded" />
+          </div>
+          <div className="flex-1 flex flex-col gap-2.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-1">
+                <div className="w-16 h-2 bg-white/[0.06] rounded" />
+                <div className="w-full h-2.5 bg-white/[0.04] rounded-full">
+                  <div className="h-full bg-white/[0.06] rounded-full" style={{ width: `${60 + i * 15}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     ),
   }
 );
@@ -136,7 +237,19 @@ const RiskRadarArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[300px] animate-pulse bg-muted rounded" />
+      <div className="h-[300px] bg-muted rounded relative overflow-hidden p-4 flex flex-col items-center gap-4 animate-pulse">
+        {/* 风险雷达：圆形 + 下方2行条 */}
+        <svg viewBox="0 0 160 160" className="w-32 h-32">
+          <circle cx="80" cy="80" r="60" fill="none" stroke="currentColor" className="text-white/[0.08]" strokeWidth="2" />
+          <circle cx="80" cy="80" r="40" fill="none" stroke="currentColor" className="text-white/[0.06]" strokeWidth="1.5" />
+          <circle cx="80" cy="80" r="20" fill="none" stroke="currentColor" className="text-white/[0.04]" strokeWidth="1" />
+          <circle cx="80" cy="80" r="4" className="fill-white/[0.08]" />
+        </svg>
+        <div className="w-full space-y-2">
+          <div className="w-3/4 h-2.5 bg-white/[0.04] rounded mx-auto" />
+          <div className="w-1/2 h-2.5 bg-white/[0.04] rounded mx-auto" />
+        </div>
+      </div>
     ),
   }
 );
@@ -149,7 +262,18 @@ const NewsFeedArtifact = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[200px] animate-pulse bg-muted rounded" />
+      <div className="h-[200px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        {/* 新闻列表：3行文本骨架（标题+描述+时间） */}
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white/[0.04] rounded p-3 space-y-2">
+              <div className="h-3 bg-white/[0.06] rounded" style={{ width: `${80 - i * 8}%` }} />
+              <div className="h-2 bg-white/[0.04] rounded w-full" />
+              <div className="h-2 bg-white/[0.04] rounded w-20" />
+            </div>
+          ))}
+        </div>
+      </div>
     ),
   }
 );
@@ -160,7 +284,7 @@ interface Props {
 
 export function ArtifactRenderer({ artifact }: Props) {
   return (
-    <ArtifactCard title={artifact.title} icon={getArtifactIcon(artifact.artifact_type)}>
+    <ArtifactCard title={artifact.title} icon={getArtifactIcon(artifact.artifact_type)} confidence={artifact.confidence}>
       {renderArtifactContent(artifact)}
     </ArtifactCard>
   );

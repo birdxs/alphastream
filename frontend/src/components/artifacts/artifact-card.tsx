@@ -12,9 +12,22 @@ interface Props {
   icon?: ReactNode;
   children: ReactNode;
   defaultExpanded?: boolean;
+  confidence?: number;
 }
 
-export function ArtifactCard({ title, icon, children, defaultExpanded = true }: Props) {
+function ConfidenceBadge({ value }: { value: number }) {
+  const label = value >= 0.8 ? "高置信" : value >= 0.5 ? "中置信" : "低置信";
+  const dotColor = value >= 0.8 ? "text-[#10B981]" : value >= 0.5 ? "text-amber-400" : "text-[#EF4444]";
+  const bgColor = value >= 0.8 ? "bg-[#10B981]/10" : value >= 0.5 ? "bg-amber-400/10" : "bg-[#EF4444]/10";
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${bgColor} ${dotColor}`}>
+      <span className="text-[8px]">{"\u25CF"}</span>
+      {label}
+    </span>
+  );
+}
+
+export function ArtifactCard({ title, icon, children, defaultExpanded = true, confidence }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [fullscreen, setFullscreen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | undefined>(undefined);
@@ -71,7 +84,8 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true }: 
             {icon && <span className="text-[#3737CC]/80">{icon}</span>}
             <span className="truncate">{title}</span>
           </div>
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {confidence !== undefined && <ConfidenceBadge value={confidence} />}
             <button
               className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
               onClick={handleExport}

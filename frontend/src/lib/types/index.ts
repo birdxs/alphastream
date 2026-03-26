@@ -28,6 +28,7 @@ export interface Artifact {
   artifact_type: ArtifactType;
   title: string;
   data: Record<string, unknown>;
+  confidence?: number;
   sources?: ArtifactSource[];
   metadata?: { source_tool: string; stock_code: string; generated_at: string };
 }

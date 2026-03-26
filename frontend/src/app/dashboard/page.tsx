@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Plus,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
 
 /* ---------- 类型定义 ---------- */
@@ -332,6 +333,67 @@ export default function DashboardPage() {
                     className="px-2 py-1 text-[10px] bg-white/[0.04] border border-white/[0.06] rounded-md text-[#8888A0] hover:text-[#F0F0F5] hover:bg-white/[0.08] transition-colors"
                   >
                     {code}
+                  </button>
+                ))}
+              </div>
+            </GlassCard>
+          </div>
+
+          {/* ========== 2.5 今日关注推荐 ========== */}
+          <div className="md:col-span-2 lg:col-span-3">
+            <GlassCard padding="lg" hover={false}>
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                <h2 className="text-sm font-semibold text-[#F0F0F5]">
+                  今日关注
+                </h2>
+                <span className="text-[10px] text-[#8888A0] ml-1">
+                  {watchItems.length > 0
+                    ? `基于您关注的${watchItems.slice(0, 3).map((w) => w.name || w.code).join("、")}，推荐关注`
+                    : "热门推荐"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {(watchItems.length > 0
+                  ? (() => {
+                      // 基于自选股行业关联推荐（简易策略：展示自选股本身 + 经典蓝筹补位）
+                      const watched = new Set(watchItems.map((w) => w.code));
+                      const defaults = [
+                        { code: "600519", name: "贵州茅台" },
+                        { code: "000858", name: "五粮液" },
+                        { code: "601318", name: "中国平安" },
+                        { code: "300750", name: "宁德时代" },
+                      ];
+                      const extra = defaults.filter((d) => !watched.has(d.code));
+                      return [
+                        ...watchItems.slice(0, 4).map((w) => ({ code: w.code, name: w.name || w.code })),
+                        ...extra,
+                      ].slice(0, 6);
+                    })()
+                  : [
+                      { code: "600519", name: "贵州茅台" },
+                      { code: "000858", name: "五粮液" },
+                      { code: "601318", name: "中国平安" },
+                    ]
+                ).map((item) => (
+                  <button
+                    key={item.code}
+                    onClick={() => router.push(`/stock/${item.code}`)}
+                    className="group flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-[#6B5EE4]/30 backdrop-blur-sm transition-all duration-200"
+                  >
+                    <div className="h-8 w-8 rounded-lg bg-[#6B5EE4]/10 flex items-center justify-center text-[#6B5EE4] text-xs font-bold shrink-0">
+                      {item.name.slice(0, 1)}
+                    </div>
+                    <div className="text-left min-w-0">
+                      <p className="text-xs font-medium text-[#F0F0F5] truncate group-hover:text-white transition-colors">
+                        {item.name}
+                      </p>
+                      <p className="text-[10px] text-[#8888A0] font-mono">
+                        {item.code}
+                      </p>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-[#8888A0] group-hover:text-[#6B5EE4] ml-auto shrink-0 transition-colors" />
                   </button>
                 ))}
               </div>

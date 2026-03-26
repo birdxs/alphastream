@@ -34,6 +34,17 @@ ARTIFACT_SOURCE_MAP = {
     "search_web": [{"name": "Bing", "type": "网络搜索"}],
 }
 
+# AI置信度映射：工具名称 → 默认置信度 (0.0-1.0)
+ARTIFACT_CONFIDENCE_MAP = {
+    "get_stock_data": 0.95,        # 数据类，高置信度
+    "get_technical_indicators": 0.75,  # 模型计算
+    "get_fundamental_data": 0.90,  # 财务数据
+    "get_capital_flow": 0.85,      # 资金数据
+    "get_stock_news": 0.80,        # 新闻
+    "get_risk_assessment": 0.70,   # 风险模型
+    "search_web": 0.60,            # 网络搜索
+}
+
 # 中文标题映射
 ARTIFACT_TITLE_MAP = {
     "candlestick_chart": "K线走势图",
@@ -76,6 +87,7 @@ def execute_tool_with_artifact(tool_name: str, arguments: dict) -> Tuple[str, Op
         "artifact_type": artifact_type,
         "title": f"{stock_code} {ARTIFACT_TITLE_MAP.get(artifact_type, tool_name)}",
         "data": structured_data,
+        "confidence": ARTIFACT_CONFIDENCE_MAP.get(tool_name, 0.5),
         "sources": ARTIFACT_SOURCE_MAP.get(tool_name, []),
         "metadata": {
             "source_tool": tool_name,
