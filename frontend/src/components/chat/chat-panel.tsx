@@ -21,9 +21,9 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* 头部 */}
-      <div className="px-4 py-3 border-b flex items-center justify-between bg-background/95 backdrop-blur-sm">
+      <div className="px-4 py-3 border-b flex items-center justify-between bg-background/95 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           <h2 className="font-semibold text-sm">AI金融分析助手</h2>

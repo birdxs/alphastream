@@ -71,7 +71,7 @@ export function MarketOverview() {
   }, []);
 
   return (
-    <div ref={scrollRef} className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs"
+    <div ref={scrollRef} className="flex items-center gap-4 px-4 py-1.5 border-b bg-muted/30 overflow-x-auto text-xs shrink-0"
       style={{
         maskImage: 'linear-gradient(90deg, transparent, black 40px, black calc(100% - 40px), transparent)',
         WebkitMaskImage: 'linear-gradient(90deg, transparent, black 40px, black calc(100% - 40px), transparent)',

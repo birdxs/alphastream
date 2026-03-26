@@ -109,7 +109,7 @@ export function ConversationSidebar() {
 
   return (
     <div className="w-56 border-r flex flex-col bg-muted/20">
-      <div className="p-2 border-b flex items-center justify-between">
+      <div className="p-2 border-b flex items-center justify-between shrink-0">
         <Button variant="outline" size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
         </Button>
@@ -117,7 +117,7 @@ export function ConversationSidebar() {
           <ChevronLeft className="h-3 w-3" />
         </Button>
       </div>
-      <div className="px-2 py-1">
+      <div className="px-2 py-1 shrink-0">
         <input
           type="text"
           value={searchQuery}

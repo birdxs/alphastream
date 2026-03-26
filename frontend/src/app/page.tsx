@@ -17,11 +17,11 @@ export default function HomePage() {
   const [mobileTab, setMobileTab] = useState<'chat' | 'artifacts'>('chat');
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <MarketOverview />
 
       {/* 移动端Tab切换 */}
-      <div className="flex sm:hidden border-b">
+      <div className="flex sm:hidden border-b shrink-0">
         <Button
           variant="ghost"
           className={`flex-1 rounded-none h-10 gap-2 text-xs ${mobileTab === 'chat' ? 'border-b-2 border-primary' : ''}`}

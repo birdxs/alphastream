@@ -15,8 +15,8 @@ export function ArtifactPanel() {
   const artifacts = useChatStore(s => s.artifacts);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 border-b flex items-center justify-between">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="p-3 border-b flex items-center justify-between shrink-0">
         <h2 className="font-semibold text-sm">分析结果</h2>
         <div className="flex items-center gap-2">
           {artifacts.length > 0 && (
