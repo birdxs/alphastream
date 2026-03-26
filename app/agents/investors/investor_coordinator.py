@@ -38,7 +38,7 @@ class InvestorCoordinator:
 
         stock_code = state.get('stock_code', '未知')
         results = {}
-        execution_log = list(state.get('execution_log', []))
+        execution_log = []  # 仅收集本次新增条目，reducer会自动合并到state
 
         # 依次调用4个投资者人格Agent
         agents = [
@@ -57,11 +57,9 @@ class InvestorCoordinator:
                 if investor_key in result:
                     results[investor_key] = result[investor_key]
 
-                # 合并execution_log
+                # 合并子Agent的execution_log增量
                 if 'execution_log' in result:
-                    for entry in result['execution_log']:
-                        if entry not in execution_log:
-                            execution_log.append(entry)
+                    execution_log.extend(result['execution_log'])
 
             except Exception as e:
                 logger.error(f"[投资者协调器] {agent_cls.name} 执行异常: {e}")

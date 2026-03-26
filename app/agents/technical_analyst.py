@@ -73,7 +73,7 @@ class TechnicalAnalystAgent:
             return {
                 'technical_report': result,
                 'progress': 10.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '技术分析师', 'status': 'success', 'mode': 'ai_agent', 'tools_used': len(tool_log)}
                 ]
             }
@@ -86,7 +86,7 @@ class TechnicalAnalystAgent:
                 logger.error(f"技术分析降级也失败: {fallback_err}")
                 return {
                     'technical_report': {'error': str(e)},
-                    'execution_log': state.get('execution_log', []) + [
+                    'execution_log': [
                         {'agent': '技术分析师', 'status': 'failed', 'error': str(e)}
                     ]
                 }
@@ -185,7 +185,7 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     if 'error' in result:
         return {
             'technical_report': {'error': result['error']},
-            'execution_log': state.get('execution_log', []) + [
+            'execution_log': [
                 {'agent': '技术分析师', 'status': 'failed', 'mode': 'fallback', 'error': result['error']}
             ]
         }
@@ -228,7 +228,7 @@ MACD信号: {result.get('macd_signal', 'N/A')}
     return {
         'technical_report': result,
         'progress': 10.0,
-        'execution_log': state.get('execution_log', []) + [
+        'execution_log': [
             {'agent': '技术分析师', 'status': 'success', 'mode': 'fallback'}
         ]
     }

@@ -29,7 +29,7 @@ class BullResearcherAgent:
                 # State定义bull_case为str类型，不能返回dict
                 return {
                     'bull_case': 'AI客户端不可用，无法生成看多分析',
-                    'execution_log': state.get('execution_log', []) + [
+                    'execution_log': [
                         {'agent': '看多研究员', 'status': 'failed', 'error': 'AI客户端不可用'}
                     ]
                 }
@@ -83,7 +83,7 @@ class BullResearcherAgent:
                 # State定义bull_case为str类型，不能返回dict
                 return {
                     'bull_case': f'AI分析失败: {error}',
-                    'execution_log': state.get('execution_log', []) + [
+                    'execution_log': [
                         {'agent': '看多研究员', 'status': 'failed', 'error': str(error)}
                     ]
                 }
@@ -104,7 +104,7 @@ class BullResearcherAgent:
             return {
                 'bull_case': bull_case_text,
                 'progress': 50.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '看多研究员', 'status': 'success'}
                 ]
             }
@@ -114,7 +114,7 @@ class BullResearcherAgent:
             # State定义bull_case为str类型，不能返回dict
             return {
                 'bull_case': f'看多分析失败: {str(e)}',
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '看多研究员', 'status': 'failed', 'error': str(e)}
                 ]
             }

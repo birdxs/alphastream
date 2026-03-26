@@ -74,7 +74,7 @@ class ReflectionAgent:
         if not client:
             return {
                 'reflection': {'error': 'AI服务不可用'},
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '反思Agent', 'status': 'skipped'}
                 ]
             }
@@ -102,7 +102,7 @@ class ReflectionAgent:
         _save_reflection(stock_code, reflection)
 
         return {
-            'execution_log': state.get('execution_log', []) + [
+            'execution_log': [
                 {
                     'agent': '反思Agent',
                     'status': 'success',

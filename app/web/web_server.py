@@ -2731,6 +2731,24 @@ def ai_agent_analyze_stream():
                     'title': f'{stock_code} 投资决策',
                     'data': final_decision
                 })
+                # 投资者共识 artifact（depth>=5 时可用）
+                investor_consensus = result.get('investor_consensus')
+                if investor_consensus:
+                    yield emit('artifact', {
+                        'type': 'artifact',
+                        'artifact_type': 'investor_consensus',
+                        'title': f'{stock_code} 投资者共识',
+                        'data': investor_consensus
+                    })
+                # 投资者观点 artifact（depth>=5 时可用）
+                investor_opinions = result.get('investor_opinions')
+                if investor_opinions:
+                    yield emit('artifact', {
+                        'type': 'artifact',
+                        'artifact_type': 'investor_opinions',
+                        'title': f'{stock_code} 大师视角',
+                        'data': investor_opinions
+                    })
                 yield emit('done', {
                     'stock_code': stock_code,
                     'execution_log': result.get('execution_log', []),

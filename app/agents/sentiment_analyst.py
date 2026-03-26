@@ -104,7 +104,7 @@ class SentimentAnalystAgent:
             return {
                 'sentiment_report': result,
                 'progress': 40.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '舆情分析师', 'status': 'success'}
                 ]
             }
@@ -113,7 +113,7 @@ class SentimentAnalystAgent:
             logger.error(f"舆情分析失败: {e}")
             return {
                 'sentiment_report': {'error': str(e)},
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '舆情分析师', 'status': 'failed', 'error': str(e)}
                 ]
             }

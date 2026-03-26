@@ -158,7 +158,7 @@ class DamodaranAgent:
                     'details': analysis,
                     'raw_response': content
                 },
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '达摩达兰投资风格分析', 'status': 'success'}
                 ]
             }
@@ -178,7 +178,7 @@ def _error_result(error_msg: str, state: Dict[str, Any]) -> Dict[str, Any]:
             'reasoning': f'分析失败: {error_msg}',
             'error': error_msg
         },
-        'execution_log': state.get('execution_log', []) + [
+        'execution_log': [
             {'agent': '达摩达兰投资风格分析', 'status': 'failed', 'error': error_msg}
         ]
     }

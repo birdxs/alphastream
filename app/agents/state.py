@@ -10,8 +10,17 @@ from typing import TypedDict, Annotated, Optional, List, Dict, Any
 from langgraph.graph.message import add_messages
 
 
+def _progress_reducer(old: float, new: float) -> float:
+    """并发进度更新时取最大值，确保进度只向前推进"""
+    return max(old, new)
+
+
 class StockAnalysisState(TypedDict):
-    """股票分析Agent系统的共享状态"""
+    """股票分析Agent系统的共享状态
+
+    注意: progress / execution_log / errors 使用 Annotated reducer，
+    以支持 LangGraph 并行 fan-out 节点并发写入同一 key。
+    """
     # 输入参数
     stock_code: str
     market_type: str  # A, HK, US
@@ -42,7 +51,7 @@ class StockAnalysisState(TypedDict):
     # 路由决策（动态编排用）
     router_decision: Optional[str]  # 路由决策记录，如 "fast_fail" / "normal"
 
-    # 元数据
-    execution_log: List[Dict[str, Any]]
-    progress: float  # 0.0 - 100.0
-    errors: List[str]
+    # 元数据 — 使用 Annotated reducer 支持并行节点并发写入
+    execution_log: Annotated[List[Dict[str, Any]], operator.add]
+    progress: Annotated[float, _progress_reducer]  # 0.0 - 100.0
+    errors: Annotated[List[str], operator.add]

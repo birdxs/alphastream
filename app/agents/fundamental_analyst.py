@@ -87,7 +87,7 @@ class FundamentalAnalystAgent:
             return {
                 'fundamental_report': result,
                 'progress': 25.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '基本面分析师', 'status': 'success', 'mode': 'ai_agent', 'tools_used': len(tool_log)}
                 ]
             }
@@ -100,7 +100,7 @@ class FundamentalAnalystAgent:
                 logger.error(f"基本面分析降级也失败: {fallback_err}")
                 return {
                     'fundamental_report': {'error': str(e)},
-                    'execution_log': state.get('execution_log', []) + [
+                    'execution_log': [
                         {'agent': '基本面分析师', 'status': 'failed', 'error': str(e)}
                     ]
                 }
@@ -179,7 +179,7 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(score_result, dict) and 'error' in score_result:
         return {
             'fundamental_report': {'error': score_result['error']},
-            'execution_log': state.get('execution_log', []) + [
+            'execution_log': [
                 {'agent': '基本面分析师', 'status': 'failed', 'mode': 'fallback', 'error': score_result['error']}
             ]
         }
@@ -218,7 +218,7 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'fundamental_report': result,
         'progress': 25.0,
-        'execution_log': state.get('execution_log', []) + [
+        'execution_log': [
             {'agent': '基本面分析师', 'status': 'success', 'mode': 'fallback'}
         ]
     }

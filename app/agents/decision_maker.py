@@ -83,7 +83,7 @@ class DecisionMakerAgent:
                     'reasoning': 'AI服务不可用，建议持有观望'
                 },
                 'progress': 100.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '投资决策者', 'status': 'fallback', 'reason': 'no_ai_client'}
                 ]
             }
@@ -103,7 +103,7 @@ class DecisionMakerAgent:
                     'reasoning': f'决策分析出错: {error}'
                 },
                 'progress': 100.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '投资决策者', 'status': 'failed', 'error': str(error)}
                 ]
             }
@@ -125,7 +125,7 @@ class DecisionMakerAgent:
         return {
             'final_decision': decision,
             'progress': 100.0,
-            'execution_log': state.get('execution_log', []) + [
+            'execution_log': [
                 {'agent': '投资决策者', 'status': 'success'}
             ]
         }

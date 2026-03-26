@@ -29,7 +29,7 @@ class BearResearcherAgent:
                 # State定义bear_case为str类型，不能返回dict
                 return {
                     'bear_case': 'AI客户端不可用，无法生成看空分析',
-                    'execution_log': state.get('execution_log', []) + [
+                    'execution_log': [
                         {'agent': '看空研究员', 'status': 'failed', 'error': 'AI客户端不可用'}
                     ]
                 }
@@ -83,7 +83,7 @@ class BearResearcherAgent:
                 # State定义bear_case为str类型，不能返回dict
                 return {
                     'bear_case': f'AI分析失败: {error}',
-                    'execution_log': state.get('execution_log', []) + [
+                    'execution_log': [
                         {'agent': '看空研究员', 'status': 'failed', 'error': str(error)}
                     ]
                 }
@@ -103,7 +103,7 @@ class BearResearcherAgent:
             return {
                 'bear_case': bear_case_text,
                 'progress': 50.0,
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '看空研究员', 'status': 'success'}
                 ]
             }
@@ -113,7 +113,7 @@ class BearResearcherAgent:
             # State定义bear_case为str类型，不能返回dict
             return {
                 'bear_case': f'看空分析失败: {str(e)}',
-                'execution_log': state.get('execution_log', []) + [
+                'execution_log': [
                     {'agent': '看空研究员', 'status': 'failed', 'error': str(e)}
                 ]
             }
