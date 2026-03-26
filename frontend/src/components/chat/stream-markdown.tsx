@@ -15,44 +15,52 @@ interface Props {
 }
 
 const markdownComponents: Components = {
-  // 自定义代码块渲染
+  // 自定义代码块渲染 — glass效果
   code({ className, children, ...props }) {
     const isInline = !className;
     if (isInline) {
       return (
-        <code className="bg-white/[0.04] border border-white/[0.08] px-1 py-0.5 rounded text-xs font-mono" {...props}>
+        <code className="bg-[var(--glass-bg)] border border-[var(--glass-border)] px-1.5 py-0.5 rounded text-xs font-mono text-[var(--brand-primary-light,#4F4FE6)]" {...props}>
           {children}
         </code>
       );
     }
     return (
-      <pre className="bg-white/[0.04] border border-white/[0.08] rounded-lg p-3 overflow-x-auto">
-        <code className="text-xs font-mono" {...props}>
+      <pre className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-xl p-3 overflow-x-auto backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <code className="text-xs font-mono leading-relaxed" {...props}>
           {children}
         </code>
       </pre>
     );
   },
-  // 表格样式
+  // 表格样式 — glass效果
   table({ children }) {
     return (
-      <div className="overflow-x-auto my-2 rounded-lg border border-white/[0.08]">
+      <div className="overflow-x-auto my-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-sm">
         <table className="min-w-full text-sm">{children}</table>
       </div>
     );
   },
   th({ children }) {
     return (
-      <th className="border-b-2 border-white/[0.08] px-3 py-2 text-left font-semibold bg-white/[0.04] text-xs uppercase tracking-wider">
+      <th className="border-b border-[var(--glass-border)] px-3 py-2 text-left font-semibold bg-white/[0.04] text-xs uppercase tracking-wider text-[var(--text-secondary,#8888A0)]">
         {children}
       </th>
     );
   },
   td({ children }) {
-    return <td className="border-b border-white/[0.08] px-3 py-1.5 even:bg-white/[0.02] tabular-nums">{children}</td>;
+    return <td className="border-b border-[var(--glass-border)] px-3 py-1.5 even:bg-white/[0.02] tabular-nums">{children}</td>;
   },
   tr({ children }) {
-    return <tr className="hover:bg-white/[0.04] transition-colors">{children}</tr>;
+    return <tr className="hover:bg-[var(--glass-bg-hover)] transition-colors duration-200">{children}</tr>;
+  },
+  // 链接 — 品牌色
+  a({ href, children }) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-primary-light,#4F4FE6)] hover:text-[var(--brand-primary,#3737CC)] underline underline-offset-2 decoration-[var(--brand-primary,#3737CC)]/30 hover:decoration-[var(--brand-primary,#3737CC)]/60 transition-colors duration-200">
+        {children}
+      </a>
+    );
   },
   // 强调数字（金融数据高亮）
   strong({ children }) {

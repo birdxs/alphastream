@@ -19,7 +19,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold">设置</h1>
 
       {/* 外观设置 */}
-      <Card>
+      <Card className="glass-card">
         <CardHeader><CardTitle className="text-sm">外观</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -46,7 +46,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* 分析设置 */}
-      <Card>
+      <Card className="glass-card">
         <CardHeader><CardTitle className="text-sm">分析参数</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -60,7 +60,7 @@ export default function SettingsPage() {
                   key={d}
                   variant={researchDepth === d ? "default" : "outline"}
                   size="sm"
-                  className="w-8 h-8 p-0 font-mono"
+                  className={`w-8 h-8 p-0 font-mono ${researchDepth === d ? 'bg-[var(--brand-primary,#3737CC)] hover:bg-[var(--brand-primary-light,#4F4FE6)]' : ''}`}
                   onClick={() => setResearchDepth(d)}
                 >
                   {d}
@@ -77,7 +77,7 @@ export default function SettingsPage() {
               variant="outline"
               size="sm"
               onClick={() => setEnableMemory(!enableMemory)}
-              className={enableMemory ? 'text-green-500 border-green-500/50' : 'text-muted-foreground'}
+              className={enableMemory ? 'text-[var(--brand-primary-light,#4F4FE6)] border-[var(--brand-primary,#3737CC)]/50 bg-[var(--brand-primary,#3737CC)]/10' : 'text-muted-foreground'}
             >
               {enableMemory ? '已启用' : '已关闭'}
             </Button>
@@ -86,7 +86,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* 系统信息 */}
-      <Card>
+      <Card className="glass-card">
         <CardHeader><CardTitle className="text-sm">系统信息</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <div className="flex justify-between"><span>前端版本</span><span className="font-mono">v2.3.0-ai-native</span></div>
@@ -96,7 +96,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
       {/* 关于 */}
-      <Card>
+      <Card className="glass-card">
         <CardHeader><CardTitle className="text-sm">关于</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p className="text-muted-foreground">
@@ -104,11 +104,11 @@ export default function SettingsPage() {
           </p>
           <div className="flex flex-wrap gap-1.5 mt-2">
             {['Next.js', 'React', 'TradingView', 'LangGraph', 'Flask', 'OpenAI'].map(tech => (
-              <span key={tech} className="px-2 py-0.5 bg-muted rounded-full text-[10px]">{tech}</span>
+              <span key={tech} className="px-2 py-0.5 bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-full text-[10px]">{tech}</span>
             ))}
           </div>
           <p className="text-[10px] text-muted-foreground/50 mt-2">
-            ⚠️ AI生成的内容仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+            AI生成的内容仅供参考，不构成投资建议。投资有风险，入市需谨慎。
           </p>
         </CardContent>
       </Card>

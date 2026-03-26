@@ -57,22 +57,24 @@ export function CommandPalette({ input, onSelect, visible }: Props) {
   if (!visible || !input.startsWith("/") || filtered.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#0F0F23] border border-white/[0.1] rounded-xl shadow-2xl p-1 z-50">
+    <div className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--bg-surface-1,#0F0F23)] border border-[var(--glass-border)] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-xl p-1 z-50 animate-[glass-enter_200ms_ease-out_both]">
       {filtered.map((cmd, i) => (
         <button
           key={cmd.trigger}
-          className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between items-center transition-colors ${
-            i === activeIndex ? 'bg-[#3737CC]/15 border-l-2 border-[#3737CC]' : 'hover:bg-white/[0.06]'
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between items-center transition-all duration-200 ${
+            i === activeIndex
+              ? 'bg-[var(--brand-primary,#3737CC)]/15 border-l-2 border-[var(--brand-primary,#3737CC)] text-[var(--text-primary,#F0F0F5)]'
+              : 'hover:bg-[var(--glass-bg-hover)] border-l-2 border-transparent'
           }`}
           onClick={() => onSelect(cmd.example)}
         >
           <span>
             <span className="font-mono text-primary">{cmd.trigger}</span>
-            <span className="ml-2 text-[#8888A0]">
+            <span className="ml-2 text-[var(--text-secondary,#8888A0)]">
               {cmd.description}
             </span>
           </span>
-          <span className="text-xs text-[#8888A0]">{cmd.example}</span>
+          <span className="text-xs text-[var(--text-muted,#707088)]">{cmd.example}</span>
         </button>
       ))}
     </div>
