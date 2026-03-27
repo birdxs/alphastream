@@ -69,8 +69,8 @@ export function ArtifactPanel() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+      {/* Content — 填满剩余高度 */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gradient-to-b from-transparent to-[#06060F]/30">
         {artifacts.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-xs space-y-5">

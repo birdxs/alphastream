@@ -119,8 +119,8 @@ export default function HomePage() {
           aria-label="拖拽调整面板宽度"
           tabIndex={0}
         />
-        {/* Artifacts — fills remaining; 超宽屏2列grid */}
-        <div className="flex-1 flex flex-col min-h-0 2xl:grid 2xl:grid-cols-2 2xl:gap-2">
+        {/* Artifacts — fills remaining */}
+        <div className="flex-1 flex flex-col min-h-0">
           <ArtifactPanel />
         </div>
       </div>
