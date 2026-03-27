@@ -1,5 +1,5 @@
 // Input: theme-store状态 + usePathname路由
-// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，品牌色底部边线，当前路径高亮，移动端精简
+// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，品牌色底部边线，当前路径高亮，移动端精简。含7项导航(对话/看板/新闻/选股/持仓/自选/对比)
 // Pos: 页面顶部固定导航
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,11 +8,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter, Briefcase, Star, BarChart3 } from "lucide-react";
+import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter, Briefcase, Star, BarChart3, Newspaper } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "对话", icon: MessageSquare },
   { href: "/dashboard", label: "看板", icon: LayoutDashboard },
+  { href: "/news", label: "新闻", icon: Newspaper },
   { href: "/screener", label: "选股", icon: Filter },
   { href: "/portfolio", label: "持仓", icon: Briefcase },
   { href: "/watchlist", label: "自选", icon: Star },

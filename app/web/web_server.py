@@ -2055,6 +2055,56 @@ def get_latest_news():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/news_sentiment', methods=['GET'])
+def get_news_sentiment():
+    """获取新闻情绪分析统计"""
+    try:
+        days = request.args.get('days', 1, type=int)
+
+        news_list = news_fetcher.get_latest_news(days=days)
+        if not news_list:
+            return jsonify({'total': 0, 'bullish': 0, 'bearish': 0, 'neutral': 0, 'score': 5.0})
+
+        total = len(news_list)
+        # 简单情绪分类（基于关键词）
+        bullish_keywords = ['增长', '上涨', '利好', '突破', '创新高', '盈利', '分红', '超预期']
+        bearish_keywords = ['下跌', '利空', '下降', '亏损', '风险', '制裁', '暴跌', '减持']
+
+        bullish = 0
+        bearish = 0
+        for item in news_list:
+            content = ''
+            if isinstance(item, dict):
+                content = str(item.get('title', '')) + str(item.get('content', ''))
+            elif isinstance(item, str):
+                content = item
+
+            is_bull = any(k in content for k in bullish_keywords)
+            is_bear = any(k in content for k in bearish_keywords)
+
+            if is_bull and not is_bear:
+                bullish += 1
+            elif is_bear and not is_bull:
+                bearish += 1
+
+        neutral = total - bullish - bearish
+        score = round(5.0 + (bullish - bearish) / max(total, 1) * 5, 1)
+        score = max(1.0, min(10.0, score))
+
+        return jsonify({
+            'total': total,
+            'bullish': bullish,
+            'bearish': bearish,
+            'neutral': neutral,
+            'score': score,
+            'bullish_pct': round(bullish / max(total, 1) * 100),
+            'bearish_pct': round(bearish / max(total, 1) * 100),
+            'neutral_pct': round(neutral / max(total, 1) * 100)
+        })
+    except Exception as e:
+        app.logger.error(f"新闻情绪分析失败: {e}")
+        return jsonify({'total': 0, 'bullish': 0, 'bearish': 0, 'neutral': 0, 'score': 5.0})
+
 
 # --- Start of new FileSessionManager implementation ---
 class FileSessionManager:
