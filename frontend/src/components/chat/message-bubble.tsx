@@ -1,5 +1,5 @@
 // Input: ChatMessage对象（含role、content、artifacts、created_at）
-// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact专业badge、数据溯源引用、时间戳、新消息弹跳入场、AI消息hover复制按钮）
+// Output: 单条消息气泡UI（渐变头像、圆角气泡、artifact专业badge（可点击滚动至右栏对应卡片）、数据溯源引用、时间戳、新消息弹跳入场、AI消息hover复制按钮）
 // Pos: message-list.tsx的子组件，负责单条消息渲染
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -125,7 +125,24 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
                 <Badge
                   key={i}
                   variant="outline"
-                  className={`text-[10px] gap-1 rounded-md px-2 py-0.5 border ${meta.color}`}
+                  className={`text-[10px] gap-1 rounded-md px-2 py-0.5 border cursor-pointer hover:brightness-125 transition-all ${meta.color}`}
+                  onClick={() => {
+                    // 在右栏artifact面板中查找匹配的artifact卡片并滚动到可视区域
+                    // 先按类型精确匹配，遍历所有同类型artifact找到对应的DOM节点
+                    const candidates = document.querySelectorAll(`[id^="artifact-${art.artifact_type}-"]`);
+                    const target = candidates[0] as HTMLElement | null;
+                    if (target) {
+                      target.scrollIntoView({ behavior: "smooth", block: "center" });
+                      // 闪烁高亮提示用户
+                      target.style.outline = "2px solid rgba(55,55,204,0.6)";
+                      target.style.outlineOffset = "4px";
+                      target.style.borderRadius = "12px";
+                      setTimeout(() => {
+                        target.style.outline = "none";
+                        target.style.outlineOffset = "0";
+                      }, 1500);
+                    }
+                  }}
                 >
                   <Icon className="h-3 w-3" />
                   {art.title}
