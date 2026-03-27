@@ -1,18 +1,21 @@
-// Input: 后端 /api/latest_news 新闻数据
+// Input: 后端 /api/latest_news 新闻数据 + /api/news_sentiment 情绪统计
 // Output: AI新闻中心页面 — 左栏AI Sentiment Terminal + 右栏3个可视化图表卡片
 // Pos: app/news/page.tsx - AI新闻舆情分析主页面
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { apiClient } from "@/lib/api/client";
 
 /* ---------- 类型定义 ---------- */
 interface NewsItem {
   title: string;
   content?: string;
-  publish_time?: string;
+  datetime?: string;       // 后端返回 "2024-01-01 10:30:00"
+  date?: string;           // 后端返回 "2024-01-01"
+  time?: string;           // 后端返回 "10:30:00"
+  publish_time?: string;   // 兼容旧字段
   source?: string;
 }
 
@@ -21,23 +24,37 @@ interface NewsResponse {
   news: NewsItem[];
 }
 
-/* ---------- 情绪判定 ---------- */
+interface SentimentResponse {
+  total: number;
+  bullish: number;
+  bearish: number;
+  neutral: number;
+  score: number;
+  bullish_pct: number;
+  bearish_pct: number;
+  neutral_pct: number;
+}
+
+/* ---------- 情绪判定（单条新闻，用于终端显示） ---------- */
 const POSITIVE_KW = ["利好", "上涨", "增长", "突破", "新高", "回升", "大涨", "强势", "反弹", "看好", "利润", "盈利", "超预期"];
 const NEGATIVE_KW = ["利空", "下跌", "下滑", "暴跌", "亏损", "风险", "减持", "退市", "违规", "处罚", "警告", "萎缩"];
 
 function analyzeSentiment(text: string): "positive" | "negative" | "neutral" {
-  const combined = text;
-  const posCount = POSITIVE_KW.filter(kw => combined.includes(kw)).length;
-  const negCount = NEGATIVE_KW.filter(kw => combined.includes(kw)).length;
+  const posCount = POSITIVE_KW.filter(kw => text.includes(kw)).length;
+  const negCount = NEGATIVE_KW.filter(kw => text.includes(kw)).length;
   if (posCount > negCount) return "positive";
   if (negCount > posCount) return "negative";
   return "neutral";
 }
 
-function sentimentScore(sentiment: "positive" | "negative" | "neutral"): number {
-  if (sentiment === "positive") return 7.0 + Math.random() * 2.5;
-  if (sentiment === "negative") return 1.5 + Math.random() * 2.5;
-  return 4.5 + Math.random() * 1.5;
+/** 确定性评分：基于关键词命中数量，不再使用 Math.random() */
+function sentimentScore(text: string, sentiment: "positive" | "negative" | "neutral"): number {
+  const posHits = POSITIVE_KW.filter(kw => text.includes(kw)).length;
+  const negHits = NEGATIVE_KW.filter(kw => text.includes(kw)).length;
+  const hits = Math.min(posHits + negHits, 5); // cap at 5
+  if (sentiment === "positive") return 7.0 + hits * 0.5;
+  if (sentiment === "negative") return 4.0 - hits * 0.5;
+  return 5.0 + (posHits - negHits) * 0.3;
 }
 
 function extractStockCode(text: string): string | null {
@@ -61,6 +78,7 @@ export default function NewsPage() {
   const [displayedNews, setDisplayedNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [fadeIdx, setFadeIdx] = useState(-1);
+  const [sentimentData, setSentimentData] = useState<SentimentResponse | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const indexRef = useRef(0);
@@ -83,7 +101,21 @@ export default function NewsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchNews(); }, [fetchNews]);
+  /* 获取情绪统计（从后端API） */
+  const fetchSentiment = useCallback(async () => {
+    try {
+      const res = await apiClient.get<SentimentResponse>("/api/news_sentiment", {
+        days: "1",
+      });
+      if (res && typeof res.total === "number") {
+        setSentimentData(res);
+      }
+    } catch {
+      // 静默失败，前端降级计算
+    }
+  }, []);
+
+  useEffect(() => { fetchNews(); fetchSentiment(); }, [fetchNews, fetchSentiment]);
 
   /* 打字机效果：每3秒逐条添加 */
   useEffect(() => {
@@ -115,36 +147,62 @@ export default function NewsPage() {
     }
   }, [displayedNews]);
 
-  /* 计算情绪分布 */
-  const sentiments = displayedNews.map(n => analyzeSentiment(n.title + (n.content || "")));
-  const posCount = sentiments.filter(s => s === "positive").length;
-  const negCount = sentiments.filter(s => s === "negative").length;
-  const neuCount = sentiments.filter(s => s === "neutral").length;
-  const total = sentiments.length || 1;
-  const posPct = Math.round((posCount / total) * 100);
-  const negPct = Math.round((negCount / total) * 100);
-  const neuPct = 100 - posPct - negPct;
-  const avgScore = sentiments.length
-    ? sentiments.reduce((sum, s) => sum + sentimentScore(s), 0) / sentiments.length
-    : 5.0;
+  /* 计算情绪分布：优先使用API数据，降级用前端计算 */
+  const posPct = sentimentData ? sentimentData.bullish_pct : (() => {
+    const sentiments = displayedNews.map(n => analyzeSentiment(n.title + (n.content || "")));
+    const total = sentiments.length || 1;
+    return Math.round(sentiments.filter(s => s === "positive").length / total * 100);
+  })();
+  const negPct = sentimentData ? sentimentData.bearish_pct : (() => {
+    const sentiments = displayedNews.map(n => analyzeSentiment(n.title + (n.content || "")));
+    const total = sentiments.length || 1;
+    return Math.round(sentiments.filter(s => s === "negative").length / total * 100);
+  })();
+  const neuPct = sentimentData ? sentimentData.neutral_pct : (100 - posPct - negPct);
+  const avgScore = sentimentData ? sentimentData.score : 5.0;
 
-  /* 7日趋势Mock */
-  const trend7d = Array.from({ length: 7 }, (_, i) => {
+  /* 7日趋势：基于日期的确定性伪随机种子 */
+  const trend7d = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
     const label = `${d.getMonth() + 1}/${d.getDate()}`;
-    const val = 30 + Math.floor(Math.random() * 60);
+    // 基于日期的确定性哈希种子，避免每次渲染变化
+    const seed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    const val = 30 + ((seed * 7 + 13) % 60);
     return { label, val };
-  });
+  }), []);
   const trendMax = Math.max(...trend7d.map(t => t.val));
 
-  /* 格式化时间 */
-  const fmtTime = (t?: string) => {
-    if (!t) return "--:--";
-    try {
-      const d = new Date(t);
-      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    } catch { return "--:--"; }
+  /**
+   * 格式化时间：兼容后端返回的多种时间字段
+   * 优先级：datetime > date+time > publish_time
+   */
+  const fmtTime = (news: NewsItem) => {
+    // 1. 尝试 datetime 字段（"2024-01-01 10:30:00"）
+    const dt = news.datetime;
+    if (dt && dt.trim() && dt.trim() !== "None") {
+      // 直接提取 HH:MM 部分（避免 new Date 在不同时区解析偏移）
+      const timePart = dt.includes(" ") ? dt.split(" ")[1] : dt;
+      const match = timePart.match(/(\d{1,2}):(\d{2})/);
+      if (match) return `${match[1].padStart(2, "0")}:${match[2]}`;
+    }
+    // 2. 尝试 time 字段（"10:30:00"）
+    const t = news.time;
+    if (t && t.trim() && t.trim() !== "None") {
+      const match = t.match(/(\d{1,2}):(\d{2})/);
+      if (match) return `${match[1].padStart(2, "0")}:${match[2]}`;
+    }
+    // 3. 兼容旧 publish_time
+    const pt = news.publish_time;
+    if (pt && pt.trim()) {
+      try {
+        const d = new Date(pt);
+        if (!isNaN(d.getTime())) {
+          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        }
+      } catch { /* fall through */ }
+    }
+    return "--:--";
   };
 
   return (
@@ -196,9 +254,10 @@ export default function NewsPage() {
             )}
 
             {displayedNews.map((news, i) => {
-              const sentiment = analyzeSentiment(news.title + (news.content || ""));
-              const score = sentimentScore(sentiment);
-              const code = extractStockCode(news.title + (news.content || ""));
+              const fullText = news.title + (news.content || "");
+              const sentiment = analyzeSentiment(fullText);
+              const score = sentimentScore(fullText, sentiment);
+              const code = extractStockCode(fullText);
               const isFading = i === fadeIdx;
 
               const sentimentIcon = sentiment === "positive" ? "\u25B2" : sentiment === "negative" ? "\u25BC" : "\u2014";
@@ -216,7 +275,7 @@ export default function NewsPage() {
                   style={isFading ? { animation: "fadeSlideIn 0.6s ease-out" } : {}}
                 >
                   <p className="text-cyan-400/70">
-                    <span className="text-white/30">[{fmtTime(news.publish_time)}]</span>
+                    <span className="text-white/30">[{fmtTime(news)}]</span>
                     {" "}
                     <span className="text-cyan-400/90">[SCAN]</span>
                     {" "}
@@ -320,22 +379,20 @@ export default function NewsPage() {
               <span className="text-xs font-medium text-white/70 tracking-wide">7{"\u65E5\u60C5\u7EEA\u8D8B\u52BF"}</span>
             </div>
 
-            <div className="flex items-end justify-between gap-2 h-[100px]">
+            <div className="flex items-end justify-between gap-2" style={{ height: 100 }}>
               {trend7d.map((d, i) => {
-                const pct = (d.val / trendMax) * 100;
+                const barH = Math.max(4, Math.round((d.val / trendMax) * 80)); // max 80px, min 4px
                 const barColor = d.val >= 65
                   ? "bg-emerald-500/70"
                   : d.val >= 40
                     ? "bg-white/20"
                     : "bg-amber-500/60";
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full flex justify-center">
-                      <div
-                        className={`w-5 rounded-t-sm ${barColor} transition-all duration-500`}
-                        style={{ height: `${pct}%` }}
-                      />
-                    </div>
+                  <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+                    <div
+                      className={`w-5 rounded-t-sm ${barColor} transition-all duration-500`}
+                      style={{ height: barH }}
+                    />
                     <span className="text-[9px] text-white/30 font-mono">{d.label}</span>
                   </div>
                 );
