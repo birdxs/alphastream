@@ -50,6 +50,16 @@ class FallbackManager:
         last_error = None
         tried_adapters = []
 
+        # 若所有adapter都因失败计数>=5被跳过，重置计数重试一次
+        with self._lock:
+            all_blocked = all(
+                self._fail_count.get(a.name, 0) >= 5 and hasattr(a, method_name)
+                for a in self.adapters
+            ) if self.adapters else False
+            if all_blocked:
+                logger.info(f"所有adapter已阻塞，重置fail_count以重试 {method_name}")
+                self._fail_count.clear()
+
         for adapter in self.adapters:
             adapter_name = adapter.name
 

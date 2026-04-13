@@ -11,17 +11,19 @@ import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare, Brief
 import { GlassCard } from "@/components/common/glass-card";
 import { usePortfolioStore } from "@/lib/stores/portfolio-store";
 import { useStockNames } from "@/lib/hooks/use-stock-names";
+import { useStockPrices } from "@/lib/hooks/use-stock-prices";
 import { formatPrice, formatPercent, getPriceColorClass } from "@/lib/utils/format";
 import Link from "next/link";
 
-// TODO: 接入后端 POST /analyze 获取持仓股票的实时价格
-// 当前使用本地localStorage持久化，未来可同步到服务端
 export default function PortfolioPage() {
   const { holdings, addHolding, removeHolding } = usePortfolioStore();
   const codes = useMemo(() => holdings.map(h => h.code), [holdings]);
   const existing = useMemo(() => Object.fromEntries(holdings.map(h => [h.code, h.name])), [holdings]);
   const resolvedNames = useStockNames(codes, existing);
+  const livePrices = useStockPrices(codes);
   const displayName = (code: string, name: string) => (name && name !== code ? name : resolvedNames[code] || code);
+  const priceOf = (h: { code: string; costPrice: number; currentPrice?: number }) =>
+    livePrices[h.code]?.price ?? h.currentPrice ?? h.costPrice;
   const [showAdd, setShowAdd] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [newName, setNewName] = useState("");
@@ -29,7 +31,7 @@ export default function PortfolioPage() {
   const [newCost, setNewCost] = useState("");
   const [formError, setFormError] = useState("");
 
-  const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice || h.costPrice) * h.shares, 0);
+  const totalValue = holdings.reduce((sum, h) => sum + priceOf(h) * h.shares, 0);
   const totalCost = holdings.reduce((sum, h) => sum + h.costPrice * h.shares, 0);
   const totalPnl = totalValue - totalCost;
   const totalReturn = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
@@ -151,8 +153,9 @@ export default function PortfolioPage() {
             </div>
           ) : (
             holdings.map(h => {
-              const pnl = ((h.currentPrice || h.costPrice) - h.costPrice) * h.shares;
-              const pnlPct = ((h.currentPrice || h.costPrice) - h.costPrice) / h.costPrice * 100;
+              const cp = priceOf(h);
+              const pnl = (cp - h.costPrice) * h.shares;
+              const pnlPct = h.costPrice > 0 ? ((cp - h.costPrice) / h.costPrice) * 100 : 0;
               return (
                 <div key={h.code} className="flex items-center justify-between p-3 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.07] dark:hover:bg-white/[0.07] transition-all duration-200">
                   <div className="flex items-center gap-3">

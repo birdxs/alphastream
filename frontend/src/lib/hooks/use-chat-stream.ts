@@ -83,12 +83,12 @@ export function useChatStream() {
           agentStore.setAgentProgress(data);
         },
         onError: (data) => {
-          console.error('Stream error:', data);
-          // 将错误展示为AI消息，附带重试提示
+          const errText = typeof data === 'string' ? data : (data?.message || data?.error || JSON.stringify(data));
+          console.error('Stream error:', errText, data);
           const errorMsg: ChatMessage = {
             message_id: `error_${Date.now()}`,
             role: 'assistant',
-            content: `⚠️ ${data.message || '分析过程出错'}\n\n点击下方"重试"按钮重新分析`,
+            content: `⚠️ ${errText || '分析服务暂时不可用（后端超时/断开）'}\n\n请检查后端服务状态，或点击"重试"。`,
             created_at: new Date().toISOString(),
           };
           chatStore.addMessage(errorMsg);
