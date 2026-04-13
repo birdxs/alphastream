@@ -47,18 +47,18 @@ export function ArtifactPanel() {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header — Dark Glassmorphism */}
-      <div className="relative flex items-center justify-between px-3 h-10 bg-[rgba(10,10,26,0.6)] backdrop-blur-sm border-b border-white/[0.08] shrink-0">
+      <div className="relative flex items-center justify-between px-3 h-10 bg-card/80 dark:bg-[rgba(10,10,26,0.6)] backdrop-blur-sm border-b border-border/60 dark:border-white/[0.08] shrink-0">
         {/* 不确定进度条 — AI分析中时显示 */}
         {isStreaming && (
           <div className="progress-indeterminate absolute bottom-0 left-0 right-0" />
         )}
-        <span className="text-xs font-medium text-[#F0F0F5]/80">分析结果</span>
+        <span className="text-xs font-medium text-foreground/80">分析结果</span>
         <div className="flex items-center gap-1">
           {artifacts.length > 0 && (
             <>
               <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-[#3737CC]/20 text-[10px] font-medium text-[#3737CC]">{artifacts.length}</span>
               <button
-                className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
+                className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] hover:text-foreground transition-all duration-200"
                 onClick={() => useChatStore.getState().clearArtifacts()}
               >
                 <Trash2 className="h-3 w-3" />
@@ -70,10 +70,10 @@ export function ArtifactPanel() {
       </div>
 
       {/* Content — 填满剩余高度 */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gradient-to-b from-transparent to-[#06060F]/30">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gradient-to-b from-transparent dark:to-[#06060F]/30">
         {artifacts.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center max-w-xs space-y-5">
+            <div className="text-center w-full max-w-sm space-y-5">
               {/* 主图标 — 大圆形 glass 容器 + 脉冲动画 */}
               <div className="flex justify-center">
                 <div className="relative">
@@ -85,27 +85,27 @@ export function ArtifactPanel() {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-[#F0F0F5] mb-1">AI智能分析工作区</h3>
-                <p className="text-xs text-[#8888A0] leading-relaxed">
+                <h3 className="text-sm font-semibold text-foreground mb-1">AI智能分析工作区</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   AI将为您生成交互式分析组件
                 </p>
               </div>
 
-              {/* Capability 卡片 — Dark Glassmorphism */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Capability 卡片 — 自适应主题 */}
+              <div className="grid grid-cols-2 gap-2.5 w-full">
                 {capabilities.map(item => (
                   <div
                     key={item.title}
-                    className={`${item.bg} rounded-xl p-2.5 text-left border border-white/[0.06] hover:border-white/[0.12] transition-all duration-200`}
+                    className={`${item.bg} rounded-xl p-3 text-left border border-border/60 dark:border-white/[0.06] hover:border-foreground/15 dark:hover:border-white/[0.12] transition-all duration-200 min-w-0`}
                   >
-                    <item.icon className={`h-4 w-4 ${item.iconColor} mb-1.5`} />
-                    <p className="text-xs font-medium text-[#F0F0F5]">{item.title}</p>
-                    <p className="text-[10px] text-[#8888A0] leading-snug">{item.desc}</p>
+                    <item.icon className={`h-4 w-4 ${item.iconColor} mb-1.5 shrink-0`} />
+                    <p className="text-xs font-medium text-foreground whitespace-nowrap">{item.title}</p>
+                    <p className="text-[10px] text-muted-foreground leading-snug mt-0.5 break-words">{item.desc}</p>
                   </div>
                 ))}
               </div>
 
-              <p className="text-[10px] text-[#555570]">
+              <p className="text-[10px] text-muted-foreground/70">
                 在左侧输入问题即可开始
               </p>
             </div>

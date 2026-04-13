@@ -27,12 +27,15 @@ export function AgentLogDrawer() {
         <Activity className="h-3 w-3" />
         Agent日志
       </SheetTrigger>
-      <SheetContent side="right" className="bg-[var(--bg-surface-0,#0A0A1A)]/95 backdrop-blur-2xl border-l-[var(--glass-border)]">
+      <SheetContent
+        side="right"
+        className="bg-card/95 dark:bg-[#0A0A1A]/95 text-foreground backdrop-blur-2xl border-l border-border dark:border-white/[0.08]"
+      >
         <SheetHeader>
-          <SheetTitle>Agent 执行日志</SheetTitle>
-          <SheetDescription>Multi-Agent分析进度与工具调用详情</SheetDescription>
+          <SheetTitle className="text-foreground">Agent 执行日志</SheetTitle>
+          <SheetDescription className="text-muted-foreground">Multi-Agent分析进度与工具调用详情</SheetDescription>
         </SheetHeader>
-        <div className="p-4 overflow-auto flex-1 font-mono text-xs leading-relaxed">
+        <div className="p-4 overflow-auto flex-1 font-mono text-xs leading-relaxed text-foreground">
           <AgentProgressPanel />
         </div>
       </SheetContent>

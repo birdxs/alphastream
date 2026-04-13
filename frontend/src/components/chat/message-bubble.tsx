@@ -88,7 +88,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
           {!isUser && message.content && (
             <button
               onClick={handleCopy}
-              className="absolute -top-2 -right-2 z-10 h-6 w-6 rounded-md flex items-center justify-center bg-[#14142B]/90 border border-white/[0.12] text-[#8888A0] hover:text-[#F0F0F5] hover:bg-white/[0.12] opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
+              className="absolute -top-2 -right-2 z-10 h-6 w-6 rounded-md flex items-center justify-center bg-popover/95 dark:bg-[#14142B]/90 border border-border dark:border-white/[0.12] text-muted-foreground hover:text-foreground hover:bg-foreground/[0.08] dark:hover:bg-white/[0.12] opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
               aria-label="复制消息"
               title="复制消息"
             >
@@ -99,7 +99,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
           className={`text-sm px-4 py-2.5 shadow-sm ${
             isUser
               ? "bg-gradient-to-br from-[#3737CC] to-[#4F4FE6] text-white rounded-2xl rounded-br-md"
-              : "glass-gradient-border bg-white/[0.04] backdrop-blur-sm text-foreground rounded-2xl rounded-bl-md"
+              : "glass-gradient-border bg-foreground/[0.03] dark:bg-white/[0.04] backdrop-blur-sm text-foreground rounded-2xl rounded-bl-md"
           }`}
         >
           {isUser ? (
@@ -107,7 +107,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
           ) : message.content ? (
             <StreamMarkdown content={message.content} />
           ) : (
-            <span className="text-[#8888A0] italic text-xs animate-pulse">(正在生成...)</span>
+            <span className="text-muted-foreground italic text-xs animate-pulse">(正在生成...)</span>
           )}
         </div>
         </div>
@@ -168,7 +168,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
           }
           if (uniqueSources.length === 0) return null;
           return (
-            <div className="text-[10px] text-[#8888A0] mt-1.5">
+            <div className="text-[10px] text-muted-foreground mt-1.5">
               数据来源:{" "}
               {uniqueSources.map((src, idx) => (
                 <span
@@ -190,7 +190,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 mt-1.5">
             <button
               onClick={onRegenerate}
-              className="text-[10px] text-muted-foreground hover:text-primary hover:bg-white/[0.06] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors"
+              className="text-[10px] text-muted-foreground hover:text-primary hover:bg-foreground/[0.05] dark:hover:bg-white/[0.06] rounded-md px-1.5 py-0.5 flex items-center gap-1 transition-colors"
             >
               <RefreshCw className="h-2.5 w-2.5" /> 重新生成
             </button>
@@ -198,7 +198,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
         )}
 
         {/* 时间戳 */}
-        <div className={`text-[10px] text-[#555570] mt-1 font-mono ${isUser ? "text-right" : ""}`}>
+        <div className={`text-[10px] text-muted-foreground/70 mt-1 font-mono ${isUser ? "text-right" : ""}`}>
           {new Date(message.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
         </div>
       </div>

@@ -206,11 +206,11 @@ export default function NewsPage() {
   };
 
   return (
-    <div className="flex-1 overflow-auto p-4">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-full min-h-[calc(100vh-80px)]">
+    <div className="flex-1 overflow-hidden p-4 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-full min-h-0" style={{ height: 'calc(100vh - 96px)' }}>
 
         {/* ====== 左栏: AI Sentiment Terminal ====== */}
-        <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl flex flex-col overflow-hidden">
+        <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl flex flex-col overflow-hidden min-h-0 h-full">
 
           {/* macOS 标题栏 */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
@@ -233,10 +233,10 @@ export default function NewsPage() {
             </div>
           </div>
 
-          {/* 终端Body */}
+          {/* 终端Body — min-h-0 让flex-1正确收缩，overflow内部滚动而非外撑 */}
           <div
             ref={terminalRef}
-            className="flex-1 overflow-y-auto p-4 space-y-1"
+            className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1"
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace", fontSize: "12.5px", lineHeight: "1.9" }}
           >
             {/* 启动信息 */}
@@ -260,8 +260,8 @@ export default function NewsPage() {
               const code = extractStockCode(fullText);
               const isFading = i === fadeIdx;
 
-              const sentimentIcon = sentiment === "positive" ? "\u25B2" : sentiment === "negative" ? "\u25BC" : "\u2014";
-              const sentimentLabel = sentiment === "positive" ? "\u5229\u597D" : sentiment === "negative" ? "\u5229\u7A7A" : "\u4E2D\u6027";
+              const sentimentIcon = sentiment === "positive" ? "▲" : sentiment === "negative" ? "▼" : "—";
+              const sentimentLabel = sentiment === "positive" ? "利好" : sentiment === "negative" ? "利空" : "中性";
               const sentimentColor = sentiment === "positive"
                 ? "text-emerald-400"
                 : sentiment === "negative"
@@ -279,7 +279,7 @@ export default function NewsPage() {
                     {" "}
                     <span className="text-cyan-400/90">[SCAN]</span>
                     {" "}
-                    <span className="text-white/50">{"\u65B0\u4FE1\u53F7"} \u2193</span>
+                    <span className="text-white/50">新信号 ↓</span>
                   </p>
                   <p className="pl-10">
                     <span className={sentimentColor}>{sentimentIcon}{sentimentLabel}</span>
@@ -289,9 +289,9 @@ export default function NewsPage() {
                   <p className="pl-10 text-white/30">
                     <span className="text-amber-400/60">[EVAL]</span>
                     {" "}
-                    {"\u8BC4\u5206"} <span className={sentimentColor}>{score.toFixed(1)}/10</span>
-                    {code && <>{" \u00B7 \u5173\u8054 "}<span className="text-blue-400/70">{code}</span></>}
-                    {news.source && <>{" \u00B7 "}<span className="text-white/20">{news.source}</span></>}
+                    评分 <span className={sentimentColor}>{score.toFixed(1)}/10</span>
+                    {code && <>{" · 关联 "}<span className="text-blue-400/70">{code}</span></>}
+                    {news.source && <>{" · "}<span className="text-white/20">{news.source}</span></>}
                   </p>
                 </div>
               );
@@ -300,7 +300,7 @@ export default function NewsPage() {
             {/* 底部闪烁光标 */}
             <div className="pt-2 text-white/40">
               <span className="text-emerald-400/60">AGENT $</span>{" "}
-              <span>{"\u76D1\u542C\u4E2D..."}</span>
+              <span>监听中...</span>
               <span className="typing-cursor inline-block w-[2px] h-[14px] bg-emerald-400 ml-1 align-middle" />
             </div>
           </div>
@@ -308,10 +308,10 @@ export default function NewsPage() {
           {/* 底部情绪分布条 */}
           <div className="px-4 py-2.5 border-t border-white/[0.06]">
             <div className="flex items-center gap-3 text-[10px] font-mono text-white/40 mb-1.5">
-              <span>{"\u60C5\u7EEA\u5206\u5E03"}</span>
-              <span className="text-emerald-400">{"\u25B2"} {posPct}%</span>
-              <span className="text-white/40">{"\u2014"} {neuPct}%</span>
-              <span className="text-rose-400">{"\u25BC"} {negPct}%</span>
+              <span>情绪分布</span>
+              <span className="text-emerald-400">▲ {posPct}%</span>
+              <span className="text-white/40">— {neuPct}%</span>
+              <span className="text-rose-400">▼ {negPct}%</span>
             </div>
             <div className="flex h-1.5 rounded-full overflow-hidden bg-white/[0.06]">
               <div className="bg-emerald-500/70 transition-all duration-500" style={{ width: `${posPct}%` }} />
@@ -322,15 +322,15 @@ export default function NewsPage() {
         </div>
 
         {/* ====== 右栏: 3个图表卡片 ====== */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
 
           {/* --- 卡片1: 舆情分布环形图 --- */}
           <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-4">
               <div className="icon-box w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                <span className="text-violet-400 text-sm">{"\u25C8"}</span>
+                <span className="text-violet-400 text-sm">◈</span>
               </div>
-              <span className="text-xs font-medium text-white/70 tracking-wide">{"\u8206\u60C5\u5206\u5E03"}</span>
+              <span className="text-xs font-medium text-white/70 tracking-wide">舆情分布</span>
             </div>
 
             <div className="flex items-center justify-center">
@@ -349,7 +349,7 @@ export default function NewsPage() {
                 {/* 中心镂空 */}
                 <div className="absolute inset-3 rounded-full bg-[#0a0a1a] flex flex-col items-center justify-center">
                   <span className="text-lg font-bold text-white/90">{avgScore.toFixed(1)}</span>
-                  <span className="text-[9px] text-white/30 font-mono">{"\u603B\u8BC4\u5206"}</span>
+                  <span className="text-[9px] text-white/30 font-mono">总评分</span>
                 </div>
               </div>
             </div>
@@ -357,15 +357,15 @@ export default function NewsPage() {
             <div className="flex justify-center gap-4 mt-4 text-[10px] font-mono">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-white/40">{"\u5229\u597D"} {posPct}%</span>
+                <span className="text-white/40">利好 {posPct}%</span>
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-white/20" />
-                <span className="text-white/40">{"\u4E2D\u6027"} {neuPct}%</span>
+                <span className="text-white/40">中性 {neuPct}%</span>
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-rose-400" />
-                <span className="text-white/40">{"\u5229\u7A7A"} {negPct}%</span>
+                <span className="text-white/40">利空 {negPct}%</span>
               </span>
             </div>
           </div>
@@ -374,9 +374,9 @@ export default function NewsPage() {
           <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-4">
               <div className="icon-box w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <span className="text-cyan-400 text-sm">{"\u25CE"}</span>
+                <span className="text-cyan-400 text-sm">◎</span>
               </div>
-              <span className="text-xs font-medium text-white/70 tracking-wide">7{"\u65E5\u60C5\u7EEA\u8D8B\u52BF"}</span>
+              <span className="text-xs font-medium text-white/70 tracking-wide">7日情绪趋势</span>
             </div>
 
             <div className="flex items-end justify-between gap-2" style={{ height: 100 }}>
@@ -404,9 +404,9 @@ export default function NewsPage() {
           <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-4">
               <div className="icon-box w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <span className="text-amber-400 text-sm">{"\u25C6"}</span>
+                <span className="text-amber-400 text-sm">◆</span>
               </div>
-              <span className="text-xs font-medium text-white/70 tracking-wide">{"\u677F\u5757\u60C5\u7EEA\u70ED\u529B\u56FE"}</span>
+              <span className="text-xs font-medium text-white/70 tracking-wide">板块情绪热力图</span>
             </div>
 
             <div className="grid grid-cols-4 gap-1.5">
@@ -433,9 +433,9 @@ export default function NewsPage() {
             </div>
 
             <div className="flex items-center justify-between mt-3 text-[9px] text-white/25 font-mono px-1">
-              <span>{"\u2190 \u5229\u7A7A"}</span>
+              <span>← 利空</span>
               <div className="flex-1 mx-2 h-1 rounded-full" style={{ background: "linear-gradient(to right, #fb7185, rgba(255,255,255,0.15), #34d399)" }} />
-              <span>{"\u5229\u597D \u2192"}</span>
+              <span>利好 →</span>
             </div>
           </div>
         </div>

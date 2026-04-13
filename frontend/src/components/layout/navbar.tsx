@@ -30,7 +30,7 @@ export function Navbar() {
   return (
     <nav
       aria-label="主导航"
-      className="flex h-12 items-center justify-between bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-b border-[#3737CC]/20 px-3 shrink-0"
+      className="flex h-12 items-center justify-between bg-card/85 dark:bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-b border-[#3737CC]/20 px-3 shrink-0"
     >
       {/* Left: Logo + Nav */}
       <div className="flex items-center gap-1">
@@ -49,7 +49,7 @@ export function Navbar() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`h-8 px-2.5 gap-1.5 text-xs hover:bg-white/[0.08] relative ${
+                  className={`h-8 px-2.5 gap-1.5 text-xs hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] relative ${
                     isActive
                       ? "text-[#3737CC] font-semibold"
                       : "text-foreground"
@@ -70,11 +70,11 @@ export function Navbar() {
       {/* Center: Search — 移动端隐藏 */}
       <button
         onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
-        className="hidden md:flex items-center gap-2 bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-white/[0.08] transition-colors"
+        className="hidden md:flex items-center gap-2 bg-foreground/[0.03] dark:bg-white/[0.03] border border-border/60 dark:border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] transition-colors"
       >
         <Search className="h-3.5 w-3.5" />
         <span>搜索股票...</span>
-        <kbd className="ml-4 px-1.5 py-0.5 rounded-md bg-white/[0.06] text-[9px] font-medium border border-white/[0.08] shadow-sm">⌘K</kbd>
+        <kbd className="ml-4 px-1.5 py-0.5 rounded-md bg-foreground/[0.05] dark:bg-white/[0.06] text-[9px] font-medium border border-border/60 dark:border-white/[0.08] shadow-sm">⌘K</kbd>
       </button>
 
       {/* Right: Controls */}
@@ -82,7 +82,7 @@ export function Navbar() {
         <Button
           variant="ghost"
           size="icon"
-          className="hidden sm:inline-flex h-8 w-8 hover:bg-white/[0.08]"
+          className="hidden sm:inline-flex h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
           onClick={toggleColorScheme}
           aria-label="切换涨跌色"
           title={stockColorScheme === 'cn' ? '中国标准（红涨绿跌）' : '国际标准（绿涨红跌）'}
@@ -93,7 +93,7 @@ export function Navbar() {
             <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
           )}
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/[0.08]" onClick={toggleTheme} aria-label="切换主题">
+        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]" onClick={toggleTheme} aria-label="切换主题">
           {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </Button>
       </div>

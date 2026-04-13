@@ -86,7 +86,7 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
         {/* --- 顶部Hero标识区 --- */}
         <div className="flex flex-col items-center gap-2 pt-2">
           {/* 毛玻璃图标容器 */}
-          <div className="flex items-center gap-1.5 rounded-2xl bg-white/[0.05] backdrop-blur-sm border border-white/[0.1] px-4 py-2.5">
+          <div className="flex items-center gap-1.5 rounded-2xl bg-foreground/[0.04] dark:bg-white/[0.05] backdrop-blur-sm border border-foreground/10 dark:border-white/[0.1] px-4 py-2.5">
             <Brain className="h-5 w-5 text-[#3737CC]" />
             <Sparkles className="h-3.5 w-3.5 text-[#46BEA3]" />
             <Zap className="h-4 w-4 text-[#6B5EE4]" />
@@ -118,7 +118,7 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
                 onClick={() =>
                   onQuestionSelect(q.text, { stock_code: q.stock })
                 }
-                className={`group relative text-left p-3 rounded-xl glass-gradient-border bg-white/[0.04] ${q.borderHover} hover:bg-white/[0.08] hover:border-white/[0.15] hover:-translate-y-0.5 backdrop-blur-sm transition-all duration-300 animate-fade-in opacity-0`}
+                className={`group relative text-left p-3 rounded-xl glass-gradient-border bg-foreground/[0.03] dark:bg-white/[0.04] ${q.borderHover} hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] hover:border-foreground/15 dark:hover:border-white/[0.15] hover:-translate-y-0.5 backdrop-blur-sm transition-all duration-300 animate-fade-in opacity-0`}
                 style={{
                   animationDelay: `${i * 60}ms`,
                   animationFillMode: "forwards",
@@ -150,7 +150,7 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
               <button
                 key={topic}
                 onClick={() => onQuestionSelect(topic, {})}
-                className="text-[10px] px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] text-muted-foreground hover:text-foreground hover:border-[#3737CC]/30 transition-all duration-200"
+                className="text-[10px] px-2.5 py-1 rounded-full bg-foreground/[0.04] dark:bg-white/[0.05] border border-foreground/10 dark:border-white/[0.08] text-muted-foreground hover:text-foreground hover:border-[#3737CC]/30 transition-all duration-200"
               >
                 {topic}
               </button>
@@ -160,13 +160,13 @@ export function WelcomeScreen({ onQuestionSelect }: Props) {
 
         {/* --- 底部快捷键提示 --- */}
         <p className="text-[9px] text-muted-foreground/50 text-center">
-          <kbd className="px-1 py-0.5 rounded bg-white/[0.05] font-mono">
+          <kbd className="px-1 py-0.5 rounded bg-foreground/[0.05] dark:bg-white/[0.05] font-mono">
             /
           </kbd>{" "}
           命令 ·{" "}
-          <kbd className="px-1 py-0.5 rounded bg-white/[0.05] font-mono">⌘K</kbd>{" "}
+          <kbd className="px-1 py-0.5 rounded bg-foreground/[0.05] dark:bg-white/[0.05] font-mono">⌘K</kbd>{" "}
           搜索 ·{" "}
-          <kbd className="px-1 py-0.5 rounded bg-white/[0.05] font-mono">
+          <kbd className="px-1 py-0.5 rounded bg-foreground/[0.05] dark:bg-white/[0.05] font-mono">
             Enter
           </kbd>{" "}
           发送

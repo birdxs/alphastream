@@ -1100,8 +1100,19 @@ def get_stock_data():
 
         records = df.to_dict('records')
 
-        app.logger.info(f"数据处理完成，返回 {len(records)} 条记录")
-        return custom_jsonify({'data': records})
+        # 获取股票名称（失败降级为stock_code）
+        stock_name = stock_code
+        try:
+            info = analyzer.get_stock_info(stock_code)
+            if isinstance(info, dict):
+                name = info.get('股票名称') or info.get('name')
+                if name and name != '未知':
+                    stock_name = name
+        except Exception as e:
+            app.logger.warning(f"获取股票名称失败 {stock_code}: {str(e)}")
+
+        app.logger.info(f"数据处理完成，返回 {len(records)} 条记录, 股票名称: {stock_name}")
+        return custom_jsonify({'data': records, 'stock_name': stock_name})
     except Exception as e:
         app.logger.error(f"获取股票数据时出错: {str(e)}")
         app.logger.error(traceback.format_exc())
