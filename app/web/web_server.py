@@ -3162,6 +3162,21 @@ cleaner_thread.start()
 _preload_thread = threading.Thread(target=_load_stock_name_cache, daemon=True)
 _preload_thread.start()
 
+# 预热 /api/stock_profile 常用股票，避免首次访问compare/dashboard时等待baostock
+def _preload_profiles():
+    import time as _t
+    _t.sleep(3)  # 等A股名称缓存先加载
+    common = ['600519', '000858', '300750', '000001', '300059', '688981']
+    for code in common:
+        try:
+            with app.test_request_context(f'/api/stock_profile?stock_code={code}'):
+                api_stock_profile()
+        except Exception as e:
+            app.logger.warning(f"预热profile失败 {code}: {e}")
+    app.logger.info(f"profile预热完成: {common}")
+
+threading.Thread(target=_preload_profiles, daemon=True).start()
+
 if __name__ == '__main__':
     # 强制禁用Flask的调试模式，以确保日志配置生效
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", "8888")), debug=False)
