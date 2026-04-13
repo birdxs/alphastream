@@ -107,8 +107,8 @@ export default function PortfolioPage() {
         </GlassCard>
       )}
 
-      {/* AI分析全部持仓 - 品牌色渐变大按钮 */}
-      {holdings.length > 0 && (
+      {/* AI分析全部持仓 - 品牌色渐变大按钮（始终展示，空持仓时禁用） */}
+      {holdings.length > 0 ? (
         <Link
           href={`/?q=${encodeURIComponent('分析我当前持仓的整体风险和优化建议，持仓列表：' + holdings.map(h => h.code).join(','))}`}
           className="block"
@@ -116,9 +116,19 @@ export default function PortfolioPage() {
           <button className="w-full group relative overflow-hidden rounded-2xl px-6 py-4 bg-gradient-to-r from-[#3737CC] via-[#5A4ED3] to-[#6B5EE4] hover:from-[#4545DD] hover:via-[#6B5EE4] hover:to-[#8B7EFF] shadow-lg shadow-[#6B5EE4]/20 hover:shadow-xl hover:shadow-[#6B5EE4]/30 transition-all duration-300 flex items-center justify-center gap-3">
             <Sparkles className="h-5 w-5 text-white group-hover:rotate-12 transition-transform duration-300" />
             <span className="text-base font-semibold text-white">AI分析全部持仓</span>
-            <span className="text-xs text-muted-foreground dark:text-white/70">（{holdings.length}只）</span>
+            <span className="text-xs text-white/70">（{holdings.length}只）</span>
           </button>
         </Link>
+      ) : (
+        <button
+          disabled
+          className="w-full rounded-2xl px-6 py-4 bg-gradient-to-r from-[#3737CC]/40 via-[#5A4ED3]/40 to-[#6B5EE4]/40 flex items-center justify-center gap-3 cursor-not-allowed opacity-60"
+          title="请先添加持仓"
+        >
+          <Sparkles className="h-5 w-5 text-white/70" />
+          <span className="text-base font-semibold text-white/80">AI分析全部持仓</span>
+          <span className="text-xs text-white/60">（请先添加持仓）</span>
+        </button>
       )}
 
       {/* 持仓列表 */}
