@@ -35,20 +35,15 @@ export default function ComparePage() {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const missing = codes.filter(c => !profiles[c]);
-      if (missing.length === 0) return;
-      const pairs = await Promise.all(
-        missing.map(async c => {
-          try { return [c, await apiClient.get<Profile>("/api/stock_profile", { stock_code: c })] as const; }
-          catch { return [c, { stock_name: getStockName(c) }] as const; }
-        })
-      );
-      if (cancelled) return;
-      setProfiles(prev => ({ ...prev, ...Object.fromEntries(pairs) }));
-    })();
-    return () => { cancelled = true; };
+    // 每个code独立获取并写入，不用cancelled flag以免StrictMode二次mount丢数据
+    codes.forEach(async c => {
+      try {
+        const r = await apiClient.get<Profile>("/api/stock_profile", { stock_code: c });
+        setProfiles(prev => ({ ...prev, [c]: r }));
+      } catch {
+        setProfiles(prev => prev[c] ? prev : { ...prev, [c]: { stock_name: getStockName(c) } });
+      }
+    });
   }, [codes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cellValue = (metric: string, code: string): string => {
