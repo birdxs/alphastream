@@ -13,7 +13,8 @@ import { SuggestedQuestions } from "./suggested-questions";
 import { WelcomeScreen } from "./welcome-screen";
 
 // 模块级guard — 桌面+移动双ChatPanel共享，防止?q=触发两次sendMessage
-let globalPrefillHandled = false;
+// key记录已处理的URL查询串，新URL会重置触发
+let lastHandledQueryKey: string | null = null;
 
 function ChatPanelInner() {
   const { sendMessage, stopGeneration } = useChatStream();
@@ -28,17 +29,16 @@ function ChatPanelInner() {
 
   // 处理 URL 查询参数预填充：?q= 直接发送，?prefill= 预填输入框
   useEffect(() => {
-    if (prefillHandled.current || globalPrefillHandled) return;
     const q = searchParams.get("q");
     const prefill = searchParams.get("prefill");
+    const currentKey = q ? `q:${q}` : prefill ? `p:${prefill}` : null;
+    if (!currentKey || currentKey === lastHandledQueryKey) return;
+    lastHandledQueryKey = currentKey;
+    prefillHandled.current = true;
     if (q) {
-      prefillHandled.current = true;
-      globalPrefillHandled = true;
       setTimeout(() => sendMessage(q, {}), 300);
       window.history.replaceState({}, "", "/");
     } else if (prefill) {
-      prefillHandled.current = true;
-      globalPrefillHandled = true;
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("chat-prefill", { detail: prefill }));
       }, 300);

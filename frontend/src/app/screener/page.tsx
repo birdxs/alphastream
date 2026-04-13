@@ -5,9 +5,10 @@
 
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api/client";
+import { useStockNames } from "@/lib/hooks/use-stock-names";
 import { GlassCard } from "@/components/common/glass-card";
 import {
   Filter,
@@ -176,6 +177,10 @@ export default function ScreenerPage() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(true);
+
+  // 批量补全名称（后端/api/board_stocks仅返回代码）
+  const resultCodes = useMemo(() => results.slice(0, 20).map(s => s.code), [results]);
+  const resolvedNames = useStockNames(resultCodes);
 
   const updateFilter = useCallback((key: keyof FilterState, val: string) => {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -446,7 +451,7 @@ export default function ScreenerPage() {
                     className="border-b border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                   >
                     <td className="px-3 py-2.5 font-mono text-xs">{stock.code}</td>
-                    <td className="px-3 py-2.5">{stock.name !== stock.code ? stock.name : "--"}</td>
+                    <td className="px-3 py-2.5">{resolvedNames[stock.code] && resolvedNames[stock.code] !== stock.code ? resolvedNames[stock.code] : (stock.name !== stock.code ? stock.name : "--")}</td>
                     <td className="px-3 py-2.5 text-right font-mono">{formatNumber(stock.price)}</td>
                     <td className={`px-3 py-2.5 text-right font-mono ${changeColor(stock.change_pct)}`}>
                       {stock.change_pct !== null

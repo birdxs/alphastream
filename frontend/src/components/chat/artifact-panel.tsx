@@ -16,6 +16,7 @@ const capabilities = [
     desc: "AI驱动技术指标识别",
     bg: "bg-[#46BEA3]/5",
     iconColor: "text-[#46BEA3]",
+    prompt: "对600519做一次完整的K线技术分析：均线系统、MACD、RSI、成交量、支撑阻力",
   },
   {
     icon: DollarSign,
@@ -23,6 +24,7 @@ const capabilities = [
     desc: "智能财务健康评估",
     bg: "bg-[#F59E0B]/5",
     iconColor: "text-[#F59E0B]",
+    prompt: "分析600519的基本面：ROE、净利润增速、毛利率、现金流、负债率",
   },
   {
     icon: Bot,
@@ -30,13 +32,15 @@ const capabilities = [
     desc: "13个专业Agent联动",
     bg: "bg-[#3737CC]/5",
     iconColor: "text-[#3737CC]",
+    prompt: "启动多Agent协作深度分析600519，技术/基本面/资金/情绪/风险全维度",
   },
   {
     icon: Users,
     title: "大师视角",
-    desc: "四大投资风格解读",
+    desc: "巴菲特·索罗斯·林奇·格雷厄姆",
     bg: "bg-[#6B5EE4]/5",
     iconColor: "text-[#6B5EE4]",
+    prompt: "用巴菲特、索罗斯、彼得林奇、格雷厄姆四位大师的投资哲学分别解读600519",
   },
 ] as const;
 
@@ -91,22 +95,23 @@ export function ArtifactPanel() {
                 </p>
               </div>
 
-              {/* Capability 卡片 — 2x2 网格，自适应主题 */}
+              {/* Capability 卡片 — 2x2 网格，点击向AI发送预置问题 */}
               <div className="grid grid-cols-2 gap-2.5 w-full">
                 {capabilities.map(item => (
-                  <div
+                  <button
                     key={item.title}
-                    className={`${item.bg} rounded-xl p-3 text-left border border-border/60 dark:border-white/[0.06] hover:border-foreground/15 dark:hover:border-white/[0.12] transition-all duration-200 min-w-0`}
+                    onClick={() => window.dispatchEvent(new CustomEvent("chat-prefill", { detail: item.prompt }))}
+                    className={`${item.bg} rounded-xl p-3 text-left border border-border/60 dark:border-white/[0.06] hover:border-[#3737CC]/30 dark:hover:border-[#6B5EE4]/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-0 cursor-pointer`}
                   >
                     <item.icon className={`h-4 w-4 ${item.iconColor} mb-1.5 shrink-0`} />
                     <p className="text-xs font-medium text-foreground truncate">{item.title}</p>
                     <p className="text-[10px] text-muted-foreground leading-snug mt-0.5 break-words">{item.desc}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
 
               <p className="text-[10px] text-muted-foreground/70">
-                在左侧输入问题即可开始
+                点击卡片或在左侧输入问题即可开始
               </p>
             </div>
           </div>
