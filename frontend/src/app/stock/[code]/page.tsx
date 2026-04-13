@@ -89,9 +89,11 @@ export default function StockDetailPage({
   const { code } = use(params);
   const router = useRouter();
 
-  /* 自选股状态 */
+  /* 自选股状态 — 延迟到mount后读取，避免zustand persist rehydrate前后UI不一致导致的hydration mismatch */
   const { hasItem, addItem, removeItem } = useWatchlistStore();
-  const isWatched = hasItem(code);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const isWatched = mounted ? hasItem(code) : false;
 
   /* 头部数据 */
   const [stockName, setStockName] = useState<string>("");
