@@ -1175,6 +1175,21 @@ def get_stock_data():
         return custom_jsonify({'error': str(e)}), 500
 
 
+# 轻量名称查询接口 — 专供持仓/自选股批量补全名称
+@app.route('/api/stock_name', methods=['GET'])
+def api_stock_name():
+    stock_code = request.args.get('stock_code', '')
+    market_type = request.args.get('market_type', 'A')
+    if not stock_code:
+        return custom_jsonify({'error': 'stock_code required'}), 400
+    try:
+        name = _get_stock_name_safe(stock_code, market_type)
+        return custom_jsonify({'stock_code': stock_code, 'stock_name': name or stock_code})
+    except Exception as e:
+        app.logger.error(f"获取股票名称出错 {stock_code}: {e}")
+        return custom_jsonify({'stock_code': stock_code, 'stock_name': stock_code})
+
+
 # @app.route('/api/market_scan', methods=['POST'])
 # def api_market_scan():
 #     try:

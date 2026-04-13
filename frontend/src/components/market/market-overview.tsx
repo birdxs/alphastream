@@ -173,7 +173,7 @@ export function MarketOverview() {
               </span>
               <span
                 className={`font-mono ${
-                  q.change_pct >= 0 ? "text-[#EF4444]" : "text-[#10B981]"
+                  q.change_pct >= 0 ? "stock-up" : "stock-down"
                 }`}
               >
                 {q.change_pct >= 0 ? "+" : ""}

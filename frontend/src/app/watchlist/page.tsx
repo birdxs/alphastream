@@ -10,10 +10,15 @@ import { Plus, X, MessageSquare, Star, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { GlassCard } from "@/components/common/glass-card";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
-import { useState, useRef } from "react";
+import { useStockNames } from "@/lib/hooks/use-stock-names";
+import { useState, useRef, useMemo } from "react";
 
 export default function WatchlistPage() {
   const { items, addItem, removeItem } = useWatchlistStore();
+  const codes = useMemo(() => items.map(i => i.code), [items]);
+  const existing = useMemo(() => Object.fromEntries(items.map(i => [i.code, i.name])), [items]);
+  const resolvedNames = useStockNames(codes, existing);
+  const getName = (code: string, name: string) => (name && name !== code ? name : resolvedNames[code] || code);
   const [newCode, setNewCode] = useState("");
   const [longPressItem, setLongPressItem] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -80,7 +85,7 @@ export default function WatchlistPage() {
                   >
                     <td className="py-3 px-3">
                       <Link href={`/stock/${item.code}`} className="font-medium hover:text-[#6B5EE4] transition-colors flex items-center gap-1">
-                        {item.name}
+                        {getName(item.code, item.name)}
                         <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
                       </Link>
                     </td>

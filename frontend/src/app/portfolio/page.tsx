@@ -4,12 +4,13 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, TrendingUp, TrendingDown, BarChart3, MessageSquare, Briefcase, Sparkles } from "lucide-react";
 import { GlassCard } from "@/components/common/glass-card";
 import { usePortfolioStore } from "@/lib/stores/portfolio-store";
+import { useStockNames } from "@/lib/hooks/use-stock-names";
 import { formatPrice, formatPercent, getPriceColorClass } from "@/lib/utils/format";
 import Link from "next/link";
 
@@ -17,6 +18,10 @@ import Link from "next/link";
 // 当前使用本地localStorage持久化，未来可同步到服务端
 export default function PortfolioPage() {
   const { holdings, addHolding, removeHolding } = usePortfolioStore();
+  const codes = useMemo(() => holdings.map(h => h.code), [holdings]);
+  const existing = useMemo(() => Object.fromEntries(holdings.map(h => [h.code, h.name])), [holdings]);
+  const resolvedNames = useStockNames(codes, existing);
+  const displayName = (code: string, name: string) => (name && name !== code ? name : resolvedNames[code] || code);
   const [showAdd, setShowAdd] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [newName, setNewName] = useState("");
@@ -152,7 +157,7 @@ export default function PortfolioPage() {
                 <div key={h.code} className="flex items-center justify-between p-3 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.07] dark:hover:bg-white/[0.07] transition-all duration-200">
                   <div className="flex items-center gap-3">
                     <div>
-                      <span className="font-medium">{h.name}</span>
+                      <span className="font-medium">{displayName(h.code, h.name)}</span>
                       <Link href={`/stock/${h.code}`} className="text-xs text-[#6B5EE4] hover:underline ml-2 font-mono" title="查看详情">
                         {h.code}
                       </Link>

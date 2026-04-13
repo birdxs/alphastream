@@ -275,9 +275,9 @@ export default function DashboardPage() {
   /* ---- 指数图标 ---- */
   const getIndexIcon = (changePct: number) =>
     changePct >= 0 ? (
-      <TrendingUp className="h-4 w-4 text-[#EF4444]" />
+      <TrendingUp className="h-4 w-4 stock-up" />
     ) : (
-      <TrendingDown className="h-4 w-4 text-[#10B981]" />
+      <TrendingDown className="h-4 w-4 stock-down" />
     );
 
   /* ---- 持仓统计 ---- */
@@ -543,8 +543,8 @@ export default function DashboardPage() {
                           const pctColor =
                             pct !== undefined
                               ? pct >= 0
-                                ? "text-[#EF4444]"
-                                : "text-[#10B981]"
+                                ? "stock-up"
+                                : "stock-down"
                               : "text-muted-foreground dark:text-[#8888A0]";
                           return (
                             <tr
@@ -713,7 +713,7 @@ export default function DashboardPage() {
                             ? ((curPrice - h.costPrice) / h.costPrice) * 100
                             : 0;
                         const pnlColor =
-                          pnl >= 0 ? "text-[#EF4444]" : "text-[#10B981]";
+                          pnl >= 0 ? "stock-up" : "stock-down";
                         return (
                           <tr
                             key={h.code}
