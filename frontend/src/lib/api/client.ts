@@ -86,30 +86,37 @@ class ApiClient {
             } else if (line.startsWith('data: ') && eventType) {
               try {
                 const data = JSON.parse(line.slice(6));
-                switch (eventType) {
+                // 后端 agent-analyze 将多种事件包在 event:info 中，通过 data.event_type 区分
+                let effectiveType = eventType;
+                let payload = data;
+                if (eventType === 'info' && data && typeof data === 'object' && typeof data.event_type === 'string') {
+                  effectiveType = data.event_type;
+                  payload = data.data ?? data;
+                }
+                switch (effectiveType) {
                   case 'token':
-                    handlers.onToken?.(data);
+                    handlers.onToken?.(payload);
                     break;
                   case 'tool_call_start':
-                    handlers.onToolCallStart?.(data);
+                    handlers.onToolCallStart?.(payload);
                     break;
                   case 'tool_call_result':
-                    handlers.onToolCallResult?.(data);
+                    handlers.onToolCallResult?.(payload);
                     break;
                   case 'artifact':
-                    handlers.onArtifact?.(data);
+                    handlers.onArtifact?.(payload);
                     break;
                   case 'agent_progress':
-                    handlers.onAgentProgress?.(data);
+                    handlers.onAgentProgress?.(payload);
                     break;
                   case 'reasoning':
-                    handlers.onReasoning?.(data);
+                    handlers.onReasoning?.(payload);
                     break;
                   case 'error':
-                    handlers.onError?.(data);
+                    handlers.onError?.(payload);
                     break;
                   case 'done':
-                    handlers.onDone?.(data);
+                    handlers.onDone?.(payload);
                     break;
                 }
               } catch {
