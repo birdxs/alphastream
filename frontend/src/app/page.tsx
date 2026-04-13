@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ArtifactPanel } from "@/components/chat/artifact-panel";
+import { AgentSidePanel } from "@/components/agent/agent-side-panel";
 import { MarketOverview } from "@/components/market/market-overview";
 import { MessageSquare, BarChart3, Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -123,6 +124,8 @@ export default function HomePage() {
         <div className="flex-1 flex flex-col min-h-0">
           <ArtifactPanel />
         </div>
+        {/* Agent 实时进度 — 固定最右侧，默认展开，可折叠为竖条 */}
+        <AgentSidePanel />
       </div>
 
       {/* Mobile: single panel with bottom padding for TabBar + 滑入动画 */}
