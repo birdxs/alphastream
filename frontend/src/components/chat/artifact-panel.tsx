@@ -4,10 +4,13 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
+import { useState } from "react";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useAgentStore } from "@/lib/stores/agent-store";
 import { ArtifactRenderer } from "./artifact-renderer";
 import { AgentLogDrawer } from "@/components/agent/agent-log-drawer";
-import { Trash2, TrendingUp, DollarSign, Users, Bot } from "lucide-react";
+import { AgentProgressPanel } from "@/components/agent/agent-progress-panel";
+import { Trash2, TrendingUp, DollarSign, Users, Bot, ChevronUp, ChevronDown } from "lucide-react";
 
 const capabilities = [
   {
@@ -47,6 +50,10 @@ const capabilities = [
 export function ArtifactPanel() {
   const artifacts = useChatStore(s => s.artifacts);
   const isStreaming = useChatStore(s => s.isStreaming);
+  const isAnalyzing = useAgentStore(s => s.isAnalyzing);
+  const agentProgresses = useAgentStore(s => s.agentProgresses);
+  const [agentInlineCollapsed, setAgentInlineCollapsed] = useState(false);
+  const showInlineAgent = (isAnalyzing || agentProgresses.length > 0);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -75,7 +82,32 @@ export function ArtifactPanel() {
 
       {/* Content — 填满剩余高度 */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gradient-to-b from-transparent dark:to-[#06060F]/30">
-        {artifacts.length === 0 ? (
+        {/* 内联Agent进度面板 — 发送消息后自动显示，实时各agent进度，可折叠 */}
+        {showInlineAgent && (
+          <div className="mb-3 rounded-xl border border-[#3737CC]/25 bg-foreground/[0.03] dark:bg-white/[0.03]">
+            <button
+              onClick={() => setAgentInlineCollapsed(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors rounded-t-xl"
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <span className="relative w-2 h-2 rounded-full bg-[#3737CC]">
+                  {isAnalyzing && <span className="absolute inset-0 rounded-full bg-[#3737CC] animate-ping" />}
+                </span>
+                Multi-Agent 实时进度
+                <span className="text-muted-foreground font-mono text-[10px]">
+                  {agentProgresses.filter(p => p.status === 'completed').length}/{agentProgresses.length || 10}
+                </span>
+              </span>
+              {agentInlineCollapsed ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+            {!agentInlineCollapsed && (
+              <div className="px-3 pb-3">
+                <AgentProgressPanel />
+              </div>
+            )}
+          </div>
+        )}
+        {artifacts.length === 0 && !showInlineAgent ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center w-full max-w-md space-y-5">
               {/* 主图标 — 大圆形 glass 容器 + 脉冲动画 */}
