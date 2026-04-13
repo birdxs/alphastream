@@ -54,19 +54,19 @@ export default function WatchlistPage() {
         </div>
         {items.length === 0 ? (
           <div className="text-center py-12 space-y-4">
-            <Star className="h-12 w-12 text-white/15 mx-auto" />
-            <p className="text-white/40">暂无自选股</p>
-            <p className="text-sm text-white/25">按 <kbd className="px-1.5 py-0.5 rounded-md bg-foreground/[0.06] dark:bg-white/[0.06] text-[10px] font-medium border border-foreground/[0.08] dark:border-white/[0.08]">{"\u2318"}K</kbd> 搜索并添加第一只自选股</p>
+            <Star className="h-12 w-12 text-muted-foreground dark:text-white/15 mx-auto" />
+            <p className="text-muted-foreground dark:text-white/40">暂无自选股</p>
+            <p className="text-sm text-muted-foreground dark:text-white/25">按 <kbd className="px-1.5 py-0.5 rounded-md bg-foreground/[0.06] dark:bg-white/[0.06] text-[10px] font-medium border border-foreground/[0.08] dark:border-white/[0.08]">{"\u2318"}K</kbd> 搜索并添加第一只自选股</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-foreground/[0.08] dark:border-white/[0.08]">
-                  <th className="text-left py-2.5 px-3 text-white/40 text-xs font-medium">名称</th>
-                  <th className="text-left py-2.5 px-3 text-white/40 text-xs font-medium font-mono">代码</th>
-                  <th className="text-right py-2.5 px-3 text-white/40 text-xs font-medium">添加日期</th>
-                  <th className="text-right py-2.5 px-3 text-white/40 text-xs font-medium">操作</th>
+                  <th className="text-left py-2.5 px-3 text-muted-foreground dark:text-white/40 text-xs font-medium">名称</th>
+                  <th className="text-left py-2.5 px-3 text-muted-foreground dark:text-white/40 text-xs font-medium font-mono">代码</th>
+                  <th className="text-right py-2.5 px-3 text-muted-foreground dark:text-white/40 text-xs font-medium">添加日期</th>
+                  <th className="text-right py-2.5 px-3 text-muted-foreground dark:text-white/40 text-xs font-medium">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -90,7 +90,7 @@ export default function WatchlistPage() {
                       </Link>
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <span className="text-xs text-white/30 font-mono">
+                      <span className="text-xs text-muted-foreground dark:text-white/30 font-mono">
                         {new Date(item.addedAt).toLocaleDateString()}
                       </span>
                     </td>
@@ -102,7 +102,7 @@ export default function WatchlistPage() {
                           </Button>
                         </Link>
                         <Button variant="ghost" size="icon" onClick={() => removeItem(item.code)} className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08]">
-                          <X className="h-3.5 w-3.5 text-white/40 hover:text-[#FF8767]" />
+                          <X className="h-3.5 w-3.5 text-muted-foreground dark:text-white/40 hover:text-[#FF8767]" />
                         </Button>
                       </div>
                     </td>

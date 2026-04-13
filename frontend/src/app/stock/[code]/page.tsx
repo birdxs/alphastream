@@ -75,7 +75,7 @@ function LoadingSkeleton({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 gap-3">
       <Loader2 className="h-8 w-8 animate-spin text-[#3737CC]/60" />
-      <span className="text-sm text-white/40">加载{label}数据中…</span>
+      <span className="text-sm text-muted-foreground dark:text-white/40">加载{label}数据中…</span>
     </div>
   );
 }
@@ -264,10 +264,13 @@ export default function StockDetailPage({
     }
   }, [code, riskData]);
 
-  /* 初始加载K线 */
+  /* 初始加载K线 + 并行获取股票名称（基本面接口稳定返回 stock_name） */
   useEffect(() => {
     fetchKline();
-  }, [fetchKline]);
+    // 后台静默拉取基本面以提取 stock_name（不阻塞K线渲染）
+    fetchFundamental();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
   /* 切tab时按需加载 */
   useEffect(() => {
@@ -377,7 +380,7 @@ export default function StockDetailPage({
   /* ---------- 涨跌颜色 ---------- */
   const priceColor =
     changePercent === null
-      ? "text-white/70"
+      ? "text-muted-foreground dark:text-white/70"
       : changePercent >= 0
         ? "text-[#FF8767]"
         : "text-[#46BEA3]";
@@ -411,15 +414,15 @@ export default function StockDetailPage({
               className="flex items-center justify-center h-9 w-9 rounded-xl bg-foreground/[0.06] dark:bg-white/[0.06] hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] border border-foreground/[0.08] dark:border-white/[0.08] transition-colors shrink-0"
               aria-label="返回"
             >
-              <ArrowLeft className="h-4 w-4 text-white/60" />
+              <ArrowLeft className="h-4 w-4 text-muted-foreground dark:text-white/60" />
             </button>
 
             <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
-              <span className="text-lg font-bold text-white tracking-wide font-mono">
+              <span className="text-lg font-bold text-foreground dark:text-white tracking-wide font-mono">
                 {code}
               </span>
               {stockName && (
-                <span className="text-base text-white/70 truncate">
+                <span className="text-base text-muted-foreground dark:text-white/70 truncate">
                   {stockName}
                 </span>
               )}
@@ -455,7 +458,7 @@ export default function StockDetailPage({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all border ${
                 isWatched
                   ? "bg-[#F59E0B]/15 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#F59E0B]/25"
-                  : "bg-foreground/[0.06] dark:bg-white/[0.06] border-foreground/[0.08] dark:border-white/[0.08] text-white/50 hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] hover:text-[#F59E0B]"
+                  : "bg-foreground/[0.06] dark:bg-white/[0.06] border-foreground/[0.08] dark:border-white/[0.08] text-muted-foreground dark:text-white/50 hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] hover:text-[#F59E0B]"
               }`}
             >
               {isWatched ? (
@@ -488,7 +491,7 @@ export default function StockDetailPage({
               className={`relative px-4 py-2 text-sm font-medium whitespace-nowrap transition-all duration-200 rounded-lg ${
                 active
                   ? "text-[#3737CC] bg-[#3737CC]/10"
-                  : "text-white/50 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] hover:text-white/70"
+                  : "text-muted-foreground dark:text-white/50 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] hover:text-foreground dark:hover:text-white/70"
               }`}
             >
               {tab.label}

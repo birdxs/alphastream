@@ -63,17 +63,17 @@ export default function PortfolioPage() {
       {/* 组合概况 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <GlassCard padding="md">
-          <p className="text-sm text-white/50">总市值</p>
+          <p className="text-sm text-muted-foreground dark:text-white/50">总市值</p>
           <p className="text-2xl font-bold font-mono">&yen;{formatPrice(totalValue)}</p>
         </GlassCard>
         <GlassCard padding="md">
-          <p className="text-sm text-white/50">总盈亏</p>
+          <p className="text-sm text-muted-foreground dark:text-white/50">总盈亏</p>
           <p className={`text-2xl font-bold font-mono ${getPriceColorClass(totalPnl)}`}>
             {totalPnl >= 0 ? '+' : ''}{formatPrice(totalPnl)}
           </p>
         </GlassCard>
         <GlassCard padding="md">
-          <p className="text-sm text-white/50">收益率</p>
+          <p className="text-sm text-muted-foreground dark:text-white/50">收益率</p>
           <p className={`text-2xl font-bold font-mono flex items-center gap-1 ${getPriceColorClass(totalReturn)}`}>
             {totalReturn >= 0 ? <TrendingUp className="h-5 w-5"/> : <TrendingDown className="h-5 w-5"/>}
             {formatPercent(totalReturn)}
@@ -86,19 +86,19 @@ export default function PortfolioPage() {
         <GlassCard padding="md">
           <div className="flex gap-2 items-end flex-wrap">
             <div className="flex-1 min-w-[120px]">
-              <label htmlFor="stock-code" className="text-xs text-white/50">股票代码</label>
+              <label htmlFor="stock-code" className="text-xs text-muted-foreground dark:text-white/50">股票代码</label>
               <Input id="stock-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="600519" className={`bg-foreground/[0.04] dark:bg-white/[0.04] border-foreground/[0.1] dark:border-white/[0.1] ${formError.includes('代码') ? 'border-[#FF8767]' : ''}`} />
             </div>
             <div className="flex-1 min-w-[120px]">
-              <label htmlFor="stock-name" className="text-xs text-white/50">股票名称</label>
+              <label htmlFor="stock-name" className="text-xs text-muted-foreground dark:text-white/50">股票名称</label>
               <Input id="stock-name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="贵州茅台" className="bg-foreground/[0.04] dark:bg-white/[0.04] border-foreground/[0.1] dark:border-white/[0.1]" />
             </div>
             <div className="flex-1 min-w-[100px]">
-              <label htmlFor="stock-shares" className="text-xs text-white/50">持股数量</label>
+              <label htmlFor="stock-shares" className="text-xs text-muted-foreground dark:text-white/50">持股数量</label>
               <Input id="stock-shares" value={newShares} onChange={e => setNewShares(e.target.value)} placeholder="100" type="number" className={`bg-foreground/[0.04] dark:bg-white/[0.04] border-foreground/[0.1] dark:border-white/[0.1] ${formError.includes('数量') ? 'border-[#FF8767]' : ''}`} />
             </div>
             <div className="flex-1 min-w-[100px]">
-              <label htmlFor="stock-cost" className="text-xs text-white/50">成本价</label>
+              <label htmlFor="stock-cost" className="text-xs text-muted-foreground dark:text-white/50">成本价</label>
               <Input id="stock-cost" value={newCost} onChange={e => setNewCost(e.target.value)} placeholder="1800" type="number" className={`bg-foreground/[0.04] dark:bg-white/[0.04] border-foreground/[0.1] dark:border-white/[0.1] ${formError.includes('成本') ? 'border-[#FF8767]' : ''}`} />
             </div>
             <Button onClick={handleAdd} className="bg-[#3737CC] hover:bg-[#4545DD] text-white">添加</Button>
@@ -116,7 +116,7 @@ export default function PortfolioPage() {
           <button className="w-full group relative overflow-hidden rounded-2xl px-6 py-4 bg-gradient-to-r from-[#3737CC] via-[#5A4ED3] to-[#6B5EE4] hover:from-[#4545DD] hover:via-[#6B5EE4] hover:to-[#8B7EFF] shadow-lg shadow-[#6B5EE4]/20 hover:shadow-xl hover:shadow-[#6B5EE4]/30 transition-all duration-300 flex items-center justify-center gap-3">
             <Sparkles className="h-5 w-5 text-white group-hover:rotate-12 transition-transform duration-300" />
             <span className="text-base font-semibold text-white">AI分析全部持仓</span>
-            <span className="text-xs text-white/70">（{holdings.length}只）</span>
+            <span className="text-xs text-muted-foreground dark:text-white/70">（{holdings.length}只）</span>
           </button>
         </Link>
       )}
@@ -124,15 +124,15 @@ export default function PortfolioPage() {
       {/* 持仓列表 */}
       <GlassCard padding="lg">
         <div className="flex items-center gap-2 mb-4">
-          <BarChart3 className="h-4 w-4 text-white/60" />
+          <BarChart3 className="h-4 w-4 text-muted-foreground dark:text-white/60" />
           <h2 className="text-sm font-semibold">持仓明细</h2>
         </div>
         <div className="space-y-2">
           {holdings.length === 0 ? (
             <div className="text-center py-12 space-y-4">
-              <Briefcase className="h-12 w-12 text-white/15 mx-auto" />
-              <p className="text-white/40">暂无持仓</p>
-              <p className="text-sm text-white/25">点击上方"添加持仓"开始管理您的投资组合</p>
+              <Briefcase className="h-12 w-12 text-muted-foreground dark:text-white/15 mx-auto" />
+              <p className="text-muted-foreground dark:text-white/40">暂无持仓</p>
+              <p className="text-sm text-muted-foreground dark:text-white/25">点击上方"添加持仓"开始管理您的投资组合</p>
             </div>
           ) : (
             holdings.map(h => {
@@ -151,7 +151,7 @@ export default function PortfolioPage() {
                   <div className="flex items-center gap-6 text-sm">
                     <div className="text-right">
                       <p className="font-mono">{h.shares}股</p>
-                      <p className="text-xs text-white/40">成本 {formatPrice(h.costPrice)}</p>
+                      <p className="text-xs text-muted-foreground dark:text-white/40">成本 {formatPrice(h.costPrice)}</p>
                     </div>
                     <div className="text-right w-24">
                       <p className={`font-mono ${getPriceColorClass(pnl)}`}>
@@ -167,7 +167,7 @@ export default function PortfolioPage() {
                       </Button>
                     </Link>
                     <Button variant="ghost" size="icon" onClick={() => removeHolding(h.code)} className="hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08]">
-                      <Trash2 className="h-4 w-4 text-white/40 hover:text-[#FF8767]" />
+                      <Trash2 className="h-4 w-4 text-muted-foreground dark:text-white/40 hover:text-[#FF8767]" />
                     </Button>
                   </div>
                 </div>

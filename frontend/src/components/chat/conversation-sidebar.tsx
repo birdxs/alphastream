@@ -217,11 +217,11 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   // Mobile Sheet模式下不支持折叠
   if (collapsed && !isMobileSheet) {
     return (
-      <div className="hidden sm:flex w-10 bg-card/60 dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
+      <div className="hidden sm:flex w-10 bg-[rgba(255,255,255,0.6)] dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
         <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]" aria-label="展开侧边栏">
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={newConversation} title="新对话" className="text-white hover:bg-[#4F4FE6]/20" aria-label="新建对话">
+        <Button variant="ghost" size="icon" onClick={newConversation} title="新对话" className="text-foreground dark:text-white hover:bg-[#4F4FE6]/20" aria-label="新建对话">
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -229,7 +229,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   }
 
   return (
-    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-card/60 dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-foreground/[0.08] dark:border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
+    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-[rgba(255,255,255,0.6)] dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-foreground/[0.08] dark:border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
       <div className="p-2 border-b border-foreground/[0.08] dark:border-white/[0.08] flex items-center justify-between shrink-0">
         <Button size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs bg-[#3737CC] hover:bg-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/20" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
