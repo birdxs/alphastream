@@ -285,7 +285,7 @@ export function ChatInput({ onSend, onStop }: Props) {
   };
 
   return (
-    <div className="bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08]">
+    <div className="bg-background/80 dark:bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08]">
       {/* 股票选择行 */}
       <div className="flex items-center gap-1.5 px-3 pt-2">
         <div className={`flex items-center gap-0.5 bg-foreground/[0.04] dark:bg-white/[0.04] border rounded-lg px-2 py-1 shadow-sm transition-colors duration-150 ${

@@ -141,7 +141,7 @@ export default function HomePage() {
       </div>
 
       {/* Mobile: 底部TabBar — 固定在底部 */}
-      <div className="flex sm:hidden fixed bottom-0 left-0 right-0 h-14 bg-[rgba(10,10,26,0.95)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08] z-50 items-center justify-around px-2">
+      <div className="flex sm:hidden fixed bottom-0 left-0 right-0 h-14 bg-background/95 dark:bg-[rgba(10,10,26,0.95)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08] z-50 items-center justify-around px-2">
         {/* 左侧：侧边栏Drawer触发按钮 */}
         <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
           <SheetTrigger
@@ -151,7 +151,7 @@ export default function HomePage() {
           >
             <Menu className="h-5 w-5" />
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0 bg-[rgba(15,15,35,0.98)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08]">
+          <SheetContent side="left" className="w-72 p-0 bg-background/98 dark:bg-[rgba(15,15,35,0.98)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08]">
             <ConversationSidebar isMobileSheet onConversationSelect={() => setMobileSheetOpen(false)} />
           </SheetContent>
         </Sheet>

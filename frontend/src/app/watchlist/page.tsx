@@ -108,7 +108,7 @@ export default function WatchlistPage() {
                     </td>
                     {longPressItem === item.code && (
                       <td colSpan={4} className="absolute right-0 top-full mt-1 z-10">
-                        <div className="bg-[rgba(15,15,35,0.95)] backdrop-blur-xl border border-foreground/[0.12] dark:border-white/[0.12] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] py-1">
+                        <div className="bg-white/95 dark:bg-[rgba(15,15,35,0.95)] backdrop-blur-xl border border-foreground/[0.12] dark:border-white/[0.12] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] py-1">
                           <Link href={`/?stock=${item.code}`} className="block w-full px-4 py-2 text-sm hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] text-left">
                             AI分析
                           </Link>
