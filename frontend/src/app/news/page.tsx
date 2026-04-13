@@ -282,10 +282,11 @@ export default function NewsPage() {
 
               const sentimentIcon = sentiment === "positive" ? "▲" : sentiment === "negative" ? "▼" : "—";
               const sentimentLabel = sentiment === "positive" ? "利好" : sentiment === "negative" ? "利空" : "中性";
+              // 利好=涨，利空=跌，随涨跌色方案切换
               const sentimentColor = sentiment === "positive"
-                ? "text-emerald-600 dark:text-emerald-400"
+                ? "stock-up"
                 : sentiment === "negative"
-                  ? "text-rose-600 dark:text-rose-400"
+                  ? "stock-down"
                   : "text-slate-500 dark:text-white/50";
 
               return (
@@ -329,9 +330,9 @@ export default function NewsPage() {
           <div className="px-4 py-2.5 border-t border-slate-200 dark:border-white/[0.06]">
             <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 dark:text-white/40 mb-1.5">
               <span>情绪分布</span>
-              <span className="text-emerald-600 dark:text-emerald-400">▲ {posPct}%</span>
+              <span className="stock-up">▲ {posPct}%</span>
               <span className="text-slate-400 dark:text-white/40">— {neuPct}%</span>
-              <span className="text-rose-600 dark:text-rose-400">▼ {negPct}%</span>
+              <span className="stock-down">▼ {negPct}%</span>
             </div>
             <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-200 dark:bg-white/[0.06]">
               <div className="bg-emerald-500/80 dark:bg-emerald-500/70 transition-all duration-500" style={{ width: `${posPct}%` }} />

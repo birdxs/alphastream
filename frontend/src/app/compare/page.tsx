@@ -104,7 +104,7 @@ export default function ComparePage() {
           <div key={code} className="flex items-center gap-1.5 bg-foreground/[0.06] dark:bg-white/[0.06] border border-foreground/[0.1] dark:border-white/[0.1] rounded-full px-3 py-1.5">
             <div className={`w-2 h-2 rounded-full ${TAG_COLORS[i]}`} />
             <Link href={`/stock/${code}`} className="font-mono text-sm hover:text-[#6B5EE4] transition-colors">{code}</Link>
-            <span className="text-xs text-muted-foreground dark:text-white/40">{getStockName(code)}</span>
+            <span className="text-xs text-muted-foreground dark:text-white/40">{profiles[code]?.stock_name || getStockName(code)}</span>
             <button onClick={() => removeCode(code)} className="ml-1 text-muted-foreground dark:text-white/30 hover:text-foreground dark:hover:text-white/70 transition-colors" aria-label={`移除${code}`}>
               <X className="h-3 w-3" />
             </button>
