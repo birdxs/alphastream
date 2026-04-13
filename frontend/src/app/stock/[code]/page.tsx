@@ -137,12 +137,17 @@ export default function StockDetailPage({
     setLoadingTab((p) => ({ ...p, kline: true }));
     setErrorTab((p) => ({ ...p, kline: null }));
     try {
-      const res = await apiClient.get<{ data: Record<string, unknown>[] }>(
+      const res = await apiClient.get<{ data: Record<string, unknown>[]; stock_name?: string }>(
         "/api/stock_data",
         { stock_code: code, market_type: "A", period: "1y" }
       );
       const rows = res.data || [];
       setKlineData(rows);
+
+      // 从顶层提取股票名称（后端返回的stock_name字段）
+      if (res.stock_name && typeof res.stock_name === "string" && res.stock_name !== code) {
+        setStockName(res.stock_name);
+      }
 
       // 从最后一条提取价格信息
       if (rows.length > 0) {
@@ -157,10 +162,6 @@ export default function StockDetailPage({
               Number((((close - prevClose) / prevClose) * 100).toFixed(2))
             );
           }
-        }
-        // 尝试提取名称（如果后端返回了name字段）
-        if (last.name && typeof last.name === "string") {
-          setStockName(last.name as string);
         }
       }
     } catch (e) {
