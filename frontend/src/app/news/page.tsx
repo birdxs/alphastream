@@ -229,27 +229,27 @@ export default function NewsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-full min-h-0" style={{ height: 'calc(100vh - 96px)' }}>
 
         {/* ====== 左栏: AI Sentiment Terminal ====== */}
-        {/* 终端在浅色下也强制深色背景以保持terminal视觉语义 */}
-        <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl flex flex-col overflow-hidden min-h-0 h-full shadow-xl shadow-black/30">
+        {/* 双主题：浅色下白底+深色文字保持clarity，深色下保留terminal视觉 */}
+        <div className="bg-white dark:bg-[#0A0A1A] backdrop-blur-[40px] saturate-[180%] border border-slate-200 dark:border-white/[0.1] rounded-2xl flex flex-col overflow-hidden min-h-0 h-full shadow-xl shadow-slate-200/50 dark:shadow-black/30">
 
           {/* macOS 标题栏 */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-foreground/[0.06] dark:border-white/[0.06]">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-white/[0.06]">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
                 <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
                 <span className="w-3 h-3 rounded-full bg-[#28c840]" />
               </div>
-              <span className="ml-3 text-[11px] font-mono text-white/40 tracking-widest uppercase">
+              <span className="ml-3 text-[11px] font-mono text-slate-500 dark:text-white/40 tracking-widest uppercase">
                 AI Sentiment Agent
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 dark:bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600 dark:bg-emerald-500" />
               </span>
-              <span className="text-[10px] font-mono text-emerald-400/80 tracking-wider">LIVE</span>
+              <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400/80 tracking-wider">LIVE</span>
             </div>
           </div>
 
@@ -260,7 +260,7 @@ export default function NewsPage() {
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace", fontSize: "12.5px", lineHeight: "1.9" }}
           >
             {/* 启动信息 */}
-            <div className="text-white/30">
+            <div className="text-slate-400 dark:text-white/30">
               <p>{">"} sentiment_agent v4.0 initialized</p>
               <p>{">"} scanning financial news feed...</p>
               <p>{">"} connected to data source [OK]</p>
@@ -268,7 +268,7 @@ export default function NewsPage() {
             </div>
 
             {loading && displayedNews.length === 0 && (
-              <div className="text-white/20 animate-pulse">
+              <div className="text-slate-300 dark:text-white/20 animate-pulse">
                 {">"} loading news data...
               </div>
             )}
@@ -283,10 +283,10 @@ export default function NewsPage() {
               const sentimentIcon = sentiment === "positive" ? "▲" : sentiment === "negative" ? "▼" : "—";
               const sentimentLabel = sentiment === "positive" ? "利好" : sentiment === "negative" ? "利空" : "中性";
               const sentimentColor = sentiment === "positive"
-                ? "text-emerald-400"
+                ? "text-emerald-600 dark:text-emerald-400"
                 : sentiment === "negative"
-                  ? "text-rose-400"
-                  : "text-white/50";
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-slate-500 dark:text-white/50";
 
               return (
                 <div
@@ -294,49 +294,49 @@ export default function NewsPage() {
                   className={`mb-3 transition-all duration-700 ${isFading ? "animate-fade-in" : ""}`}
                   style={isFading ? { animation: "fadeSlideIn 0.6s ease-out" } : {}}
                 >
-                  <p className="text-cyan-400/70">
-                    <span className="text-white/30">[{fmtTime(news)}]</span>
+                  <p className="text-cyan-700 dark:text-cyan-400/70">
+                    <span className="text-slate-400 dark:text-white/30">[{fmtTime(news)}]</span>
                     {" "}
-                    <span className="text-cyan-400/90">[SCAN]</span>
+                    <span className="text-cyan-700 dark:text-cyan-400/90">[SCAN]</span>
                     {" "}
-                    <span className="text-white/50">新信号 ↓</span>
+                    <span className="text-slate-500 dark:text-white/50">新信号 ↓</span>
                   </p>
                   <p className="pl-10">
                     <span className={sentimentColor}>{sentimentIcon}{sentimentLabel}</span>
                     {"  "}
-                    <span className="text-white/80">{news.title}</span>
+                    <span className="text-slate-700 dark:text-white/80">{news.title}</span>
                   </p>
-                  <p className="pl-10 text-white/30">
-                    <span className="text-amber-400/60">[EVAL]</span>
+                  <p className="pl-10 text-slate-500 dark:text-white/30">
+                    <span className="text-amber-600 dark:text-amber-400/60">[EVAL]</span>
                     {" "}
                     评分 <span className={sentimentColor}>{score.toFixed(1)}/10</span>
-                    {code && <>{" · 关联 "}<span className="text-blue-400/70">{code}</span></>}
-                    {news.source && <>{" · "}<span className="text-white/20">{news.source}</span></>}
+                    {code && <>{" · 关联 "}<span className="text-blue-600 dark:text-blue-400/70">{code}</span></>}
+                    {news.source && <>{" · "}<span className="text-slate-400 dark:text-white/20">{news.source}</span></>}
                   </p>
                 </div>
               );
             })}
 
             {/* 底部闪烁光标 */}
-            <div className="pt-2 text-white/40">
-              <span className="text-emerald-400/60">AGENT $</span>{" "}
+            <div className="pt-2 text-slate-500 dark:text-white/40">
+              <span className="text-emerald-600 dark:text-emerald-400/60">AGENT $</span>{" "}
               <span>监听中...</span>
-              <span className="typing-cursor inline-block w-[2px] h-[14px] bg-emerald-400 ml-1 align-middle" />
+              <span className="typing-cursor inline-block w-[2px] h-[14px] bg-emerald-500 dark:bg-emerald-400 ml-1 align-middle" />
             </div>
           </div>
 
           {/* 底部情绪分布条 */}
-          <div className="px-4 py-2.5 border-t border-foreground/[0.06] dark:border-white/[0.06]">
-            <div className="flex items-center gap-3 text-[10px] font-mono text-white/40 mb-1.5">
+          <div className="px-4 py-2.5 border-t border-slate-200 dark:border-white/[0.06]">
+            <div className="flex items-center gap-3 text-[10px] font-mono text-slate-500 dark:text-white/40 mb-1.5">
               <span>情绪分布</span>
-              <span className="text-emerald-400">▲ {posPct}%</span>
-              <span className="text-white/40">— {neuPct}%</span>
-              <span className="text-rose-400">▼ {negPct}%</span>
+              <span className="text-emerald-600 dark:text-emerald-400">▲ {posPct}%</span>
+              <span className="text-slate-400 dark:text-white/40">— {neuPct}%</span>
+              <span className="text-rose-600 dark:text-rose-400">▼ {negPct}%</span>
             </div>
-            <div className="flex h-1.5 rounded-full overflow-hidden bg-foreground/[0.06] dark:bg-white/[0.06]">
-              <div className="bg-emerald-500/70 transition-all duration-500" style={{ width: `${posPct}%` }} />
-              <div className="bg-white/20 transition-all duration-500" style={{ width: `${neuPct}%` }} />
-              <div className="bg-rose-500/70 transition-all duration-500" style={{ width: `${negPct}%` }} />
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-200 dark:bg-white/[0.06]">
+              <div className="bg-emerald-500/80 dark:bg-emerald-500/70 transition-all duration-500" style={{ width: `${posPct}%` }} />
+              <div className="bg-slate-400/60 dark:bg-white/20 transition-all duration-500" style={{ width: `${neuPct}%` }} />
+              <div className="bg-rose-500/80 dark:bg-rose-500/70 transition-all duration-500" style={{ width: `${negPct}%` }} />
             </div>
           </div>
         </div>
@@ -345,12 +345,12 @@ export default function NewsPage() {
         <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
 
           {/* --- 卡片1: 舆情分布环形图 --- */}
-          <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-black/20">
+          <div className="bg-white dark:bg-[#0A0A1A] backdrop-blur-[40px] saturate-[180%] border border-slate-200 dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-slate-200/50 dark:shadow-black/20">
             <div className="flex items-center gap-2 mb-4">
-              <div className="icon-box w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                <span className="text-violet-400 text-sm">◈</span>
+              <div className="icon-box w-7 h-7 rounded-lg bg-violet-500/15 dark:bg-violet-500/20 flex items-center justify-center">
+                <span className="text-violet-600 dark:text-violet-400 text-sm">◈</span>
               </div>
-              <span className="text-xs font-medium text-white/70 tracking-wide">舆情分布</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-white/70 tracking-wide">舆情分布</span>
             </div>
 
             <div className="flex items-center justify-center">
@@ -361,59 +361,59 @@ export default function NewsPage() {
                   style={{
                     background: `conic-gradient(
                       #34d399 0% ${posPct}%,
-                      rgba(255,255,255,0.2) ${posPct}% ${posPct + neuPct}%,
+                      rgba(148,163,184,0.25) ${posPct}% ${posPct + neuPct}%,
                       #fb7185 ${posPct + neuPct}% 100%
                     )`,
                   }}
                 />
-                {/* 中心镂空 */}
-                <div className="absolute inset-3 rounded-full bg-[#0a0a1a] flex flex-col items-center justify-center">
-                  <span className="text-lg font-bold text-white/90">{avgScore.toFixed(1)}</span>
-                  <span className="text-[9px] text-white/30 font-mono">总评分</span>
+                {/* 中心镂空 — 双主题 */}
+                <div className="absolute inset-3 rounded-full bg-white dark:bg-[#0a0a1a] flex flex-col items-center justify-center">
+                  <span className="text-lg font-bold text-slate-800 dark:text-white/90">{avgScore.toFixed(1)}</span>
+                  <span className="text-[9px] text-slate-500 dark:text-white/30 font-mono">总评分</span>
                 </div>
               </div>
             </div>
 
             <div className="flex justify-center gap-4 mt-4 text-[10px] font-mono">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-white/40">利好 {posPct}%</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                <span className="text-slate-500 dark:text-white/40">利好 {posPct}%</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-white/20" />
-                <span className="text-white/40">中性 {neuPct}%</span>
+                <span className="w-2 h-2 rounded-full bg-slate-400/60 dark:bg-white/20" />
+                <span className="text-slate-500 dark:text-white/40">中性 {neuPct}%</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-rose-400" />
-                <span className="text-white/40">利空 {negPct}%</span>
+                <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400" />
+                <span className="text-slate-500 dark:text-white/40">利空 {negPct}%</span>
               </span>
             </div>
           </div>
 
           {/* --- 卡片2: 7日情绪趋势柱状图 --- */}
-          <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-black/20">
+          <div className="bg-white dark:bg-[#0A0A1A] backdrop-blur-[40px] saturate-[180%] border border-slate-200 dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-slate-200/50 dark:shadow-black/20">
             <div className="flex items-center gap-2 mb-4">
-              <div className="icon-box w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                <span className="text-cyan-400 text-sm">◎</span>
+              <div className="icon-box w-7 h-7 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/20 flex items-center justify-center">
+                <span className="text-cyan-600 dark:text-cyan-400 text-sm">◎</span>
               </div>
-              <span className="text-xs font-medium text-white/70 tracking-wide">7日情绪趋势</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-white/70 tracking-wide">7日情绪趋势</span>
             </div>
 
             <div className="flex items-end justify-between gap-2" style={{ height: 100 }}>
               {trend7d.map((d, i) => {
                 const barH = Math.max(4, Math.round((d.val / trendMax) * 80)); // max 80px, min 4px
                 const barColor = d.val >= 65
-                  ? "bg-emerald-500/70"
+                  ? "bg-emerald-500/80 dark:bg-emerald-500/70"
                   : d.val >= 40
-                    ? "bg-white/20"
-                    : "bg-amber-500/60";
+                    ? "bg-slate-400/50 dark:bg-white/20"
+                    : "bg-amber-500/70 dark:bg-amber-500/60";
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
                     <div
                       className={`w-5 rounded-t-sm ${barColor} transition-all duration-500`}
                       style={{ height: barH }}
                     />
-                    <span className="text-[9px] text-white/30 font-mono">{d.label}</span>
+                    <span className="text-[9px] text-slate-500 dark:text-white/30 font-mono">{d.label}</span>
                   </div>
                 );
               })}
@@ -421,12 +421,12 @@ export default function NewsPage() {
           </div>
 
           {/* --- 卡片3: 板块情绪热力图 --- */}
-          <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-black/20">
+          <div className="bg-white dark:bg-[#0A0A1A] backdrop-blur-[40px] saturate-[180%] border border-slate-200 dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-slate-200/50 dark:shadow-black/20">
             <div className="flex items-center gap-2 mb-4">
-              <div className="icon-box w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <span className="text-amber-400 text-sm">◆</span>
+              <div className="icon-box w-7 h-7 rounded-lg bg-amber-500/15 dark:bg-amber-500/20 flex items-center justify-center">
+                <span className="text-amber-600 dark:text-amber-400 text-sm">◆</span>
               </div>
-              <span className="text-xs font-medium text-white/70 tracking-wide">板块情绪热力图</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-white/70 tracking-wide">板块情绪热力图</span>
             </div>
 
             <div className="grid grid-cols-4 gap-1.5">
@@ -435,16 +435,16 @@ export default function NewsPage() {
                 const bg = sec.score >= 6
                   ? `rgba(52,211,153,${0.15 + intensity * 0.4})`
                   : sec.score >= 4.5
-                    ? `rgba(255,255,255,${0.04 + intensity * 0.1})`
+                    ? `rgba(148,163,184,${0.08 + intensity * 0.12})`
                     : `rgba(251,113,133,${0.15 + (1 - intensity) * 0.3})`;
                 return (
                   <div
                     key={sec.name}
-                    className="rounded-lg p-2 text-center transition-colors hover:brightness-125 cursor-default"
+                    className="rounded-lg p-2 text-center transition-colors hover:brightness-110 dark:hover:brightness-125 cursor-default"
                     style={{ background: bg }}
                   >
-                    <div className="text-[11px] text-white/70 font-medium">{sec.name}</div>
-                    <div className={`text-[10px] font-mono ${sec.score >= 6 ? "text-emerald-400/70" : sec.score >= 4.5 ? "text-white/30" : "text-rose-400/70"}`}>
+                    <div className="text-[11px] text-slate-700 dark:text-white/70 font-medium">{sec.name}</div>
+                    <div className={`text-[10px] font-mono ${sec.score >= 6 ? "text-emerald-700 dark:text-emerald-400/70" : sec.score >= 4.5 ? "text-slate-500 dark:text-white/30" : "text-rose-700 dark:text-rose-400/70"}`}>
                       {sec.score.toFixed(1)}
                     </div>
                   </div>
@@ -452,9 +452,9 @@ export default function NewsPage() {
               })}
             </div>
 
-            <div className="flex items-center justify-between mt-3 text-[9px] text-white/25 font-mono px-1">
+            <div className="flex items-center justify-between mt-3 text-[9px] text-slate-500 dark:text-white/25 font-mono px-1">
               <span>← 利空</span>
-              <div className="flex-1 mx-2 h-1 rounded-full" style={{ background: "linear-gradient(to right, #fb7185, rgba(255,255,255,0.15), #34d399)" }} />
+              <div className="flex-1 mx-2 h-1 rounded-full" style={{ background: "linear-gradient(to right, #fb7185, rgba(148,163,184,0.3), #34d399)" }} />
               <span>利好 →</span>
             </div>
           </div>

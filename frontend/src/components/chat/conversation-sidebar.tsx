@@ -23,7 +23,7 @@ function HighlightText({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <span className="text-[#3737CC] font-medium">{text.slice(idx, idx + query.length)}</span>
+      <span className="text-[#3737CC] dark:text-[#6B6BFF] font-medium">{text.slice(idx, idx + query.length)}</span>
       {text.slice(idx + query.length)}
     </>
   );
@@ -111,15 +111,20 @@ function SwipeableConvItem({
         onClick={() => { if (offsetX < 5) onSelect(conv); }}
         className={`relative flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer group transition-transform duration-150 ${
           isActive
-            ? 'bg-[#3737CC]/10 text-[#4F4FE6]'
+            ? 'bg-[#3737CC]/10 text-[#3737CC] dark:text-[#4F4FE6]'
             : 'text-foreground dark:text-[#F0F0F5]/80 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'
         }`}
-        style={{ transform: `translateX(-${offsetX}px)`, backgroundColor: offsetX > 0 ? 'rgba(15,15,35,0.95)' : undefined }}
+        style={{
+          transform: `translateX(-${offsetX}px)`,
+          backgroundColor: offsetX > 0
+            ? (typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'rgba(15,15,35,0.95)' : 'rgba(255,255,255,0.95)')
+            : undefined,
+        }}
       >
-        <MessageSquare className={`h-3 w-3 shrink-0 ${isActive ? 'text-[#3737CC]' : 'text-[#555570]'}`} />
+        <MessageSquare className={`h-3 w-3 shrink-0 ${isActive ? 'text-[#3737CC]' : 'text-muted-foreground dark:text-[#555570]'}`} />
         <span className="flex-1 truncate">
           {conv.stock_codes && conv.stock_codes.length > 0 && (
-            <span className="text-[#3737CC] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
+            <span className="text-[#3737CC] dark:text-[#6B6BFF] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
           )}
           <HighlightText text={conv.title} query={searchQuery} />
         </span>
@@ -212,7 +217,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   // Mobile Sheet模式下不支持折叠
   if (collapsed && !isMobileSheet) {
     return (
-      <div className="hidden sm:flex w-10 bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
+      <div className="hidden sm:flex w-10 bg-card/60 dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
         <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]" aria-label="展开侧边栏">
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -224,7 +229,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   }
 
   return (
-    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-foreground/[0.08] dark:border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
+    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-card/60 dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-foreground/[0.08] dark:border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
       <div className="p-2 border-b border-foreground/[0.08] dark:border-white/[0.08] flex items-center justify-between shrink-0">
         <Button size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs bg-[#3737CC] hover:bg-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/20" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
@@ -243,7 +248,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
           placeholder="搜索对话..."
           aria-label="搜索对话"
           tabIndex={1}
-          className="w-full bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg px-2.5 py-1.5 text-[11px] text-foreground dark:text-[#F0F0F5] border border-foreground/[0.08] dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-[#3737CC]/30 focus:border-[#3737CC] transition-all duration-200 placeholder:text-[#555570]"
+          className="w-full bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg px-2.5 py-1.5 text-[11px] text-foreground dark:text-[#F0F0F5] border border-foreground/[0.08] dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-[#3737CC]/30 focus:border-[#3737CC] transition-all duration-200 placeholder:text-muted-foreground dark:placeholder:text-[#555570]"
         />
       </div>
       {error && (
@@ -264,13 +269,13 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
             return filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center text-center py-6 px-3 gap-2">
               <MessageSquare className="h-6 w-6 text-[#3737CC]/30" />
-              <p className="text-xs text-[#555570] leading-relaxed">{searchQuery ? '无匹配对话' : '开始一段新对话，探索AI金融分析的无限可能'}</p>
+              <p className="text-xs text-muted-foreground dark:text-[#555570] leading-relaxed">{searchQuery ? '无匹配对话' : '开始一段新对话，探索AI金融分析的无限可能'}</p>
             </div>
           ) : (
             Object.entries(groupByDate(filteredConversations)).map(([label, convs]) => (
               <div key={label} className="mb-1" role="list" aria-label={`${label}的对话`}>
                 <div className={`px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase ${
-                  label === '今天' ? 'text-[#3737CC]' : label === '昨天' ? 'text-muted-foreground dark:text-[#8888A0]/70' : 'text-[#555570]'
+                  label === '今天' ? 'text-[#3737CC] dark:text-[#6B6BFF]' : label === '昨天' ? 'text-muted-foreground dark:text-[#8888A0]/70' : 'text-muted-foreground/70 dark:text-[#555570]'
                 }`}>{label}</div>
                 {convs.map(conv => (
                   isMobileSheet ? (
@@ -292,14 +297,14 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectConversation(conv); } }}
                     className={`relative flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer group transition-all duration-150 ${
                       activeConversationId === conv.conversation_id
-                        ? 'bg-[#3737CC]/10 text-[#4F4FE6] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:bg-[#3737CC] before:rounded-full before:transition-all before:duration-300 before:ease-out animate-[glass-enter_250ms_ease-out_both]'
+                        ? 'bg-[#3737CC]/10 text-[#3737CC] dark:text-[#4F4FE6] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:bg-[#3737CC] before:rounded-full before:transition-all before:duration-300 before:ease-out animate-[glass-enter_250ms_ease-out_both]'
                         : 'text-foreground dark:text-[#F0F0F5]/80 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] active:animate-[glass-enter_200ms_ease-out_both]'
                     }`}
                   >
-                    <MessageSquare className={`h-3 w-3 shrink-0 ${activeConversationId === conv.conversation_id ? 'text-[#3737CC]' : 'text-[#555570]'}`} />
+                    <MessageSquare className={`h-3 w-3 shrink-0 ${activeConversationId === conv.conversation_id ? 'text-[#3737CC]' : 'text-muted-foreground dark:text-[#555570]'}`} />
                     <span className="flex-1 truncate">
                       {conv.stock_codes && conv.stock_codes.length > 0 && (
-                        <span className="text-[#3737CC] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
+                        <span className="text-[#3737CC] dark:text-[#6B6BFF] font-mono text-[11px] font-medium mr-1">{conv.stock_codes[0]}</span>
                       )}
                       <HighlightText text={conv.title} query={searchQuery} />
                     </span>
@@ -321,7 +326,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
         </div>
       </ScrollArea>
       <div className="px-3 py-1.5 border-t border-foreground/[0.08] dark:border-white/[0.08] shrink-0">
-        <span className="text-[9px] text-[#555570]/60 tracking-wide">StockAnal v1.0</span>
+        <span className="text-[9px] text-muted-foreground/70 dark:text-[#555570]/60 tracking-wide">StockAnal v1.0</span>
       </div>
     </div>
   );

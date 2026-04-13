@@ -1035,6 +1035,70 @@ def server_error(error):
     return render_template('error.html', error_code=500, message="服务器内部错误"), 500
 
 
+# ============ A股名称缓存（ak.stock_info_a_code_name fallback） ============
+# 解决东方财富接口偶发失败导致stock_name降级为股票代码的问题
+_STOCK_NAME_CACHE = {}
+_CACHE_LOADED = False
+_CACHE_LOCK = threading.Lock()
+
+
+def _load_stock_name_cache():
+    """首次调用时加载全量A股代码->名称映射（~5000条）到进程级缓存"""
+    global _CACHE_LOADED
+    if _CACHE_LOADED:
+        return
+    with _CACHE_LOCK:
+        if _CACHE_LOADED:
+            return
+        try:
+            import akshare as ak
+            df = ak.stock_info_a_code_name()
+            for _, row in df.iterrows():
+                _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
+            _CACHE_LOADED = True
+            app.logger.info(f"A股名称缓存加载完成，共 {len(_STOCK_NAME_CACHE)} 条")
+        except Exception as e:
+            app.logger.warning(f"加载A股名称缓存失败: {str(e)}")
+
+
+def _get_stock_name_safe(stock_code, market_type='A'):
+    """
+    安全获取股票名称：
+    1. 优先调用 analyzer.get_stock_info（东方财富，信息最全）
+    2. 失败则降级查全量A股缓存（akshare stock_info_a_code_name）
+    3. 最终降级为股票代码本身
+    """
+    # 非A股暂无对应fallback，直接尝试analyzer
+    if market_type != 'A':
+        try:
+            info = analyzer.get_stock_info(stock_code)
+            if isinstance(info, dict):
+                name = info.get('股票名称') or info.get('name')
+                if name and name != '未知':
+                    return name
+        except Exception:
+            pass
+        return stock_code
+
+    # 1. 先试主路径
+    try:
+        info = analyzer.get_stock_info(stock_code)
+        if isinstance(info, dict):
+            name = info.get('股票名称') or info.get('name')
+            if name and name != '未知' and name != stock_code:
+                return name
+    except Exception as e:
+        app.logger.warning(f"analyzer.get_stock_info 失败 {stock_code}: {str(e)}")
+
+    # 2. 降级：全量A股缓存
+    _load_stock_name_cache()
+    if stock_code in _STOCK_NAME_CACHE:
+        return _STOCK_NAME_CACHE[stock_code]
+
+    # 3. 最终降级
+    return stock_code
+
+
 # Update the get_stock_data function in web_server.py to handle date formatting properly
 @app.route('/api/stock_data', methods=['GET'])
 @cache.cached(timeout=300, query_string=True)
@@ -1100,16 +1164,8 @@ def get_stock_data():
 
         records = df.to_dict('records')
 
-        # 获取股票名称（失败降级为stock_code）
-        stock_name = stock_code
-        try:
-            info = analyzer.get_stock_info(stock_code)
-            if isinstance(info, dict):
-                name = info.get('股票名称') or info.get('name')
-                if name and name != '未知':
-                    stock_name = name
-        except Exception as e:
-            app.logger.warning(f"获取股票名称失败 {stock_code}: {str(e)}")
+        # 获取股票名称（主路径失败自动降级到akshare全量缓存）
+        stock_name = _get_stock_name_safe(stock_code, market_type)
 
         app.logger.info(f"数据处理完成，返回 {len(records)} 条记录, 股票名称: {stock_name}")
         return custom_jsonify({'data': records, 'stock_name': stock_name})
