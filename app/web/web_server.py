@@ -1176,11 +1176,33 @@ def get_stock_data():
 
 
 # 股票概要：名称/行业/市值/PE/PB/ROE — 供对比页快速对比使用（baostock主，不依赖eastmoney）
-# baostock使用全局session，并发请求会串线 — 用lock串行化 + profile短缓存
+# baostock使用全局session，并发请求会串线 — 用lock串行化 + profile短缓存 + 启动时一次登录
 import threading as _threading
+import atexit as _atexit
 _BAOSTOCK_LOCK = _threading.Lock()
 _PROFILE_CACHE = {}  # {stock_code: (ts, profile)}
 _PROFILE_TTL = 3600  # 1小时
+_BS_LOGGED_IN = False
+
+def _ensure_bs_login():
+    global _BS_LOGGED_IN
+    if _BS_LOGGED_IN: return
+    with _BAOSTOCK_LOCK:
+        if _BS_LOGGED_IN: return
+        try:
+            import baostock as bs
+            bs.login()
+            _BS_LOGGED_IN = True
+            app.logger.info("baostock 已登录（进程级）")
+        except Exception as e:
+            app.logger.warning(f"baostock 登录失败: {e}")
+
+@_atexit.register
+def _bs_logout_on_exit():
+    try:
+        import baostock as bs
+        bs.logout()
+    except: pass
 
 @app.route('/api/stock_profile', methods=['GET'])
 def api_stock_profile():
@@ -1197,15 +1219,18 @@ def api_stock_profile():
     if cached and (now - cached[0] < _PROFILE_TTL):
         return custom_jsonify(cached[1])
 
-    name = _get_stock_name_safe(stock_code, 'A') or stock_code
+    # 名称：直接走预加载缓存，不走analyzer.get_stock_info（该函数在eastmoney阻断时会60s超时）
+    _load_stock_name_cache()
+    name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
     profile = {'stock_code': stock_code, 'stock_name': name,
                'industry': None, 'market_cap': None, 'pe_ttm': None, 'pb': None, 'roe': None}
     # baostock需要 sh./sz. 前缀
     prefix = 'sh.' if stock_code.startswith('6') else 'sz.'
     bs_code = prefix + stock_code
+    _ensure_bs_login()
     with _BAOSTOCK_LOCK:
       try:
-        bs.login()
+        pass  # 进程级session已登录
         # 行业
         try:
             rs = bs.query_stock_industry(code=bs_code)
@@ -1260,24 +1285,21 @@ def api_stock_profile():
         except Exception as e:
             app.logger.warning(f"baostock profit失败({stock_code}): {e}")
       except Exception as e:
-        app.logger.error(f"baostock login 失败: {e}")
-      finally:
-        try: bs.logout()
-        except: pass
+        app.logger.error(f"baostock 查询失败: {e}")
     _PROFILE_CACHE[stock_code] = (_time.time(), profile)
     return custom_jsonify(profile)
 
 
-# 轻量名称查询接口 — 专供持仓/自选股批量补全名称
+# 轻量名称查询接口 — 直接走A股预加载缓存，避免analyzer.get_stock_info在eastmoney阻断时60s超时
 @app.route('/api/stock_name', methods=['GET'])
 def api_stock_name():
     stock_code = request.args.get('stock_code', '')
-    market_type = request.args.get('market_type', 'A')
     if not stock_code:
         return custom_jsonify({'error': 'stock_code required'}), 400
     try:
-        name = _get_stock_name_safe(stock_code, market_type)
-        return custom_jsonify({'stock_code': stock_code, 'stock_name': name or stock_code})
+        _load_stock_name_cache()
+        name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
+        return custom_jsonify({'stock_code': stock_code, 'stock_name': name})
     except Exception as e:
         app.logger.error(f"获取股票名称出错 {stock_code}: {e}")
         return custom_jsonify({'stock_code': stock_code, 'stock_name': stock_code})
