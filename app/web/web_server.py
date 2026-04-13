@@ -3135,6 +3135,10 @@ cleaner_thread = threading.Thread(target=run_task_cleaner)
 cleaner_thread.daemon = True
 cleaner_thread.start()
 
+# 启动时后台预加载A股名称缓存，避免首次请求时名字降级为代码
+_preload_thread = threading.Thread(target=_load_stock_name_cache, daemon=True)
+_preload_thread.start()
+
 if __name__ == '__main__':
     # 强制禁用Flask的调试模式，以确保日志配置生效
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", "8888")), debug=False)
