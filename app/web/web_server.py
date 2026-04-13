@@ -1175,26 +1175,80 @@ def get_stock_data():
         return custom_jsonify({'error': str(e)}), 500
 
 
-# 股票概要：名称/行业/市值/PE/PB/ROE — 供对比页快速对比使用
+# 股票概要：名称/行业/市值/PE/PB/ROE — 供对比页快速对比使用（baostock主，不依赖eastmoney）
 @app.route('/api/stock_profile', methods=['GET'])
 def api_stock_profile():
-    import akshare as ak
+    import baostock as bs
+    from datetime import datetime, timedelta
     stock_code = request.args.get('stock_code', '')
     if not stock_code:
         return custom_jsonify({'error': 'stock_code required'}), 400
     name = _get_stock_name_safe(stock_code, 'A') or stock_code
     profile = {'stock_code': stock_code, 'stock_name': name,
                'industry': None, 'market_cap': None, 'pe_ttm': None, 'pb': None, 'roe': None}
+    # baostock需要 sh./sz. 前缀
+    prefix = 'sh.' if stock_code.startswith('6') else 'sz.'
+    bs_code = prefix + stock_code
     try:
-        df = ak.stock_individual_info_em(symbol=stock_code)
-        if df is not None and not df.empty:
-            kv = dict(zip(df['item'].astype(str), df['value']))
-            profile['industry'] = kv.get('行业')
-            mc = kv.get('总市值')
-            profile['market_cap'] = float(mc) if mc not in (None, '') else None
+        bs.login()
+        # 行业
+        try:
+            rs = bs.query_stock_industry(code=bs_code)
+            rows = []
+            while rs.error_code == '0' and rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                profile['industry'] = rows[0][3] if len(rows[0]) > 3 else None
+        except Exception as e:
+            app.logger.warning(f"baostock industry失败({stock_code}): {e}")
+        # PE/PB/close — 取最近可用交易日（baostock数据有2-3天滞后，向前扩展90天）
+        try:
+            end = datetime.now().strftime('%Y-%m-%d')
+            start = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
+            rs = bs.query_history_k_data_plus(bs_code,
+                'date,code,open,high,low,close,volume,amount,adjustflag,turn,tradestatus,pctChg,peTTM,pbMRQ,psTTM,pcfNcfTTM,isST',
+                start_date=start, end_date=end, frequency='d', adjustflag='3')
+            rows = []
+            while rs.error_code == '0' and rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                last = rows[-1]
+                # 字段索引：5=close, 12=peTTM, 13=pbMRQ
+                def _f(i):
+                    try: return float(last[i]) if last[i] else None
+                    except: return None
+                profile['pe_ttm'] = _f(12)
+                profile['pb'] = _f(13)
+                close = _f(5)
+                # market_cap 需要total_share，由 query_stock_basic 或独立接口获取
+                if close:
+                    try:
+                        rs2 = bs.query_stock_basic(code=bs_code)
+                        # query_stock_basic returns: code, code_name, ipoDate, outDate, type, status
+                        # 不含 total_share，需要 query_history_k_data_plus 中的 turn 等估算不可行
+                        # 使用 akshare name cache中可能缺失 market cap，暂留close作价格展示
+                        pass
+                    except: pass
+        except Exception as e:
+            app.logger.warning(f"baostock k_data失败({stock_code}): {e}")
+        # ROE — 最近年报
+        try:
+            year = datetime.now().year
+            for y in [year - 1, year - 2]:
+                rs = bs.query_profit_data(code=bs_code, year=y, quarter=4)
+                rows = []
+                while rs.error_code == '0' and rs.next():
+                    rows.append(rs.get_row_data())
+                if rows and len(rows[0]) > 3 and rows[0][3]:
+                    profile['roe'] = float(rows[0][3]) * 100  # baostock roeAvg 为小数
+                    break
+        except Exception as e:
+            app.logger.warning(f"baostock profit失败({stock_code}): {e}")
     except Exception as e:
-        app.logger.warning(f"stock_individual_info_em 失败({stock_code}): {e}")
-    # PE/PB/ROE — 可从东财估值接口补，避免多次外网调用暂留None
+        app.logger.error(f"baostock login 失败: {e}")
+    finally:
+        try: bs.logout()
+        except: pass
     return custom_jsonify(profile)
 
 
