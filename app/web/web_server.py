@@ -1175,6 +1175,29 @@ def get_stock_data():
         return custom_jsonify({'error': str(e)}), 500
 
 
+# 股票概要：名称/行业/市值/PE/PB/ROE — 供对比页快速对比使用
+@app.route('/api/stock_profile', methods=['GET'])
+def api_stock_profile():
+    import akshare as ak
+    stock_code = request.args.get('stock_code', '')
+    if not stock_code:
+        return custom_jsonify({'error': 'stock_code required'}), 400
+    name = _get_stock_name_safe(stock_code, 'A') or stock_code
+    profile = {'stock_code': stock_code, 'stock_name': name,
+               'industry': None, 'market_cap': None, 'pe_ttm': None, 'pb': None, 'roe': None}
+    try:
+        df = ak.stock_individual_info_em(symbol=stock_code)
+        if df is not None and not df.empty:
+            kv = dict(zip(df['item'].astype(str), df['value']))
+            profile['industry'] = kv.get('行业')
+            mc = kv.get('总市值')
+            profile['market_cap'] = float(mc) if mc not in (None, '') else None
+    except Exception as e:
+        app.logger.warning(f"stock_individual_info_em 失败({stock_code}): {e}")
+    # PE/PB/ROE — 可从东财估值接口补，避免多次外网调用暂留None
+    return custom_jsonify(profile)
+
+
 # 轻量名称查询接口 — 专供持仓/自选股批量补全名称
 @app.route('/api/stock_name', methods=['GET'])
 def api_stock_name():

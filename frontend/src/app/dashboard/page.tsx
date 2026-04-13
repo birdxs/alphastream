@@ -162,6 +162,13 @@ export default function DashboardPage() {
 
     const results: WatchQuote[] = await Promise.all(
       watchItems.map(async (item) => {
+        let resolvedName = item.name;
+        // 1) 先走轻量name端点（靠A股全量缓存，不依赖实时网络）
+        try {
+          const r = await apiClient.get<{ stock_name?: string }>("/api/stock_name", { stock_code: item.code });
+          if (r.stock_name && r.stock_name !== item.code) resolvedName = r.stock_name;
+        } catch { /* ignore, fall back */ }
+        // 2) 再尝试 stock_data 取价格（失败不影响name）
         try {
           const res = await apiClient.get<{
             stock_name?: string;
@@ -171,11 +178,7 @@ export default function DashboardPage() {
             period: "1m",
           });
           const data = res?.data;
-          // 回填 stock_name：后端返回有效名称则优先使用，避免显示纯代码
-          const resolvedName =
-            res?.stock_name && res.stock_name !== item.code
-              ? res.stock_name
-              : item.name;
+          if (res?.stock_name && res.stock_name !== item.code) resolvedName = res.stock_name;
           if (data?.close?.length) {
             const lastIdx = data.close.length - 1;
             return {
@@ -185,10 +188,8 @@ export default function DashboardPage() {
               change_pct: data.change_pct?.[lastIdx] ?? 0,
             };
           }
-          return { ...item, name: resolvedName };
-        } catch {
-          return { ...item };
-        }
+        } catch { /* ignore */ }
+        return { ...item, name: resolvedName };
       })
     );
 

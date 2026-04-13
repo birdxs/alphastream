@@ -49,7 +49,7 @@ function ChatPanelInner() {
   return (
     <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20 bg-gradient-to-b from-foreground/[0.02] dark:from-white/[0.02] to-transparent">
       {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-3 h-10 border-b border-border/60 dark:border-white/[0.08] bg-background dark:bg-[#0A0A1A] backdrop-blur-xl shrink-0">
+      <div className="relative z-20 flex items-center justify-between px-3 min-h-[40px] border-b border-border/60 dark:border-white/[0.08] bg-background dark:bg-[#0A0A1A] shrink-0">
         <div className="flex items-center gap-2">
           <div className="relative w-1.5 h-1.5 group/indicator cursor-default">
             <div className="absolute inset-0 rounded-full bg-[#3737CC] animate-ping opacity-75" />

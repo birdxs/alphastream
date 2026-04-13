@@ -4,17 +4,64 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, X, BarChart3, Sparkles } from "lucide-react";
 import { GlassCard } from "@/components/common/glass-card";
 import { getStockName } from "@/lib/utils/stock-code";
+import { apiClient } from "@/lib/api/client";
 import Link from "next/link";
+
+interface Profile {
+  stock_name?: string;
+  industry?: string | null;
+  market_cap?: number | null;
+  pe_ttm?: number | null;
+  pb?: number | null;
+  roe?: number | null;
+}
+
+function fmtMarketCap(v?: number | null): string {
+  if (v == null || !isFinite(v)) return "--";
+  if (v >= 1e12) return `${(v / 1e12).toFixed(2)}万亿`;
+  if (v >= 1e8) return `${(v / 1e8).toFixed(2)}亿`;
+  return v.toFixed(0);
+}
 
 export default function ComparePage() {
   const [codes, setCodes] = useState<string[]>(["600519", "000858"]);
   const [newCode, setNewCode] = useState("");
+  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const missing = codes.filter(c => !profiles[c]);
+      if (missing.length === 0) return;
+      const pairs = await Promise.all(
+        missing.map(async c => {
+          try { return [c, await apiClient.get<Profile>("/api/stock_profile", { stock_code: c })] as const; }
+          catch { return [c, { stock_name: getStockName(c) }] as const; }
+        })
+      );
+      if (cancelled) return;
+      setProfiles(prev => ({ ...prev, ...Object.fromEntries(pairs) }));
+    })();
+    return () => { cancelled = true; };
+  }, [codes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cellValue = (metric: string, code: string): string => {
+    const p = profiles[code];
+    if (metric === '名称') return p?.stock_name || getStockName(code);
+    if (!p) return '--';
+    if (metric === '行业') return p.industry || '--';
+    if (metric === '市值') return fmtMarketCap(p.market_cap);
+    if (metric === 'PE(TTM)') return p.pe_ttm != null ? p.pe_ttm.toFixed(2) : '--';
+    if (metric === 'PB') return p.pb != null ? p.pb.toFixed(2) : '--';
+    if (metric === 'ROE') return p.roe != null ? p.roe.toFixed(2) + '%' : '--';
+    return '--';
+  };
 
   const addCode = () => {
     if (newCode && /^\d{6}$/.test(newCode) && !codes.includes(newCode) && codes.length < 4) {
@@ -114,7 +161,7 @@ export default function ComparePage() {
                     <td className="py-2.5 px-3 text-muted-foreground dark:text-white/40">{metric}</td>
                     {codes.map(code => (
                       <td key={code} className="text-right py-2.5 px-3 font-mono">
-                        {metric === '名称' ? getStockName(code) : '--'}
+                        {cellValue(metric, code)}
                       </td>
                     ))}
                   </tr>

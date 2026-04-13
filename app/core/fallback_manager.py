@@ -47,58 +47,53 @@ class FallbackManager:
         Raises:
             Exception: 所有数据源均不可用时抛出
         """
-        last_error = None
-        tried_adapters = []
+        def _loop_once() -> tuple[bool, list, Exception | None, object]:
+            """返回(success, tried, last_error, result)"""
+            le = None
+            tried: list[str] = []
+            for adapter in self.adapters:
+                adapter_name = adapter.name
 
-        # 若所有adapter都因失败计数>=5被跳过，重置计数重试一次
-        with self._lock:
-            all_blocked = all(
-                self._fail_count.get(a.name, 0) >= 5 and hasattr(a, method_name)
-                for a in self.adapters
-            ) if self.adapters else False
-            if all_blocked:
-                logger.info(f"所有adapter已阻塞，重置fail_count以重试 {method_name}")
-                self._fail_count.clear()
+                # 跳过已标记为不可用的适配器（但失败次数超过阈值才跳过）
+                with self._lock:
+                    if self._fail_count.get(adapter_name, 0) >= 5:
+                        continue
 
-        for adapter in self.adapters:
-            adapter_name = adapter.name
-
-            # 跳过已标记为不可用的适配器（但失败次数超过阈值才跳过）
-            with self._lock:
-                if self._fail_count.get(adapter_name, 0) >= 5:
+                # 检查适配器是否有该方法
+                if not hasattr(adapter, method_name):
                     continue
 
-            # 检查适配器是否有该方法
-            if not hasattr(adapter, method_name):
-                continue
+                tried.append(adapter_name)
+                for retry in range(self.max_retries):
+                    try:
+                        method = getattr(adapter, method_name)
+                        result = method(*args, **kwargs)
+                        if self._is_valid_result(result):
+                            with self._lock:
+                                self._fail_count[adapter_name] = 0
+                                self._adapter_status[adapter_name] = True
+                            return True, tried, None, result
+                    except Exception as e:
+                        le = e
+                        logger.warning(f"[{adapter_name}] {method_name} 失败(重试{retry+1}/{self.max_retries}): {e}")
+                        if retry < self.max_retries - 1:
+                            time.sleep(self.retry_delay)
+                with self._lock:
+                    self._fail_count[adapter_name] = self._fail_count.get(adapter_name, 0) + 1
+                logger.warning(f"[{adapter_name}] 失败次数: {self._fail_count[adapter_name]}")
+            return False, tried, le, None
 
-            tried_adapters.append(adapter_name)
-
-            for retry in range(self.max_retries):
-                try:
-                    method = getattr(adapter, method_name)
-                    result = method(*args, **kwargs)
-
-                    # 检查结果是否有效
-                    if self._is_valid_result(result):
-                        # 成功，重置失败计数
-                        with self._lock:
-                            self._fail_count[adapter_name] = 0
-                            self._adapter_status[adapter_name] = True
-                        return result
-
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"[{adapter_name}] {method_name} 失败(重试{retry+1}/{self.max_retries}): {e}")
-
-                    if retry < self.max_retries - 1:
-                        time.sleep(self.retry_delay)
-
-            # 该适配器所有重试都失败了
+        success, tried_adapters, last_error, result = _loop_once()
+        if success:
+            return result
+        # 若无adapter被尝试（全被阻塞），重置fail_count重试一次
+        if not tried_adapters and self.adapters:
+            logger.info(f"所有adapter已阻塞，重置fail_count以重试 {method_name}")
             with self._lock:
-                self._fail_count[adapter_name] = self._fail_count.get(adapter_name, 0) + 1
-                fail_count = self._fail_count[adapter_name]
-            logger.warning(f"[{adapter_name}] 失败次数: {fail_count}")
+                self._fail_count.clear()
+            success, tried_adapters, last_error, result = _loop_once()
+            if success:
+                return result
 
         # 所有适配器都失败了
         error_msg = f"所有数据源均不可用 (尝试了: {tried_adapters})"
