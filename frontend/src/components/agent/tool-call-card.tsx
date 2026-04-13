@@ -71,10 +71,10 @@ export function ToolCallCard({ toolCall }: Props) {
   return (
     <div
       className={`
-        backdrop-blur-md bg-white/[0.04] border border-white/[0.08]
+        backdrop-blur-md bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08]
         rounded-lg p-2.5 text-xs cursor-pointer
         transition-all duration-200
-        hover:bg-white/[0.08] hover:border-white/[0.15]
+        hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:border-foreground/[0.15] dark:hover:border-white/[0.15]
         ${!hasResult ? "shadow-[0_0_8px_rgba(55,55,204,0.15)]" : ""}
       `}
       onClick={() => setExpanded(!expanded)}
@@ -109,24 +109,24 @@ export function ToolCallCard({ toolCall }: Props) {
       {/* 执行中骨架 */}
       {!hasResult && (
         <div className="mt-2 space-y-1.5">
-          <div className="h-2.5 w-3/4 bg-white/[0.06] rounded animate-pulse" />
-          <div className="h-2.5 w-1/2 bg-white/[0.04] rounded animate-pulse" />
+          <div className="h-2.5 w-3/4 bg-foreground/[0.06] dark:bg-white/[0.06] rounded animate-pulse" />
+          <div className="h-2.5 w-1/2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded animate-pulse" />
         </div>
       )}
 
       {/* 展开详情：glass-card背景 + 代码块样式 */}
       {expanded && hasResult && (
-        <div className="mt-2 space-y-2 border-t border-white/[0.08] pt-2">
-          <div className="backdrop-blur-sm bg-white/[0.03] rounded-lg p-2 border border-white/[0.06]">
+        <div className="mt-2 space-y-2 border-t border-foreground/[0.08] dark:border-white/[0.08] pt-2">
+          <div className="backdrop-blur-sm bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2 border border-foreground/[0.06] dark:border-white/[0.06]">
             <span className="text-[10px] text-muted-foreground block mb-1">{"\u53C2\u6570"}</span>
-            <pre className="bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
+            <pre className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
               {JSON.stringify(toolCall.arguments, null, 2)}
             </pre>
           </div>
           {toolCall.result?.result_summary && (
-            <div className="backdrop-blur-sm bg-white/[0.03] rounded-lg p-2 border border-white/[0.06]">
+            <div className="backdrop-blur-sm bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2 border border-foreground/[0.06] dark:border-white/[0.06]">
               <span className="text-[10px] text-muted-foreground block mb-1">{"\u7ED3\u679C"}</span>
-              <pre className="bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
+              <pre className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
                 {toolCall.result.result_summary}
               </pre>
             </div>

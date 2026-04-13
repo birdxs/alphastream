@@ -89,7 +89,7 @@ export function KeyboardShortcuts() {
           {SHORTCUTS.map(s => (
             <div key={s.keys} className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{s.desc}</span>
-              <kbd className="px-2 py-1 rounded bg-white/[0.08] border border-white/[0.12] text-xs font-mono text-foreground">{s.keys}</kbd>
+              <kbd className="px-2 py-1 rounded bg-foreground/[0.08] dark:bg-white/[0.08] border border-foreground/[0.12] dark:border-white/[0.12] text-xs font-mono text-foreground">{s.keys}</kbd>
             </div>
           ))}
         </div>

@@ -408,7 +408,7 @@ export default function StockDetailPage({
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => router.back()}
-              className="flex items-center justify-center h-9 w-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] transition-colors shrink-0"
+              className="flex items-center justify-center h-9 w-9 rounded-xl bg-foreground/[0.06] dark:bg-white/[0.06] hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] border border-foreground/[0.08] dark:border-white/[0.08] transition-colors shrink-0"
               aria-label="返回"
             >
               <ArrowLeft className="h-4 w-4 text-white/60" />
@@ -455,7 +455,7 @@ export default function StockDetailPage({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all border ${
                 isWatched
                   ? "bg-[#F59E0B]/15 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#F59E0B]/25"
-                  : "bg-white/[0.06] border-white/[0.08] text-white/50 hover:bg-white/[0.12] hover:text-[#F59E0B]"
+                  : "bg-foreground/[0.06] dark:bg-white/[0.06] border-foreground/[0.08] dark:border-white/[0.08] text-white/50 hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] hover:text-[#F59E0B]"
               }`}
             >
               {isWatched ? (
@@ -488,7 +488,7 @@ export default function StockDetailPage({
               className={`relative px-4 py-2 text-sm font-medium whitespace-nowrap transition-all duration-200 rounded-lg ${
                 active
                   ? "text-[#3737CC] bg-[#3737CC]/10"
-                  : "text-white/50 hover:bg-white/[0.06] hover:text-white/70"
+                  : "text-white/50 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] hover:text-white/70"
               }`}
             >
               {tab.label}

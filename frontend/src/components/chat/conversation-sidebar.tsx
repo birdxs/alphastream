@@ -112,7 +112,7 @@ function SwipeableConvItem({
         className={`relative flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer group transition-transform duration-150 ${
           isActive
             ? 'bg-[#3737CC]/10 text-[#4F4FE6]'
-            : 'text-[#F0F0F5]/80 hover:bg-white/[0.04]'
+            : 'text-foreground dark:text-[#F0F0F5]/80 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'
         }`}
         style={{ transform: `translateX(-${offsetX}px)`, backgroundColor: offsetX > 0 ? 'rgba(15,15,35,0.95)' : undefined }}
       >
@@ -212,8 +212,8 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   // Mobile Sheet模式下不支持折叠
   if (collapsed && !isMobileSheet) {
     return (
-      <div className="hidden sm:flex w-10 bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
-        <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-[#8888A0] hover:bg-white/[0.06]" aria-label="展开侧边栏">
+      <div className="hidden sm:flex w-10 bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08] flex-col items-center py-2 gap-2 transition-all duration-300 ease-in-out">
+        <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]" aria-label="展开侧边栏">
           <ChevronRight className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" onClick={newConversation} title="新对话" className="text-white hover:bg-[#4F4FE6]/20" aria-label="新建对话">
@@ -224,13 +224,13 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   }
 
   return (
-    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
-      <div className="p-2 border-b border-white/[0.08] flex items-center justify-between shrink-0">
+    <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-foreground/[0.08] dark:border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
+      <div className="p-2 border-b border-foreground/[0.08] dark:border-white/[0.08] flex items-center justify-between shrink-0">
         <Button size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs bg-[#3737CC] hover:bg-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/20" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
         </Button>
         {!isMobileSheet && (
-          <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7 text-[#8888A0] hover:bg-white/[0.06]" aria-label="收起侧边栏">
+          <Button variant="ghost" size="icon" onClick={() => setCollapsed(true)} className="h-7 w-7 text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]" aria-label="收起侧边栏">
             <ChevronLeft className="h-3 w-3" />
           </Button>
         )}
@@ -243,7 +243,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
           placeholder="搜索对话..."
           aria-label="搜索对话"
           tabIndex={1}
-          className="w-full bg-white/[0.03] rounded-lg px-2.5 py-1.5 text-[11px] text-[#F0F0F5] border border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-[#3737CC]/30 focus:border-[#3737CC] transition-all duration-200 placeholder:text-[#555570]"
+          className="w-full bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg px-2.5 py-1.5 text-[11px] text-foreground dark:text-[#F0F0F5] border border-foreground/[0.08] dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-[#3737CC]/30 focus:border-[#3737CC] transition-all duration-200 placeholder:text-[#555570]"
         />
       </div>
       {error && (
@@ -270,7 +270,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
             Object.entries(groupByDate(filteredConversations)).map(([label, convs]) => (
               <div key={label} className="mb-1" role="list" aria-label={`${label}的对话`}>
                 <div className={`px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase ${
-                  label === '今天' ? 'text-[#3737CC]' : label === '昨天' ? 'text-[#8888A0]/70' : 'text-[#555570]'
+                  label === '今天' ? 'text-[#3737CC]' : label === '昨天' ? 'text-muted-foreground dark:text-[#8888A0]/70' : 'text-[#555570]'
                 }`}>{label}</div>
                 {convs.map(conv => (
                   isMobileSheet ? (
@@ -293,7 +293,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
                     className={`relative flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer group transition-all duration-150 ${
                       activeConversationId === conv.conversation_id
                         ? 'bg-[#3737CC]/10 text-[#4F4FE6] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:bg-[#3737CC] before:rounded-full before:transition-all before:duration-300 before:ease-out animate-[glass-enter_250ms_ease-out_both]'
-                        : 'text-[#F0F0F5]/80 hover:bg-white/[0.04] active:animate-[glass-enter_200ms_ease-out_both]'
+                        : 'text-foreground dark:text-[#F0F0F5]/80 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] active:animate-[glass-enter_200ms_ease-out_both]'
                     }`}
                   >
                     <MessageSquare className={`h-3 w-3 shrink-0 ${activeConversationId === conv.conversation_id ? 'text-[#3737CC]' : 'text-[#555570]'}`} />
@@ -320,7 +320,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
           })()}
         </div>
       </ScrollArea>
-      <div className="px-3 py-1.5 border-t border-white/[0.08] shrink-0">
+      <div className="px-3 py-1.5 border-t border-foreground/[0.08] dark:border-white/[0.08] shrink-0">
         <span className="text-[9px] text-[#555570]/60 tracking-wide">StockAnal v1.0</span>
       </div>
     </div>

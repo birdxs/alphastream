@@ -144,11 +144,11 @@ export function MarketOverview() {
   // 加载中或错误时显示占位
   if (loading) {
     return (
-      <div className="flex items-center gap-3 px-3 h-7 bg-[#06060F]/80 backdrop-blur-sm border-b border-white/[0.06] text-[11px] shrink-0">
+      <div className="flex items-center gap-3 px-3 h-7 bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm border-b border-foreground/[0.06] dark:border-white/[0.06] text-[11px] shrink-0">
         {FALLBACK_NAMES.map((name) => (
           <div key={name} className="flex items-center gap-1 shrink-0">
-            <span className="text-[#8888A0]">{name}</span>
-            <span className="text-[#F0F0F5]/40 font-mono animate-pulse">···</span>
+            <span className="text-muted-foreground dark:text-[#8888A0]">{name}</span>
+            <span className="text-foreground dark:text-[#F0F0F5]/40 font-mono animate-pulse">···</span>
           </div>
         ))}
       </div>
@@ -160,15 +160,15 @@ export function MarketOverview() {
     : quotes.map((q) => ({ ...q, isError: false }));
 
   return (
-    <div className="flex items-center gap-3 px-3 h-7 bg-[#06060F]/80 backdrop-blur-sm border-b border-white/[0.06] text-[11px] shrink-0 overflow-x-auto">
+    <div className="flex items-center gap-3 px-3 h-7 bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm border-b border-foreground/[0.06] dark:border-white/[0.06] text-[11px] shrink-0 overflow-x-auto">
       {displayItems.map((q, i) => (
         <div key={q.name} className={`flex items-center gap-1 shrink-0 ${!q.isError && flashMap[q.name] === 'up' ? 'flash-up' : ''} ${!q.isError && flashMap[q.name] === 'down' ? 'flash-down' : ''}`}>
-          <span className="text-[#8888A0]">{q.name}</span>
+          <span className="text-muted-foreground dark:text-[#8888A0]">{q.name}</span>
           {q.isError ? (
-            <span className="text-[#F0F0F5]/60 font-mono">---</span>
+            <span className="text-foreground dark:text-[#F0F0F5]/60 font-mono">---</span>
           ) : (
             <>
-              <span className="font-mono text-[#F0F0F5]">
+              <span className="font-mono text-foreground dark:text-[#F0F0F5]">
                 {q.price.toFixed(2)}
               </span>
               <span

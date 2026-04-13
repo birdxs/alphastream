@@ -126,7 +126,7 @@ function GlassInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`bg-white/[0.04] border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-[#3737CC]/60 focus:ring-1 focus:ring-[#3737CC]/30 transition-colors ${className}`}
+      className={`bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.1] dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-[#3737CC]/60 focus:ring-1 focus:ring-[#3737CC]/30 transition-colors ${className}`}
     />
   );
 }
@@ -146,7 +146,7 @@ function GlassSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`bg-white/[0.04] border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-[#3737CC]/60 focus:ring-1 focus:ring-[#3737CC]/30 transition-colors appearance-none cursor-pointer ${className}`}
+      className={`bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.1] dark:border-white/[0.1] rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-[#3737CC]/60 focus:ring-1 focus:ring-[#3737CC]/30 transition-colors appearance-none cursor-pointer ${className}`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
@@ -253,7 +253,7 @@ export default function ScreenerPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-white/[0.1] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-foreground/[0.1] dark:border-white/[0.1] text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] hover:text-foreground transition-colors"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             重置
@@ -429,7 +429,7 @@ export default function ScreenerPage() {
           <div className="overflow-x-auto -mx-4 px-4">
             <table className="w-full text-sm min-w-[640px]">
               <thead>
-                <tr className="bg-white/[0.04]">
+                <tr className="bg-foreground/[0.04] dark:bg-white/[0.04]">
                   <th className="text-left font-medium text-muted-foreground px-3 py-2.5 rounded-l-lg">代码</th>
                   <th className="text-left font-medium text-muted-foreground px-3 py-2.5">名称</th>
                   <th className="text-right font-medium text-muted-foreground px-3 py-2.5 font-mono">最新价</th>
@@ -443,7 +443,7 @@ export default function ScreenerPage() {
                 {results.map((stock) => (
                   <tr
                     key={stock.code}
-                    className="border-b border-white/[0.06] hover:bg-white/[0.04] transition-colors"
+                    className="border-b border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                   >
                     <td className="px-3 py-2.5 font-mono text-xs">{stock.code}</td>
                     <td className="px-3 py-2.5">{stock.name !== stock.code ? stock.name : "--"}</td>

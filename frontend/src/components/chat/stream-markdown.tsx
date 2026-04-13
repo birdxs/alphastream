@@ -27,7 +27,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute top-2 right-2 bg-white/[0.08] hover:bg-white/[0.15] rounded p-1 transition-colors duration-200"
+      className="absolute top-2 right-2 bg-foreground/[0.08] dark:bg-white/[0.08] hover:bg-foreground/[0.15] dark:hover:bg-white/[0.15] rounded p-1 transition-colors duration-200"
       aria-label="复制代码"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-[#46BEA3]" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground/70" />}
@@ -67,13 +67,13 @@ const markdownComponents: Components = {
   },
   th({ children }) {
     return (
-      <th className="border-b border-[var(--glass-border)] px-3 py-2 text-left font-semibold bg-white/[0.04] text-xs uppercase tracking-wider text-[var(--text-secondary,#8888A0)]">
+      <th className="border-b border-[var(--glass-border)] px-3 py-2 text-left font-semibold bg-foreground/[0.04] dark:bg-white/[0.04] text-xs uppercase tracking-wider text-[var(--text-secondary,#8888A0)]">
         {children}
       </th>
     );
   },
   td({ children }) {
-    return <td className="border-b border-[var(--glass-border)] px-3 py-1.5 even:bg-white/[0.02] tabular-nums">{children}</td>;
+    return <td className="border-b border-[var(--glass-border)] px-3 py-1.5 even:bg-foreground/[0.02] dark:bg-white/[0.02] tabular-nums">{children}</td>;
   },
   tr({ children }) {
     return <tr className="hover:bg-[var(--glass-bg-hover)] transition-colors duration-200">{children}</tr>;

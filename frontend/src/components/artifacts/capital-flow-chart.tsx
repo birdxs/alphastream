@@ -117,9 +117,9 @@ export function CapitalFlowArtifact({ data }: Props) {
           {summaryItems.map((item) => (
             <div
               key={item.label}
-              className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1.5 text-sm"
+              className="bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg px-2 py-1.5 text-sm"
             >
-              <span className="text-[#8888A0]">{item.label}</span>
+              <span className="text-muted-foreground dark:text-[#8888A0]">{item.label}</span>
               <span
                 className={`ml-2 font-mono ${
                   Number(item.value) >= 0 ? "text-[#46BEA3]" : "text-[#FF8767]"
@@ -162,8 +162,8 @@ export function CapitalFlowArtifact({ data }: Props) {
                 if (!active || !payload?.length) return null;
                 const val = payload[0].value as number;
                 return (
-                  <div className="bg-[#0A0A1A]/90 border border-white/[0.08] rounded-lg px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
-                    <p className="text-[#8888A0]">{payload[0].payload?.date}</p>
+                  <div className="bg-card/90 dark:bg-[#0A0A1A]/90 border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
+                    <p className="text-muted-foreground dark:text-[#8888A0]">{payload[0].payload?.date}</p>
                     <p className={`font-mono font-bold ${val >= 0 ? 'text-[#46BEA3]' : 'text-[#FF8767]'}`}>
                       净流入: {formatLargeNumber(val * 10000)}
                     </p>
@@ -185,7 +185,7 @@ export function CapitalFlowArtifact({ data }: Props) {
 
       {/* 无数据提示 */}
       {chartData.length === 0 && summaryItems.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-10 text-[#8888A0]">
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground dark:text-[#8888A0]">
           <TrendingDown className="h-8 w-8 mb-2 opacity-40" />
           <p className="text-sm">暂无资金流向数据</p>
         </div>

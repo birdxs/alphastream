@@ -40,7 +40,7 @@ function FlowNode({ name, status }: { name: string; status: AgentStatus }) {
     status === 'error' ? 'border-[#FF8767]/50' :
     'border-white/10';
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${borderColor} bg-white/[0.03] text-[10px] whitespace-nowrap`}>
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${borderColor} bg-foreground/[0.03] dark:bg-white/[0.03] text-[10px] whitespace-nowrap`}>
       <FlowDot status={status} />
       <span className={status === 'pending' ? 'text-muted-foreground' : 'text-foreground/90'}>{name}</span>
     </div>
@@ -101,7 +101,7 @@ export function AgentProgressPanel() {
   return (
     <>
       {!expanded && (
-        <button onClick={() => setExpanded(true)} className="glass-card w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-white/[0.06] transition-colors animate-[glass-enter_300ms_ease-out_both]">
+        <button onClick={() => setExpanded(true)} className="glass-card w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors animate-[glass-enter_300ms_ease-out_both]">
           <span className="flex items-center gap-2">
             <span className="agent-pending">{"\uD83E\uDD16"}</span>
             <span className="font-mono">Agent{"\u5206\u6790\u4E2D"}... {Math.round(overallProgress)}%</span>
@@ -120,7 +120,7 @@ export function AgentProgressPanel() {
               <ChevronUp className="h-3 w-3 text-muted-foreground" />
             </div>
           </div>
-          <div className="w-full bg-white/[0.06] rounded-full h-1.5">
+          <div className="w-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1.5">
             <div className="bg-[#3737CC] h-1.5 rounded-full transition-all duration-500"
                  style={{ width: `${overallProgress}%` }} />
           </div>
@@ -135,7 +135,7 @@ export function AgentProgressPanel() {
               <span>{"\u67E5\u770B\u6267\u884C\u6D41\u7A0B"}</span>
             </button>
             {flowExpanded && (
-              <div className="mt-1.5 p-2 rounded-lg bg-white/[0.02] border border-white/[0.06] animate-[glass-enter_200ms_ease-out_both]">
+              <div className="mt-1.5 p-2 rounded-lg bg-foreground/[0.02] dark:bg-white/[0.02] border border-foreground/[0.06] dark:border-white/[0.06] animate-[glass-enter_200ms_ease-out_both]">
                 <AgentFlowChart agentProgresses={agentProgresses} />
               </div>
             )}

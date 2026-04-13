@@ -41,7 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       const title = this.props.fallbackTitle || "组件渲染出错";
       return (
-        <div className="bg-white/[0.04] backdrop-blur-md border border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.36)] p-5 flex flex-col items-center gap-3 text-center">
+        <div className="bg-foreground/[0.04] dark:bg-white/[0.04] backdrop-blur-md border border-foreground/[0.08] dark:border-white/[0.08] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.36)] p-5 flex flex-col items-center gap-3 text-center">
           <div className="w-10 h-10 rounded-full bg-[#FF8767]/10 flex items-center justify-center">
             <AlertTriangle className="h-5 w-5 text-[#FF8767]" />
           </div>
@@ -53,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           <button
             onClick={this.handleRetry}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/[0.06] border border-white/[0.1] hover:bg-white/[0.12] hover:border-white/[0.2] transition-all duration-200 text-foreground"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-foreground/[0.06] dark:bg-white/[0.06] border border-foreground/[0.1] dark:border-white/[0.1] hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] hover:border-foreground/[0.2] dark:hover:border-white/[0.2] transition-all duration-200 text-foreground"
           >
             <RotateCcw className="h-3 w-3" />
             重试

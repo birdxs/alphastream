@@ -75,7 +75,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
               <Badge variant="outline" className="text-xs">{data.recommendation}</Badge>
             )}
           </div>
-          <div className="w-32 bg-white/[0.06] rounded-full h-2 mt-1">
+          <div className="w-32 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-2 mt-1">
             <div className={`h-2 rounded-full bg-gradient-to-r ${scoreColor} transition-all duration-1000`} style={{ width: `${score}%` }} />
           </div>
         </div>
@@ -91,7 +91,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
               <div key={q.label} className={`px-2.5 py-1 rounded-lg text-xs border ${
                 isGood ? 'bg-[#46BEA3]/10 border-[#46BEA3]/30 text-[#46BEA3]' :
                 isBad ? 'bg-[#FF8767]/10 border-[#FF8767]/30 text-[#FF8767]' :
-                'bg-white/[0.03] border-white/[0.08]'
+                'bg-foreground/[0.03] dark:bg-white/[0.03] border-foreground/[0.08] dark:border-white/[0.08]'
               }`}>
                 <span className="text-muted-foreground">{q.label}</span>
                 <span className="ml-1 font-medium">{q.value}</span>
@@ -108,7 +108,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
             const val = Number(m.value);
             const isGood = m.good(val);
             return (
-              <div key={m.label} className="bg-white/[0.03] rounded-lg p-2.5 text-center border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
+              <div key={m.label} className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2.5 text-center border-b border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
                 <div className="text-[10px] text-muted-foreground mb-0.5">{m.label}</div>
                 <div className={`text-sm font-mono font-bold text-right ${isGood ? 'text-[#46BEA3]' : 'text-foreground'}`}>
                   {val.toFixed(1)}{m.suffix}

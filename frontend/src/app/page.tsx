@@ -110,7 +110,7 @@ export default function HomePage() {
         {/* Draggable divider — touch-action:none 确保触摸设备可拖拽 */}
         <div
           className={`w-1 shrink-0 cursor-col-resize transition-colors ${
-            isDragging ? "bg-[#3737CC]/60" : "bg-white/[0.08] hover:bg-[#3737CC]/40"
+            isDragging ? "bg-[#3737CC]/60" : "bg-foreground/[0.08] dark:bg-white/[0.08] hover:bg-[#3737CC]/40"
           }`}
           style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown}
@@ -141,17 +141,17 @@ export default function HomePage() {
       </div>
 
       {/* Mobile: 底部TabBar — 固定在底部 */}
-      <div className="flex sm:hidden fixed bottom-0 left-0 right-0 h-14 bg-[rgba(10,10,26,0.95)] backdrop-blur-xl border-t border-white/[0.08] z-50 items-center justify-around px-2">
+      <div className="flex sm:hidden fixed bottom-0 left-0 right-0 h-14 bg-[rgba(10,10,26,0.95)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08] z-50 items-center justify-around px-2">
         {/* 左侧：侧边栏Drawer触发按钮 */}
         <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
           <SheetTrigger
             render={
-              <Button variant="ghost" size="icon" className="h-10 w-10 text-[#8888A0] hover:bg-white/[0.08]" />
+              <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08]" />
             }
           >
             <Menu className="h-5 w-5" />
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0 bg-[rgba(15,15,35,0.98)] backdrop-blur-2xl border-r border-white/[0.08]">
+          <SheetContent side="left" className="w-72 p-0 bg-[rgba(15,15,35,0.98)] backdrop-blur-2xl border-r border-foreground/[0.08] dark:border-white/[0.08]">
             <ConversationSidebar isMobileSheet onConversationSelect={() => setMobileSheetOpen(false)} />
           </SheetContent>
         </Sheet>
@@ -160,7 +160,7 @@ export default function HomePage() {
         <button
           onClick={() => handleMobileTabSwitch("chat")}
           className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
-            mobileTab === "chat" ? "text-[#3737CC]" : "text-[#8888A0]"
+            mobileTab === "chat" ? "text-[#3737CC]" : "text-muted-foreground dark:text-[#8888A0]"
           }`}
         >
           <MessageSquare className="h-5 w-5" />
@@ -171,7 +171,7 @@ export default function HomePage() {
         <button
           onClick={() => handleMobileTabSwitch("artifacts")}
           className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
-            mobileTab === "artifacts" ? "text-[#3737CC]" : "text-[#8888A0]"
+            mobileTab === "artifacts" ? "text-[#3737CC]" : "text-muted-foreground dark:text-[#8888A0]"
           }`}
         >
           <BarChart3 className="h-5 w-5" />

@@ -44,7 +44,7 @@ export function ScoreRadarArtifact({ data }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <span className="text-[#8888A0] text-xs">综合评分</span>
+        <span className="text-muted-foreground dark:text-[#8888A0] text-xs">综合评分</span>
         <span className={`font-mono text-lg font-bold ${avgScore >= 60 ? 'text-[#46BEA3]' : avgScore >= 40 ? 'text-[#F59E0B]' : 'text-[#FF8767]'}`}>
           {avgScore}
         </span>
@@ -94,8 +94,8 @@ export function ScoreRadarArtifact({ data }: Props) {
       </ResponsiveContainer>
       <div className="grid grid-cols-3 gap-1 px-1">
         {radarData.map((d) => (
-          <div key={d.subject} className="flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.08]">
-            <span className="text-[#8888A0]">{d.subject}</span>
+          <div key={d.subject} className="flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08]">
+            <span className="text-muted-foreground dark:text-[#8888A0]">{d.subject}</span>
             <span className={`font-mono ${d.value >= 60 ? 'text-[#46BEA3]' : d.value >= 40 ? 'text-[#F59E0B]' : 'text-[#FF8767]'}`}>
               {d.value}
             </span>

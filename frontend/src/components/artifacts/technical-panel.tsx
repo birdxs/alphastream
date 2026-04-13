@@ -80,7 +80,7 @@ export function TechnicalPanelArtifact({ data }: Props) {
       {/* 指标网格 */}
       <div className="grid grid-cols-2 gap-2">
         {indicators.map(({ label, value, format }) => (
-          <div key={label} className="flex justify-between items-center bg-white/[0.04] rounded px-3 py-2">
+          <div key={label} className="flex justify-between items-center bg-foreground/[0.04] dark:bg-white/[0.04] rounded px-3 py-2">
             <span className="text-xs text-muted-foreground">{label}</span>
             <span className="text-sm font-mono font-medium">
               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -92,7 +92,7 @@ export function TechnicalPanelArtifact({ data }: Props) {
 
       {/* 价格&支撑阻力 */}
       {(data.price || data.support_level || data.resistance_level) && (
-        <div className="flex justify-between text-sm pt-1 border-t border-white/[0.08]">
+        <div className="flex justify-between text-sm pt-1 border-t border-foreground/[0.08] dark:border-white/[0.08]">
           {data.support_level && (
             <span className="stock-down">支撑 {data.support_level}</span>
           )}

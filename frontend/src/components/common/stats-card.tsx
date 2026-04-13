@@ -79,13 +79,13 @@ export function StatsCard({
         {/* 顶部: icon + label */}
         <div className="flex items-center gap-1.5">
           {icon && <span className="text-sm">{icon}</span>}
-          <span className="text-[#8888A0] text-xs">{label}</span>
+          <span className="text-muted-foreground dark:text-[#8888A0] text-xs">{label}</span>
         </div>
 
         {/* 中部: 大数字 + 右下角sparkline */}
         <div className="flex items-end justify-between">
           <div className="flex flex-col gap-0.5">
-            <span className="text-2xl font-mono font-bold text-[#F0F0F5]">
+            <span className="text-2xl font-mono font-bold text-foreground dark:text-[#F0F0F5]">
               {displayValue}
             </span>
 

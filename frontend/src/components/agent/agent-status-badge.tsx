@@ -14,10 +14,10 @@ interface Props {
 }
 
 const STATUS_CONFIG = {
-  pending: { icon: "\u23F3", color: "text-[#555570] bg-white/[0.03] animate-[pulse_2s_ease-in-out_infinite]", label: "\u7B49\u5F85\u4E2D" },
-  started: { icon: "\u26A1", color: "text-[#3737CC] bg-white/[0.05] animate-spin", label: "\u6267\u884C\u4E2D" },
-  completed: { icon: "\u2705", color: "text-[#46BEA3] bg-white/[0.05]", label: "\u5B8C\u6210" },
-  error: { icon: "\u274C", color: "text-[#FF8767] bg-white/[0.05]", label: "\u9519\u8BEF" },
+  pending: { icon: "\u23F3", color: "text-[#555570] bg-foreground/[0.03] dark:bg-white/[0.03] animate-[pulse_2s_ease-in-out_infinite]", label: "\u7B49\u5F85\u4E2D" },
+  started: { icon: "\u26A1", color: "text-[#3737CC] bg-foreground/[0.05] dark:bg-white/[0.05] animate-spin", label: "\u6267\u884C\u4E2D" },
+  completed: { icon: "\u2705", color: "text-[#46BEA3] bg-foreground/[0.05] dark:bg-white/[0.05]", label: "\u5B8C\u6210" },
+  error: { icon: "\u274C", color: "text-[#FF8767] bg-foreground/[0.05] dark:bg-white/[0.05]", label: "\u9519\u8BEF" },
 };
 
 export function AgentStatusBadge({ name, status }: Props) {

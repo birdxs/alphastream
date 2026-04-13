@@ -274,7 +274,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1 bg-white/[0.03] rounded-xl p-1">
+        <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.03] rounded-xl p-1">
           {TIME_RANGES.map((r) => (
             <button
               key={r.days}
@@ -282,7 +282,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
               className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ${
                 timeRange === r.days
                   ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30'
-                  : 'bg-transparent text-[#8888A0] border-transparent hover:bg-white/[0.06]'
+                  : 'bg-transparent text-muted-foreground dark:text-[#8888A0] border-transparent hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]'
               }`}
             >
               {r.label}
@@ -291,7 +291,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
           <button
             onClick={() => setDrawMode(drawMode === 'trendline' ? 'none' : 'trendline')}
             className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ml-2 ${
-              drawMode === 'trendline' ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30' : 'bg-white/[0.04] text-[#8888A0] border-white/[0.08] hover:bg-white/[0.08]'
+              drawMode === 'trendline' ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30' : 'bg-foreground/[0.04] dark:bg-white/[0.04] text-muted-foreground dark:text-[#8888A0] border-foreground/[0.08] dark:border-white/[0.08] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08]'
             }`}
           >
             趋势线
@@ -304,14 +304,14 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
         </div>
       )}
       {crosshairData && (
-        <div className="bg-white/[0.04] rounded-lg px-3 py-1 font-mono text-xs flex items-center gap-3 text-[#8888A0] mb-1">
+        <div className="bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg px-3 py-1 font-mono text-xs flex items-center gap-3 text-muted-foreground dark:text-[#8888A0] mb-1">
           <span>{crosshairData.time}</span>
           <span>O:<span className={crosshairData.close >= crosshairData.open ? 'text-[#46BEA3]' : 'text-[#FF8767]'}>{crosshairData.open.toFixed(2)}</span></span>
           <span>H:<span className="text-[#46BEA3]">{crosshairData.high.toFixed(2)}</span></span>
           <span>L:<span className="text-[#FF8767]">{crosshairData.low.toFixed(2)}</span></span>
           <span>C:<span className={crosshairData.close >= crosshairData.open ? 'text-[#46BEA3]' : 'text-[#FF8767]'}>{crosshairData.close.toFixed(2)}</span></span>
           {crosshairData.volume != null && (
-            <span>V:<span className="text-[#F0F0F5]">{crosshairData.volume >= 1e8 ? (crosshairData.volume / 1e8).toFixed(2) + '亿' : crosshairData.volume >= 1e4 ? (crosshairData.volume / 1e4).toFixed(0) + '万' : crosshairData.volume.toLocaleString()}</span></span>
+            <span>V:<span className="text-foreground dark:text-[#F0F0F5]">{crosshairData.volume >= 1e8 ? (crosshairData.volume / 1e8).toFixed(2) + '亿' : crosshairData.volume >= 1e4 ? (crosshairData.volume / 1e4).toFixed(0) + '万' : crosshairData.volume.toLocaleString()}</span></span>
           )}
         </div>
       )}

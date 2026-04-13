@@ -101,20 +101,20 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
     <>
       {/* 全屏遮罩层 — 用 CSS transition 而非条件渲染 */}
       <div
-        className={`fixed inset-0 z-50 bg-[#0A0A1A] overflow-auto transition-all duration-300 ease-in-out ${
+        className={`fixed inset-0 z-50 bg-card dark:bg-[#0A0A1A] overflow-auto transition-all duration-300 ease-in-out ${
           fullscreen
             ? "opacity-100 scale-100 pointer-events-auto"
             : "opacity-0 scale-95 pointer-events-none"
         }`}
       >
         <div className="p-6">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.08]">
-            <h2 className="text-lg font-semibold flex items-center gap-2 text-[#F0F0F5]">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-foreground/[0.08] dark:border-white/[0.08]">
+            <h2 className="text-lg font-semibold flex items-center gap-2 text-foreground dark:text-[#F0F0F5]">
               {icon && <span className="text-[#3737CC]/80">{icon}</span>}
               {title}
             </h2>
             <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setFullscreen(false)}
               aria-label="退出全屏"
             >
@@ -130,8 +130,8 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
         className="glass-card-elevated glass-gradient-border animate-[glass-enter_300ms_ease-out_both] overflow-hidden rounded-2xl transition-all duration-300"
       >
         {/* 标题栏 — 微弱分层 */}
-        <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02] border-b border-white/[0.06] rounded-t-2xl">
-          <div className="text-sm font-medium flex items-center gap-2 text-[#F0F0F5]/90">
+        <div className="flex items-center justify-between px-4 py-3 bg-foreground/[0.02] dark:bg-white/[0.02] border-b border-foreground/[0.06] dark:border-white/[0.06] rounded-t-2xl">
+          <div className="text-sm font-medium flex items-center gap-2 text-foreground dark:text-[#F0F0F5]/90">
             {icon && <span className="text-[#3737CC]/80">{icon}</span>}
             <span className="truncate">{title}</span>
           </div>
@@ -139,7 +139,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
             {confidence !== undefined && <ConfidenceBadge value={confidence} />}
             <div className="relative" ref={exportMenuRef}>
               <button
-                className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
+                className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
                 onClick={() => setExportMenuOpen(!exportMenuOpen)}
                 title="导出"
                 aria-label="导出菜单"
@@ -150,26 +150,26 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
               </button>
               {/* 导出下拉菜单 — 毛玻璃 */}
               {exportMenuOpen && (
-                <div className="absolute right-0 top-8 z-50 min-w-[150px] rounded-xl border border-white/[0.12] bg-[#14142B]/80 backdrop-blur-2xl shadow-2xl shadow-black/40 py-1 animate-[glass-enter_150ms_ease-out_both]">
+                <div className="absolute right-0 top-8 z-50 min-w-[150px] rounded-xl border border-foreground/[0.12] dark:border-white/[0.12] bg-popover/80 dark:bg-[#14142B]/80 backdrop-blur-2xl shadow-2xl shadow-black/40 py-1 animate-[glass-enter_150ms_ease-out_both]">
                   <button
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-white/[0.08] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] transition-colors"
                     onClick={handleCopyData}
                   >
-                    <Copy className="h-3.5 w-3.5 text-[#8888A0]" />
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground dark:text-[#8888A0]" />
                     复制数据
                   </button>
                   <button
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-white/[0.08] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] transition-colors"
                     onClick={handleSaveImage}
                   >
-                    <Camera className="h-3.5 w-3.5 text-[#8888A0]" />
+                    <Camera className="h-3.5 w-3.5 text-muted-foreground dark:text-[#8888A0]" />
                     保存图片
                   </button>
                 </div>
               )}
             </div>
             <button
-              className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
+              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setFullscreen(true)}
               title="全屏"
               aria-label="全屏查看"
@@ -177,7 +177,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
               <Maximize2 className="h-3.5 w-3.5" />
             </button>
             <button
-              className="h-6 w-6 flex items-center justify-center rounded-md text-[#8888A0] hover:bg-white/[0.08] hover:text-[#F0F0F5] transition-all duration-200"
+              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
               onClick={() => setExpanded(!expanded)}
               title={expanded ? "折叠" : "展开"}
               aria-label={expanded ? "折叠内容" : "展开内容"}

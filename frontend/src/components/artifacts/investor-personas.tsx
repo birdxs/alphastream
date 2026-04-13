@@ -71,7 +71,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
     <div className="space-y-4">
       {/* 共识概要 */}
       {consensus && (
-        <div className={`rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm p-4 ${recColor(consensus.final_recommendation)}`}>
+        <div className={`rounded-xl border border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.04] dark:bg-white/[0.04] backdrop-blur-sm p-4 ${recColor(consensus.final_recommendation)}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-lg font-bold">{recText(consensus.final_recommendation)}</span>
             <div className="flex items-center gap-2">
@@ -100,7 +100,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
             return (
               <div key={key} className="flex items-center gap-2 text-xs">
                 <span className="w-12 text-right text-muted-foreground truncate">{meta.name}</span>
-                <div className="flex-1 bg-white/[0.06] rounded-full h-2.5 overflow-hidden">
+                <div className="flex-1 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-2.5 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
                     style={{ width: `${conf * 100}%` }}
@@ -120,7 +120,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
             const meta = INVESTOR_META[key as keyof typeof INVESTOR_META];
             if (!meta || !opinion) return null;
             return (
-              <Card key={key} className="overflow-hidden bg-white/[0.03] border border-white/[0.08] rounded-xl hover:bg-white/[0.06] transition-colors">
+              <Card key={key} className="overflow-hidden bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.08] dark:border-white/[0.08] rounded-xl hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
                 <CardHeader className="pb-2 pt-3 px-3">
                   <CardTitle className="text-sm flex items-center justify-between">
                     <span>
@@ -134,7 +134,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
                 </CardHeader>
                 <CardContent className="px-3 pb-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="flex-1 bg-white/[0.06] rounded-full h-1.5">
+                    <div className="flex-1 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1.5">
                       <div
                         className="bg-gradient-to-r from-[#3737CC] to-[#6B5EE4] h-1.5 rounded-full"
                         style={{ width: `${opinion.confidence * 100}%` }}
@@ -153,7 +153,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
 
       {/* 关键共识/分歧 */}
       {(consensus?.key_agreements?.length || consensus?.key_disagreements?.length) && (
-        <div className="bg-white/[0.04] border-t border-white/[0.08] rounded-b-xl p-4 space-y-3">
+        <div className="bg-foreground/[0.04] dark:bg-white/[0.04] border-t border-foreground/[0.08] dark:border-white/[0.08] rounded-b-xl p-4 space-y-3">
           {consensus?.key_agreements && consensus.key_agreements.length > 0 && (
             <div className="text-sm space-y-1">
               <p className="font-medium text-[#46BEA3]">{"\u2705"} \u4E00\u81F4\u8BA4\u540C</p>

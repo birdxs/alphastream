@@ -1,5 +1,5 @@
 // Input: 后端 /api/market_indices、/api/latest_news、watchlist-store、portfolio-store
-// Output: 投资看板页面 — Bento Grid布局，Dark Glassmorphism风格
+// Output: 投资看板页面 — Bento Grid布局、自选股表格回填stock_name，Dark Glassmorphism风格
 // Pos: app/dashboard/page.tsx - Dashboard看板主页面
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -164,21 +164,28 @@ export default function DashboardPage() {
       watchItems.map(async (item) => {
         try {
           const res = await apiClient.get<{
+            stock_name?: string;
             data?: { dates?: string[]; close?: number[]; change_pct?: number[] };
           }>("/api/stock_data", {
             stock_code: item.code,
             period: "1m",
           });
           const data = res?.data;
+          // 回填 stock_name：后端返回有效名称则优先使用，避免显示纯代码
+          const resolvedName =
+            res?.stock_name && res.stock_name !== item.code
+              ? res.stock_name
+              : item.name;
           if (data?.close?.length) {
             const lastIdx = data.close.length - 1;
             return {
               ...item,
+              name: resolvedName,
               price: data.close[lastIdx],
               change_pct: data.change_pct?.[lastIdx] ?? 0,
             };
           }
-          return { ...item };
+          return { ...item, name: resolvedName };
         } catch {
           return { ...item };
         }
@@ -298,7 +305,7 @@ export default function DashboardPage() {
           className="flex items-center justify-center overflow-hidden transition-[height] duration-150"
           style={{ height: `${pullDistance}px` }}
         >
-          <div className="flex items-center gap-2 text-xs text-[#8888A0]">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-[#8888A0]">
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : pullDistance >= 60 ? "text-[#6B5EE4]" : ""}`} />
             <span className={pullDistance >= 60 ? "text-[#6B5EE4]" : ""}>
               {isRefreshing ? "刷新中..." : pullDistance >= 60 ? "释放刷新" : "下拉刷新"}
@@ -310,10 +317,10 @@ export default function DashboardPage() {
         {/* ---- 页头 ---- */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-[#F0F0F5]">
+            <h1 className="text-xl font-bold text-foreground dark:text-[#F0F0F5]">
               Dashboard · 投资看板
             </h1>
-            <p className="text-xs text-[#8888A0] mt-0.5">
+            <p className="text-xs text-muted-foreground dark:text-[#8888A0] mt-0.5">
               <span className="text-[#6B5EE4] font-medium">{getGreeting().text}</span>
               <span className="mx-1.5">·</span>
               <span>{getGreeting().sub}</span>
@@ -325,7 +332,7 @@ export default function DashboardPage() {
           </div>
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] rounded-lg text-[#8888A0] hover:text-[#F0F0F5] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-foreground/[0.06] dark:bg-white/[0.06] hover:bg-foreground/[0.12] dark:hover:bg-white/[0.12] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg text-muted-foreground dark:text-[#8888A0] hover:text-foreground dark:hover:text-[#F0F0F5] transition-colors"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${indicesLoading ? "animate-spin" : ""}`} />
             刷新
@@ -339,7 +346,7 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="h-4 w-4 text-[#6B5EE4]" />
-                <h2 className="text-sm font-semibold text-[#F0F0F5]">市场概览</h2>
+                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">市场概览</h2>
               </div>
 
               {indicesLoading && indices.length === 0 ? (
@@ -347,7 +354,7 @@ export default function DashboardPage() {
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="h-24 rounded-xl bg-white/[0.03] animate-pulse"
+                      className="h-24 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.03] animate-pulse"
                     />
                   ))}
                 </div>
@@ -365,7 +372,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-[#8888A0] text-center py-6">
+                <p className="text-sm text-muted-foreground dark:text-[#8888A0] text-center py-6">
                   暂无指数数据
                 </p>
               )}
@@ -377,11 +384,11 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false} glow="ai" className="h-full">
               <div className="flex items-center gap-2 mb-4">
                 <Bot className="h-4 w-4 text-[#6B5EE4]" />
-                <h2 className="text-sm font-semibold text-[#F0F0F5]">
+                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
                   AI 快速分析
                 </h2>
               </div>
-              <p className="text-xs text-[#8888A0] mb-4">
+              <p className="text-xs text-muted-foreground dark:text-[#8888A0] mb-4">
                 输入股票代码或问题，一键启动AI分析
               </p>
 
@@ -392,7 +399,7 @@ export default function DashboardPage() {
                   onChange={(e) => setAiInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAiSubmit()}
                   placeholder="如：600519、分析比亚迪..."
-                  className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-[#F0F0F5] placeholder:text-[#8888A0]/60 placeholder:animate-pulse focus:outline-none focus:border-[#6B5EE4]/50 focus:ring-1 focus:ring-[#6B5EE4]/20 transition-colors"
+                  className="flex-1 bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg px-3 py-2 text-sm text-foreground dark:text-[#F0F0F5] placeholder:text-muted-foreground dark:placeholder:text-[#8888A0]/60 placeholder:animate-pulse focus:outline-none focus:border-[#6B5EE4]/50 focus:ring-1 focus:ring-[#6B5EE4]/20 transition-colors"
                 />
                 <button
                   onClick={handleAiSubmit}
@@ -417,7 +424,7 @@ export default function DashboardPage() {
                       router.push(`/?q=${encodeURIComponent(`分析 ${item.code}`)}`);
                     }}
                     title={item.name}
-                    className="px-2 py-1 text-[10px] bg-white/[0.04] border border-white/[0.06] rounded-md text-[#8888A0] hover:text-[#F0F0F5] hover:bg-white/[0.08] transition-colors"
+                    className="px-2 py-1 text-[10px] bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.06] dark:border-white/[0.06] rounded-md text-muted-foreground dark:text-[#8888A0] hover:text-foreground dark:hover:text-[#F0F0F5] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] transition-colors"
                   >
                     {item.code}
                   </button>
@@ -431,10 +438,10 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm font-semibold text-[#F0F0F5]">
+                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
                   今日关注
                 </h2>
-                <span className="text-[10px] text-[#8888A0] ml-1">
+                <span className="text-[10px] text-muted-foreground dark:text-[#8888A0] ml-1">
                   {watchItems.length > 0
                     ? `基于您关注的${watchItems.slice(0, 3).map((w) => w.name || w.code).join("、")}，推荐关注`
                     : "热门推荐"}
@@ -467,20 +474,20 @@ export default function DashboardPage() {
                   <button
                     key={item.code}
                     onClick={() => router.push(`/stock/${item.code}`)}
-                    className="group flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.08] hover:border-[#6B5EE4]/30 hover:scale-[1.02] hover:shadow-lg hover:shadow-[#6B5EE4]/5 backdrop-blur-sm transition-all duration-200"
+                    className="group flex items-center gap-3 p-3 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:border-[#6B5EE4]/30 hover:scale-[1.02] hover:shadow-lg hover:shadow-[#6B5EE4]/5 backdrop-blur-sm transition-all duration-200"
                   >
                     <div className="h-8 w-8 rounded-lg bg-[#6B5EE4]/10 flex items-center justify-center text-[#6B5EE4] text-xs font-bold shrink-0">
                       {item.name.slice(0, 1)}
                     </div>
                     <div className="text-left min-w-0">
-                      <p className="text-xs font-medium text-[#F0F0F5] truncate group-hover:text-white transition-colors">
+                      <p className="text-xs font-medium text-foreground dark:text-[#F0F0F5] truncate group-hover:text-white transition-colors">
                         {item.name}
                       </p>
-                      <p className="text-[10px] text-[#8888A0] font-mono">
+                      <p className="text-[10px] text-muted-foreground dark:text-[#8888A0] font-mono">
                         {item.code}
                       </p>
                     </div>
-                    <ArrowRight className="h-3.5 w-3.5 text-[#8888A0] group-hover:text-[#6B5EE4] ml-auto shrink-0 transition-colors" />
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground dark:text-[#8888A0] group-hover:text-[#6B5EE4] ml-auto shrink-0 transition-colors" />
                   </button>
                 ))}
               </div>
@@ -493,13 +500,13 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Star className="h-4 w-4 text-amber-400" />
-                  <h2 className="text-sm font-semibold text-[#F0F0F5]">
+                  <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
                     自选股行情
                   </h2>
                 </div>
                 <button
                   onClick={() => router.push("/watchlist")}
-                  className="flex items-center gap-1 text-[10px] text-[#8888A0] hover:text-[#6B5EE4] transition-colors"
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground dark:text-[#8888A0] hover:text-[#6B5EE4] transition-colors"
                 >
                   管理 <ExternalLink className="h-3 w-3" />
                 </button>
@@ -507,8 +514,8 @@ export default function DashboardPage() {
 
               {watchItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Star className="h-8 w-8 text-[#8888A0]/30 mb-2" />
-                  <p className="text-sm text-[#8888A0]">添加自选股开始追踪</p>
+                  <Star className="h-8 w-8 text-muted-foreground dark:text-[#8888A0]/30 mb-2" />
+                  <p className="text-sm text-muted-foreground dark:text-[#8888A0]">添加自选股开始追踪</p>
                   <button
                     onClick={() => router.push("/watchlist")}
                     className="mt-2 flex items-center gap-1 text-xs text-[#6B5EE4] hover:underline"
@@ -520,7 +527,7 @@ export default function DashboardPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-white/[0.06] text-[#8888A0]">
+                      <tr className="border-b border-foreground/[0.06] dark:border-white/[0.06] text-muted-foreground dark:text-[#8888A0]">
                         <th className="text-left py-2 font-medium">代码</th>
                         <th className="text-left py-2 font-medium">名称</th>
                         <th className="text-right py-2 font-medium">最新价</th>
@@ -538,19 +545,19 @@ export default function DashboardPage() {
                               ? pct >= 0
                                 ? "text-[#EF4444]"
                                 : "text-[#10B981]"
-                              : "text-[#8888A0]";
+                              : "text-muted-foreground dark:text-[#8888A0]";
                           return (
                             <tr
                               key={item.code}
-                              className="border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors"
+                              className="border-b border-foreground/[0.04] dark:border-white/[0.04] hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                             >
-                              <td className="py-2.5 font-mono text-[#F0F0F5]">
+                              <td className="py-2.5 font-mono text-foreground dark:text-[#F0F0F5]">
                                 {item.code}
                               </td>
-                              <td className="py-2.5 text-[#F0F0F5]">
+                              <td className="py-2.5 text-foreground dark:text-[#F0F0F5]">
                                 {item.name}
                               </td>
-                              <td className="py-2.5 text-right font-mono text-[#F0F0F5]">
+                              <td className="py-2.5 text-right font-mono text-foreground dark:text-[#F0F0F5]">
                                 {q.price !== undefined
                                   ? q.price.toFixed(2)
                                   : watchLoading
@@ -591,7 +598,7 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false} className="h-full">
               <div className="flex items-center gap-2 mb-4">
                 <Newspaper className="h-4 w-4 text-sky-400" />
-                <h2 className="text-sm font-semibold text-[#F0F0F5]">
+                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
                   最新新闻
                 </h2>
               </div>
@@ -600,8 +607,8 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <div key={i} className="space-y-1.5">
-                      <div className="h-3 w-full bg-white/[0.04] rounded animate-pulse" />
-                      <div className="h-2.5 w-1/3 bg-white/[0.03] rounded animate-pulse" />
+                      <div className="h-3 w-full bg-foreground/[0.04] dark:bg-white/[0.04] rounded animate-pulse" />
+                      <div className="h-2.5 w-1/3 bg-foreground/[0.03] dark:bg-white/[0.03] rounded animate-pulse" />
                     </div>
                   ))}
                 </div>
@@ -610,18 +617,18 @@ export default function DashboardPage() {
                   {news.map((item, i) => (
                     <li
                       key={i}
-                      className="group py-2 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.04] rounded px-1.5 -mx-1.5 transition-colors cursor-default"
+                      className="group py-2 border-b border-foreground/[0.04] dark:border-white/[0.04] last:border-0 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] rounded px-1.5 -mx-1.5 transition-colors cursor-default"
                     >
-                      <p className="text-xs text-[#F0F0F5] leading-relaxed line-clamp-2 group-hover:text-white transition-colors">
+                      <p className="text-xs text-foreground dark:text-[#F0F0F5] leading-relaxed line-clamp-2 group-hover:text-white transition-colors">
                         {item.title}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         {item.source && (
-                          <span className="text-[10px] text-[#8888A0]">
+                          <span className="text-[10px] text-muted-foreground dark:text-[#8888A0]">
                             {item.source}
                           </span>
                         )}
-                        <span className="text-[10px] text-[#8888A0]/60">
+                        <span className="text-[10px] text-muted-foreground dark:text-[#8888A0]/60">
                           {formatTime(item.publish_time)}
                         </span>
                       </div>
@@ -629,7 +636,7 @@ export default function DashboardPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-[#8888A0] text-center py-6">
+                <p className="text-sm text-muted-foreground dark:text-[#8888A0] text-center py-6">
                   暂无新闻
                 </p>
               )}
@@ -643,13 +650,13 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <PieChart className="h-4 w-4 text-emerald-400" />
-                    <h2 className="text-sm font-semibold text-[#F0F0F5]">
+                    <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
                       持仓概览
                     </h2>
                   </div>
                   <button
                     onClick={() => router.push("/portfolio")}
-                    className="flex items-center gap-1 text-[10px] text-[#8888A0] hover:text-[#6B5EE4] transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground dark:text-[#8888A0] hover:text-[#6B5EE4] transition-colors"
                   >
                     详情 <ExternalLink className="h-3 w-3" />
                   </button>
@@ -688,7 +695,7 @@ export default function DashboardPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-white/[0.06] text-[#8888A0]">
+                      <tr className="border-b border-foreground/[0.06] dark:border-white/[0.06] text-muted-foreground dark:text-[#8888A0]">
                         <th className="text-left py-2 font-medium">代码</th>
                         <th className="text-left py-2 font-medium">名称</th>
                         <th className="text-right py-2 font-medium">持仓量</th>
@@ -710,19 +717,19 @@ export default function DashboardPage() {
                         return (
                           <tr
                             key={h.code}
-                            className="border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors"
+                            className="border-b border-foreground/[0.04] dark:border-white/[0.04] hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                           >
-                            <td className="py-2.5 font-mono text-[#F0F0F5]">
+                            <td className="py-2.5 font-mono text-foreground dark:text-[#F0F0F5]">
                               {h.code}
                             </td>
-                            <td className="py-2.5 text-[#F0F0F5]">{h.name}</td>
-                            <td className="py-2.5 text-right font-mono text-[#F0F0F5]">
+                            <td className="py-2.5 text-foreground dark:text-[#F0F0F5]">{h.name}</td>
+                            <td className="py-2.5 text-right font-mono text-foreground dark:text-[#F0F0F5]">
                               {h.shares.toLocaleString()}
                             </td>
-                            <td className="py-2.5 text-right font-mono text-[#F0F0F5]">
+                            <td className="py-2.5 text-right font-mono text-foreground dark:text-[#F0F0F5]">
                               {h.costPrice.toFixed(2)}
                             </td>
-                            <td className="py-2.5 text-right font-mono text-[#F0F0F5]">
+                            <td className="py-2.5 text-right font-mono text-foreground dark:text-[#F0F0F5]">
                               {curPrice.toFixed(2)}
                             </td>
                             <td

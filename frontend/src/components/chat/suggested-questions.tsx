@@ -40,7 +40,7 @@ export function SuggestedQuestions({ onSelect }: Props) {
   if (followUpQuestions.length === 0 || isStreaming) return null;
 
   return (
-    <div className="px-3 py-2 border-t border-white/[0.08] bg-white/[0.02]">
+    <div className="px-3 py-2 border-t border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.02] dark:bg-white/[0.02]">
       <div className="flex items-center gap-1.5 mb-1.5">
         <MessageSquare className="h-3 w-3 text-[#3737CC]" />
         <span className="text-[10px] text-muted-foreground font-medium">继续探索</span>
@@ -54,7 +54,7 @@ export function SuggestedQuestions({ onSelect }: Props) {
               variant="outline"
               size="sm"
               style={{ animationDelay: `${i * 60}ms`, ['--cat-color' as string]: color }}
-              className="whitespace-nowrap text-xs h-7 bg-white/[0.04] border border-white/[0.08] rounded-full hover:bg-white/[0.06] hover:-translate-x-0.5 transition-all duration-200 animate-[glass-enter_300ms_ease-out_both] opacity-0 [animation-fill-mode:forwards]"
+              className="whitespace-nowrap text-xs h-7 bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08] rounded-full hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] hover:-translate-x-0.5 transition-all duration-200 animate-[glass-enter_300ms_ease-out_both] opacity-0 [animation-fill-mode:forwards]"
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = borderColor; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = ''; }}
               onClick={() => onSelect(q)}

@@ -72,7 +72,7 @@ export function RiskRadarArtifact({ data }: Props) {
       </div>
 
       {/* 风险进度条 */}
-      <div className="w-full bg-white/[0.06] rounded-full h-3 overflow-hidden">
+      <div className="w-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-3 overflow-hidden">
         <div className={`h-3 rounded-full bg-gradient-to-r ${riskColor} transition-all duration-1000`} style={{ width: `${riskScore}%` }} />
       </div>
 

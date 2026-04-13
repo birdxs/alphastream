@@ -129,7 +129,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-between text-muted-foreground"><span>Agent数量</span><span>13个</span></div>
           <div className="flex justify-between text-muted-foreground"><span>技术栈</span><span>Next.js + Flask + LangGraph</span></div>
-          <div className="pt-2 border-t border-white/[0.06]">
+          <div className="pt-2 border-t border-foreground/[0.06] dark:border-white/[0.06]">
             <Button
               variant="outline"
               size="sm"

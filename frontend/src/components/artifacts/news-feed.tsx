@@ -27,7 +27,7 @@ export function NewsFeedArtifact({ data }: Props) {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-10 text-[#8888A0]">
+      <div className="flex flex-col items-center justify-center py-10 text-muted-foreground dark:text-[#8888A0]">
         <Newspaper className="h-8 w-8 mb-2 opacity-40" />
         <p className="text-sm">暂无相关新闻</p>
       </div>
@@ -38,13 +38,13 @@ export function NewsFeedArtifact({ data }: Props) {
     <div className="space-y-1">
       {items.slice(0, 8).map((item, i) => {
         const sentiment = item.sentiment || 0;
-        const sentimentColor = sentiment > 0.6 ? 'text-[#46BEA3]' : sentiment < 0.4 ? 'text-[#FF8767]' : 'text-[#8888A0]';
+        const sentimentColor = sentiment > 0.6 ? 'text-[#46BEA3]' : sentiment < 0.4 ? 'text-[#FF8767]' : 'text-muted-foreground dark:text-[#8888A0]';
         const sentimentLabel = sentiment > 0.6 ? '利好' : sentiment < 0.4 ? '利空' : '中性';
 
         return (
-          <div key={i} className="flex items-start gap-3 py-2.5 border-b border-white/[0.06] last:border-0 group hover:bg-white/[0.04] rounded px-2 -mx-2 transition-colors">
+          <div key={i} className="flex items-start gap-3 py-2.5 border-b border-foreground/[0.06] dark:border-white/[0.06] last:border-0 group hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] rounded px-2 -mx-2 transition-colors">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-snug text-[#F0F0F5] group-hover:text-[#3737CC] transition-colors line-clamp-2">
+              <p className="text-sm font-medium leading-snug text-foreground dark:text-[#F0F0F5] group-hover:text-[#3737CC] transition-colors line-clamp-2">
                 {item.title || '无标题'}
               </p>
               <div className="flex items-center gap-2 mt-1">
@@ -58,7 +58,7 @@ export function NewsFeedArtifact({ data }: Props) {
             </div>
             {item.sentiment != null && item.sentiment !== 0 && (
               <div className="flex items-center gap-1.5 shrink-0">
-                <div className="w-12 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                <div className="w-12 h-1.5 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{

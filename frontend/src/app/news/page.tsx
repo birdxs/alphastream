@@ -92,7 +92,17 @@ export default function NewsPage() {
         days: "1",
       });
       if (res?.success && res.news?.length) {
-        setAllNews(res.news.slice(0, 10));
+        // 按时间倒序排序：最新的在最前
+        const sorted = [...res.news].sort((a, b) => {
+          const ta = a.datetime || (a.date && a.time ? `${a.date} ${a.time}` : "") || a.publish_time || "";
+          const tb = b.datetime || (b.date && b.time ? `${b.date} ${b.time}` : "") || b.publish_time || "";
+          return tb.localeCompare(ta);
+        });
+        setAllNews(sorted.slice(0, 10));
+        // 新数据到达后，滚动条归零（下一帧执行，确保DOM已更新）
+        requestAnimationFrame(() => {
+          if (terminalRef.current) terminalRef.current.scrollTop = 0;
+        });
       }
     } catch {
       // 静默失败
@@ -115,7 +125,16 @@ export default function NewsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchNews(); fetchSentiment(); }, [fetchNews, fetchSentiment]);
+  /* 首次加载 + 每30秒定时同步后端新闻与情绪 */
+  useEffect(() => {
+    fetchNews();
+    fetchSentiment();
+    const pollId = setInterval(() => {
+      fetchNews();
+      fetchSentiment();
+    }, 30000);
+    return () => clearInterval(pollId);
+  }, [fetchNews, fetchSentiment]);
 
   /* 打字机效果：每3秒逐条添加 */
   useEffect(() => {
@@ -140,10 +159,10 @@ export default function NewsPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [allNews]);
 
-  /* 自动滚动到底部 */
+  /* 始终保持滚动条在顶部：每次有新数据渲染时归零 */
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+      terminalRef.current.scrollTop = 0;
     }
   }, [displayedNews]);
 
@@ -210,10 +229,11 @@ export default function NewsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-full min-h-0" style={{ height: 'calc(100vh - 96px)' }}>
 
         {/* ====== 左栏: AI Sentiment Terminal ====== */}
-        <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl flex flex-col overflow-hidden min-h-0 h-full">
+        {/* 终端在浅色下也强制深色背景以保持terminal视觉语义 */}
+        <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl flex flex-col overflow-hidden min-h-0 h-full shadow-xl shadow-black/30">
 
           {/* macOS 标题栏 */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-foreground/[0.06] dark:border-white/[0.06]">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
@@ -306,14 +326,14 @@ export default function NewsPage() {
           </div>
 
           {/* 底部情绪分布条 */}
-          <div className="px-4 py-2.5 border-t border-white/[0.06]">
+          <div className="px-4 py-2.5 border-t border-foreground/[0.06] dark:border-white/[0.06]">
             <div className="flex items-center gap-3 text-[10px] font-mono text-white/40 mb-1.5">
               <span>情绪分布</span>
               <span className="text-emerald-400">▲ {posPct}%</span>
               <span className="text-white/40">— {neuPct}%</span>
               <span className="text-rose-400">▼ {negPct}%</span>
             </div>
-            <div className="flex h-1.5 rounded-full overflow-hidden bg-white/[0.06]">
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-foreground/[0.06] dark:bg-white/[0.06]">
               <div className="bg-emerald-500/70 transition-all duration-500" style={{ width: `${posPct}%` }} />
               <div className="bg-white/20 transition-all duration-500" style={{ width: `${neuPct}%` }} />
               <div className="bg-rose-500/70 transition-all duration-500" style={{ width: `${negPct}%` }} />
@@ -325,7 +345,7 @@ export default function NewsPage() {
         <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
 
           {/* --- 卡片1: 舆情分布环形图 --- */}
-          <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl p-4">
+          <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-black/20">
             <div className="flex items-center gap-2 mb-4">
               <div className="icon-box w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
                 <span className="text-violet-400 text-sm">◈</span>
@@ -371,7 +391,7 @@ export default function NewsPage() {
           </div>
 
           {/* --- 卡片2: 7日情绪趋势柱状图 --- */}
-          <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl p-4">
+          <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-black/20">
             <div className="flex items-center gap-2 mb-4">
               <div className="icon-box w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                 <span className="text-cyan-400 text-sm">◎</span>
@@ -401,7 +421,7 @@ export default function NewsPage() {
           </div>
 
           {/* --- 卡片3: 板块情绪热力图 --- */}
-          <div className="bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] rounded-2xl p-4">
+          <div className="bg-[#0A0A1A] dark:bg-white/[0.04] backdrop-blur-[40px] saturate-[180%] border border-white/[0.1] dark:border-white/[0.1] rounded-2xl p-4 shadow-lg shadow-black/20">
             <div className="flex items-center gap-2 mb-4">
               <div className="icon-box w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
                 <span className="text-amber-400 text-sm">◆</span>

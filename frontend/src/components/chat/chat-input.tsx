@@ -285,11 +285,11 @@ export function ChatInput({ onSend, onStop }: Props) {
   };
 
   return (
-    <div className="bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-white/[0.08]">
+    <div className="bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08]">
       {/* 股票选择行 */}
       <div className="flex items-center gap-1.5 px-3 pt-2">
-        <div className={`flex items-center gap-0.5 bg-white/[0.04] border rounded-lg px-2 py-1 shadow-sm transition-colors duration-150 ${
-          stockCodeError ? 'border-[#FF8767]' : 'border-white/[0.08]'
+        <div className={`flex items-center gap-0.5 bg-foreground/[0.04] dark:bg-white/[0.04] border rounded-lg px-2 py-1 shadow-sm transition-colors duration-150 ${
+          stockCodeError ? 'border-[#FF8767]' : 'border-foreground/[0.08] dark:border-white/[0.08]'
         }`}>
           <input
             type="text"
@@ -367,7 +367,7 @@ export function ChatInput({ onSend, onStop }: Props) {
             {attachments.map((att, idx) => (
               <div
                 key={idx}
-                className="relative group flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-white/[0.1] bg-white/[0.06] backdrop-blur-xl shadow-sm max-w-[180px]"
+                className="relative group flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-foreground/[0.1] dark:border-white/[0.1] bg-foreground/[0.06] dark:bg-white/[0.06] backdrop-blur-xl shadow-sm max-w-[180px]"
               >
                 {att.previewUrl ? (
                   <img
@@ -376,7 +376,7 @@ export function ChatInput({ onSend, onStop }: Props) {
                     className="h-10 w-10 rounded-lg object-cover shrink-0"
                   />
                 ) : (
-                  <div className="h-10 w-10 rounded-lg bg-white/[0.08] flex items-center justify-center text-[10px] font-mono text-muted-foreground/70 shrink-0">
+                  <div className="h-10 w-10 rounded-lg bg-foreground/[0.08] dark:bg-white/[0.08] flex items-center justify-center text-[10px] font-mono text-muted-foreground/70 shrink-0">
                     PDF
                   </div>
                 )}
@@ -385,7 +385,7 @@ export function ChatInput({ onSend, onStop }: Props) {
                 </span>
                 <button
                   onClick={() => removeAttachment(idx)}
-                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[#0A0A1A] border border-white/[0.15] flex items-center justify-center text-muted-foreground/70 hover:text-[#EF4444] hover:border-[#EF4444]/30 transition-colors opacity-0 group-hover:opacity-100"
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-card dark:bg-[#0A0A1A] border border-foreground/[0.15] dark:border-white/[0.15] flex items-center justify-center text-muted-foreground/70 hover:text-[#EF4444] hover:border-[#EF4444]/30 transition-colors opacity-0 group-hover:opacity-100"
                   aria-label="移除附件"
                 >
                   <X className="h-3 w-3" />
@@ -406,7 +406,7 @@ export function ChatInput({ onSend, onStop }: Props) {
         <div className="flex gap-2 items-end">
           {/* 附件按钮 */}
           <button
-            className="rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-white/[0.06] transition-all duration-200"
+            className="rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-all duration-200"
             onClick={() => fileInputRef.current?.click()}
             aria-label="添加附件"
             title="上传图片或PDF"
@@ -432,7 +432,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               aria-label="消息输入框"
               rows={1}
               tabIndex={10}
-              className="w-full resize-none rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3737CC]/30 focus:border-[#3737CC] focus:shadow-[0_0_12px_rgba(55,55,204,0.15)] transition-all duration-300 placeholder:text-muted-foreground/35"
+              className="w-full resize-none rounded-2xl border border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.03] dark:bg-white/[0.03] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3737CC]/30 focus:border-[#3737CC] focus:shadow-[0_0_12px_rgba(55,55,204,0.15)] transition-all duration-300 placeholder:text-muted-foreground/35"
               disabled={isStreaming}
               style={{ minHeight: '40px', maxHeight: '120px' }}
             />
@@ -451,7 +451,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               className={`rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center transition-all duration-200 ${
                 isListening
                   ? 'bg-[#EF4444] text-white shadow-lg shadow-[#EF4444]/30 animate-pulse'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-white/[0.06]'
+                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]'
               }`}
               onClick={toggleListening}
               aria-label={isListening ? "停止录音" : "语音输入"}

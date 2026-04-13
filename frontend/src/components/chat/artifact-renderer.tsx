@@ -90,7 +90,7 @@ const CapitalFlowArtifact = dynamic(
         {[65, 85, 45, 70, 55].map((h, i) => (
           <div
             key={i}
-            className="flex-1 bg-white/[0.04] rounded-t animate-pulse"
+            className="flex-1 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-t animate-pulse"
             style={{ height: `${h}%` }}
           />
         ))}
@@ -111,12 +111,12 @@ const InvestorPersonasArtifact = dynamic(
         {/* 投资者画像：4个并排卡片轮廓 */}
         <div className="grid grid-cols-4 gap-3 h-full">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white/[0.04] rounded-lg p-3 flex flex-col items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/[0.06]" />
-              <div className="w-3/4 h-2.5 bg-white/[0.06] rounded" />
-              <div className="w-full h-2 bg-white/[0.04] rounded" />
-              <div className="w-2/3 h-2 bg-white/[0.04] rounded" />
-              <div className="mt-auto w-full h-6 bg-white/[0.04] rounded" />
+            <div key={i} className="bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg p-3 flex flex-col items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-foreground/[0.06] dark:bg-white/[0.06]" />
+              <div className="w-3/4 h-2.5 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
+              <div className="w-full h-2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded" />
+              <div className="w-2/3 h-2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded" />
+              <div className="mt-auto w-full h-6 bg-foreground/[0.04] dark:bg-white/[0.04] rounded" />
             </div>
           ))}
         </div>
@@ -135,10 +135,10 @@ const DecisionCardArtifact = dynamic(
     loading: () => (
       <div className="h-[200px] bg-muted rounded relative overflow-hidden p-6 flex flex-col items-center justify-center gap-4 animate-pulse">
         {/* 决策卡：居中大文字 + 进度条 */}
-        <div className="w-20 h-10 bg-white/[0.06] rounded-lg" />
-        <div className="w-32 h-3 bg-white/[0.04] rounded" />
-        <div className="w-48 h-2.5 bg-white/[0.04] rounded-full">
-          <div className="w-1/2 h-full bg-white/[0.06] rounded-full" />
+        <div className="w-20 h-10 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-lg" />
+        <div className="w-32 h-3 bg-foreground/[0.04] dark:bg-white/[0.04] rounded" />
+        <div className="w-48 h-2.5 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-full">
+          <div className="w-1/2 h-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full" />
         </div>
       </div>
     ),
@@ -156,15 +156,15 @@ const TechnicalPanelArtifact = dynamic(
       <div className="h-[200px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
         {/* 技术面板：大数字 + 进度条 + 2x2网格 */}
         <div className="flex flex-col gap-3 h-full">
-          <div className="w-24 h-8 bg-white/[0.06] rounded" />
-          <div className="w-full h-2 bg-white/[0.04] rounded-full">
-            <div className="w-2/3 h-full bg-white/[0.06] rounded-full" />
+          <div className="w-24 h-8 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
+          <div className="w-full h-2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-full">
+            <div className="w-2/3 h-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full" />
           </div>
           <div className="grid grid-cols-2 gap-2 flex-1">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white/[0.04] rounded p-2 flex flex-col gap-1.5">
-                <div className="w-1/2 h-2 bg-white/[0.06] rounded" />
-                <div className="w-3/4 h-2.5 bg-white/[0.06] rounded" />
+              <div key={i} className="bg-foreground/[0.04] dark:bg-white/[0.04] rounded p-2 flex flex-col gap-1.5">
+                <div className="w-1/2 h-2 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
+                <div className="w-3/4 h-2.5 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
               </div>
             ))}
           </div>
@@ -187,10 +187,10 @@ const SearchResultsArtifact = dynamic(
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3">
-              <div className="w-4 h-4 rounded bg-white/[0.06] shrink-0" />
+              <div className="w-4 h-4 rounded bg-foreground/[0.06] dark:bg-white/[0.06] shrink-0" />
               <div className="flex-1 space-y-1.5">
-                <div className="h-2.5 bg-white/[0.06] rounded" style={{ width: `${75 - i * 10}%` }} />
-                <div className="h-2 bg-white/[0.04] rounded w-1/2" />
+                <div className="h-2.5 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" style={{ width: `${75 - i * 10}%` }} />
+                <div className="h-2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded w-1/2" />
               </div>
             </div>
           ))}
@@ -211,15 +211,15 @@ const FundamentalScorecardArtifact = dynamic(
       <div className="h-[200px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
         {/* 基本面评分卡：圆形评分 + 3行指标条 */}
         <div className="flex gap-4 h-full items-center">
-          <div className="w-20 h-20 rounded-full border-4 border-white/[0.08] shrink-0 flex items-center justify-center">
-            <div className="w-10 h-5 bg-white/[0.06] rounded" />
+          <div className="w-20 h-20 rounded-full border-4 border-foreground/[0.08] dark:border-white/[0.08] shrink-0 flex items-center justify-center">
+            <div className="w-10 h-5 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
           </div>
           <div className="flex-1 flex flex-col gap-2.5">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="space-y-1">
-                <div className="w-16 h-2 bg-white/[0.06] rounded" />
-                <div className="w-full h-2.5 bg-white/[0.04] rounded-full">
-                  <div className="h-full bg-white/[0.06] rounded-full" style={{ width: `${60 + i * 15}%` }} />
+                <div className="w-16 h-2 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
+                <div className="w-full h-2.5 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-full">
+                  <div className="h-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full" style={{ width: `${60 + i * 15}%` }} />
                 </div>
               </div>
             ))}
@@ -247,8 +247,8 @@ const RiskRadarArtifact = dynamic(
           <circle cx="80" cy="80" r="4" className="fill-white/[0.08]" />
         </svg>
         <div className="w-full space-y-2">
-          <div className="w-3/4 h-2.5 bg-white/[0.04] rounded mx-auto" />
-          <div className="w-1/2 h-2.5 bg-white/[0.04] rounded mx-auto" />
+          <div className="w-3/4 h-2.5 bg-foreground/[0.04] dark:bg-white/[0.04] rounded mx-auto" />
+          <div className="w-1/2 h-2.5 bg-foreground/[0.04] dark:bg-white/[0.04] rounded mx-auto" />
         </div>
       </div>
     ),
@@ -267,10 +267,10 @@ const NewsFeedArtifact = dynamic(
         {/* 新闻列表：3行文本骨架（标题+描述+时间） */}
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white/[0.04] rounded p-3 space-y-2">
-              <div className="h-3 bg-white/[0.06] rounded" style={{ width: `${80 - i * 8}%` }} />
-              <div className="h-2 bg-white/[0.04] rounded w-full" />
-              <div className="h-2 bg-white/[0.04] rounded w-20" />
+            <div key={i} className="bg-foreground/[0.04] dark:bg-white/[0.04] rounded p-3 space-y-2">
+              <div className="h-3 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" style={{ width: `${80 - i * 8}%` }} />
+              <div className="h-2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded w-full" />
+              <div className="h-2 bg-foreground/[0.04] dark:bg-white/[0.04] rounded w-20" />
             </div>
           ))}
         </div>

@@ -179,12 +179,12 @@ export function GlobalSearch() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
-        className="sm:max-w-md p-0 overflow-hidden bg-[#0A0A1A]/80 backdrop-blur-sm border border-white/[0.08] rounded-2xl"
+        className="sm:max-w-md p-0 overflow-hidden bg-card/80 dark:bg-[#0A0A1A]/80 backdrop-blur-sm border border-foreground/[0.08] dark:border-white/[0.08] rounded-2xl"
         showCloseButton={false}
       >
         <div className="p-4">
           {/* 搜索输入 */}
-          <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-2xl px-3 py-2.5">
+          <div className="flex items-center gap-2 bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08] rounded-2xl px-3 py-2.5">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
@@ -261,19 +261,19 @@ export function GlobalSearch() {
 
           {/* 底部提示 */}
           <div className="mt-3 text-xs text-muted-foreground text-center">
-            <kbd className="px-1.5 py-0.5 bg-white/[0.06] border border-white/[0.1] rounded text-[10px]">
+            <kbd className="px-1.5 py-0.5 bg-foreground/[0.06] dark:bg-white/[0.06] border border-foreground/[0.1] dark:border-white/[0.1] rounded text-[10px]">
               &#8984;K
             </kbd>{" "}
             打开搜索 ·{" "}
-            <kbd className="px-1.5 py-0.5 bg-white/[0.06] border border-white/[0.1] rounded text-[10px]">
+            <kbd className="px-1.5 py-0.5 bg-foreground/[0.06] dark:bg-white/[0.06] border border-foreground/[0.1] dark:border-white/[0.1] rounded text-[10px]">
               ↑↓
             </kbd>{" "}
             导航 ·{" "}
-            <kbd className="px-1.5 py-0.5 bg-white/[0.06] border border-white/[0.1] rounded text-[10px]">
+            <kbd className="px-1.5 py-0.5 bg-foreground/[0.06] dark:bg-white/[0.06] border border-foreground/[0.1] dark:border-white/[0.1] rounded text-[10px]">
               Enter
             </kbd>{" "}
             确认 ·{" "}
-            <kbd className="px-1.5 py-0.5 bg-white/[0.06] border border-white/[0.1] rounded text-[10px]">
+            <kbd className="px-1.5 py-0.5 bg-foreground/[0.06] dark:bg-white/[0.06] border border-foreground/[0.1] dark:border-white/[0.1] rounded text-[10px]">
               Esc
             </kbd>{" "}
             关闭
