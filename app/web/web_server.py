@@ -986,6 +986,7 @@ def enhanced_analysis():
             wait_interval = 0.5
             waited = 0
 
+            store = get_task_store('stock_analysis')
             while waited < max_wait:
                 with task_lock:
                     current_task = store[task_id]
