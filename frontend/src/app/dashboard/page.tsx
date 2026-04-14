@@ -1,5 +1,5 @@
-// Input: 后端 /api/market_indices、/api/latest_news、watchlist-store、portfolio-store
-// Output: 投资看板页面 — Bento Grid布局、自选股表格回填stock_name，Dark Glassmorphism风格
+// Input: 后端 /api/market_indices、/api/latest_news、watchlist-store、portfolio-store、useStockNames、useStockPrices
+// Output: 投资看板页面 — Bento Grid布局、自选股+持仓表格实时补全中文名与最新价，Dark Glassmorphism风格
 // Pos: app/dashboard/page.tsx - Dashboard看板主页面
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -12,6 +12,8 @@ import { StatsCard } from "@/components/common/stats-card";
 import { GlassCard } from "@/components/common/glass-card";
 import { useWatchlistStore, type WatchItem } from "@/lib/stores/watchlist-store";
 import { usePortfolioStore, type Holding } from "@/lib/stores/portfolio-store";
+import { useStockNames } from "@/lib/hooks/use-stock-names";
+import { useStockPrices } from "@/lib/hooks/use-stock-prices";
 import {
   TrendingUp,
   TrendingDown,
@@ -281,10 +283,22 @@ export default function DashboardPage() {
       <TrendingDown className="h-4 w-4 stock-down" />
     );
 
+  /* ---- 持仓：实时名+实时价（derived state，不持久化回store） ---- */
+  const holdingCodes = holdings.map((h) => h.code);
+  const liveNames = useStockNames(holdingCodes);
+  const livePrices = useStockPrices(holdingCodes);
+  const liveHoldings = holdings.map((h) => {
+    const liveName = liveNames[h.code];
+    const livePrice = livePrices[h.code]?.price;
+    const name = liveName && liveName !== h.code ? liveName : (h.name && h.name !== h.code ? h.name : h.code);
+    const currentPrice = livePrice ?? h.currentPrice ?? h.costPrice;
+    return { ...h, name, currentPrice };
+  });
+
   /* ---- 持仓统计 ---- */
-  const totalCost = holdings.reduce((sum, h) => sum + h.costPrice * h.shares, 0);
-  const totalMarket = holdings.reduce(
-    (sum, h) => sum + (h.currentPrice ?? h.costPrice) * h.shares,
+  const totalCost = liveHoldings.reduce((sum, h) => sum + h.costPrice * h.shares, 0);
+  const totalMarket = liveHoldings.reduce(
+    (sum, h) => sum + h.currentPrice * h.shares,
     0
   );
   const totalPnL = totalMarket - totalCost;
@@ -706,8 +720,8 @@ export default function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {holdings.map((h) => {
-                        const curPrice = h.currentPrice ?? h.costPrice;
+                      {liveHoldings.map((h) => {
+                        const curPrice = h.currentPrice;
                         const pnl = (curPrice - h.costPrice) * h.shares;
                         const pnlPct =
                           h.costPrice > 0
