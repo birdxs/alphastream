@@ -311,8 +311,33 @@ function getArtifactIcon(type: string): ReactNode {
   return icons[type] || <ClipboardList className={iconClass} />;
 }
 
+// 递归还原字符串中字面量 \uXXXX 转义序列（防止后端 LLM 偶发返回 escaped Unicode 字面量被原样渲染）
+// 仅替换合法形态：反斜杠 + u + 4 位 hex；替代对（surrogate pair）也覆盖
+function unescapeUnicodeLiterals(input: unknown): unknown {
+  if (typeof input === "string") {
+    if (input.indexOf("\\u") === -1) return input;
+    try {
+      return input.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+        String.fromCharCode(parseInt(hex, 16))
+      );
+    } catch {
+      return input;
+    }
+  }
+  if (Array.isArray(input)) return input.map(unescapeUnicodeLiterals);
+  if (input && typeof input === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      out[k] = unescapeUnicodeLiterals(v);
+    }
+    return out;
+  }
+  return input;
+}
+
 function renderArtifactContent(artifact: Artifact) {
-  const { artifact_type, data } = artifact;
+  const { artifact_type } = artifact;
+  const data = unescapeUnicodeLiterals(artifact.data) as typeof artifact.data;
 
   switch (artifact_type) {
     case "candlestick_chart":
