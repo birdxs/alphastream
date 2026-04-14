@@ -74,18 +74,61 @@ export function useChatStream() {
         },
         onToolCallStart: (data) => {
           agentStore.addToolCall(data);
+          // 实时数据流：工具调用开始
+          let argsPreview = '';
+          try {
+            argsPreview = JSON.stringify(data.arguments ?? {});
+          } catch { argsPreview = String(data.arguments ?? ''); }
+          agentStore.appendEvent({
+            type: 'tool_call_start',
+            agent: data.agent,
+            title: `调用工具 ${data.tool_name}`,
+            detail: argsPreview,
+            meta: { tool_call_id: data.tool_call_id, tool_name: data.tool_name, arguments: data.arguments },
+          });
         },
         onToolCallResult: (data) => {
           agentStore.setToolCallResult(data.tool_call_id, data);
           if (data.artifact) {
             chatStore.addArtifact(data.artifact);
           }
+          // 实时数据流：工具调用结果
+          const dur = data.duration_ms != null ? ` · ${data.duration_ms}ms` : '';
+          agentStore.appendEvent({
+            type: 'tool_call_result',
+            title: `${data.tool_name} 完成${dur}`,
+            detail: data.result_summary || (data.artifact ? `生成 artifact: ${data.artifact.title}` : ''),
+            meta: { tool_call_id: data.tool_call_id, duration_ms: data.duration_ms },
+          });
         },
         onArtifact: (data) => {
           chatStore.addArtifact(data);
         },
         onAgentProgress: (data) => {
           agentStore.setAgentProgress(data);
+          // 实时数据流：agent状态变化
+          const evType: 'agent_started' | 'agent_progress' | 'agent_completed' =
+            data.status === 'started' ? 'agent_started' :
+            data.status === 'completed' ? 'agent_completed' : 'agent_progress';
+          agentStore.appendEvent({
+            type: evType,
+            agent: data.agent_name,
+            title: data.status === 'started'
+              ? `${data.agent_name} 启动`
+              : data.status === 'completed'
+                ? `${data.agent_name} 完成`
+                : `${data.agent_name} ${Math.round(data.progress)}%`,
+            detail: data.message,
+            meta: { progress: data.progress, status: data.status },
+          });
+        },
+        onReasoning: (data) => {
+          agentStore.appendEvent({
+            type: 'reasoning',
+            agent: data.agent,
+            title: `${data.agent || '推理'} 思考`,
+            detail: data.content,
+          });
         },
         onError: (data) => {
           const errText = typeof data === 'string' ? data : (data?.message || data?.error || JSON.stringify(data));

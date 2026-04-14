@@ -97,12 +97,15 @@ export function ChatInput({ onSend, onStop }: Props) {
     return () => window.removeEventListener("chat-prefill", handler);
   }, []);
 
-  // P0-1: 输入框自动增高
+  // P0-1: 输入框自动增高 + 仅满高度时显示滚动条
   useEffect(() => {
     const ta = textareaRef.current;
     if (ta) {
       ta.style.height = '40px'; // reset
-      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+      const next = Math.min(ta.scrollHeight, 120);
+      ta.style.height = next + 'px';
+      // 未达 max-h 时隐藏滚动条，达到才显示
+      ta.style.overflowY = ta.scrollHeight > 120 ? 'auto' : 'hidden';
     }
   }, [input]);
 
