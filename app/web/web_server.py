@@ -1337,6 +1337,33 @@ def api_stock_name():
         return custom_jsonify({'stock_code': stock_code, 'stock_name': stock_code})
 
 
+# 股票名称反查接口 — 根据名称关键词搜索代码（FE意图路由用）
+@app.route('/api/stock_name_search', methods=['GET'])
+def api_stock_name_search():
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        return custom_jsonify({'error': 'q required', 'results': []}), 400
+    try:
+        _load_stock_name_cache()
+        exact = []
+        prefix = []
+        contains = []
+        for code, name in _STOCK_NAME_CACHE.items():
+            if name == q:
+                exact.append({'stock_code': code, 'stock_name': name})
+            elif name.startswith(q):
+                prefix.append({'stock_code': code, 'stock_name': name})
+            elif q in name:
+                contains.append({'stock_code': code, 'stock_name': name})
+            if len(exact) + len(prefix) >= 10:
+                break
+        results = (exact + prefix + contains)[:10]
+        return custom_jsonify({'query': q, 'results': results, 'count': len(results)})
+    except Exception as e:
+        app.logger.error(f"stock_name_search 出错 q={q}: {e}")
+        return custom_jsonify({'query': q, 'results': [], 'error': str(e)}), 500
+
+
 # @app.route('/api/market_scan', methods=['POST'])
 # def api_market_scan():
 #     try:
