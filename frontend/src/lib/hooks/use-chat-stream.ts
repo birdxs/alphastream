@@ -51,6 +51,11 @@ export function useChatStream() {
       chatStore.resetStreamContent();
       chatStore.clearArtifacts();
       agentStore.reset();
+      // 走agent-analyze时立即打开isAnalyzing，让右侧Agent面板在首个事件到达前就显示"进行中"
+      // （以下endpoint判断稍后也会计算一次，此处提前点亮即可）
+      const _msgHasCode = /\b\d{6}\b/.test(message);
+      const _isAgentRoute = /分析|研究|深度|全面|多[aA]gent|agent/.test(message) && (_msgHasCode || options.stock_code);
+      if (_isAgentRoute) agentStore.setAnalyzing(true);
 
       // 累积完整内容（不受打字动画影响），用于onDone时生成最终消息
       let fullContentBuffer = '';
@@ -93,7 +98,7 @@ export function useChatStream() {
           };
           chatStore.addMessage(errorMsg);
           chatStore.resetStreamContent();
-          chatStore.setStreaming(false);
+          chatStore.setStreaming(false); agentStore.setAnalyzing(false);
           // 保存重试建议
           chatStore.setFollowUps(['🔄 重试上一个问题']);
         },
@@ -109,7 +114,7 @@ export function useChatStream() {
           };
           chatStore.addMessage(assistantMsg);
           chatStore.resetStreamContent();
-          chatStore.setStreaming(false);
+          chatStore.setStreaming(false); agentStore.setAnalyzing(false);
           chatStore.setFollowUps(data.follow_up_questions || []);
 
           // Tab标题闪烁提醒 + 浏览器通知
@@ -151,14 +156,29 @@ export function useChatStream() {
         },
       };
 
-      try {
-        await apiClient.streamPost(
-          '/api/ai/chat',
-          {
+      // 意图路由：消息含6位股票代码且含"分析"关键字（或options.stock_code存在），走多Agent分析端点；
+      // 否则走普通聊天端点
+      const codeMatch = message.match(/\b(\d{6})\b/);
+      const isAnalyze = /分析|研究|深度|全面|多[aA]gent|agent/.test(message) && (codeMatch || options.stock_code);
+      const endpoint = isAnalyze ? '/api/ai/agent-analyze' : '/api/ai/chat';
+      const body = isAnalyze
+        ? {
+            stock_code: options.stock_code || codeMatch?.[1] || '',
+            market_type: options.market_type || 'A',
+            research_depth: options.research_depth ?? 3,
+            user_message: message,
+            conversation_id: chatStore.activeConversationId || '',
+          }
+        : {
             message,
             conversation_id: chatStore.activeConversationId || '',
             ...options,
-          },
+          };
+
+      try {
+        await apiClient.streamPost(
+          endpoint,
+          body,
           handlers,
           abortRef.current.signal
         );
@@ -177,10 +197,10 @@ export function useChatStream() {
             chatStore.addMessage(stoppedMsg);
           }
           chatStore.resetStreamContent();
-          chatStore.setStreaming(false);
+          chatStore.setStreaming(false); agentStore.setAnalyzing(false);
           return;
         }
-        chatStore.setStreaming(false);
+        chatStore.setStreaming(false); agentStore.setAnalyzing(false);
         console.error('Chat stream error:', e);
       }
     },
