@@ -120,22 +120,39 @@ class ConversationManager:
         return self._load_conversation(conversation_id)
 
     def list_conversations(self, limit: int = 20) -> List[Dict]:
-        """列出最近的对话（不含完整消息）"""
+        """列出最近的对话（不含完整消息）
+
+        按 updated_at 倒序，而非按文件名（conv_id 为随机 uuid hex，文件名序 != 时间序）。
+        """
         conversations = []
         try:
-            files = sorted(os.listdir(CONVERSATION_DIR), reverse=True)
-            for f in files[:limit]:
-                if f.endswith('.json'):
-                    conv = self._load_conversation(f.replace('.json', ''))
-                    if conv:
-                        conversations.append({
-                            'conversation_id': conv['conversation_id'],
-                            'title': conv['title'],
-                            'created_at': conv['created_at'],
-                            'updated_at': conv['updated_at'],
-                            'message_count': len(conv['messages']),
-                            'stock_codes': conv.get('stock_codes', [])
-                        })
+            # 先按文件 mtime 倒序，避免一次性加载全部 json
+            entries = []
+            for f in os.listdir(CONVERSATION_DIR):
+                if not f.endswith('.json'):
+                    continue
+                fpath = os.path.join(CONVERSATION_DIR, f)
+                try:
+                    entries.append((os.path.getmtime(fpath), f))
+                except OSError:
+                    continue
+            entries.sort(key=lambda x: x[0], reverse=True)
+
+            for _mtime, f in entries:
+                conv = self._load_conversation(f.replace('.json', ''))
+                if conv:
+                    conversations.append({
+                        'conversation_id': conv['conversation_id'],
+                        'title': conv['title'],
+                        'created_at': conv['created_at'],
+                        'updated_at': conv['updated_at'],
+                        'message_count': len(conv['messages']),
+                        'stock_codes': conv.get('stock_codes', [])
+                    })
+
+            # 以 updated_at 字符串再排序一次（YYYY-MM-DD HH:MM:SS 字典序==时间序），兜底 mtime 与业务时间不一致的情况
+            conversations.sort(key=lambda c: c.get('updated_at') or c.get('created_at') or '', reverse=True)
+            return conversations[:limit]
         except Exception as e:
             logger.warning(f"列出对话失败: {e}")
         return conversations
