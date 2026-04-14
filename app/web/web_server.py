@@ -527,10 +527,34 @@ def convert_messages_to_dict(obj):
 
 # 使用我们的编码器的自定义 jsonify 函数
 def custom_jsonify(data):
+    # allow_nan=False 禁止输出字面 NaN/Infinity(非标 JSON)；
+    # convert_numpy_types 已把 float NaN/Inf 转 None 作为兜底。
     return app.response_class(
-        json.dumps(convert_numpy_types(data), cls=NumpyJSONEncoder),
+        json.dumps(convert_numpy_types(data), cls=NumpyJSONEncoder, allow_nan=False),
         mimetype='application/json'
     )
+
+
+# === 全局 JSON Provider: 让 Flask 原生 jsonify 也走 NaN-safe 路径 ===
+# 修复 bug: /api/conversations/<id> 等 125+ 处 jsonify 调用原先允许输出
+# 字面 NaN/Infinity，前端 JSON.parse 会抛 SyntaxError。
+try:
+    from flask.json.provider import DefaultJSONProvider
+
+    class NanSafeJSONProvider(DefaultJSONProvider):
+        def dumps(self, obj, **kwargs):
+            kwargs.setdefault('ensure_ascii', self.ensure_ascii)
+            kwargs.setdefault('sort_keys', self.sort_keys)
+            kwargs['allow_nan'] = False
+            kwargs['cls'] = NumpyJSONEncoder
+            return json.dumps(convert_numpy_types(obj), **kwargs)
+
+        def loads(self, s, **kwargs):
+            return json.loads(s, **kwargs)
+
+    app.json = NanSafeJSONProvider(app)
+except Exception as _e:
+    app.logger.warning(f"无法安装 NanSafeJSONProvider, 将继续使用默认 provider: {_e}")
 
 
 # 保持API兼容的路由
