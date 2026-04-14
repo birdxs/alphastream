@@ -48,8 +48,8 @@ function ChatPanelInner() {
 
   return (
     <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20 bg-gradient-to-b from-foreground/[0.02] dark:from-white/[0.02] to-transparent">
-      {/* Header — 固定h-12对齐sidebar"新对话"按钮行高度，z-30+shrink-0避免被squeeze或遮挡 */}
-      <div className="relative z-30 flex items-center justify-between px-3 h-12 border-b border-border/60 dark:border-white/[0.08] bg-background dark:bg-[#0A0A1A] shrink-0">
+      {/* Header — h-10与artifact/agent对齐，shrink-0避免被squeeze；不用z-index避免覆盖sibling列 */}
+      <div className="relative flex items-center justify-between px-3 h-10 border-b border-border/60 dark:border-white/[0.08] bg-background dark:bg-[#0A0A1A] shrink-0">
         <div className="flex items-center gap-2">
           <div className="relative w-1.5 h-1.5 group/indicator cursor-default">
             <div className="absolute inset-0 rounded-full bg-[#3737CC] animate-ping opacity-75" />
@@ -84,7 +84,7 @@ export function ChatPanel() {
   return (
     <Suspense fallback={
       <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20">
-        <div className="flex items-center px-3 h-12 border-b border-border/60 dark:border-white/[0.08] bg-card/80 dark:bg-[rgba(10,10,26,0.6)] backdrop-blur-sm shrink-0">
+        <div className="flex items-center px-3 h-10 border-b border-border/60 dark:border-white/[0.08] bg-card/80 dark:bg-[rgba(10,10,26,0.6)] backdrop-blur-sm shrink-0">
           <span className="text-xs text-foreground/40">加载中...</span>
         </div>
       </div>
