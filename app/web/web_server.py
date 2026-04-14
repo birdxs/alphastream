@@ -84,7 +84,7 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 )
 
 app = Flask(__name__)
-allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127.0.0.1:8888').split(',')
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127.0.0.1:8888,http://localhost:3000,http://127.0.0.1:3000').split(',')
 CORS(app, resources={r"/api/*": {"origins": allowed_origins, "methods": ["GET", "POST"], "allow_headers": ["Content-Type", "X-API-Key"]}})
 analyzer = StockAnalyzer()
 us_stock_service = USStockService()

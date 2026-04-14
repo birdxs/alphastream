@@ -102,3 +102,8 @@ export const useAgentStore = create<AgentState>((set) => ({
       isAnalyzing: false,
     }),
 }));
+
+// 调试：暴露store到window，便于playwright/e2e/DevTools直接读取
+if (typeof window !== 'undefined') {
+  (window as unknown as { __agentStore?: typeof useAgentStore }).__agentStore = useAgentStore;
+}

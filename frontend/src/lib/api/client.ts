@@ -3,12 +3,21 @@
  * Output: 类型安全的API响应
  * Pos: lib/api/client.ts - 统一API客户端，所有后端调用的唯一入口
  * Note: GET/POST 均走 safeJSONParse, 兼容非标 JSON (NaN/Infinity -> null)
+ * Note: streamPost 直连后端 SSE_BASE (绕过Next dev rewrites流式buffer问题)
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
 import type { SSEHandlers } from '@/lib/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+
+// SSE 专用后端直连 URL — 绕过 Next.js 16 dev rewrites 对流式响应的 buffer。
+// 证据：curl 直连 8888 立刻流式刷 bytes；curl http://localhost:3000 代理要 ~10s 才刷第一批。
+// 浏览器 fetch().body.getReader() 依赖实时 chunked 刷写，被 Next 代理 buffer 后 reader.read() 长时间挂起。
+// 开发环境直连后端；生产环境若设置了 NEXT_PUBLIC_API_URL 则继承。
+const SSE_BASE = process.env.NEXT_PUBLIC_SSE_URL
+  || process.env.NEXT_PUBLIC_API_URL
+  || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8888' : '');
 
 // 兼容历史 API 返回字面 NaN/Infinity 的响应 (非标 JSON)。
 // 后端已修复为输出 null, 但旧 conversation 持久化数据可能仍含 NaN, 前端做双保险。
@@ -64,7 +73,9 @@ class ApiClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const res = await fetch(`${this.baseUrl}${path}`, {
+        // SSE 必须直连后端（SSE_BASE）以避开 Next dev rewrites 的流式 buffer
+        const sseUrl = `${SSE_BASE}${path}`;
+        const res = await fetch(sseUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -106,7 +117,6 @@ class ApiClient {
             console.warn('[SSE] JSON parse error for event', eventType, e);
             return;
           }
-          console.log('[SSE-DBG] block received', { eventType, dataKeys: typeof data === 'object' && data ? Object.keys(data) : null });
           let effectiveType = eventType;
           let payload: unknown = data;
           if (eventType === 'info' && data && typeof data === 'object' && typeof (data as { event_type?: unknown }).event_type === 'string') {
