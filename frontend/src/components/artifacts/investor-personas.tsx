@@ -77,7 +77,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
             <div className="flex items-center gap-2">
               <Badge variant="outline">{consensus.agreement_level}</Badge>
               <span className="text-sm font-mono">
-                \u7F6E\u4FE1\u5EA6 {(consensus.consensus_confidence_score * 100).toFixed(0)}%
+                置信度 {(consensus.consensus_confidence_score * 100).toFixed(0)}%
               </span>
             </div>
           </div>
@@ -156,7 +156,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
         <div className="bg-foreground/[0.04] dark:bg-white/[0.04] border-t border-foreground/[0.08] dark:border-white/[0.08] rounded-b-xl p-4 space-y-3">
           {consensus?.key_agreements && consensus.key_agreements.length > 0 && (
             <div className="text-sm space-y-1">
-              <p className="font-medium text-[#46BEA3]">{"\u2705"} \u4E00\u81F4\u8BA4\u540C</p>
+              <p className="font-medium text-[#46BEA3]">{"\u2705"} 一致认同</p>
               {consensus.key_agreements.map((a, i) => (
                 <p key={i} className="text-xs text-muted-foreground pl-5">
                   {"\u2022"} {a}
@@ -166,7 +166,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
           )}
           {consensus?.key_disagreements && consensus.key_disagreements.length > 0 && (
             <div className="text-sm space-y-1">
-              <p className="font-medium text-[#FF8767]">{"\u26A1"} \u4E3B\u8981\u5206\u6B67</p>
+              <p className="font-medium text-[#FF8767]">{"\u26A1"} 主要分歧</p>
               {consensus.key_disagreements.map((d, i) => (
                 <p key={i} className="text-xs text-muted-foreground pl-5">
                   {"\u2022"} {d}

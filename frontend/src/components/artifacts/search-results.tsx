@@ -31,11 +31,11 @@ export function SearchResultsArtifact({ data }: Props) {
     <div className="space-y-2">
       {data.query && (
         <p className="text-xs text-muted-foreground">
-          \u641C\u7D22: &quot;{data.query}&quot;
+          搜索: &quot;{data.query}&quot;
         </p>
       )}
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">\u6682\u65E0\u641C\u7D22\u7ED3\u679C</p>
+        <p className="text-sm text-muted-foreground">暂无搜索结果</p>
       ) : (
         items.map((item, i) => (
           <div key={i} className="border-b pb-2 last:border-0">
