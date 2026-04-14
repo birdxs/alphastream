@@ -1,16 +1,14 @@
-// Input: 用户键盘输入、股票代码选择、市场类型选择、停止生成回调、文件附件（图片上传至后端/api/upload_image）、语音输入
-// Output: 聊天输入框UI（含股票代码验证反馈、快捷选择、市场切换、自选按钮、停止生成按钮、自动增高、附件预览与上传、语音录入、空消息shake动画、自动聚焦）
+// Input: 用户键盘输入、停止生成回调、文件附件（图片上传至后端/api/upload_image）、语音输入
+// Output: 聊天输入框UI（单行textarea + 附件/语音/发送按钮；股票代码从消息内自动提取6位数字，市场类型默认A股）
 // Pos: chat-panel.tsx的子组件，负责用户输入与发送（含多模态图片上传）
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
-import { Button } from "@/components/ui/button";
 import { useChatStore } from "@/lib/stores/chat-store";
-import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { useToast } from "@/components/common/toast-provider";
 import { CommandPalette } from "./command-palette";
-import { Send, Square, Star, Paperclip, Mic, X, AlertCircle, Loader2 } from "lucide-react";
+import { Send, Paperclip, Mic, X, Loader2 } from "lucide-react";
 
 // ── 附件类型 ──
 interface AttachedFile {
@@ -44,16 +42,10 @@ interface Props {
 
 export function ChatInput({ onSend, onStop }: Props) {
   const [input, setInput] = useState("");
-  const [stockCode, setStockCode] = useState("");
-  const [marketType, setMarketType] = useState("A");
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [isListening, setIsListening] = useState(false);
-  const [stockCodeError, setStockCodeError] = useState(false);
   const [shaking, setShaking] = useState(false);
-  const [detectedCode, setDetectedCode] = useState<string | null>(null);
-  const detectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isStreaming = useChatStore(s => s.isStreaming);
-  const { addItem, hasItem } = useWatchlistStore();
   const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -119,28 +111,6 @@ export function ChatInput({ onSend, onStop }: Props) {
       window.visualViewport.addEventListener('resize', handleResize);
       return () => window.visualViewport?.removeEventListener('resize', handleResize);
     }
-  }, []);
-
-  // ── 智能股票代码识别 ──
-  useEffect(() => {
-    // 匹配输入中独立的6位数字
-    const match = input.match(/(?:^|\s)(\d{6})(?:\s|$)/);
-    if (match && match[1] && match[1] !== stockCode) {
-      const code = match[1];
-      setStockCode(code);
-      setDetectedCode(code);
-      setStockCodeError(false);
-      // 清除上一个计时器
-      if (detectedTimerRef.current) clearTimeout(detectedTimerRef.current);
-      detectedTimerRef.current = setTimeout(() => setDetectedCode(null), 2000);
-    }
-  }, [input, stockCode]);
-
-  // 清理计时器
-  useEffect(() => {
-    return () => {
-      if (detectedTimerRef.current) clearTimeout(detectedTimerRef.current);
-    };
   }, []);
 
   // ── 附件处理 ──
@@ -261,8 +231,7 @@ export function ChatInput({ onSend, onStop }: Props) {
     attachments.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
     setAttachments([]);
     const codeMatch = msg.match(/(\d{6})/);
-    const code = codeMatch ? codeMatch[1] : stockCode;
-    if (code) setStockCode(code);
+    const code = codeMatch ? codeMatch[1] : undefined;
 
     // 将上传文件信息附加到消息中
     let finalMsg = msg;
@@ -270,7 +239,7 @@ export function ChatInput({ onSend, onStop }: Props) {
       const fileInfo = uploadedFiles.map((f) => `[图片: ${f.filename}]`).join(" ");
       finalMsg = `${msg}\n${fileInfo}`;
     }
-    onSend(finalMsg, { stock_code: code, market_type: marketType });
+    onSend(finalMsg, { stock_code: code, market_type: "A" });
     // 发送消息后自动聚焦
     setTimeout(() => textareaRef.current?.focus(), 50);
   };
@@ -289,73 +258,6 @@ export function ChatInput({ onSend, onStop }: Props) {
 
   return (
     <div className="bg-background/80 dark:bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08]">
-      {/* 股票选择行 */}
-      <div className="flex items-center gap-1.5 px-3 pt-2">
-        <div className={`flex items-center gap-0.5 bg-foreground/[0.04] dark:bg-white/[0.04] border rounded-lg px-2 py-1 shadow-sm transition-colors duration-150 ${
-          stockCodeError ? 'border-[#FF8767]' : 'border-foreground/[0.08] dark:border-white/[0.08]'
-        }`}>
-          <input
-            type="text"
-            value={stockCode}
-            onChange={(e) => {
-              const val = e.target.value.replace(/\D/g, '').slice(0, 6);
-              setStockCode(val);
-              // 验证：有输入但不足6位时显示错误
-              setStockCodeError(val.length > 0 && val.length < 6);
-            }}
-            onBlur={() => {
-              // 失焦时验证：非空且非6位则报错
-              setStockCodeError(stockCode.length > 0 && stockCode.length !== 6);
-            }}
-            placeholder="代码"
-            aria-label="股票代码"
-            className={`w-14 bg-transparent text-[11px] font-mono focus:outline-none placeholder:text-muted-foreground/35 transition-colors duration-150 ${
-              stockCodeError ? 'text-[#FF8767]' : ''
-            }`}
-            maxLength={6}
-          />
-          <div className="w-px h-3.5 bg-border/60" />
-          <select
-            value={marketType}
-            onChange={(e) => setMarketType(e.target.value)}
-            aria-label="市场类型"
-            className="bg-transparent text-[11px] focus:outline-none cursor-pointer text-muted-foreground/70 pr-0.5"
-          >
-            <option value="A">A股</option>
-            <option value="HK">港股</option>
-            <option value="US">美股</option>
-          </select>
-        </div>
-        {stockCodeError && (
-          <span className="flex items-center gap-0.5 text-[10px] text-[#FF8767] animate-fade-in">
-            <AlertCircle className="h-3 w-3" />
-            请输入6位股票代码
-          </span>
-        )}
-        {stockCode && stockCode.length === 6 && (
-          <Button
-            variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-1.5"
-            onClick={() => addItem(stockCode)}
-          >
-            <Star className={`h-3 w-3 ${hasItem(stockCode) ? 'fill-[#F59E0B] text-[#F59E0B]' : 'text-muted-foreground/50'}`} />
-            {hasItem(stockCode) ? '已自选' : '自选'}
-          </Button>
-        )}
-        <div className="flex gap-0.5 ml-auto">
-          {["600519", "000001"].map(code => (
-            <button
-              key={code}
-              onClick={() => setStockCode(code)}
-              className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md transition-all duration-150 ${
-                stockCode === code ? 'bg-[#3737CC]/15 text-[#3737CC] ring-1 ring-[#3737CC]/20' : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
-              }`}
-            >
-              {code}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* 输入框 */}
       <div className="p-3 relative">
         <CommandPalette
@@ -440,13 +342,6 @@ export function ChatInput({ onSend, onStop }: Props) {
               style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'hidden' }}
             />
           </div>
-
-          {/* 股票代码自动识别气泡 */}
-          {detectedCode && (
-            <div className="absolute -top-7 left-12 bg-[#3737CC]/10 text-[#3737CC] text-xs px-2 py-1 rounded-full animate-fade-in z-10">
-              检测到股票代码 {detectedCode}，已自动设置
-            </div>
-          )}
 
           {/* 语音按钮 — 不支持时隐藏 */}
           {speechSupported && (
