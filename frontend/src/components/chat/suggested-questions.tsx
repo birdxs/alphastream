@@ -43,7 +43,7 @@ export function SuggestedQuestions({ onSelect }: Props) {
     <div className="px-3 py-2 border-t border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.02] dark:bg-white/[0.02]">
       <div className="flex items-center gap-1.5 mb-1.5">
         <MessageSquare className="h-3 w-3 text-[#3737CC]" />
-        <span className="text-[10px] text-muted-foreground font-medium">继续探索</span>
+        <span className="text-[10px] text-foreground/70 dark:text-white/60 font-medium">继续探索</span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {followUpQuestions.map((q, i) => {
@@ -66,7 +66,7 @@ export function SuggestedQuestions({ onSelect }: Props) {
                 <Icon className="h-2.5 w-2.5" style={{ color }} />
               </span>
               <span className="text-[10px] font-medium mr-1" style={{ color }}>{label}</span>
-              <span className="text-white/70">{q}</span>
+              <span className="text-foreground/85 dark:text-white/75">{q}</span>
             </Button>
           );
         })}

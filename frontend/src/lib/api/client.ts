@@ -70,7 +70,9 @@ class ApiClient {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let doneEventSeen = false;
 
+        try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -116,14 +118,23 @@ class ApiClient {
                     handlers.onError?.(payload);
                     break;
                   case 'done':
+                    doneEventSeen = true;
                     handlers.onDone?.(payload);
                     break;
                 }
-              } catch {
-                /* ignore parse errors */
+              } catch (parseErr) {
+                // JSON.parse 失败或 handler 内抛错都不应吞掉关闭通知
+                console.warn('[SSE] parse/handler error for event', eventType, parseErr);
               }
               eventType = '';
             }
+          }
+        }
+        } finally {
+          // 无论 done 事件是否触发、handler 是否抛错，都强制通知上层清理 loading 状态
+          try { handlers.onClose?.(); } catch (e) { console.warn('[SSE] onClose error', e); }
+          if (!doneEventSeen) {
+            console.warn('[SSE] stream closed without done event');
           }
         }
         return; // 成功处理完毕，退出重试循环

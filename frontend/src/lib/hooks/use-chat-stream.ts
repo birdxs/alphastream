@@ -158,7 +158,7 @@ export function useChatStream() {
           chatStore.addMessage(assistantMsg);
           chatStore.resetStreamContent();
           chatStore.setStreaming(false); agentStore.setAnalyzing(false);
-          chatStore.setFollowUps(data.follow_up_questions || []);
+          chatStore.setFollowUps(data?.follow_up_questions || []);
 
           // Tab标题闪烁提醒 + 浏览器通知
           if (document.hidden) {
@@ -196,6 +196,27 @@ export function useChatStream() {
               }
             }
           }
+        },
+        // 兜底：流通道关闭时强制清理 loading 状态——防止后端 done 事件丢失/handler 抛错时 UI 卡死在"AI正在分析中"
+        onClose: () => {
+          const cs = useChatStore.getState();
+          const ags = useAgentStore.getState();
+          if (cs.isStreaming) {
+            // 若 streamingContent 有内容但未通过 onDone 入库，补一条 assistant 消息
+            const remaining = fullContentBuffer || cs.streamingContent;
+            if (remaining) {
+              cs.addMessage({
+                message_id: `assistant_${Date.now()}`,
+                role: 'assistant',
+                content: remaining,
+                artifacts: [...cs.artifacts],
+                created_at: new Date().toISOString(),
+              });
+              cs.resetStreamContent();
+            }
+            cs.setStreaming(false);
+          }
+          if (ags.isAnalyzing) ags.setAnalyzing(false);
         },
       };
 

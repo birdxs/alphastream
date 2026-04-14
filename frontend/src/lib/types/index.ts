@@ -15,6 +15,8 @@ export interface SSEHandlers {
   onReasoning?: (data: { content: string; agent: string }) => void;
   onError?: (data: { code: string; message: string; recoverable?: boolean }) => void;
   onDone?: (data: StreamDone) => void;
+  // 流通道关闭时的兜底（无论是否收到 done 事件都会触发，用于强制清理 loading 状态）
+  onClose?: () => void;
 }
 
 // Artifact类型
