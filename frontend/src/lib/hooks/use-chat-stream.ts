@@ -147,12 +147,44 @@ export function useChatStream() {
         },
         onDone: (data) => {
           // 将流式内容转为正式消息，优先使用完整缓冲内容避免打字动画导致内容不完整
-          const finalContent = fullContentBuffer || useChatStore.getState().streamingContent;
+          let finalContent = fullContentBuffer || useChatStore.getState().streamingContent;
+          const finalArtifacts = [...useChatStore.getState().artifacts];
+          // agent-analyze 路径不发 token 事件 → finalContent 为空 → 渲染 "(正在生成...)" 占位
+          // 这里基于 artifacts + execution_log 自动合成一段总结，避免空消息
+          if (!finalContent) {
+            const stockCode = options.stock_code || /\b(\d{6})\b/.exec(message)?.[1] || '';
+            const decisionArt = finalArtifacts.find(a => a.artifact_type === 'decision_card');
+            const decision = decisionArt?.data as { action?: string; confidence?: number; reasoning?: string; risk_level?: string; position_suggestion?: string; price_targets?: { support?: string; resistance?: string; target?: string } } | undefined;
+            const lines: string[] = [`### ${stockCode} 多Agent分析完成`];
+            if (decision?.action) {
+              const conf = decision.confidence != null ? `${Math.round(decision.confidence * 100)}%` : '—';
+              lines.push(`- **建议操作**：${decision.action}（置信度 ${conf}）`);
+              if (decision.risk_level) lines.push(`- **风险等级**：${decision.risk_level}`);
+              if (decision.position_suggestion) lines.push(`- **建议仓位**：${decision.position_suggestion}`);
+              const pt = decision.price_targets;
+              if (pt && (pt.support || pt.resistance || pt.target)) {
+                const seg: string[] = [];
+                if (pt.support) seg.push(`支撑 ${pt.support}`);
+                if (pt.resistance) seg.push(`阻力 ${pt.resistance}`);
+                if (pt.target) seg.push(`目标 ${pt.target}`);
+                lines.push(`- **关键价位**：${seg.join(' · ')}`);
+              }
+              if (decision.reasoning) lines.push(`\n${decision.reasoning}`);
+            } else {
+              lines.push(`已完成全部 Agent 执行。详见右侧实时进度面板与下方决策卡片。`);
+            }
+            const execLog = (data?.execution_log || []) as Array<{ agent?: string; status?: string }>;
+            if (execLog.length > 0) {
+              const ok = execLog.filter(e => e.status === 'success').length;
+              lines.push(`\n_执行日志：${ok}/${execLog.length} Agent 成功_`);
+            }
+            finalContent = lines.join('\n');
+          }
           const assistantMsg: ChatMessage = {
             message_id: `assistant_${Date.now()}`,
             role: 'assistant',
             content: finalContent,
-            artifacts: [...useChatStore.getState().artifacts],
+            artifacts: finalArtifacts,
             created_at: new Date().toISOString(),
           };
           chatStore.addMessage(assistantMsg);
@@ -204,12 +236,23 @@ export function useChatStream() {
           if (cs.isStreaming) {
             // 若 streamingContent 有内容但未通过 onDone 入库，补一条 assistant 消息
             const remaining = fullContentBuffer || cs.streamingContent;
+            const arts = [...cs.artifacts];
             if (remaining) {
               cs.addMessage({
                 message_id: `assistant_${Date.now()}`,
                 role: 'assistant',
                 content: remaining,
-                artifacts: [...cs.artifacts],
+                artifacts: arts,
+                created_at: new Date().toISOString(),
+              });
+              cs.resetStreamContent();
+            } else if (arts.length > 0) {
+              // 流断开但已收到artifacts（典型agent-analyze路径）— 给一条简短占位消息
+              cs.addMessage({
+                message_id: `assistant_${Date.now()}`,
+                role: 'assistant',
+                content: '分析已完成，请查看下方决策卡片与右侧 Agent 进度面板。',
+                artifacts: arts,
                 created_at: new Date().toISOString(),
               });
               cs.resetStreamContent();

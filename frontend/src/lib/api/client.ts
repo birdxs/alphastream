@@ -72,62 +72,69 @@ class ApiClient {
         let buffer = '';
         let doneEventSeen = false;
 
+        // 内部派发：处理一个完整SSE事件块（多行）— 按事件而非按行处理，
+        // 避免TCP chunk在event:/data:中间切断时丢失event前缀
+        const dispatchBlock = (block: string) => {
+          let eventType = '';
+          let dataStr = '';
+          for (const rawLine of block.split('\n')) {
+            const line = rawLine.replace(/\r$/, '');
+            if (!line) continue;
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              // 多行 data 拼接（SSE 规范）
+              dataStr += (dataStr ? '\n' : '') + line.slice(5).trimStart();
+            }
+          }
+          if (!eventType || !dataStr) return;
+          let data: unknown;
+          try { data = JSON.parse(dataStr); } catch (e) {
+            console.warn('[SSE] JSON parse error for event', eventType, e);
+            return;
+          }
+          let effectiveType = eventType;
+          let payload: unknown = data;
+          if (eventType === 'info' && data && typeof data === 'object' && typeof (data as { event_type?: unknown }).event_type === 'string') {
+            const d = data as { event_type: string; data?: unknown };
+            effectiveType = d.event_type;
+            payload = d.data ?? d;
+          }
+          try {
+            switch (effectiveType) {
+              case 'token': handlers.onToken?.(payload as Parameters<NonNullable<typeof handlers.onToken>>[0]); break;
+              case 'tool_call_start': handlers.onToolCallStart?.(payload as Parameters<NonNullable<typeof handlers.onToolCallStart>>[0]); break;
+              case 'tool_call_result': handlers.onToolCallResult?.(payload as Parameters<NonNullable<typeof handlers.onToolCallResult>>[0]); break;
+              case 'artifact': handlers.onArtifact?.(payload as Parameters<NonNullable<typeof handlers.onArtifact>>[0]); break;
+              case 'agent_progress': handlers.onAgentProgress?.(payload as Parameters<NonNullable<typeof handlers.onAgentProgress>>[0]); break;
+              case 'reasoning': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;
+              case 'error': handlers.onError?.(payload as Parameters<NonNullable<typeof handlers.onError>>[0]); break;
+              case 'done':
+                doneEventSeen = true;
+                handlers.onDone?.(payload as Parameters<NonNullable<typeof handlers.onDone>>[0]);
+                break;
+            }
+          } catch (handlerErr) {
+            console.warn('[SSE] handler error for event', effectiveType, handlerErr);
+          }
+        };
+
         try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
-
+          if (done) {
+            // 末尾残余作为最后一个事件块派发（若有）
+            if (buffer.trim()) dispatchBlock(buffer);
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          let eventType = '';
-          for (const line of lines) {
-            if (line.startsWith('event: ')) {
-              eventType = line.slice(7).trim();
-            } else if (line.startsWith('data: ') && eventType) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                // 后端 agent-analyze 将多种事件包在 event:info 中，通过 data.event_type 区分
-                let effectiveType = eventType;
-                let payload = data;
-                if (eventType === 'info' && data && typeof data === 'object' && typeof data.event_type === 'string') {
-                  effectiveType = data.event_type;
-                  payload = data.data ?? data;
-                }
-                switch (effectiveType) {
-                  case 'token':
-                    handlers.onToken?.(payload);
-                    break;
-                  case 'tool_call_start':
-                    handlers.onToolCallStart?.(payload);
-                    break;
-                  case 'tool_call_result':
-                    handlers.onToolCallResult?.(payload);
-                    break;
-                  case 'artifact':
-                    handlers.onArtifact?.(payload);
-                    break;
-                  case 'agent_progress':
-                    handlers.onAgentProgress?.(payload);
-                    break;
-                  case 'reasoning':
-                    handlers.onReasoning?.(payload);
-                    break;
-                  case 'error':
-                    handlers.onError?.(payload);
-                    break;
-                  case 'done':
-                    doneEventSeen = true;
-                    handlers.onDone?.(payload);
-                    break;
-                }
-              } catch (parseErr) {
-                // JSON.parse 失败或 handler 内抛错都不应吞掉关闭通知
-                console.warn('[SSE] parse/handler error for event', eventType, parseErr);
-              }
-              eventType = '';
-            }
+          // SSE 事件以空行（\n\n 或 \r\n\r\n）分隔
+          let sepIdx: number;
+          while ((sepIdx = buffer.search(/\r?\n\r?\n/)) !== -1) {
+            const block = buffer.slice(0, sepIdx);
+            const sepMatch = buffer.slice(sepIdx).match(/^(\r?\n\r?\n)/);
+            buffer = buffer.slice(sepIdx + (sepMatch ? sepMatch[1].length : 2));
+            if (block.trim()) dispatchBlock(block);
           }
         }
         } finally {

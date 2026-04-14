@@ -75,8 +75,11 @@ export interface ToolCallResult {
 
 // 流结束
 export interface StreamDone {
-  conversation_id: string;
-  follow_up_questions: string[];
+  conversation_id?: string;
+  follow_up_questions?: string[];
+  // agent-analyze 路径附带：每个Agent执行结果摘要
+  execution_log?: Array<{ agent?: string; status?: string; mode?: string; tools_used?: number; timestamp?: string }>;
+  stock_code?: string;
 }
 
 // 对话

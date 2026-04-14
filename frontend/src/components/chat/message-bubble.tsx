@@ -106,8 +106,10 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
             <span className="whitespace-pre-wrap">{message.content}</span>
           ) : message.content ? (
             <StreamMarkdown content={message.content} />
+          ) : message.artifacts && message.artifacts.length > 0 ? (
+            <span className="text-muted-foreground text-xs">分析已完成，请查看下方决策卡片</span>
           ) : (
-            <span className="text-muted-foreground italic text-xs animate-pulse">(正在生成...)</span>
+            <span className="text-muted-foreground italic text-xs">（无文本输出）</span>
           )}
         </div>
         </div>
