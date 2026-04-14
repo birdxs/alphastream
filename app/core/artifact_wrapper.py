@@ -82,16 +82,37 @@ def execute_tool_with_artifact(tool_name: str, arguments: dict) -> Tuple[str, Op
         return raw_result, None
 
     stock_code = arguments.get("stock_code", arguments.get("query", ""))
+
+    # 反查股票名称（用于卡片标题显示"688111 金山办公 ..."）
+    stock_name = ""
+    if stock_code and artifact_type != "search_results":
+        # structured_data里已有stock_name优先用
+        if isinstance(structured_data, dict) and structured_data.get("stock_name"):
+            stock_name = structured_data.get("stock_name", "")
+        else:
+            try:
+                from app.analysis.stock_analyzer import StockAnalyzer
+                info = StockAnalyzer().get_stock_info(stock_code)
+                stock_name = info.get("股票名称", "") or info.get("name", "")
+                if stock_name == "未知":
+                    stock_name = ""
+                if stock_name and isinstance(structured_data, dict):
+                    structured_data.setdefault("stock_name", stock_name)
+            except Exception as e:
+                logger.debug(f"反查{stock_code}名称失败: {e}")
+
+    title_prefix = f"{stock_code} {stock_name}".strip() if stock_name else stock_code
     artifact = {
         "type": "artifact",
         "artifact_type": artifact_type,
-        "title": f"{stock_code} {ARTIFACT_TITLE_MAP.get(artifact_type, tool_name)}",
+        "title": f"{title_prefix} {ARTIFACT_TITLE_MAP.get(artifact_type, tool_name)}".strip(),
         "data": structured_data,
         "confidence": ARTIFACT_CONFIDENCE_MAP.get(tool_name, 0.5),
         "sources": ARTIFACT_SOURCE_MAP.get(tool_name, []),
         "metadata": {
             "source_tool": tool_name,
             "stock_code": stock_code,
+            "stock_name": stock_name,
             "generated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
     }
@@ -292,32 +313,93 @@ def _get_capital_flow_structured(arguments: dict) -> Optional[Dict]:
 
 
 def _get_news_structured(arguments: dict) -> Optional[Dict]:
-    """获取新闻数据的结构化结果
+    """获取个股相关新闻结构化数据
 
-    调用 NewsFetcher.get_latest_news() 获取list[dict]，
-    返回结构: {items: [{title, content, datetime, source}, ...]}
+    优先级:
+      1. akshare stock_news_em(symbol=code) — 东方财富按股票代码过滤的个股新闻
+      2. search_stock_news_unified(code, name) — Tavily/SERP中文新闻搜索降级
+      3. NewsFetcher.get_latest_news() — 最后兜底(全市场财联社电报)
+
+    返回结构: {stock_code, stock_name, items: [{title, content, datetime, source}, ...]}
     """
+    stock_code = arguments.get("stock_code", "")
+    limit = arguments.get("limit", 8)
+
+    # 反查股票名称
+    stock_name = ""
     try:
-        from app.analysis.news_fetcher import news_fetcher
+        from app.analysis.stock_analyzer import StockAnalyzer
+        info = StockAnalyzer().get_stock_info(stock_code) if stock_code else {}
+        stock_name = info.get("股票名称", "") or info.get("name", "")
+        if stock_name == "未知":
+            stock_name = ""
+    except Exception:
+        pass
 
-        limit = arguments.get("limit", 5)
-        news = news_fetcher.get_latest_news(days=1, limit=limit)
-        if not news:
-            return None
+    items: List[Dict[str, Any]] = []
 
-        items = []
-        for item in news[:limit]:
-            items.append({
-                "title": item.get("title", ""),
-                "content": item.get("content", "")[:200],
-                "datetime": item.get("datetime", ""),
-                "time": item.get("time", ""),
-            })
+    # 优先级1: akshare个股新闻接口（按股票代码过滤）
+    if stock_code:
+        try:
+            import akshare as ak
+            df = ak.stock_news_em(symbol=stock_code)
+            if df is not None and not df.empty:
+                for _, row in df.head(limit).iterrows():
+                    items.append({
+                        "title": str(row.get("新闻标题", "") or row.get("title", "")),
+                        "content": str(row.get("新闻内容", "") or row.get("content", ""))[:200],
+                        "datetime": str(row.get("发布时间", "") or row.get("datetime", "")),
+                        "time": str(row.get("发布时间", "") or row.get("time", "")),
+                        "source": str(row.get("文章来源", "") or "东方财富"),
+                        "url": str(row.get("新闻链接", "") or ""),
+                    })
+                logger.info(f"stock_news_em获取 {stock_code} 个股新闻 {len(items)} 条")
+        except Exception as e:
+            logger.warning(f"akshare stock_news_em({stock_code})失败: {e}")
 
-        return {"items": items}
-    except Exception as e:
-        logger.warning(f"获取新闻结构化数据失败: {e}")
+    # 优先级2: Tavily/SERP按 code+name 联网搜索
+    if not items and stock_code:
+        try:
+            from app.core.search import search_stock_news_unified
+            results = search_stock_news_unified(stock_code, stock_name, max_results=limit)
+            for r in results:
+                items.append({
+                    "title": r.get("title", ""),
+                    "content": (r.get("content") or "")[:200],
+                    "datetime": r.get("published_date", ""),
+                    "time": r.get("published_date", ""),
+                    "source": r.get("source", "web"),
+                    "url": r.get("url", ""),
+                })
+            if items:
+                logger.info(f"search_stock_news_unified获取 {stock_code} 新闻 {len(items)} 条")
+        except Exception as e:
+            logger.warning(f"search_stock_news_unified({stock_code})失败: {e}")
+
+    # 优先级3: 兜底财联社电报(全市场非个股)
+    if not items:
+        try:
+            from app.analysis.news_fetcher import news_fetcher
+            news = news_fetcher.get_latest_news(days=1, limit=limit)
+            for item in (news or [])[:limit]:
+                items.append({
+                    "title": item.get("title", ""),
+                    "content": item.get("content", "")[:200],
+                    "datetime": item.get("datetime", ""),
+                    "time": item.get("time", ""),
+                    "source": "财联社",
+                })
+        except Exception as e:
+            logger.warning(f"news_fetcher兜底失败: {e}")
+
+    if not items:
         return None
+
+    return {
+        "stock_code": stock_code,
+        "stock_name": stock_name,
+        "items": items,
+    }
 
 
 def _get_risk_structured(arguments: dict) -> Optional[Dict]:
@@ -340,9 +422,21 @@ def _get_risk_structured(arguments: dict) -> Optional[Dict]:
             return None
 
         # 提取关键字段，移除内嵌的大型DataFrame避免序列化问题
+        # 注意: 同时冗余发送 risk_score / *_risk 扁平字符串, 保持与前端 risk-radar-chart.tsx 契约兼容
+        vr = result.get("volatility_risk", {}) or {}
+        tr = result.get("trend_risk", {}) or {}
+        rr = result.get("reversal_risk", {}) or {}
+        vor = result.get("volume_risk", {}) or {}
         return {
             "total_risk_score": result.get("total_risk_score", 0),
+            "risk_score": round(result.get("total_risk_score", 0), 1),
             "risk_level": result.get("risk_level", "未知"),
+            # 扁平字符串 — 前端radarData按'低/中/高'映射20/50/80
+            "volatility_risk_level": vr.get("risk_level", "中"),
+            "trend_risk_level": tr.get("risk_level", "中"),
+            "reversal_risk_level": rr.get("risk_level", "中"),
+            "volume_risk_level": vor.get("risk_level", "中"),
+            # 详细dict结构(保持原字段)
             "volatility_risk": {
                 "score": result.get("volatility_risk", {}).get("score", 0),
                 "value": result.get("volatility_risk", {}).get("value", 0),
