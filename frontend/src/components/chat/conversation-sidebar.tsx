@@ -178,13 +178,33 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
     setActiveConversation(conv.conversation_id);
     // 在mobile sheet中，选择对话后立即关闭sheet
     onConversationSelect?.();
+    // 切换前清空旧对话的 artifacts/流式内容/follow-ups, 避免脏数据残留
+    useChatStore.getState().clearArtifacts();
+    useChatStore.getState().resetStreamContent();
+    useChatStore.getState().setFollowUps([]);
     try {
-      const data = await apiClient.get<{messages: Array<{message_id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string}>}>(`/api/conversations/${conv.conversation_id}`);
-      if (data.messages) {
-        setMessages(data.messages);
-      }
-    } catch {
-      showError('加载对话消息失败');
+      // 后端 GET /api/conversations/<id> 返回完整对话(含 artifacts/tool_calls/stock_codes 等),
+      // 这里只取 messages 字段; 兼容历史/异常 schema (messages 缺失或非数组时给空数组而不是 toast)
+      const data = await apiClient.get<{messages?: Array<Record<string, unknown>>}>(`/api/conversations/${conv.conversation_id}`);
+      const rawMsgs = Array.isArray(data?.messages) ? data.messages : [];
+      // 规范化为 ChatMessage[], 过滤掉缺失关键字段的脏记录
+      const msgs = rawMsgs
+        .filter(m => m && typeof m === 'object' && typeof m.role === 'string' && typeof m.content === 'string')
+        .map(m => ({
+          message_id: (m.message_id as string) || `msg_${Math.random().toString(36).slice(2, 10)}`,
+          role: m.role as 'user' | 'assistant' | 'system',
+          content: m.content as string,
+          artifacts: Array.isArray(m.artifacts) ? (m.artifacts as never[]) : [],
+          tool_calls: Array.isArray(m.tool_calls) ? (m.tool_calls as never[]) : [],
+          created_at: (m.created_at as string) || new Date().toISOString(),
+        }));
+      setMessages(msgs);
+      // 历史对话恢复 artifacts 到右侧 panel (从所有 assistant 消息的 artifacts 聚合)
+      const allArtifacts = msgs.flatMap(m => (m.artifacts as unknown[]) || []);
+      allArtifacts.forEach(a => useChatStore.getState().addArtifact(a as never));
+    } catch (err) {
+      console.error('[conversation-sidebar] 加载对话消息失败:', err);
+      showError(`加载对话消息失败: ${err instanceof Error ? err.message : '未知错误'}`);
     }
   };
 
