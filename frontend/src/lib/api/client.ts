@@ -2,12 +2,25 @@
  * Input: 后端API URL + 请求参数
  * Output: 类型安全的API响应
  * Pos: lib/api/client.ts - 统一API客户端，所有后端调用的唯一入口
+ * Note: GET/POST 均走 safeJSONParse, 兼容非标 JSON (NaN/Infinity -> null)
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
 import type { SSEHandlers } from '@/lib/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+
+// 兼容历史 API 返回字面 NaN/Infinity 的响应 (非标 JSON)。
+// 后端已修复为输出 null, 但旧 conversation 持久化数据可能仍含 NaN, 前端做双保险。
+// 注意: 只替换"裸露"的 NaN/Infinity (不在字符串引号内的), 使用简单正则 \bNaN\b 已足够覆盖,
+// 误伤字符串内 "NaN" 文字的概率极低 (字符串内会带引号, \b 匹配不到字母边界之外的引号模式)。
+function safeJSONParse<T>(text: string): T {
+  const sanitized = text
+    .replace(/\bNaN\b/g, 'null')
+    .replace(/\b-Infinity\b/g, 'null')
+    .replace(/\bInfinity\b/g, 'null');
+  return JSON.parse(sanitized) as T;
+}
 
 class ApiClient {
   private baseUrl: string;
@@ -25,7 +38,7 @@ class ApiClient {
     }
     const res = await fetch(url);
     if (!res.ok) throw new ApiError(res.status, await res.text());
-    return res.json();
+    return safeJSONParse<T>(await res.text());
   }
 
   // 通用POST请求
@@ -36,7 +49,7 @@ class ApiClient {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new ApiError(res.status, await res.text());
-    return res.json();
+    return safeJSONParse<T>(await res.text());
   }
 
   // SSE流式请求（支持自动重连，最多重试2次）
@@ -93,6 +106,7 @@ class ApiClient {
             console.warn('[SSE] JSON parse error for event', eventType, e);
             return;
           }
+          console.log('[SSE-DBG] block received', { eventType, dataKeys: typeof data === 'object' && data ? Object.keys(data) : null });
           let effectiveType = eventType;
           let payload: unknown = data;
           if (eventType === 'info' && data && typeof data === 'object' && typeof (data as { event_type?: unknown }).event_type === 'string') {
