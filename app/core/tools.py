@@ -98,11 +98,19 @@ def get_stock_news(stock_code: str, limit: int = 5) -> str:
 
 
 @tool
-def search_web_tool(query: str, max_results: int = 5) -> str:
-    """搜索互联网获取最新信息（支持DuckDuckGo/Tavily/SERP多源降级）"""
+def search_web_tool(query: str, max_results: int = 5, engine: str = "auto") -> str:
+    """搜索互联网获取最新信息。
+
+    支持17种引擎(engine参数):
+      - 'auto' 默认走 fallback 链: duckduckgo→baidu→bing_cn→sogou→so360→wechat→brave
+      - 中文域: 'baidu' / 'sogou' / 'so360' / 'wechat' / 'toutiao' / 'bing_cn' / 'jisilu' / 'zhihu'
+      - 全球域: 'duckduckgo' / 'duckduckgo_html' / 'bing' / 'brave' / 'qwant' / 'startpage' / 'ecosia'
+      - 知识域: 'wikipedia'(百科事实), 'wolframalpha'(数学/单位/货币换算)
+      - 'concurrent' 并发多引擎 + 去重合并
+    """
     from app.core.search import search_web
     try:
-        results = search_web(query, max_results)
+        results = search_web(query, max_results, engine=engine)
         if not results:
             return "未找到相关搜索结果"
         output = []
@@ -260,7 +268,7 @@ OPENAI_TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "search_web",
-            "description": "搜索互联网获取最新信息（支持DuckDuckGo/Tavily/SERP多源降级）",
+            "description": "搜索互联网获取最新信息。17引擎多源聚合：auto自动降级(DDG→百度→Bing→搜狗→360→微信→Brave)；可明确指定 baidu/sogou/so360/wechat/toutiao/bing_cn/bing/duckduckgo/brave/qwant/startpage/ecosia/jisilu/zhihu/wikipedia/wolframalpha/concurrent",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -272,6 +280,11 @@ OPENAI_TOOLS_SCHEMA = [
                         "type": "integer",
                         "description": "最大返回结果数",
                         "default": 5
+                    },
+                    "engine": {
+                        "type": "string",
+                        "description": "引擎名。auto默认；数学/换算用wolframalpha；百科事实用wikipedia；中文新闻可用wechat/toutiao；隐私偏好用duckduckgo/brave/qwant；多源聚合用concurrent",
+                        "default": "auto"
                     }
                 },
                 "required": ["query"]
