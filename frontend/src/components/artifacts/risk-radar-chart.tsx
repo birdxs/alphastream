@@ -1,6 +1,7 @@
-// Input: 风险评分数据（risk_score、各维度风险、风险因素列表）
+// Input: 风险评分数据（total_risk_score、各维度risk dict/level、alerts列表）
 // Output: 专业风险雷达图组件（风险评分头部、进度条、雷达图、风险因素列表）
 // Pos: artifact-renderer.tsx的子组件，risk_gauge类型Artifact渲染器
+// 契约: 兼容 total_risk_score / risk_score 双字段, volatility_risk可为dict{score,risk_level}或字符串'低/中/高'
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
@@ -12,38 +13,93 @@ const ScoreRadarArtifact = dynamic(
   { ssr: false }
 );
 
+// 后端返回格式 (见 app/core/artifact_wrapper.py::_get_risk_structured):
+//   {
+//     total_risk_score: number,            // 0-100加权分
+//     risk_score: number,                   // 同上(别名)
+//     risk_level: string,                   // 极低/低/中等/高/极高
+//     volatility_risk_level: '低'|'中'|'高',  // 扁平映射字段
+//     trend_risk_level, reversal_risk_level, volume_risk_level,
+//     volatility_risk: {score, value, risk_level},  // 详细dict
+//     trend_risk: {score, trend, risk_level},
+//     reversal_risk: {score, direction, risk_level},
+//     volume_risk: {score, pattern, risk_level},
+//     alerts: [{type, level, message}]
+//   }
+interface RiskSub {
+  score?: number;
+  risk_level?: string;
+  value?: number;
+  trend?: string;
+  direction?: string;
+  pattern?: string;
+}
 interface Props {
   data: {
     risk_score?: number;
+    total_risk_score?: number;
     risk_level?: string;
-    volatility_risk?: string;
-    trend_risk?: string;
-    reversal_risk?: string;
-    volume_risk?: string;
-    max_drawdown_risk?: string;
+    volatility_risk_level?: string;
+    trend_risk_level?: string;
+    reversal_risk_level?: string;
+    volume_risk_level?: string;
+    volatility_risk?: RiskSub | string;
+    trend_risk?: RiskSub | string;
+    reversal_risk?: RiskSub | string;
+    volume_risk?: RiskSub | string;
+    alerts?: Array<{ type?: string; level?: string; message?: string }>;
     risk_factors?: string[];
     stop_loss_suggestion?: number;
     position_suggestion?: string;
+    stock_name?: string;
     [key: string]: unknown;
   };
 }
 
+/** 从 string | RiskSub 中提取 score(0-100) */
+function extractScore(field: RiskSub | string | undefined, fallbackLevel?: string): number {
+  if (field == null) {
+    return levelToScore(fallbackLevel);
+  }
+  if (typeof field === 'string') {
+    return levelToScore(field);
+  }
+  if (typeof field.score === 'number') {
+    return field.score;
+  }
+  return levelToScore(field.risk_level || fallbackLevel);
+}
+
+function levelToScore(level?: string): number {
+  if (!level) return 50;
+  if (level.includes('极高')) return 90;
+  if (level.includes('高')) return 75;
+  if (level.includes('极低')) return 10;
+  if (level.includes('低')) return 25;
+  return 50; // 中
+}
+
 export function RiskRadarArtifact({ data }: Props) {
-  const riskScore = Number(data.risk_score || 50);
+  // 兼容 total_risk_score (后端真实字段) 与 risk_score (旧字段)
+  const rawScore = data.total_risk_score ?? data.risk_score;
+  const riskScore = typeof rawScore === 'number' ? Math.round(rawScore * 10) / 10 : 50;
   const riskLevel = data.risk_level || '中等风险';
 
   const riskColor = 'from-[#3737CC] to-[#6B5EE4]';
-  const riskLevelColor = riskScore >= 70 ? 'text-[#FF8767]' : riskScore >= 40 ? 'text-[#F59E0B]' : 'text-[#46BEA3]';
   const riskBg = riskScore >= 70 ? 'bg-[#FF8767]/10 text-[#FF8767]' : riskScore >= 40 ? 'bg-[#F59E0B]/10 text-[#F59E0B]' : 'bg-[#46BEA3]/10 text-[#46BEA3]';
 
-  const riskMap: Record<string, number> = { '低': 20, '中': 50, '高': 80 };
   const radarData = {
-    volatility_risk: riskMap[data.volatility_risk || '中'] || 50,
-    trend_risk: riskMap[data.trend_risk || '中'] || 50,
-    reversal_risk: riskMap[data.reversal_risk || '中'] || 50,
-    volume_risk: riskMap[data.volume_risk || '中'] || 50,
+    volatility_risk: extractScore(data.volatility_risk, data.volatility_risk_level),
+    trend_risk: extractScore(data.trend_risk, data.trend_risk_level),
+    reversal_risk: extractScore(data.reversal_risk, data.reversal_risk_level),
+    volume_risk: extractScore(data.volume_risk, data.volume_risk_level),
     risk_score: riskScore,
   };
+
+  // alerts => risk_factors 派生, 保持UI不变
+  const derivedFactors: string[] = Array.isArray(data.risk_factors) && data.risk_factors.length > 0
+    ? data.risk_factors
+    : (data.alerts || []).map(a => a.message || '').filter(Boolean);
 
   return (
     <div className="space-y-4">
@@ -80,10 +136,10 @@ export function RiskRadarArtifact({ data }: Props) {
       <ScoreRadarArtifact data={radarData} />
 
       {/* 风险因素 */}
-      {data.risk_factors && data.risk_factors.length > 0 && (
+      {derivedFactors.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">风险因素</p>
-          {data.risk_factors.map((f, i) => (
+          {derivedFactors.map((f, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
               <span className="text-[#FF8767] mt-0.5">&#9888;</span>
               <span>{f}</span>
