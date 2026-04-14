@@ -11,6 +11,55 @@ import { useChatStore } from '@/lib/stores/chat-store';
 import { useAgentStore } from '@/lib/stores/agent-store';
 import type { SSEHandlers, ChatMessage } from '@/lib/types';
 
+// ===== 意图识别规则 =====
+// 分析类动词（触发agent路径的语义信号）
+const ANALYZE_VERB_RE = /分析|研究|深度|全面|对比|解读|评估|诊断|复盘|解析|探讨|解构|解密|剖析|透视|推演|预测|展望|盘点|梳理|点评|测评|多[aA]gent|agent/;
+
+// 简体中文股票名候选抽取：2-6字连续中文串，过滤常见动词/代词/连词
+const STOP_WORDS = new Set([
+  '分析', '研究', '深度', '全面', '对比', '解读', '评估', '诊断', '复盘', '解析',
+  '探讨', '解构', '解密', '剖析', '透视', '推演', '预测', '展望', '盘点', '梳理',
+  '点评', '测评', '你好', '请问', '帮我', '这个', '那个', '一下', '怎么样',
+  '巴菲特', '索罗斯', '彼得林奇', '格雷厄姆', '投资', '哲学', '大师', '四位',
+  '三位', '两位', '五位', '分别', '思路', '风格', '视角', '角度', '综合',
+]);
+
+function extractStockNameCandidates(message: string): string[] {
+  // 匹配 2-6 字的连续中文
+  const re = /[\u4e00-\u9fa5]{2,6}/g;
+  const raw = message.match(re) || [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const w of raw) {
+    if (STOP_WORDS.has(w)) continue;
+    if (seen.has(w)) continue;
+    seen.add(w);
+    out.push(w);
+  }
+  // 长的优先（股票名通常3-4字）
+  out.sort((a, b) => b.length - a.length);
+  return out.slice(0, 8);
+}
+
+async function lookupCodeByName(message: string): Promise<string | null> {
+  const cands = extractStockNameCandidates(message);
+  for (const q of cands) {
+    try {
+      const resp = await fetch(`/api/stock_name_search?q=${encodeURIComponent(q)}`);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const hit = Array.isArray(data?.results) && data.results[0];
+      if (hit?.stock_code && /^\d{6}$/.test(hit.stock_code)) {
+        // 偏好精确匹配
+        const exact = data.results.find((r: { stock_name?: string; stock_code?: string }) => r.stock_name === q);
+        if (exact?.stock_code) return exact.stock_code;
+        return hit.stock_code;
+      }
+    } catch { /* ignore, try next */ }
+  }
+  return null;
+}
+
 export function useChatStream() {
   // 不订阅store — 通过getState()在回调内获取最新状态，避免全量重渲染
   const abortRef = useRef<AbortController | null>(null);
@@ -51,11 +100,11 @@ export function useChatStream() {
       chatStore.resetStreamContent();
       chatStore.clearArtifacts();
       agentStore.reset();
-      // 走agent-analyze时立即打开isAnalyzing，让右侧Agent面板在首个事件到达前就显示"进行中"
-      // （以下endpoint判断稍后也会计算一次，此处提前点亮即可）
-      const _msgHasCode = /\b\d{6}\b/.test(message);
-      const _isAgentRoute = /分析|研究|深度|全面|多[aA]gent|agent/.test(message) && (_msgHasCode || options.stock_code);
-      if (_isAgentRoute) agentStore.setAnalyzing(true);
+      // 意图预判：同步判断是否有6位代码或 options.stock_code；若无代码但有分析意图动词，稍后异步反查股票名
+      const _codeMatch0 = message.match(/\b(\d{6})\b/);
+      const _hasAnalyzeVerb = ANALYZE_VERB_RE.test(message);
+      const _directAgent = _hasAnalyzeVerb && (_codeMatch0 || options.stock_code);
+      if (_directAgent) agentStore.setAnalyzing(true);
 
       // 累积完整内容（不受打字动画影响），用于onDone时生成最终消息
       let fullContentBuffer = '';
@@ -263,14 +312,28 @@ export function useChatStream() {
         },
       };
 
-      // 意图路由：消息含6位股票代码且含"分析"关键字（或options.stock_code存在），走多Agent分析端点；
-      // 否则走普通聊天端点
-      const codeMatch = message.match(/\b(\d{6})\b/);
-      const isAnalyze = /分析|研究|深度|全面|多[aA]gent|agent/.test(message) && (codeMatch || options.stock_code);
+      // 意图路由（两阶段）：
+      // Stage1: 6位代码 或 options.stock_code → 直走agent
+      // Stage2: 无代码但有分析动词 → 反查股票名得代码 → 走agent
+      // 否则 → 走普通 /api/ai/chat
+      const codeMatch = _codeMatch0;
+      let resolvedCode = options.stock_code || codeMatch?.[1] || '';
+      let isAnalyze = _hasAnalyzeVerb && !!resolvedCode;
+
+      if (!isAnalyze && _hasAnalyzeVerb && !resolvedCode) {
+        // Stage2: 股票名反查
+        const lookedUp = await lookupCodeByName(message);
+        if (lookedUp) {
+          resolvedCode = lookedUp;
+          isAnalyze = true;
+          agentStore.setAnalyzing(true);
+        }
+      }
+
       const endpoint = isAnalyze ? '/api/ai/agent-analyze' : '/api/ai/chat';
       const body = isAnalyze
         ? {
-            stock_code: options.stock_code || codeMatch?.[1] || '',
+            stock_code: resolvedCode,
             market_type: options.market_type || 'A',
             research_depth: options.research_depth ?? 3,
             user_message: message,
