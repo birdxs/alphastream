@@ -216,6 +216,8 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
         await apiClient.delete(`/api/conversations/${id}`);
         setConversations(prev => prev.filter(c => c.conversation_id !== id));
         if (activeConversationId === id) newConversation();
+        // 删除后以后端为准重拉一次，避免前端乐观状态与磁盘不一致
+        loadConversations();
       } catch { showError('删除失败'); }
       setPendingDelete(null);
     } else {
