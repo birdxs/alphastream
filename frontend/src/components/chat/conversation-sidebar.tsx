@@ -250,8 +250,9 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
 
   return (
     <div className={`${isMobileSheet ? 'w-full h-full' : 'hidden sm:flex w-56 xl:w-64'} flex flex-col bg-[rgba(255,255,255,0.6)] dark:bg-[rgba(15,15,35,0.6)] backdrop-blur-2xl ${isMobileSheet ? '' : 'border-r border-foreground/[0.08] dark:border-white/[0.08]'} transition-all duration-300 ease-in-out`}>
-      <div className="p-2 border-b border-foreground/[0.08] dark:border-white/[0.08] flex items-center justify-between shrink-0">
-        <Button size="sm" onClick={newConversation} className="flex-1 mr-1 gap-1 text-xs bg-[#3737CC] hover:bg-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/20" aria-label="创建新对话" tabIndex={2}>
+      {/* Header — h-10与chat/artifact/agent列严格对齐，避免顶部错位遮挡 */}
+      <div className="px-2 h-10 border-b border-foreground/[0.08] dark:border-white/[0.08] flex items-center justify-between shrink-0">
+        <Button size="sm" onClick={newConversation} className="flex-1 mr-1 h-7 gap-1 text-xs bg-[#3737CC] hover:bg-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/20" aria-label="创建新对话" tabIndex={2}>
           <Plus className="h-3 w-3" />新对话
         </Button>
         {!isMobileSheet && (
