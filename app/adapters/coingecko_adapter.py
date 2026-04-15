@@ -21,6 +21,7 @@ import pandas as pd
 import requests
 
 from .base_adapter import BaseAdapter
+from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,8 @@ class CoinGeckoAdapter(BaseAdapter):
         try:
             resp = requests.get(url, params=params or {}, timeout=self.timeout,
                                 headers={"Accept": "application/json",
-                                         "User-Agent": "StockAnalSys/CoinGeckoAdapter"})
+                                         "User-Agent": "StockAnalSys/CoinGeckoAdapter"},
+                                proxies=get_proxies())
             if resp.status_code == 429:
                 logger.warning("CoinGecko 429限流，退避2s")
                 time.sleep(2.0)

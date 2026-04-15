@@ -18,6 +18,7 @@ from typing import List, Dict, Optional
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,12 @@ class CCXTAdapter(BaseAdapter):
                     logger.warning(f"ccxt未知交易所 exchange_id={exchange_id}")
                 else:
                     # enableRateLimit 启用内建限流，避免触发交易所风控
-                    self._exchange = klass({"enableRateLimit": True, "timeout": 20000})
+                    # H4: 代理透传，境内访问 Binance 等走 HTTP_PROXY/HTTPS_PROXY
+                    _cfg = {"enableRateLimit": True, "timeout": 20000}
+                    _proxies = get_proxies()
+                    if _proxies:
+                        _cfg["proxies"] = _proxies
+                    self._exchange = klass(_cfg)
             except Exception as e:
                 logger.warning(f"ccxt实例化失败({exchange_id}): {type(e).__name__}: {e}")
 

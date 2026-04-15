@@ -18,6 +18,7 @@ from typing import List, Dict, Optional
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._proxy_utils import get_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class YFinanceAdapter(BaseAdapter):
             interval = "1d"
 
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, proxy=get_proxy_url())
             df = ticker.history(period=period, interval=interval, auto_adjust=False)
             if df is None or df.empty:
                 return pd.DataFrame()
@@ -135,7 +136,7 @@ class YFinanceAdapter(BaseAdapter):
         if not _YF_AVAILABLE:
             return {}
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, proxy=get_proxy_url())
             info = ticker.info
             return dict(info) if info else {}
         except Exception as e:
@@ -148,7 +149,7 @@ class YFinanceAdapter(BaseAdapter):
             return {"income_stmt": [], "balance_sheet": [], "cashflow": []}
         result = {"income_stmt": [], "balance_sheet": [], "cashflow": []}
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, proxy=get_proxy_url())
             for key, attr in (("income_stmt", "income_stmt"),
                               ("balance_sheet", "balance_sheet"),
                               ("cashflow", "cashflow")):
@@ -176,7 +177,7 @@ class YFinanceAdapter(BaseAdapter):
         if not _YF_AVAILABLE:
             return {"expiry": None, "expirations": [], "calls": [], "puts": []}
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, proxy=get_proxy_url())
             expirations = list(ticker.options) if ticker.options else []
             if not expirations:
                 return {"expiry": None, "expirations": [], "calls": [], "puts": []}
@@ -205,7 +206,7 @@ class YFinanceAdapter(BaseAdapter):
                 d = str(d).strip()
                 return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 and d.isdigit() else d
             auto_adjust = adjust in ("qfq", "hfq")
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol, proxy=get_proxy_url())
             df = ticker.history(start=_fmt(start_date), end=_fmt(end_date),
                                 interval="1d", auto_adjust=auto_adjust)
             if df is None or df.empty:
@@ -240,7 +241,7 @@ class YFinanceAdapter(BaseAdapter):
         if not _YF_AVAILABLE:
             return False
         try:
-            df = yf.Ticker("AAPL").history(period="5d", interval="1d")
+            df = yf.Ticker("AAPL", proxy=get_proxy_url()).history(period="5d", interval="1d")
             return df is not None and not df.empty
         except Exception as e:
             logger.warning(f"yfinance健康检查失败: {type(e).__name__}: {e}")
