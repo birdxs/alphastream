@@ -3923,3 +3923,49 @@ Dashboard 页的新闻卡片使用简单 `setNews(res.news.slice(0,5))` 无副�
 
 ### 教训
 React StrictMode updater 必须是纯函数，任何对 `useRef.current` / 外部变量的修改必须放在组件函数体或 effect 中，否则会被双调用放大成业务 bug。
+
+---
+
+## Q2 对话sidebar自动刷新 [21:21]
+
+### Comdr反馈
+发完消息得到 AI 回复后，左侧 conversations sidebar **没有自动出现新会话**，必须手动刷新页面才看到。
+
+### 根因
+1. **sidebar 用本地 useState + 仅 mount 时一次性 load** — `conversation-sidebar.tsx` 中 `useEffect(loadConversations, [])` 仅在挂载执行，后续无任何触发器。
+2. **use-chat-stream onDone/onClose 无刷新逻辑** — 流结束后只写 message + followUps，既没把后端返回的 `conversation_id` 写回 store，也没通知 sidebar 重拉列表。
+3. **后端行为OK** — `/api/ai/chat` done 事件已附带 `conversation_id`（web_server.py:3033），新建会话 id 正常下发，只是前端不消费。
+4. **polling 误导** — 后端 log 多为 HEAD /api/conversations 心跳（Next dev proxy 探活），从未触发 GET，符合"前端无刷新"的表现。
+
+### 修复（最小变更，三文件）
+```
+发送消息 → SSE 流 → onDone(data.conversation_id)
+  ├─ 若 activeConversationId 为空 → setActiveConversation(conversation_id)
+  └─ bumpConversationsRefresh()  —— tick++
+                                         ↓
+            sidebar useEffect([refreshTick]) 重新 GET /api/conversations
+                                         ↓
+                           新会话立即出现在列表顶部
+
+（onClose 兜底：agent-analyze / 超时 / 错误路径亦递增 tick）
+```
+
+- `chat-store.ts`：新增 `conversationsRefreshTick: number` + `bumpConversationsRefresh()`
+- `conversation-sidebar.tsx`：`useEffect([refreshTick])` 替换 `useEffect([])`
+- `use-chat-stream.ts`：
+  - 导入 `StreamDone` 类型
+  - `onDone`：写回 conversation_id + bump tick
+  - `onClose`：bump tick 作为兜底
+
+### 验证
+- `npx tsc --noEmit`：通过（EXIT=0，0 错误）
+- 不启服务
+- 场景：发 "hello" → onDone → sidebar 自动出现新会话 "hello..."（首行作 title，后端截取前20字符）
+
+### 文件清单
+- 修改：`frontend/src/lib/stores/chat-store.ts`（+4 行：tick 字段 + bump action）
+- 修改：`frontend/src/components/chat/conversation-sidebar.tsx`（+3 行：订阅 tick + deps 改写）
+- 修改：`frontend/src/lib/hooks/use-chat-stream.ts`（+9 行：onDone 写回 id + tick，onClose 兜底）
+
+### 教训
+前端 sidebar 之类"旁挂"列表组件必须通过全局 store 的显式信号订阅刷新，不能依赖 mount-only effect；只要主流程修改了后端可见的数据，就必须同步递增 refresh 信号，否则 UI 与实际状态永远漂移。
