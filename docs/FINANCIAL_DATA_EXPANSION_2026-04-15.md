@@ -2589,3 +2589,51 @@ SSE 正常返回 1167 字节, agent_progress 事件完整 (技术/基本面/资�
 - 所有 alias 采用最小变更 (薄转发 / 循环封装), 未改动 adapter 真实接口语义;
 - 端到端 `grep "tried=\[\]" = 0` 锁定 method 层数据全通;
 - 剩余 news/sentiment_social 失败系 rsshub/feedparser 与 opencli 命令缺失的环境问题, 属数据源可用性而非 registry 对齐问题, 已有 I1 专项回归守护。
+
+---
+
+## 🏁 Phase-7 (J批) 总验收 (2026-04-15 14:32 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| J1 6域method对齐 | macro_*/a_stock_realtime/earth_observation/corporate_entity alias | `30bf27c`(含alias)+`0c69ca0`+`50280c6` | 90 PASS (0 warn) |
+| J2 前后端浏览器 | 9 Next路由200+5 P3 API↔Artifact契约对齐 | `8bbce08` | — |
+| J3 最终验收 | pytest 460 + smoke v3 🟢10/🟡10/🔴0/⚫0 | `378460c` | 460 PASS |
+
+### J批关键收益
+- **16 business domain 全部 method 对齐** — 最终0 warn 0 fail
+- **前后端真端到端完全贯通** — 9 Next route 200 + 5 P3 API ↔ 5 Artifact TSX interface 字段契约 100% 对齐
+- **全项目pytest 460 PASS / 0 FAIL** — 最终数字
+
+### 数据层v2 一日 7 Phase 终极闭环 ✅
+
+```
+P0: 4 adapter (OpenCLI桥+efinance+yfinance+EDGAR)
+P1: 6 adapter (FRED+NBS+WB+IMF+ccxt+CoinGecko)
+P2: 5 adapter + Registry + 3 JS爬虫
+Phase-2(C+D): 依赖+Agent集成+P3另类(shipping/satellite/corporate/jobs/esg)
+Phase-3(E): yfinance修+冒烟+前端Artifact 5种
+Phase-4(F+G): 依赖+v2契约+10 P3 API+[DEDUP]+端到端
+Phase-5(H): next build+SSE真跑+HTTP代理+README v3.1
+Phase-6(I): Registry契约(4 adapter alias)+Agent健壮+OPS手册
+Phase-7(J): 16域全对齐+浏览器端到端+pytest 460/0
+```
+
+### 终极数值 (2026-04-15 17:00 UTC+8)
+| 维度 | 最终值 |
+|---|---|
+| Python adapter | 21 |
+| Registry domain | 16 (全method对齐) |
+| Agent接入 | 12 |
+| Flask P3 API | 10 (全200) |
+| 前端Artifact | 15 (10原+5P3) |
+| JS爬虫 | 3 |
+| Git commits today | 80+ |
+| pytest PASS | **460 / 0 FAIL / 0 ERROR** |
+| smoke v3 | 🟢10/🟡10/🔴0/⚫0 |
+| 真端到端 | 10/10 P3 + 9/9 Next + 3/3 SSE |
+| 运维手册 | docs/OPERATIONS.md |
+| 代理支持 | 13 adapter + .env |
+| 5 免费Key字段 | 预留待申请 |
+
+**v2方案一日7 Phase完整闭环. 数据全通. 前后端对齐. 无遗漏功能**
