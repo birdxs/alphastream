@@ -3457,3 +3457,48 @@ P0/P1/P2 → C+D → E → F+G → H → I → J → K → L → M+N(维护+修�
 
 **同步更新**: `docs/README.md` 置顶"交接档案"区块.
 
+
+---
+
+## O1 Python依赖安全升级 [2026-04-15 15:55 +08:00]
+
+**背景**: M3 Security audit (commit 97c6e44) 发现28包60+条Python漏洞,按约束未自动修. 本次清理P0关键CVE.
+
+### 升级清单
+
+| 包 | 旧版本 | 新版本 | 修复CVE | pytest状态 |
+|---|---|---|---|---|
+| python-jose | 3.3.0 | 3.5.0 | PYSEC-2024-232/233 (JWT算法混淆) | PASS |
+| urllib3 | 2.5.0 | 2.6.3 | 最新安全补丁 | PASS |
+| Werkzeug | 3.1.3 | 3.1.8 | 最新patch | PASS |
+| tornado | 6.4.1 | 6.5.5 | 最新稳定版 | PASS |
+
+### pytest 前后对比
+
+| 阶段 | 结果 | 耗时 |
+|---|---|---|
+| 升级前基线 | 527 passed, 12 warnings | 39.69s |
+| 升级后回归 | 527 passed, 12 warnings | 36.01s |
+
+**结论**: 零回归, 无需回滚.
+
+### pip-audit 前后对比
+
+- 升级前 (M3基线): P0四包 python-jose/urllib3/werkzeug/tornado 均上榜
+- 升级后: `pip-audit | grep -iE "python-jose|urllib3|werkzeug|tornado"` → **无匹配**, 四包CVE全清
+
+### 回滚包清单
+
+无. 全部P0 patch级升级成功.
+
+### P1遗留 (未本次升级)
+
+| 包 | 当前 | 建议 | 理由 |
+|---|---|---|---|
+| pytest | 7.3.1 | 9.0.3 | Major升级, 测试框架, 下Sprint评估 |
+| scikit-learn | 1.2.2 | 1.5.0 | Major升级, ML模型兼容性需回归 |
+| pillow | 10.2.0 | 10.3.0 | Patch, 下Sprint批量 |
+| pymysql | 1.1.0 | 1.1.1 | Patch, 下Sprint批量 |
+| transformers | 4.52.4 | 4.53.0+ | 涉及多CVE, 下Sprint专项 |
+
+**定位**: P0 CVE清零已达成本次任务目标 (修复CVE数≥4, 遗留Major级升级按Sprint节奏推进).
