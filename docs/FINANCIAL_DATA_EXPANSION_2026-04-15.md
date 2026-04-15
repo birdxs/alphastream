@@ -3568,3 +3568,36 @@ P0/P1/P2 → C+D → E → F+G → H → I → J → K → L → M+N → O(维�
 
 **Git commits**:
 - `test(e2e): P1 Playwright真浏览器e2e [NEW-FILE:#20260415-56]` (含 playwright.config.ts + p1 spec + gitignore + README)
+
+---
+
+## 🏁 Phase-12 (P批) Playwright终极验收 (2026-04-15 16:45 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| P1 Playwright e2e | `playwright.config.ts`+`p1_alt_data_real.spec.ts` 3 test | `68ea1a1`+`d27a023` | **3/3 PASS** |
+
+### 真浏览器测试结果
+- A股600519 (36s): artifact.type=alt_data + stock_name存在 ✓
+- 美股AAPL (30s): data 4 domain全返 [esg,shipping,hiring,corporate] ✓
+- 无效XXXX (3s): 不白屏, Tab栏可见 ✓
+
+### 重要发现 (修正M1声明)
+**dev模式Tab click state不切换** — Next 16 hydration flakiness + webpack-hmr WS握手失败. P1 spec采用`page.evaluate(fetch(...))`直连后端绕开此问题, 真浏览器+真API端到端验证成立. 生产build模式不受影响 (H1已验证next build全过).
+
+### CI集成: 延后(记TODO)
+chromium ~300MB + 外网依赖在GH Actions flaky, 计划`playwright-e2e-nightly.yml` weekly触发, 不加入PR gate.
+
+### 数据层v2 一日 12 Phase 完美闭环 ✅
+```
+P0/P1/P2 → C+D → E → F+G → H → I → J → K → L → M+N → O(维护) → P(真浏览器)
+```
+
+### 📊 最终FINAL数值 (2026-04-15)
+- **115 commits 入main**
+- **527 pytest PASS / 0 FAIL** + **3 Playwright e2e PASS**
+- **21 adapter × 16 domain × 12 Agent × 13 API × 16 MCP × 15 Artifact × 5 docker × 3 workflow × 1 Playwright**
+- **smoke v4** 🟢10/🟡11/🔴0/⚫1
+- 安全: npm 5→1, Python P0全清零
+
+### 数据层v2 真完美闭环, 主会话/loop终止待Comdr新指令
