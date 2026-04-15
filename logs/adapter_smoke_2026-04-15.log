@@ -1,0 +1,49 @@
+Ashare未安装或导入失败，AshareAdapter进入降级模式: ModuleNotFoundError: No module named 'Ashare'
+openbb未安装，OpenBBAdapter将返回空结构。pip install openbb 启用
+akshare东财接口失败(symbol=600519): ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+=== Adapter 真网络冒烟 @ 2026-04-15 12:52:14 +08:00 ===
+
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:00<00:00,  2.52it/s]                                             efinance实时行情失败: ConnectionError: HTTPConnectionPool(host='push2.eastmoney.com', port=80): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+Failed to get ticker 'AAPL' reason: Expecting value: line 1 column 1 (char 0)
+AAPL: No price data found, symbol may be delisted (period=5d)
+FRED_API_KEY 未设置，FREDAdapter 将返回空结构。前往 https://fred.stlouisfed.org/docs/api/api_key.html 免费申请
+NBS请求失败 attempt=1 HTTP 403
+NBS请求失败 attempt=2 HTTP 403
+NBS请求失败 attempt=3 HTTP 403
+NBS请求最终失败: HTTP 403
+IMF 请求失败 https://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/IFS/A.US.PMP_IX: SSLError: HTTPSConnectionPool(host='dataservices.imf.org', port=443): Max retries exceeded with url: /REST/SDMX_JSON.svc/CompactData/IFS/A.US.PMP_IX (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1000)')))
+ccxt get_ticker失败(binance:BTC/USDT): NetworkError: binance GET https://api.binance.com/api/v3/exchangeInfo
+Ashare未就绪，get_price返回空DF
+feedparser 解析失败 url=https://rss.sina.com.cn/news/allnews/finance.xml err=feedparser bozo: document declared as us-ascii, but parsed as utf-8
+feedparser 解析失败 url=https://rsshub.app/sina/finance err=feedparser bozo: <unknown>:2:751: not well-formed (invalid token)
+OpenCorporates 401 未授权, 可能 api_key 无效: https://api.opencorporates.com/v0.4/companies/search
+[ESG] HTTP 404 https://www.cdp.net/api/public/responses
+Shipping GET 最终失败 url=https://www.investing.com/indices/baltic-dry err=HTTP 403
+FRED_API_KEY 未设置，FREDAdapter 将返回空结构。前往 https://fred.stlouisfed.org/docs/api/api_key.html 免费申请
+[🟢 PASS] AkshareAdapter.get_stock_history(600519) rows=7 (1.0s)
+login success!
+[🟢 PASS] BaostockAdapter.get_stock_history(sh.600519) rows=7 (3.7s)
+[🟡 DEGRADED] EfinanceAdapter.get_realtime_quotes([600519]) empty (rows=0) (0.6s)
+[🟡 DEGRADED] YFinanceAdapter.get_kline(AAPL,5d,1d) empty (rows=0) (26.8s)
+[🟢 PASS] EDGARAdapter.get_cik(AAPL) rows=10 (17.1s)
+[⚫ SKIP] FREDAdapter.get_common_indicators — FRED_API_KEY 未配置
+[🟡 DEGRADED] NBSAdapter.get_cpi empty (rows=0) (2.0s)
+[🟢 PASS] WorldBankAdapter.get_indicator(CN,NY.GDP.MKTP.CD) rows=5 (13.4s)
+[🟡 DEGRADED] IMFAdapter.get_ifs(PMP_IX,US,A) empty (rows=0) (5.2s)
+[🟡 DEGRADED] CCXTAdapter.get_ticker(BTC/USDT) empty (rows=0) (7.7s)
+[🟢 PASS] CoinGeckoAdapter.get_price([bitcoin]) rows=1 (4.7s)
+[⚫ SKIP] OpenCLIBridge.get_eastmoney_hot_rank — env: opencli_not_installed
+[🟢 PASS] EasyquotationAdapter.get_realtime([sh600519]) rows=1 (0.2s)
+[🟡 DEGRADED] AshareAdapter.get_price(sh600519,1d,5) empty (rows=0) (0.0s)
+[🟡 DEGRADED] RSSNewsAdapter.get_feed(sina_finance,limit=5) empty (rows=0) (17.3s)
+[🟡 DEGRADED] CorporateAdapter.search_company(Apple) empty (rows=0) (2.3s)
+[🟢 PASS] JobsAdapter.search_jobs(python,limit=5) rows=5 (4.0s)
+[🟢 PASS] ESGAdapter.get_cdp_response(Apple,2024) rows=7 (3.7s)
+[🟡 DEGRADED] ShippingAdapter.get_bdi_index(days=5) empty (rows=0) (9.6s)
+[🟢 PASS] SatelliteAdapter.search_datasets(MODIS) rows=20 (6.9s)
+[🟡 DEGRADED] OpenBBAdapter.get_equity_price(AAPL) empty (rows=0) (0.0s)
+[🟢 PASS] AdapterRegistry.list_domains rows=16
+
+=== 报告已写入: /Users/panda/Downloads/StockAnal_Sys/logs/adapter_smoke_2026-04-15.md ===
+汇总: 🟢10  🟡10  🔴0  ⚫2 (共22)
+logout success!
