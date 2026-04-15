@@ -2807,3 +2807,82 @@ git revert <此commit>   # 代码层
 - 修改: `app/web/web_server.py` (+132 行, 0 删除)
 - 新增: `tests/web/test_health_endpoints.py` [NEW-FILE:#20260415-49]
 - 更新: `docs/OPERATIONS.md` §6 故障排查追加"健康检查"小节
+
+---
+
+## K1 🟡降级adapter优化 [2026-04-15 14:52 +08:00]
+
+**目标**: J3冒烟v3(10🟢/10🟡/0🔴/0⚫)中10个🟡根因拆解 → 对可控项(UA/重试/Referer/代理)做通用级优化, 不可控项(地域限流/需付费Key)明确归档。
+
+### 1. 🟡根因分类 (10项)
+
+| # | Adapter | 根因 | 分类 | 可优化 |
+|---|---------|------|------|--------|
+| 1 | Efinance | eastmoney反爬空 | 反爬 | ✅ UA池+Referer |
+| 2 | YFinance | Yahoo地域限流 | 地域 | ⚠️ 需代理(已H4支持,未生效) |
+| 3 | NBS | 国统局403 | 反爬 | ✅ UA池+403重试 |
+| 4 | IMF | SSL EOF间歇 | 网络 | ✅ 指数退避(上游) |
+| 5 | CCXT-Binance | 境内451 | 地域 | ⚠️ 需代理 |
+| 6 | Ashare | 单文件依赖未就绪 | 依赖 | ❌ 需单独迁移 |
+| 7 | RSS (部分源) | feedparser bozo 404 | 反爬 | ✅ UA池+Referer+退避 |
+| 8 | Corporate | 401 需Key | Key | ⚠️ 匿名回退(Comdr申请中) |
+| 9 | Shipping BDI | investing.com 403 | 反爬 | ✅ UA池+Referer |
+| 10 | OpenBB | 未装降级 | 依赖 | ❌ 可选大库不装 |
+
+### 2. K1 优化措施
+
+**新增 `app/adapters/_retry_utils.py` [NEW-FILE:#20260415-44]**:
+- `UA_POOL` 8条 Chrome/Firefox/Safari/Edge 2025-Q4~2026-Q1 稳定UA
+- `random_ua()` 随机轮询
+- `retry_with_backoff()` 通用包装 — 指数退避(base*2^n)+jitter+429/5xx重试
+- `build_session_with_ua()` / `rotate_ua()` 会话级辅助
+
+**新增 `tests/adapters/test_retry_utils.py` [NEW-FILE:#20260415-45]**:
+- 10 用例: UA池内容+随机性 / 首次成功 / 429重试 / 全失败返最后Response / 异常raise / 指数退避时间 / Session构建 / UA轮换
+
+**改造6个adapter**:
+
+| Adapter | 改动 |
+|---------|------|
+| `shipping_adapter.py` | UA池轮换+Referer伪造(investing/TE)+4次重试+代理应用 |
+| `nbs_adapter.py` | UA池轮换+403加入重试码+代理应用 |
+| `corporate_adapter.py` | UA池+401→匿名fallback重试+代理应用 |
+| `esg_adapter.py` | UA池+通用backoff+代理应用 |
+| `rss_news_adapter.py` | UA池扩至8条(共享_retry_utils)+Referer伪造+指数退避 |
+| `efinance_adapter.py` | 注入 `efinance.shared.session` UA/Referer/代理 (对抗东财反爬) |
+
+### 3. Smoke v3 vs v4 对比 (真网络)
+
+| 统计 | v3 (378460c) | v4 (K1) | Δ |
+|------|--------------|---------|---|
+| 🟢 PASS | 10 | 10 | 0 |
+| 🟡 DEGRADED | 10 | 11 | +1* |
+| 🔴 FAIL | 0 | 0 | 0 ✅ 无回归 |
+| ⚫ SKIPPED | 0 | 1 | +1* |
+
+\* v4 中 FRED 从 🟢PASS 变 ⚫SKIP 是因本次 shell 未加载 `FRED_API_KEY` (K1外因,非回归);Ashare 为 🟡 已在 v3 计数。
+
+### 4. 不可解决清单 (需外部条件)
+
+| Adapter | 阻断项 | 所需条件 | 状态 |
+|---------|--------|----------|------|
+| YFinance | Yahoo 对境内IP 429/空 | HTTP(S)_PROXY 科学上网 | H4已实现,测试环境未导出env |
+| CCXT-Binance | 境内 451 地域阻断 | 同上 | 同上 |
+| OpenCorporates | 需API Key (401) | OPENCORPORATES_API_KEY | Comdr申请中 |
+| FRED | 需API Key | FRED_API_KEY | Comdr已有,本次shell未export |
+| Ashare | 单文件 Ashare.py 未就绪 | 单独迁移/pip Ashare | 非K1范围 |
+| OpenBB | 大型可选依赖 | pip install openbb | 默认降级设计 |
+| Efinance | 东财反爬+UA池对抗有限 | 保守频控+代理 | K1已尽可能优化, 上游反爬策略主导 |
+| IMF/NBS/Shipping | 境外 SSL + 国内政策站点间歇 | UA池+退避 | K1已优化, 间歇空DF属正常降级 |
+
+### 5. Git 提交
+- `feat(adapter): K1通用重试工具_retry_utils + UA池 [NEW-FILE:#20260415-44,45]`
+- `refactor(adapter): K1将6 adapter切换到UA池+retry_with_backoff`
+- `test(smoke): K1 smoke v4真网络对比验证`
+- `docs(data): K1追溯`
+
+### 文件清单
+- 新增: `app/adapters/_retry_utils.py` [NEW-FILE:#20260415-44] (+160 行)
+- 新增: `tests/adapters/test_retry_utils.py` [NEW-FILE:#20260415-45] (+110 行, 10 用例)
+- 修改: `app/adapters/shipping_adapter.py` / `nbs_adapter.py` / `corporate_adapter.py` / `esg_adapter.py` / `rss_news_adapter.py` / `efinance_adapter.py`
+- 修改: `tests/adapters/test_nbs_adapter.py` (UA池化适配)
