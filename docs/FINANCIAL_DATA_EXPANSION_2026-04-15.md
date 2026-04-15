@@ -2929,3 +2929,130 @@ P0/P1/P2 → Phase-2(C+D) → Phase-3(E) → Phase-4(F+G)
 - 配置: .env预留5 Key+3代理字段, OPS手册指引申请
 - 监控: 3端点供docker HEALTHCHECK + nginx upstream + 日常排查
 - 容错: UA池+重试+软降级三层防护, 0 FAIL
+
+---
+
+## L3 代码简化+文档审计 [2026-04-15 14:55 +08:00]
+
+### 审计发现分类统计
+
+| 维度 | 结果 |
+|---|---|
+| 代码重复 (adapter utility) | _retry_utils 13 文件覆盖, _proxy_utils 境外源全透传, 无 P0 |
+| artifact_wrapper.py 冗余 | F4 收敛后集中 wrap, 无冗余分支 |
+| 死链 (README/docs) | 0 |
+| TODO/FIXME/DEPRECATED/XXX/HACK | Python 0 真债 / TS 0 真债 |
+| NotImplementedError stub | 0 |
+| 缺失 README 领地标记 | 8 → 0 (本轮全补) |
+| .gitignore 漏项 | 1 (.ruff_cache/) → 0 |
+| Registry DOMAIN_MAP 完整性 | 16/16 ✅ import 纯洁 |
+| requirements.txt | 无版本冲突, 可选依赖已标注 |
+| Phase 作战记录 (2931 行) | 结构清晰, 锚点可跳, P2 建议 >4000 行拆分 |
+
+### 本轮修复摘要
+
+**P0 落盘**:
+1. 补齐 8 个缺失 README: `app/tradingagents/` `frontend/src/components/ui/` `frontend/src/lib/{api,stores,types,hooks}/` `scripts/` `tests/`
+2. `.gitignore` 补 `.ruff_cache/`
+3. 审计报告: `logs/l3_audit_2026-04-15.md`
+
+### 遗留 TODO
+
+**P1**:
+- pydantic V2.12 `@model_validator(mode='after')` 废弃 warning (来自 openbb 依赖, 上游修)
+- 本文档 2931 行, 接近 4000 行拆分阈值, 考虑按 Phase 独立
+
+**P2**:
+- `esg_adapter` / `rss_news_adapter` / `shipping_adapter` 的 `requests.get` 可并入 `_retry_utils`
+- requirements.txt 显式分组 optional/required
+
+---
+
+
+---
+
+## L1 前端Stock页另类数据Tab [2026-04-15 14:55]
+
+### 交付摘要
+用户从 Agent 对话被动接收 Artifact → **用户可在 `/stock/[code]` 页面主动点击 "另类数据" Tab 直接拉取聚合面板**。打通了 E4 落盘的 5 个 P3 Artifact 组件到真实用户 UI 的最后一公里。
+
+### UI 位置与交互
+- **入口**: `/stock/[code]` 详情页 Tab 栏末尾, 紧接 "风险" 后新增 **"另类数据"** Tab (第6个)。
+- **设计风格**: 完全复用现有 Tab 切换风格 — `text-[#3737CC] bg-[#3737CC]/10` 激活态 + 底部 4px 品牌色指示线, Dark Glassmorphism 一致。
+- **懒加载**: 首屏不拉 (避免无关请求), 用户点击 Tab 后首次激活 `useAltData` hook, 内部维护 `altEnabled` 闸门。
+- **Loading 态**: 复用 `LoadingSkeleton label="另类数据"` — 品牌色 spinner + 文案。
+- **Error 态**: 统一 `errorTab.alt` 分支, 红色 `#FF8767/80` 文案 + "点击重试" 调 `reloadAlt()` (hook 内部 `tick` 计数器触发 re-fetch)。
+- **子 Tab**: 面板内部 4 个子 Tab (航运&大宗 / ESG / 招聘扩张 / 企业关联), 缺失子域置灰不禁用 (AltDataPanelArtifact 自处理)。
+
+### 字段流程图
+```
+用户点击 "另类数据" Tab
+      │
+      ▼
+setAltEnabled(true)  →  altTicker = code (如 600519/AAPL)
+      │
+      ▼
+useAltData(ticker)  ──fetch──►  GET /api/alt_data/<ticker>
+                                         │
+                                         ▼
+                     后端 wrap_alt_data_v2 聚合 4 子域:
+                       shipping (BDI波罗的海干散货)
+                       esg (ESG评分)
+                       hiring (招聘扩张信号)
+                       corporate (OpenCorporates 企业关联)
+                                         │
+                                         ▼
+响应 JSON: { success: true, artifact: {
+    type: "alt_data",
+    title: "<ticker> 另类数据聚合",
+    data: { shipping?, esg?, hiring?, corporate? },  ← 核心
+    confidence: 0.60,
+    sources: [...],
+    metadata: { ticker, coverage: "4/4", ... }
+  } }
+      │
+      ▼
+j.artifact  →  altData state
+      │
+      ▼
+<AltDataPanelArtifact data={altData.data} />
+      │  props 契约: { shipping?, esg?, hiring?, corporate? } (子集皆可)
+      ▼
+内部 4 子 Tab 按 available 标识渲染对应子 Artifact 组件:
+   ShippingChartArtifact / ESGScorecardArtifact /
+   HiringSignalArtifact / CorporateNetworkArtifact
+```
+
+### 使用示例
+```tsx
+// frontend/src/app/stock/[code]/page.tsx 中已接入, 用户无感
+const { data: altData, loading: altLoading, error: altError, reload: reloadAlt } = useAltData(altTicker);
+
+// 组件侧消费 (新建组件如需复用):
+import { useAltData } from "@/lib/hooks/use-alt-data";
+import { AltDataPanelArtifact } from "@/components/artifacts/alt-data-panel";
+
+function Demo({ ticker }: { ticker: string }) {
+  const { data, loading, error, reload } = useAltData(ticker);
+  if (loading) return <Spinner />;
+  if (error) return <button onClick={reload}>重试: {error}</button>;
+  return data ? <AltDataPanelArtifact data={data.data} /> : null;
+}
+```
+
+### Ticker 格式兼容性
+- A股: `600519` / `000001` (6位数字) — 直接传, 后端 alt_data 端点容错
+- 美股: `AAPL` / `MSFT` — 直接传
+- 港股: `00700` (5位数字) — 直接传
+- 前端 hook `encodeURIComponent(ticker)` 额外兜底特殊字符
+
+### 新建文件登记
+- `frontend/src/lib/hooks/use-alt-data.ts` **[NEW-FILE:#20260415-50]**
+  - 触发原因: 现有 `apiClient` 仅支持 get/post/streamPost 通用封装, 无 hook 层; Stock 页其他 Tab 直接内联 fetch 逻辑; 为 `AltDataArtifact` 提供类型化的 hook 层是 React 惯例且便于跨页面复用 (Dashboard/Compare 未来可复用), 无法通过修改现有文件达成。
+  - 白名单条款: (e) 其他必要新文件 — 独立业务 hook 无法融入 `apiClient` 类实例
+  - 回滚: 单文件删除 + page.tsx 恢复 5 Tab 即可
+
+### 验证证据
+- `npx tsc --noEmit` — 通过, 无新 TS 错误
+- `npx next build` — 通过, `/stock/[code]` 路由正常生成 (ƒ Dynamic), 11/11 静态页生成成功
+- 产物日志 `frontend/.next/` 可复核, 编译 10.6s + TS 2.3s
