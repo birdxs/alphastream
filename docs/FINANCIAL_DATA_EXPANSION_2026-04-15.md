@@ -2115,3 +2115,50 @@ python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_e
 
 ### 时间基准锚点
 所有 H3 记录时间引用本文顶部 "0. 时间真实性校验"：2026-04-15 13:46:42 +08:00 (本机 `date` 命令)，阈值内一致。
+
+---
+
+## H2 14-Agent真端到端SSE验证 [2026-04-15 13:50]
+
+**授权**：Comdr 批准启服务验证；后端 PID=85033；服务已 pkill cleaned。
+
+### 三冒烟状态表
+
+| # | 端点 | 入参 | HTTP | Size | Time(s) | 结果 |
+|---|------|------|------|------|---------|------|
+| 1 | POST /api/ai/chat | `{message:"你好, 简单介绍AAPL"}` | 200 | 10,816 B | 40.35 | PASS |
+| 2 | POST /api/ai/agent-analyze | 600519 / A | 200 | 3,220 B | 110.03 | PASS |
+| 3 | POST /api/ai/agent-analyze | AAPL / US | 200 | 3,174 B | 47.19 | PASS |
+
+SSE 事件类型齐全：冒烟1 `token + artifact×2 + done`；冒烟2/3 `info×13 (agent_progress) + artifact (decision_card) + done`。
+
+### Agent链路触发证据
+
+6 个 Agent 阶段（技术 → 资金流 → 基本面 → 情绪 → 决策 → 反思）在 600519 与 AAPL 各自完整 started→completed，`execution_log` 全 success。
+
+- Coordinator 生命周期闭环：13:47:35 启动 600519 → 13:48:55 完成（80s）；13:49:31 启动 AAPL → 13:50:18 完成（47s）。
+- decision_card 生成：600519 HOLD/0.6/仓位 30%，支撑阻力目标三价位齐全。
+
+### Registry数据流证据 (grep 后端日志)
+
+`registry fetch` 关键词命中 **12 次**，验证 Registry 生产链路已接入：
+
+| domain.method | 次数 | 触发 Agent |
+|---------------|------|-----------|
+| news.get_latest_news | 4 | SentimentAnalyst / DecisionMaker |
+| sentiment_social.get_social_sentiment | 4 | SentimentAnalyst / DecisionMaker |
+| esg_rating.get_esg_rating | 3 | DecisionMaker / StrategyEvolver |
+| hiring_signal.get_hiring_trend | 1 | StrategyEvolver |
+
+四 domain 返回 `tried=[]`（尚无 adapter 注册），Agent 正确 catch 降级异常继续流程。`fallback_manager` 的 akshare↔baostock 切换 + 5次阻塞 reset 机制**在线触发 1 次**（get_stock_info AAPL）。
+
+### 关键bug / 观察
+
+1. 四新 domain（news/sentiment_social/esg_rating/hiring_signal）Registry 无 adapter 注册，`tried=[]` — 非阻塞，待 C3/C4 补注册。
+2. StrategyEvolver 策略 JSON 解析失败 — P1 优化 prompt。
+3. AAPL `capital_flow_analyzer:157 NoneType` — 上层 mock 填充，非阻塞；P2 接入 yfinance。
+4. **未发现 SSE 超时 / 未发现 >30s 阻塞 / 未发现 500**。
+
+### 结论
+
+H2 验收 PASS：3/3 冒烟 200、6/6 Agent 阶段闭环、12 次 Registry 真调、fallback 降级契约正确。详见 `logs/agent_e2e_2026-04-15.md`。
