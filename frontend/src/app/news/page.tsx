@@ -73,41 +73,58 @@ const SECTORS = [
 ];
 
 /* ---------- 组件 ---------- */
+/* ---------- 去重 & 时间键 ---------- */
+function newsKey(n: NewsItem): string {
+  const t = n.datetime || (n.date && n.time ? `${n.date} ${n.time}` : "") || n.publish_time || "";
+  return `${t}|${(n.title || "").slice(0, 80)}`;
+}
+function newsTimestamp(n: NewsItem): string {
+  return n.datetime || (n.date && n.time ? `${n.date} ${n.time}` : "") || n.publish_time || "";
+}
+
 export default function NewsPage() {
+  // 累积新闻列表（保留历史，不清屏） — 按时间倒序，最新在顶
   const [allNews, setAllNews] = useState<NewsItem[]>([]);
-  const [displayedNews, setDisplayedNews] = useState<NewsItem[]>([]);
+  const [newestKey, setNewestKey] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [fadeIdx, setFadeIdx] = useState(-1);
   const [sentimentData, setSentimentData] = useState<SentimentResponse | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const indexRef = useRef(0);
+  const seenKeysRef = useRef<Set<string>>(new Set());
+  const isFirstLoadRef = useRef(true);
 
-  /* 获取新闻 */
+  /* 获取新闻 — 增量合并 + 去重 + 倒序，不清屏 */
   const fetchNews = useCallback(async () => {
     try {
-      setLoading(true);
       const res = await apiClient.get<NewsResponse>("/api/latest_news", {
-        limit: "10",
+        limit: "20",
         days: "1",
       });
       if (res?.success && res.news?.length) {
-        // 按时间倒序排序：最新的在最前
-        const sorted = [...res.news].sort((a, b) => {
-          const ta = a.datetime || (a.date && a.time ? `${a.date} ${a.time}` : "") || a.publish_time || "";
-          const tb = b.datetime || (b.date && b.time ? `${b.date} ${b.time}` : "") || b.publish_time || "";
-          return tb.localeCompare(ta);
-        });
-        setAllNews(sorted.slice(0, 10));
-        // 新数据到达后，滚动条归零（下一帧执行，确保DOM已更新）
-        requestAnimationFrame(() => {
-          if (terminalRef.current) terminalRef.current.scrollTop = 0;
+        setAllNews((prev) => {
+          const seen = seenKeysRef.current;
+          const incoming = res.news.filter((n) => {
+            const k = newsKey(n);
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+          if (incoming.length === 0) return prev;
+          const merged = [...incoming, ...prev].sort((a, b) =>
+            newsTimestamp(b).localeCompare(newsTimestamp(a))
+          );
+          // 保持上限 200 条，防内存膨胀
+          const capped = merged.slice(0, 200);
+          if (capped[0]) setNewestKey(newsKey(capped[0]));
+          return capped;
         });
       }
     } catch {
       // 静默失败
     } finally {
-      setLoading(false);
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -125,7 +142,7 @@ export default function NewsPage() {
     }
   }, []);
 
-  /* 首次加载 + 每30秒定时同步后端新闻与情绪 */
+  /* 首次加载 + 每30秒轮询（节流），合并去重不清屏 */
   useEffect(() => {
     fetchNews();
     fetchSentiment();
@@ -136,44 +153,23 @@ export default function NewsPage() {
     return () => clearInterval(pollId);
   }, [fetchNews, fetchSentiment]);
 
-  /* 打字机效果：每3秒逐条添加 */
+  /* 新条目到达时：仅当用户接近顶部时自动回到顶部（不强制打断用户阅读） */
   useEffect(() => {
-    if (allNews.length === 0) return;
-    indexRef.current = 0;
-    setDisplayedNews([]);
-
-    // 立刻显示第一条
-    const showNext = () => {
-      if (indexRef.current >= allNews.length) {
-        if (timerRef.current) clearInterval(timerRef.current);
-        return;
-      }
-      const idx = indexRef.current;
-      setDisplayedNews(prev => [...prev, allNews[idx]]);
-      setFadeIdx(idx);
-      indexRef.current++;
-    };
-
-    showNext();
-    timerRef.current = setInterval(showNext, 3000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [allNews]);
-
-  /* 始终保持滚动条在顶部：每次有新数据渲染时归零 */
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = 0;
+    const el = terminalRef.current;
+    if (!el || !newestKey) return;
+    if (el.scrollTop < 80) {
+      requestAnimationFrame(() => { el.scrollTop = 0; });
     }
-  }, [displayedNews]);
+  }, [newestKey]);
 
   /* 计算情绪分布：优先使用API数据，降级用前端计算 */
   const posPct = sentimentData ? sentimentData.bullish_pct : (() => {
-    const sentiments = displayedNews.map(n => analyzeSentiment(n.title + (n.content || "")));
+    const sentiments = allNews.map(n => analyzeSentiment(n.title + (n.content || "")));
     const total = sentiments.length || 1;
     return Math.round(sentiments.filter(s => s === "positive").length / total * 100);
   })();
   const negPct = sentimentData ? sentimentData.bearish_pct : (() => {
-    const sentiments = displayedNews.map(n => analyzeSentiment(n.title + (n.content || "")));
+    const sentiments = allNews.map(n => analyzeSentiment(n.title + (n.content || "")));
     const total = sentiments.length || 1;
     return Math.round(sentiments.filter(s => s === "negative").length / total * 100);
   })();
@@ -267,18 +263,19 @@ export default function NewsPage() {
               <p className="mb-3">---</p>
             </div>
 
-            {loading && displayedNews.length === 0 && (
+            {loading && allNews.length === 0 && (
               <div className="text-slate-300 dark:text-white/20 animate-pulse">
                 {">"} loading news data...
               </div>
             )}
 
-            {displayedNews.map((news, i) => {
+            {allNews.map((news, i) => {
               const fullText = news.title + (news.content || "");
               const sentiment = analyzeSentiment(fullText);
               const score = sentimentScore(fullText, sentiment);
               const code = extractStockCode(fullText);
-              const isFading = i === fadeIdx;
+              // 仅顶部第一条（最新追加）播放淡入动画
+              const isFading = i === 0 && newsKey(news) === newestKey;
 
               const sentimentIcon = sentiment === "positive" ? "▲" : sentiment === "negative" ? "▼" : "—";
               const sentimentLabel = sentiment === "positive" ? "利好" : sentiment === "negative" ? "利空" : "中性";

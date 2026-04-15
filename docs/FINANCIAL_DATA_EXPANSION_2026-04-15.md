@@ -3601,3 +3601,71 @@ P0/P1/P2 → C+D → E → F+G → H → I → J → K → L → M+N → O(维�
 - 安全: npm 5→1, Python P0全清零
 
 ### 数据层v2 真完美闭环, 主会话/loop终止待Comdr新指令
+
+---
+
+## UI-Q1 Mac终端风格Agent面板+新闻修复 [2026-04-15 19:58]
+
+### Part 1 — Agent侧边面板重构为Mac终端
+**文件**: `frontend/src/components/agent/agent-side-panel.tsx`（整体重写, 保留同名, 非新建）
+
+**新UI结构（文字描述）**:
+```
+┌────────────────────────────────────────────┐
+│ ● ● ●  ⎔ AGENT STREAM · stock-analysis · zsh   19:58:42 │ ← macOS 三点 + tty标题 + 实时钟
+├────────────────────────────────────────────┤
+│ 12 events · 3/10 agents         [🗑] [⬇] [▶]│ ← 工具条: 清空/导出/折叠
+├────────────────────────────────────────────┤
+│ [19:35:42] $ running 10-agent pipeline · 3 active    │
+│ [19:35:43] ▶ 情绪分析师 → starting                    │
+│ [19:35:44]   ├─ fetching (rss_news) ok                │
+│ [19:35:45]   ├─ fetching (opencli) failed, degraded   │
+│ [19:35:46]   └─ 情绪分析师 completed · 3.2s ▊         │ ← 末行闪烁光标
+├────────────────────────────────────────────┤
+│ ● connected · streaming            uptime 3m12s       │ ← 底部状态栏
+└────────────────────────────────────────────┘
+```
+
+**主题色板**:
+
+| 角色 | 暗色 (VS Code Dark) | 亮色 |
+|------|---------------------|------|
+| 背景 | `#1E1E1E` | `#F8F8F8` |
+| 头/状态栏 | `#2D2D2D` / `#181818` | `#ECECEC` / `#E5E5E5` |
+| 文本 | `#D4D4D4` | `#333333` |
+| Prompt `$` | `#50FA7B` | `#28A745` |
+| 信息 `├─` | `#8BE9FD` | `#0366D6` |
+| 警告 `⚠` | `#F1FA8C` | `#D73A49` |
+| 错误 `✖` | `#FF5555` | `#D73A49` |
+| Agent 名 `▶` | `#BD93F9` | `#6F42C1` |
+| 时间戳 | `#6272A4` | `#6A737D` |
+| 光标 | `#50FA7B` (glow) | `#28A745` |
+
+**核心能力**:
+- 等宽字体 12px + line-height 1.65, 自适应宽度 w-72 (xl:w-96)
+- 树形前缀 `▶ / ├─ / └─ / $ / · / ⚠ / ✖` 建立视觉层次
+- 行进入动画: `animate-in fade-in slide-in-from-bottom-1 duration-300`
+- 光标闪烁: `@keyframes blink` 0.5s 半周期
+- 自定义细滚动条 6px, hover 变色
+- 折叠态 10px 竖排（原设计保留兼容）
+- 订阅 `useThemeStore` 实时切主题, 订阅 `useAgentStore.events` 自动scroll到底
+- 导出日志: Blob → `.log` 文件, 含绝对时间戳命名
+
+### Part 2 — 新闻板块清屏bug修复
+**文件**: `frontend/src/app/news/page.tsx`
+
+**修复前后对比**:
+
+| 项目 | 修复前 | 修复后 |
+|------|--------|--------|
+| 历史保留 | ❌ 每次 fetchNews 触发打字机 useEffect → `setDisplayedNews([])` 清空重建 | ✅ 增量合并, Set去重, 保留最多 200 条历史 |
+| 时间顺序 | 初始倒序但 3s 打字机逐条 push, 视觉抖动 | ✅ 始终按 datetime desc, 最新一条在顶 |
+| 节流 | 30s 轮询 + 3s 打字机双定时器 | ✅ 仅 30s 轮询 (已符合) |
+| 滚动行为 | 每条都强制 `scrollTop=0` 打断用户阅读 | ✅ 仅当用户距顶 <80px 时自动回顶, 否则保持位置 |
+| 去重 | 无 | ✅ `datetime + title(80字符)` 复合 key, Set 持久化 |
+| 动画 | 所有条目循环重新淡入 | ✅ 仅最新追加的第一条淡入 (newestKey 匹配) |
+
+**关键删除**: `displayedNews` state / `fadeIdx` state / `timerRef` / `indexRef` / 整个打字机 interval useEffect / 清屏滚动 useEffect。
+
+**TypeScript**: `npx tsc --noEmit` 0 错误通过。
+
