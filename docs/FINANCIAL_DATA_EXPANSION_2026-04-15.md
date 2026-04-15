@@ -2533,3 +2533,59 @@ v3 无 SKIPPED — 21 个 adapter 全部被扫到并返回真实状态; 10 DEGRA
 - `alt_data/AAPL` ↔ `alt-data-panel.tsx` (data.{esg,shipping,hiring,corporate}/coverage/partial_errors)
 
 **结论**: PASS. 全部 artifact 结构与前端 TS interface 100% 对齐, 降级路径 `partial_errors` 正常暴露, 前端有 DEMO fallback。详见 `logs/e2e_j2_2026-04-15.md`。
+
+
+## J1 剩余6域 method 对齐 — 数据全通 [2026-04-15 14:30 +08:00]
+
+**追溯**: I1 (commit 487ad1c) 修复 4 域 tried=[] (news/sentiment_social/esg_rating/hiring_signal), 标记"非I1 域 method 对齐由测试 warn 标记, 留待 I2+"。J1 任务扫平这批遗留。
+
+**实际缺口统计**: pytest 原 17 warnings 中 UserWarning = 6 条 (I1 报告预估 11, 实际只有 6 — 因 a_stock_kline/us_stock/hk_stock/crypto/xbrl_financials/commodity_shipping 的 agent method 已在 BaseAdapter 契约自然覆盖 get_stock_history/get_financials/get_bdi_index)。
+
+### 6 域缺口对齐表
+
+| # | Domain | agent 调用 method | 承载 adapter(注册顺序) | J1 alias 实现策略 |
+|---|--------|-------------------|----------------------|-------------------|
+| 1 | a_stock_realtime | `get_individual_fund_flow(code)` | efinance, easyquotation, akshare, opencli | efinance: 优先 `ef.stock.get_today_bill` → 回退 `get_realtime_quotes(codes=[code])`; akshare: 转发 `ak.stock_individual_fund_flow` 返回 DataFrame; easyquotation: 从 `get_realtime` 重组单行 DF |
+| 2 | macro_us | `get_macro_indicators(indicators=None)` | fred, openbb, worldbank | fred: 循环 `get_series`, 支持 COMMON_INDICATORS 中文key映射; openbb: 循环 `get_economy_indicator`; worldbank: 循环 `get_indicator(country="WLD")` |
+| 3 | macro_cn | `get_macro_indicators(indicators=None)` | nbs, akshare | nbs: 循环 get_gdp/cpi/pmi/industrial_output |
+| 4 | macro_global | `get_macro_indicators(indicators=None)` | worldbank, imf, openbb | worldbank: 同上; imf: 循环 `get_ifs(indicator, country, freq="A")`; openbb: 同上 |
+| 5 | earth_observation | `search_collections(keyword,bbox,start,end,page_size)` | satellite | satellite: 薄转发 `search_datasets` (NASA CMR /collections.json 端点语义) |
+| 6 | corporate_entity | `search_entity(query, jurisdiction)` | opencorporates | corporate: 薄转发 `search_company(name=query, jurisdiction)` |
+
+### pytest 数字对比
+
+| 阶段 | passed | UserWarnings (非I1 domain) | 总 warnings |
+|------|--------|---------------------------|-------------|
+| I1 (commit 487ad1c) | 57 | 6 | 17 |
+| **J1 升级严格断言** | **57 + 33 = 90** | **0** | 11 (仅第三方 Deprecation) |
+
+J1 新增文件 `tests/adapters/test_registry_domains_full_coverage.py` [NEW-FILE:#20260415-43]:
+- 16 domain × hasattr method 命中严格断言 (16 tests)
+- 16 domain × monkeypatch 抛异常验证 tried 列表非空 (16 tests)
+- 1 test 验证 J1 alias 承载 adapter 全部注册
+
+原文件 `tests/adapters/test_registry_domains.py` `test_non_i1_agent_method_status` 由 warn-only 升级为 assert hasattr ≥ 1 命中。
+
+### 真后端端到端证据对比
+
+**命令**:
+```bash
+curl -m 120 -N -s -X POST http://127.0.0.1:8888/api/ai/agent-analyze \
+  -H "Content-Type: application/json" -d '{"stock_code":"600519","market_type":"A"}' > /tmp/j1_sse.log
+grep -c "tried=\[\]" /tmp/backend_j1.log
+```
+
+| 阶段 | `grep -c "tried=\[\]"` backend.log | registry fetch 失败残余 |
+|------|------------------------------------|-------------------------|
+| I1 前 | ≥4 (news/sentiment_social/esg_rating/hiring_signal 全空) | 4 域 |
+| I1 后 | 6 (本任务前, 6 非I1 域仍空) — 预估值, I1 未产生 SSE 真实抓取 | 6 域 |
+| **J1 后** | **0** | 仍存 news/sentiment_social, 但 tried 非空 (`tried=['rss_news']` / `tried=['opencli']`, 系上游网络/CLI 问题, 非 registry 层 method 缺失) |
+
+SSE 正常返回 1167 字节, agent_progress 事件完整 (技术/基本面/资金流分析师 started→completed)。
+
+### 结论
+
+- J1 扫平 I1 遗留 6 域 method 对齐缺口, registry.call_with_fallback 在所有 16 domain 上 tried 列表保证非空;
+- 所有 alias 采用最小变更 (薄转发 / 循环封装), 未改动 adapter 真实接口语义;
+- 端到端 `grep "tried=\[\]" = 0` 锁定 method 层数据全通;
+- 剩余 news/sentiment_social 失败系 rsshub/feedparser 与 opencli 命令缺失的环境问题, 属数据源可用性而非 registry 对齐问题, 已有 I1 专项回归守护。
