@@ -1988,3 +1988,61 @@ python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_e
 - FRED_API_KEY / OPENCORPORATES_API_KEY 手动申请 (免费)
 - Yahoo/Binance地区限流 (非代码问题)
 - Ashare/OpenBB 运行时上游限流
+
+---
+
+## H1 前端生产编译+Artifact路由审计 [2026-04-15 13:52 +08:00]
+
+### TypeScript 完整性
+- **修复前**: 1 error — `src/lib/hooks/use-chat-stream.ts:183` TS2339 `Property 'error' does not exist on type '{ code; message; recoverable? }'` (E4 遗留)
+- **修复方式**: 最小类型断言 `(data as { error?: string })?.error` 保留运行时兼容
+- **修复后**: `npx tsc --noEmit` **0 error**
+
+### Next.js 生产编译 (Next 16.2.1 + Turbopack)
+- **Compiled successfully in 10.3s** + **TypeScript 2.6s**
+- **11 routes 全部生成** (10 Static ○ + 1 Dynamic ƒ):
+  | Route | Type |
+  |---|---|
+  | `/` `/compare` `/dashboard` `/news` `/portfolio` `/screener` `/settings` `/watchlist` `/_not-found` | ○ Static |
+  | `/stock/[code]` | ƒ Dynamic |
+- Static pages: 11/11 generated in 153ms (9 workers)
+- 警告: workspace root 检测歧义 (3个lockfile), 非阻塞
+
+### Artifact Renderer Switch 覆盖表 (15 ArtifactType + 1 legacy 别名)
+| # | ArtifactType | 前端 union | switch case | dynamic组件 | 后端 wrap `type` |
+|---|---|---|---|---|---|
+| 1 | candlestick_chart | ✓ | ✓ | CandlestickChartArtifact | ✓ |
+| 2 | technical_indicators | ✓ | ✓ | TechnicalPanel+ScoreRadar | ✓ |
+| 3 | fundamental_metrics | ✓ | ✓ | FundamentalScorecard | ✓ |
+| 4 | capital_flow_chart | ✓ | ✓ | CapitalFlowArtifact | ✓ |
+| 5 | news_feed | ✓ | ✓ | NewsFeedArtifact | ✓ |
+| 6 | risk_gauge | ✓ | ✓ | RiskRadarArtifact | ✓ |
+| 7 | search_results | ✓ | ✓ | SearchResultsArtifact | ✓ |
+| 8 | decision_card | ✓ | ✓ | DecisionCardArtifact | ✓ |
+| 9 | investor_consensus | ✓ | ✓ | InvestorPersonasArtifact | ✓ |
+| 10 | investor_opinions | ✓ | ✓ | InvestorPersonasArtifact | ✓ |
+| 11 | agent_pipeline | ✓ | (default→GenericDataView) | — | ✓ |
+| 12 | **alt_data** (E4) | ✓ | ✓ | AltDataPanelArtifact | ✓ L1013 |
+| 13 | **shipping** (E4) | ✓ | ✓ | ShippingChartArtifact | ✓ L697 |
+| 14 | **esg** (E4) | ✓ | ✓ | ESGScorecardArtifact | ✓ L791 |
+| 15 | **hiring** (E4) | ✓ | ✓ | HiringSignalArtifact | ✓ L891 |
+| 16 | **corporate_network** (E4) | ✓ | ✓ | CorporateNetworkArtifact | ✓ L958 |
+
+### 前后端 type 契约一致性: ✓ 100%
+- 前端 `ArtifactType` union 15种 ⇔ 后端 `wrap_*_v2()` 返回 `type` 字段 严格相等
+- 5个 P3 新类型 (alt_data/shipping/esg/hiring/corporate_network) 全部在 artifact_wrapper.py 中验证:
+  - `wrap_shipping_v2`  → `"type": "shipping"` (L697)
+  - `wrap_esg_v2`       → `"type": "esg"` (L791)
+  - `wrap_hiring_v2`    → `"type": "hiring"` (L891)
+  - `wrap_corporate_network_v2` → `"type": "corporate_network"` (L958)
+  - `wrap_alt_data_v2`  → `"type": "alt_data"` (L1013)
+
+### 发现问题 + 修复
+1. **[Fixed]** `use-chat-stream.ts:183` TS2339 阻塞 `next build` (Turbopack编译成功但 tsc 阶段 fail → exit 1) — 已类型断言修复
+2. **[非阻塞]** 3个 package-lock.json 导致 Turbopack root 推断歧义 — 建议后续保留 `frontend/package-lock.json`, 清理上级目录的残留lock
+
+### 结论
+- ✓ 前端生产 build 通过 (首次完整通过,此前因 TS 错误阻塞)
+- ✓ 11 routes 全量生成
+- ✓ 15种 ArtifactType dispatch 完整覆盖,无缺口
+- ✓ 前后端 type 契约 100% 对齐 (单一真相源: 前端 ArtifactType union)

@@ -180,7 +180,7 @@ export function useChatStream() {
           });
         },
         onError: (data) => {
-          const errText = typeof data === 'string' ? data : (data?.message || data?.error || JSON.stringify(data));
+          const errText = typeof data === 'string' ? data : (data?.message || (data as { error?: string })?.error || JSON.stringify(data));
           console.error('Stream error:', errText, data);
           const errorMsg: ChatMessage = {
             message_id: `error_${Date.now()}`,
