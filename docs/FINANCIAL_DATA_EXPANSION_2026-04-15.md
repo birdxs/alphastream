@@ -323,6 +323,52 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 
 ---
 
+### A2 efinance [2026-04-15]
+
+**时间基准**：2026-04-15 11:30 +08:00（Asia/Singapore）
+
+**交付物**：
+- `app/adapters/efinance_adapter.py` [NEW-FILE:#20260415-04]
+- `tests/adapters/test_efinance_adapter.py`
+
+**能力矩阵**：
+
+| 能力 | 方法签名 | efinance实际API | 状态 |
+|---|---|---|---|
+| 分钟K线 | `get_minute_kline(code, klt=1, count=240)` | `ef.stock.get_quote_history(code, klt, fqt)` | ✅ klt∈{1,5,15,30,60} |
+| 龙虎榜 | `get_top_list(start, end)` | `ef.stock.get_daily_billboard(start_date, end_date)` | ✅（API实际名非get_top_list） |
+| 融资融券 | `get_margin_trading(code)` | **efinance无此API** | ⚠️ 返回空DF，由akshare兜底 |
+| 实时行情 | `get_realtime_quotes(codes)` | `ef.stock.get_realtime_quotes(fs)` | ✅ codes为None→全市场 |
+
+**权威源交叉验证（≥3源）**：
+
+| # | 来源 | URL | 版本/commit | 发布/检索时间 | 采用点 |
+|---|---|---|---|---|---|
+| 1 | GitHub 源码 | https://github.com/Micro-sheep/efinance/blob/main/efinance/stock/getter.py | main @ `84eca44` | commit 2026-03-18T14:32:46Z / 检索 2026-04-15 11:30 +08:00 | `get_quote_history / get_daily_billboard / get_realtime_quotes` 确切签名与返回列 |
+| 2 | GitHub Release | https://github.com/Micro-sheep/efinance/releases/tag/v0.5.5 | v0.5.5 tag commit `495f76f` | 2025-03-15T11:23:37Z / 检索 2026-04-15 11:30 +08:00 | 最新tag版本（PyPI 0.5.8为后续dev） |
+| 3 | PyPI | https://pypi.org/project/efinance/ | v0.5.8 | 2026-03-18 / 检索 2026-04-15 11:30 +08:00 | License=MIT，依赖(requests/pandas/tqdm/retry/multitasking/jsonpath/rich/bs4)，Summary="A finance tool to get stock, fund and futures data base on eastmoney" |
+| 4 | GitHub `__init__.py` | https://raw.githubusercontent.com/Micro-sheep/efinance/main/efinance/stock/__init__.py | main | 检索 2026-04-15 11:30 +08:00 | 确认16个公开函数清单，**不含** `get_top_list` / `get_margin_schedule` |
+
+**关键发现（与任务原始规格的偏差及处置）**：
+
+1. 任务规格中 `efinance.stock.get_top_list` 在实际源码中**不存在**，实际API名为 `get_daily_billboard`（来源#1/#4交叉验证）。本适配器对外保留语义化方法名 `get_top_list`，内部正确调用 `get_daily_billboard`。
+2. 任务规格中 `efinance.stock.get_margin_schedule` **不存在**（来源#1/#4交叉验证）；"融资融券"仅在 `get_belong_board` 返回的板块名中作为字符串出现。本适配器保留 `get_margin_trading` 接口返回空DF+日志提示，由 `fallback_manager` 路由到 `AkshareAdapter` 兜底。
+3. `get_realtime_quotes` 的 `fs` 参数实为市场名而非股票代码列表，按代码过滤需全市场拉取后本地filter。
+
+**测试覆盖**：`pytest tests/adapters/test_efinance_adapter.py` → **19 passed**，覆盖：
+- `_norm_date` 三种格式、`_rename` 部分映射/空DF
+- `get_minute_kline`：正常/count尾切/非法klt回退/未装降级/异常空DF
+- `get_top_list`：正常+日期dash格式传参+未装降级
+- `get_margin_trading`：恒空
+- `get_realtime_quotes`：全市场/按codes过滤/未装降级
+- `name`/`health_check` 可用与不可用
+
+**合规**：efinance反向工程东财接口，仅研究用途，禁止商用转售/对外API化，UA限速≤2QPS（引自本文件§五）。
+
+**Commit Hash**：见 git log（commit1: 代码+测试落盘；commit2: 本追溯文档）
+
+---
+
 ### A3 yfinance [2026-04-15]
 
 **时间基准**：2026-04-15 11:30 +08:00（Asia/Singapore）
