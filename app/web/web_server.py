@@ -3227,6 +3227,16 @@ def _p3_call_with_timeout(domain: str, method: str, timeout: int = 20, **kwargs)
         return fut.result(timeout=timeout)
 
 
+def _p3_call_soft(domain: str, method: str, timeout: int = 20, **kwargs):
+    """[G2 B1/B2/B5 软降级] Registry 调用，所有异常(含全数据源空)静默返回 None。
+    用于 P3 端点在上游真网络失败时仍返回 200 + 空 artifact 的契约保持场景。"""
+    try:
+        return _p3_call_with_timeout(domain, method, timeout=timeout, **kwargs)
+    except Exception as e:
+        app.logger.info(f"[_p3_call_soft] {domain}.{method} 软降级: {type(e).__name__}: {e}")
+        return None
+
+
 def _p3_error(message: str, status: int = 500, **extra):
     payload = {"success": False, "error": message}
     payload.update(extra)
@@ -3256,7 +3266,7 @@ def api_shipping_bdi():
             return _p3_error("参数days必须为整数", 400)
         if days_i <= 0 or days_i > 365:
             return _p3_error("days范围应在[1,365]", 400)
-        result = _p3_call_with_timeout("commodity_shipping", "get_bdi_index", days=days_i)
+        result = _p3_call_soft("commodity_shipping", "get_bdi_index", days=days_i)
         artifact = wrap_shipping_v2(stock_name="", bdi_df=result)
         artifact["artifact_type"] = "shipping_bdi"
         artifact["metadata"] = {"days": days_i, "domain": "shipping"}
@@ -3275,7 +3285,7 @@ def api_shipping_port(port: str):
         period = request.args.get('period', 'monthly')
         if period not in ('monthly', 'yearly', 'daily'):
             return _p3_error("period必须是monthly/yearly/daily", 400)
-        result = _p3_call_with_timeout(
+        result = _p3_call_soft(
             "commodity_shipping", "get_port_throughput", port=port, period=period
         )
         artifact = wrap_shipping_v2(stock_name="", port_df=result)
@@ -3336,11 +3346,19 @@ def api_corporate_search():
             return _p3_error("参数q不能为空", 400)
         if len(q) > 100:
             return _p3_error("参数q过长", 400)
-        result = _p3_call_with_timeout(
-            "corporate_entity", "search_company", query=q
+        result = _p3_call_soft(
+            "corporate_entity", "search_company", name=q
         )
-        # search_company 返回 list[dict]
-        items = result if isinstance(result, list) else (result or {}).get("items") or []
+        # search_company 返回 pd.DataFrame (B3 修复: 统一转 list[dict])
+        import pandas as _pd
+        if isinstance(result, _pd.DataFrame):
+            items = result.to_dict(orient="records") if not result.empty else []
+        elif isinstance(result, list):
+            items = result
+        elif result is None:
+            items = []
+        else:
+            items = (result or {}).get("items") or []
         artifact = _build_p3_artifact(
             artifact_type="corporate_search",
             title=f"企业搜索: {q}",
@@ -3355,13 +3373,15 @@ def api_corporate_search():
         return _p3_error(str(e), 500)
 
 
-@app.route('/api/corporate/<string:company_id>/network', methods=['GET'])
+@app.route('/api/corporate/<path:company_id>/network', methods=['GET'])
 def api_corporate_network(company_id: str):
+    """[G2 B4] 改 <path:> 以允许 company_id 内含斜杠 (如 us_ca/SAMPLEID)。
+    Flask 默认 <string:> 不匹配斜杠, 即使客户端 URL-encode %2F 也会被解码后截断。"""
     from app.core.artifact_wrapper import wrap_corporate_network_v2
     try:
         if not company_id:
             return _p3_error("company_id非法", 400)
-        result = _p3_call_with_timeout(
+        result = _p3_call_soft(
             "corporate_entity", "get_company_network", company_id=company_id
         )
         artifact = wrap_corporate_network_v2(stock_name=company_id, network=result or {})
@@ -3405,7 +3425,7 @@ def api_jobs_company(company: str):
     try:
         if not company or len(company) > 100:
             return _p3_error("company非法", 400)
-        result = _p3_call_with_timeout(
+        result = _p3_call_soft(
             "hiring_signal", "get_company_postings", company=company
         )
         artifact = wrap_hiring_v2(stock_name=company, postings_df=result)
@@ -3472,7 +3492,7 @@ def api_alt_data(ticker: str):
 
     try:
         corp = _p3_call_with_timeout(
-            "corporate_entity", "search_company", timeout=15, query=ticker
+            "corporate_entity", "search_company", timeout=15, name=ticker
         )
     except Exception as e:
         errors["corporate"] = str(e)
@@ -3487,7 +3507,13 @@ def api_alt_data(ticker: str):
     # corporate: search_company 返回 list, 转为最小 corporate 子域 dict (company_name 用首条)
     corp_wrapped = None
     if corp is not None:
-        corp_items = corp if isinstance(corp, list) else []
+        import pandas as _pd_alt
+        if isinstance(corp, _pd_alt.DataFrame):
+            corp_items = corp.to_dict(orient="records") if not corp.empty else []
+        elif isinstance(corp, list):
+            corp_items = corp
+        else:
+            corp_items = []
         first = corp_items[0] if corp_items else {}
         corp_wrapped = {
             "data": {
