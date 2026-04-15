@@ -1104,3 +1104,17 @@ Easyquotation:
 4. **_is_valid_result 与 FallbackManager 对齐**：None/空DataFrame/空list/空dict 视为无效，降级继续；非空 str/数值 视为有效
 5. **单例 + reset_default**：生产单例 `AdapterRegistry.default()`；测试 `reset_default()` 避免跨用例污染
 6. **AGPL 合规提醒**：OpenBB 核心 AGPL-3.0，仅作为可选软依赖通过 SDK 调用，不内嵌其源码，不触发 copyleft 传染
+
+---
+
+## C1 依赖真跑验收 [2026-04-15 12:22 +08:00]
+
+- **requirements.txt 更新**: +5 条实装依赖 (fredapi / efinance / ccxt / pycoingecko / easyquotation) + 2 条注释说明 (Ashare 单文件非PyPI / openbb 可选重依赖); feedparser & yfinance 原已存在于 TradingAgents 区段，未重复添加。
+- **pip install 结果**: 全部成功 - aiodns-4.0.0, ccxt-4.5.48, coincurve-21.0.0, easyquotation-0.7.7, efinance-0.5.8, fredapi-0.5.2, py-1.11.0, pycares-5.0.1, pycoingecko-3.2.0, retry-0.9.2。Ashare/openbb 按约定未强装。
+- **pytest tests/adapters/ 结果**: **227 passed, 1 failed, 0 errors, 4 warnings, 4.02s**
+- **失败摘要**:
+  - `test_yfinance_adapter.py::TestNormalizeSymbol::test_hk_auto_detect`
+  - 期望 `normalize_symbol("09988") == "9988.HK"`，实际返回 `"09988.HK"`（保留前导零）
+  - 根因：YFinance adapter 对港股短码仅补后缀 `.HK`，未去前导零；属 adapter 实现侧细节，非依赖环境问题。后续可决定是"去前导零"还是"修正期望值"。
+- **环境确认**: 16 adapter + Registry 全部可 import，238 mock 单测中 227 通过、1 个断言值分歧；所有测试零真实网络请求，符合 mock 约束。
+- **commit hash**: 见提交后 git log
