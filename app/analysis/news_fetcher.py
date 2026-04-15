@@ -1,8 +1,16 @@
 # news_fetcher.py
 # -*- coding: utf-8 -*-
 """
-智能分析系统（股票） - 新闻数据获取模块
-功能: 获取财联社电报新闻数据并缓存到本地，避免重复内容
+Input: AKShare stock_info_global_cls 财联社电报原始数据 (含标题/内容/发布日期/发布时间)
+Output: JSON文件(每日1个)，每条新闻含统一字段:
+  - title (若上游空则从content首40字派生)
+  - content
+  - date/time/datetime/fetch_time (向后兼容旧字段)
+  - published_at (R1 Q3契约: ISO8601 +08:00 统一时间, 前端优先使用)
+  - source (R1 Q3契约: "财联社"|"新浪财经"|... 前端展示来源)
+  - hash (内容指纹去重)
+Pos: 后端新闻管道唯一入口 (app/analysis/news_fetcher.py), 被 web_server.py /api/latest_news 调用
+一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 
 import os
@@ -77,6 +85,52 @@ class NewsFetcher:
             logger.error(f"加载新闻哈希时出错: {str(e)}")
             # 不清空已加载的哈希，保留部分去重能力
 
+    @staticmethod
+    def _derive_title(content: str, max_len: int = 40) -> str:
+        """R1 Q3契约: 财联社电报多数条目title为空, 从content首段派生简短标题。
+        优先以中英文句号/问号/感叹号断句, 否则按max_len硬截断。"""
+        if not content:
+            return ""
+        text = str(content).strip()
+        if not text:
+            return ""
+        # 尝试以首个句末标点断句
+        for punct in ("。", "！", "？", ".", "!", "?"):
+            idx = text.find(punct)
+            if 0 < idx <= max_len:
+                return text[:idx].strip()
+        if len(text) <= max_len:
+            return text
+        return text[:max_len].rstrip() + "…"
+
+    @staticmethod
+    def _compose_published_at(pub_date: str, pub_time: str) -> str:
+        """R1 Q3契约: 将后端异构 date/time 字段组装为 ISO8601 +08:00。
+        若解析失败则返回空字符串(前端应兜底到旧 datetime/publish_time 字段)。"""
+        try:
+            pd_str = (pub_date or "").strip()
+            pt_str = (pub_time or "").strip()
+            if not pd_str and not pt_str:
+                return ""
+            # 纯时间 HH:MM:SS 情况: 补今日日期
+            if not pd_str and pt_str:
+                pd_str = datetime.now().strftime("%Y-%m-%d")
+            # 纯日期: 补 00:00:00
+            if pd_str and not pt_str:
+                pt_str = "00:00:00"
+            # 尝试宽松解析
+            combined = f"{pd_str} {pt_str}"
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                        "%Y/%m/%d %H:%M:%S", "%Y%m%d %H:%M:%S"):
+                try:
+                    dt = datetime.strptime(combined, fmt)
+                    return dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
+                except ValueError:
+                    continue
+            return ""
+        except Exception:
+            return ""
+
     def _calculate_hash(self, content):
         """计算内容哈希，带文本规范化"""
         if not content:
@@ -150,14 +204,23 @@ class NewsFetcher:
                 else:
                     pub_time = str(pub_time)
 
+                # R1 Q3契约: title空则从content派生
+                effective_title = title.strip() if title and title.strip() else self._derive_title(content)
+
+                # R1 Q3契约: 统一ISO8601时间
+                published_at = self._compose_published_at(pub_date, pub_time)
+
                 # 创建新闻项并添加哈希值
                 news_item = {
-                    "title": title,
+                    "title": effective_title,
                     "content": content,
                     "date": pub_date,
                     "time": pub_time,
                     "datetime": f"{pub_date} {pub_time}",
                     "fetch_time": now.strftime('%Y-%m-%d %H:%M:%S'),
+                    # R1 Q3契约新增字段 (前端优先消费)
+                    "published_at": published_at,
+                    "source": "财联社",
                     "hash": content_hash  # 保存哈希值以便后续使用
                 }
                 news_list.append(news_item)
@@ -252,6 +315,25 @@ class NewsFetcher:
 
         # 限制返回条数
         result = deduplicated_news[:limit]
+
+        # R1 Q3契约: 对历史文件中缺失 title/published_at/source 的条目做"输出时回填"
+        # (不重写磁盘文件, 保持向后兼容; 仅保证 API 出参统一)
+        for it in result:
+            try:
+                # title 空 → 从 content 派生
+                t = it.get("title")
+                if not (t and str(t).strip()):
+                    it["title"] = self._derive_title(it.get("content", ""))
+                # published_at 缺失 → 从 date+time 组装
+                if not it.get("published_at"):
+                    pa = self._compose_published_at(it.get("date", ""), it.get("time", ""))
+                    if pa:
+                        it["published_at"] = pa
+                # source 缺失 → 默认财联社 (当前唯一数据源)
+                if not it.get("source"):
+                    it["source"] = "财联社"
+            except Exception:
+                continue
 
         logger.info(f"获取最近 {days} 天新闻(处理日期:{','.join(processed_dates)}), "
                     f"共 {total_before_sort} 条, 去重后 {len(deduplicated_news)} 条, "
