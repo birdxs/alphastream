@@ -1557,3 +1557,61 @@ _无_。所有 🔴 为 0，Python 层无 AttributeError/TypeError/KeyError 等�
 (b) 申请 FRED_API_KEY / OpenCorporates Key 解🟡降级
 (c) Efinance/NBS/Shipping 反爬增强 (UA池+proxy)
 (d) 端到端全链路灰度 (启服务+调Agent+Artifact渲染真数据)
+
+---
+
+## F3 Flask P3 API端点 [2026-04-15 13:15 +08:00]
+
+### 交付清单
+- **后端路由**: `app/web/web_server.py` 追加10个P3 REST端点 (line 3214~3451)
+- **Artifact封装**: `app/core/artifact_wrapper.py` 新增 `wrap_shipping / wrap_esg / wrap_corporate / wrap_jobs / wrap_satellite / wrap_alt_data` 6个P3包装函数 + `_build_p3_artifact` 公共构造器
+- **测试**: `tests/web/test_p3_api_endpoints.py` [NEW-FILE:#20260415-36] - **20个test全PASS** (3.97s)
+
+### API端点表
+
+| Method | Path | 参数 | 调用链 (domain.method) | 响应Artifact | 超时 |
+|--------|------|------|------------------------|--------------|------|
+| GET | `/api/shipping/bdi` | `days=1-365` (默认30) | commodity_shipping.get_bdi_index | `shipping_bdi` | 20s |
+| GET | `/api/shipping/port/<port>` | `period=monthly/yearly/daily` | commodity_shipping.get_port_throughput | `shipping_port` | 20s |
+| GET | `/api/esg/<ticker>` | `source=esgbook`(可选) | esg_rating.get_esg_score | `esg_score` | 20s |
+| GET | `/api/esg/climate/<cik>` | — | esg_rating.get_climate_disclosure | `esg_climate` | 20s |
+| GET | `/api/corporate/search` | `q`(必填, ≤100字) | corporate_entity.search_company | `corporate_search` | 20s |
+| GET | `/api/corporate/<company_id>/network` | — | corporate_entity.get_company_network | `corporate_network` | 20s |
+| GET | `/api/jobs/search` | `q`(必填), `limit=1-100`(默认20) | hiring_signal.search_jobs | `jobs_search` | 20s |
+| GET | `/api/jobs/company/<company>` | — | hiring_signal.get_company_postings | `jobs_company` | 20s |
+| GET | `/api/satellite/search` | `q`(必填) | earth_observation.search_datasets | `satellite_datasets` | 20s |
+| GET | `/api/alt_data/<ticker>` | — | **聚合** shipping+esg+hiring+corporate (每路15s) | `alt_data_aggregate` | 60s |
+
+### 响应契约 (统一格式)
+```json
+{
+  "success": true,
+  "artifact": {
+    "type": "artifact",
+    "artifact_type": "<domain>_<subtype>",
+    "title": "中文标题",
+    "data": { /* 结构化数据 */ },
+    "confidence": 0.60~0.80,
+    "sources": [{"name":"...","type":"..."}],
+    "metadata": {"generated_at":"...","domain":"..."}
+  }
+}
+```
+错误: `{"success": false, "error": "<msg>"}` 配合 HTTP 400/500/502。
+
+### 现有端点清单 (原68个) + 新增10个 = **78个路由**
+
+- **原68个路由**: 页面路由(15) + analysis(~8) + stock_data/profile/name(5) + market_scan(4) + industry(7) + capital_flow(3) + news/sentiment(3) + agent(7) + mcp(2) + ai/chat & conversations(5) + SSE(1) + 其他(8)
+- **新增10个P3路由**: 如上表
+
+### 安全/可靠性
+- 复用 `custom_jsonify`（原endpoint一致风格）
+- `ThreadPoolExecutor` 20s 硬超时避免外网卡死
+- 参数校验：空/类型/范围/长度均返回 **400**
+- Adapter降级失败 → 传播 Exception → **500**，`/api/alt_data` 4域全挂 → **502 + details**
+- `/api/alt_data` 部分域失败不阻断，`metadata.coverage` 告知覆盖率 (如 `3/4`)
+
+### 验证证据
+- `python -m pytest tests/web/test_p3_api_endpoints.py -x -q` → **20 passed in 3.97s**
+- 覆盖: happy path(10) + 参数错误400(7) + 上游异常500(2) + 全部失败502(1)
+- 使用 Flask `test_client` + `patch.object(ws, "_p3_call_with_timeout", ...)` mock Registry，无需真实外网
