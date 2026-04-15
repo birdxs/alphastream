@@ -2,14 +2,26 @@
 Input: StockAnalysisState (stock_code, market_type)
 Output: StockAnalysisState (fundamental_report已填充，含AI评分/财务健康度/成长性/工具调用记录)
 Pos: 基本面分析Agent，通过Function Calling让AI自主查询数据并评分分析，降级时使用硬编码模式
+[C2 2026-04-15] fallback层接入 AdapterRegistry (xbrl_financials / us_stock / a_stock_kline),
+  原analyzer调用作为降级兜底 —— 双保险不破坏现有路径。
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch (静态Agent使用)。失败返回None, 不抛。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[FundamentalAnalyst] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
 
 
 class FundamentalAnalystAgent:
@@ -159,12 +171,20 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     stock_code = state['stock_code']
 
     analyzer = FundamentalAnalyzer()
+    market_type = state.get('market_type', 'A')
 
-    # 获取财务指标
-    financial_data = analyzer.get_financial_indicators(stock_code)
+    # [C2] 优先走 AdapterRegistry 多源 (xbrl_financials / us_stock), 失败才回退 analyzer
+    financial_data = None
+    if market_type == 'US':
+        financial_data = _registry_fetch('xbrl_financials', 'get_financials', code=stock_code) \
+                         or _registry_fetch('us_stock', 'get_financials', code=stock_code)
+    if financial_data is None:
+        financial_data = analyzer.get_financial_indicators(stock_code)
 
-    # 获取成长性数据
-    growth_data = analyzer.get_growth_data(stock_code)
+    # 获取成长性数据 (registry优先 → analyzer兜底)
+    growth_data = _registry_fetch('a_stock_kline', 'get_growth_data', code=stock_code)
+    if growth_data is None:
+        growth_data = analyzer.get_growth_data(stock_code)
 
     # 计算基本面评分
     score_result = analyzer.calculate_fundamental_score(stock_code)

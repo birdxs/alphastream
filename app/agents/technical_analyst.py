@@ -2,14 +2,26 @@
 Input: StockAnalysisState (stock_code, market_type, 可选的历史反思上下文)
 Output: StockAnalysisState (technical_report已填充，含AI评分/趋势/建议/工具调用记录)
 Pos: 技术分析Agent，通过Function Calling让AI自主查询数据并评分分析，降级时使用硬编码模式
+[C2 2026-04-15] fallback层接入 AdapterRegistry (a_stock_kline / us_stock),
+  原 StockAnalyzer 作为兜底 —— 双保险。
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch。失败返回None。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[TechnicalAnalyst] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
 
 
 class TechnicalAnalystAgent:
@@ -180,6 +192,13 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     market_type = state.get('market_type', 'A')
 
     analyzer = StockAnalyzer()
+
+    # [C2] 优先用 AdapterRegistry 拉K线作为 analyzer 的数据源 (若analyzer支持外部df)
+    domain = 'us_stock' if market_type == 'US' else 'a_stock_kline'
+    kline_df = _registry_fetch(domain, 'get_stock_history', code=stock_code)
+    if kline_df is not None:
+        logger.debug(f"[TechnicalAnalyst] registry拿到K线 rows={len(kline_df) if hasattr(kline_df,'__len__') else '?'}")
+
     result = analyzer.quick_analyze_stock(stock_code, market_type)
 
     if 'error' in result:

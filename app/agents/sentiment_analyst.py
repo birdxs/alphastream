@@ -2,12 +2,24 @@
 Input: StockAnalysisState (stock_code, market_type) + 历史语义记忆
 Output: StockAnalysisState (sentiment_report已填充) + 保存分析记忆
 Pos: 舆情分析Agent，包装news_fetcher提供LLM增强情绪分析，带历史记忆注入
+[C2 2026-04-15] 新闻获取接入 AdapterRegistry (news / sentiment_social),
+  原 NewsFetcher 兜底 —— 双保险。
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch。失败返回None。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[SentimentAnalyst] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
 
 
 class SentimentAnalystAgent:
@@ -24,9 +36,19 @@ class SentimentAnalystAgent:
         stock_code = state['stock_code']
 
         try:
-            # 获取最新新闻
-            fetcher = NewsFetcher()
-            news_list = fetcher.get_latest_news(days=3, limit=20)
+            # [C2] 优先走 AdapterRegistry news 域多源 (RSS/OpenCLI/Akshare), 失败兜底 NewsFetcher
+            news_list = _registry_fetch('news', 'get_latest_news',
+                                        code=stock_code, days=3, limit=20)
+            if not news_list:
+                # 可选: 社交情绪域补充 (如 OpenCLI 微博/reddit)
+                social = _registry_fetch('sentiment_social', 'get_social_sentiment',
+                                         code=stock_code, limit=10)
+                if social:
+                    news_list = social
+            if not news_list:
+                # 获取最新新闻 (原路径兜底)
+                fetcher = NewsFetcher()
+                news_list = fetcher.get_latest_news(days=3, limit=20)
 
             # 筛选与该股票相关的新闻
             relevant_news = _filter_relevant_news(news_list, stock_code)

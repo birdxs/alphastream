@@ -2,14 +2,26 @@
 Input: StockAnalysisState (stock_code, market_type)
 Output: StockAnalysisState (capital_flow_report已填充，含AI评分/主力动向/资金意图/工具调用记录)
 Pos: 资金流向分析Agent，通过Function Calling让AI自主查询数据并评分分析，降级时使用硬编码模式
+[C2 2026-04-15] fallback层接入 AdapterRegistry (a_stock_realtime / a_stock_kline),
+  原 CapitalFlowAnalyzer 兜底 —— 双保险。
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch。失败返回None。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[CapitalFlowAnalyst] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
 
 
 class CapitalFlowAnalystAgent:
@@ -161,8 +173,16 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     if market_type == 'A':
         flow_market = 'sh' if stock_code.startswith('6') else 'sz'
 
-    # 获取个股资金流向
-    flow_data = analyzer.get_individual_fund_flow(stock_code, flow_market)
+    # [C2] 优先走 AdapterRegistry 实时行情多源 (efinance/akshare/opencli), 失败兜底 analyzer
+    flow_data = _registry_fetch('a_stock_realtime', 'get_individual_fund_flow',
+                                code=stock_code, market=flow_market)
+    if flow_data is None:
+        # 尝试 a_stock_kline 域获取 (某些适配器在kline域暴露资金流)
+        flow_data = _registry_fetch('a_stock_kline', 'get_individual_fund_flow',
+                                    code=stock_code, market=flow_market)
+    if flow_data is None:
+        # 获取个股资金流向 (原路径兜底)
+        flow_data = analyzer.get_individual_fund_flow(stock_code, flow_market)
 
     # 计算资金流向评分
     score_result = analyzer.calculate_capital_flow_score(stock_code, flow_market)
