@@ -23,6 +23,11 @@ import {
   Lightbulb,
   Users,
   Workflow,
+  Layers,
+  Ship,
+  Leaf,
+  Briefcase,
+  Network,
 } from "lucide-react";
 
 /* Artifact 类型 → 图标 + 颜色映射 */
@@ -41,6 +46,12 @@ const artifactMeta: Record<
   investor_consensus: { icon: Users, color: "text-[#46BEA3] bg-[#46BEA3]/10 border-[#46BEA3]/20" },
   investor_opinions: { icon: Users, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
   agent_pipeline: { icon: Workflow, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
+  // P3 另类数据 (E4 — 2026-04-15)
+  alt_data: { icon: Layers, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
+  shipping: { icon: Ship, color: "text-[#6B5EE4] bg-[#6B5EE4]/10 border-[#6B5EE4]/20" },
+  esg: { icon: Leaf, color: "text-[#46BEA3] bg-[#46BEA3]/10 border-[#46BEA3]/20" },
+  hiring: { icon: Briefcase, color: "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/20" },
+  corporate_network: { icon: Network, color: "text-[#3737CC] bg-[#3737CC]/10 border-[#3737CC]/20" },
 };
 
 interface Props {

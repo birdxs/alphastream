@@ -46,7 +46,13 @@ export type ArtifactType =
   | 'decision_card'
   | 'investor_consensus'
   | 'investor_opinions'
-  | 'agent_pipeline';
+  | 'agent_pipeline'
+  // P3 另类数据 Artifact (E4 — 2026-04-15)
+  | 'alt_data'           // 另类数据聚合主面板 (tab: shipping/esg/hiring/corporate)
+  | 'shipping'           // 航运大宗 — BDI/港口吞吐/AIS
+  | 'esg'                // ESG 三维评分 + 多源对比 + SEC 气候披露
+  | 'hiring'             // 招聘信号 — 岗位数/技能分布/扩张预警
+  | 'corporate_network'; // 企业关联网络 — 父/子/董事会/司法管辖区
 
 // Agent进度
 export interface AgentProgress {

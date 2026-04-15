@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/components/common/error-boundary";
 import {
   TrendingUp, BarChart3, DollarSign, ArrowDownUp,
   Newspaper, AlertTriangle, Search, Target, Users, Bot, ClipboardList,
+  Ship, Leaf, Briefcase, Network, Layers,
 } from "lucide-react";
 
 const CandlestickChartArtifact = dynamic(
@@ -279,6 +280,113 @@ const NewsFeedArtifact = dynamic(
   }
 );
 
+// ========== P3 另类数据 Artifact (E4 — 2026-04-15) ==========
+const AltDataPanelArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/alt-data-panel").then((m) => ({
+      default: m.AltDataPanelArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[300px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        <div className="flex gap-1 mb-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex-1 h-7 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg" />
+          ))}
+        </div>
+        <div className="h-48 bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg" />
+      </div>
+    ),
+  }
+);
+
+const ShippingChartArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/shipping-chart").then((m) => ({
+      default: m.ShippingChartArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[380px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-14 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg" />
+          ))}
+        </div>
+        <div className="h-44 bg-foreground/[0.03] dark:bg-white/[0.03] rounded mb-3" />
+        <div className="h-32 bg-foreground/[0.03] dark:bg-white/[0.03] rounded" />
+      </div>
+    ),
+  }
+);
+
+const ESGScorecardArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/esg-scorecard").then((m) => ({
+      default: m.ESGScorecardArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[400px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        <div className="flex gap-3 mb-3">
+          <div className="w-16 h-16 rounded-2xl bg-foreground/[0.06] dark:bg-white/[0.06]" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-32 bg-foreground/[0.06] dark:bg-white/[0.06] rounded" />
+            <div className="h-3 w-48 bg-foreground/[0.04] dark:bg-white/[0.04] rounded" />
+          </div>
+        </div>
+        <div className="h-48 bg-foreground/[0.03] dark:bg-white/[0.03] rounded mb-2" />
+        <div className="h-24 bg-foreground/[0.03] dark:bg-white/[0.03] rounded" />
+      </div>
+    ),
+  }
+);
+
+const HiringSignalArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/hiring-signal").then((m) => ({
+      default: m.HiringSignalArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[400px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-14 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg" />
+          ))}
+        </div>
+        <div className="h-44 bg-foreground/[0.03] dark:bg-white/[0.03] rounded mb-3" />
+        <div className="h-48 bg-foreground/[0.03] dark:bg-white/[0.03] rounded" />
+      </div>
+    ),
+  }
+);
+
+const CorporateNetworkArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/corporate-network").then((m) => ({
+      default: m.CorporateNetworkArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[360px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        <div className="h-16 bg-foreground/[0.04] dark:bg-white/[0.04] rounded-xl mb-3" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="mb-2">
+            <div className="h-3 w-24 bg-foreground/[0.06] dark:bg-white/[0.06] rounded mb-1" />
+            <div className="h-16 bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg" />
+          </div>
+        ))}
+      </div>
+    ),
+  }
+);
+
 interface Props {
   artifact: Artifact;
 }
@@ -307,6 +415,12 @@ function getArtifactIcon(type: string): ReactNode {
     investor_consensus: <Users className={iconClass} />,
     investor_opinions: <Users className={iconClass} />,
     agent_pipeline: <Bot className={iconClass} />,
+    // P3 另类数据
+    alt_data: <Layers className={iconClass} />,
+    shipping: <Ship className={iconClass} />,
+    esg: <Leaf className={iconClass} />,
+    hiring: <Briefcase className={iconClass} />,
+    corporate_network: <Network className={iconClass} />,
   };
   return icons[type] || <ClipboardList className={iconClass} />;
 }
@@ -367,6 +481,17 @@ function renderArtifactContent(artifact: Artifact) {
       return <RiskRadarArtifact data={data} />;
     case "news_feed":
       return <NewsFeedArtifact data={data} />;
+    // P3 另类数据 Artifact (E4 — 2026-04-15)
+    case "alt_data":
+      return <AltDataPanelArtifact data={data} />;
+    case "shipping":
+      return <ShippingChartArtifact data={data} />;
+    case "esg":
+      return <ESGScorecardArtifact data={data} />;
+    case "hiring":
+      return <HiringSignalArtifact data={data} />;
+    case "corporate_network":
+      return <CorporateNetworkArtifact data={data} />;
     default:
       return <GenericDataView data={data} />;
   }
