@@ -4262,3 +4262,84 @@ for key, agent_cls in agents:
 1. `feat(be): R1 news title/published_at/source统一 + stock_data复核`
 2. `refactor(fe): R1 Dashboard DEDUP fetchWatchQuotes → useStockPrices+useStockNames hook`
 3. `docs(data): R1 Q3契约收尾追溯 + 字段契约终版表`
+
+---
+
+## R4 alt_data源治理 21:50
+
+**时间基准**: 2026-04-15 21:50 +08:00
+**触发**: Q4审计发现 news/sentiment_social/shipping/corporate/hiring/esg 六域 `tried=[...]` 全降级失败, Agent决策用空上下文继续.
+**策略**: A能修(代码治理) / B需Key(文档标注) / C不可抗(代理提示).
+
+### 六域修复状态
+
+| 域 | Before (失败原因) | After (治理方案) | 状态 |
+|---|---|---|---|
+| news | rsshub.app 全返HTML反爬, bozo=True 100% | 源清单重写为新浪官方3路径+人民网+FT中文+rssforever镜像, 全失败兜底 `news_fetcher.get_latest_news()` 本地缓存(636条) | A ✓ |
+| sentiment_social | `opencli xueqiu/discuss` 格式错误 + opencli 1.7.3 无此命令 | `opencli_call()` 重构: 自动拆分 group/action + `--symbol=` 转位置参数 + `-f json`; 映射改用内置 `xueqiu comments`/`sinafinance news`/`sinafinance stock-rank` | A ✓ (需浏览器桥扩展才能真抓数据, 否则降级空列表) |
+| shipping (BDI) | investing.com 403 / tradingeconomics 空HTML | 加上海航交所+国内航运报价2备源, investing Referer 改为 google, 全失败返占位行 `{value:null, note:"上游反爬"}` | A ✓ |
+| corporate | OpenCorporates 401 无API Key | `.env.example` 已预留 `OPENCORPORATES_API_KEY`, 无Key时降级空 | B ⚠ |
+| hiring | jobs_adapter 降级失败 (LinkedIn/Indeed反爬) | 无可抗代码修复, 需海外代理+Key | B/C ⚠ |
+| esg | bcorporation JSONDecodeError, cufe.edu.cn ConnectionError | 官方源结构变更/内网限访, 需Key/代理 | B/C ⚠ |
+
+### A能修 变更清单
+
+**app/adapters/rss_news_adapter.py**:
+- `FEED_SOURCES` 源清单替换: 移除 wallstreetcn/cls/xueqiu/jrj/cctv 的 rsshub.app 主源
+- 新增 sina_finance / sina_stock / people_economy / ftchinese / rsshub_wscn / rsshub_cls
+- 新增 `_fallback_local_cache()` 静态方法: 回落 `app.analysis.news_fetcher.NewsFetcher.get_latest_news()` 本地 `data/news/*.json`
+- `get_latest_news()` 全降级时自动调用兜底, 字段统一到 RSS schema (source/title/link/published/summary)
+- **实测**: 本地缓存回落取 636 条可用, 返回样例 `{source:"财联社", title:"美股三大指数小幅高开", published:"2026-04-15T21:30:54+08:00", ...}`
+
+**app/adapters/opencli_bridge.py**:
+- `opencli_call()` 重构: 命令格式从 `opencli <adapter>/<action> --format=json` 改为 `opencli <group> <action> [positional] -f json` (对齐 opencli@1.7.3 实际 CLI)
+- `--symbol=X` / `--code=X` 自动转位置参数 (opencli `xueqiu comments <symbol>` 契约要求)
+- 适配器映射更换:
+  - `xueqiu/discuss` (不存在) → `xueqiu/comments` (内置)
+  - `cls/telegraph` (自建需Puppeteer) → `sinafinance/news` (内置, 7x24实时快讯)
+  - `eastmoney/guba` (自建需Puppeteer) → `sinafinance/stock-rank` (内置, 热搜榜)
+- **实测**: 命令路由正确 (opencli 进入执行), 因本机未装 Browser Bridge 扩展 stderr `code:BROWSER_CONNECT` 降级空列表(符合规范). 装了扩展后可真抓.
+
+**app/adapters/shipping_adapter.py**:
+- `_BDI_ENDPOINTS` 加 2 个国内备源: `http://www.sse.net.cn/` (上海航运交易所) + `http://www1.chineseshipping.com.cn/gxh/xhzb/index.jhtml` (国内航运报价)
+- `_REFERER_MAP` investing.com / tradingeconomics Referer 改为 `https://www.google.com/` (搜索引流绕反爬)
+- `get_bdi_index()` 全降级时返回单行占位 DataFrame (`value:null, note:"上游反爬/暂不可达"`), Agent 感知而非误判"无航运压力"
+- **实测**: 4 端点全降级 (403/404 符合预期), 返回 `(1,5)` 占位行 ✓
+
+### B需Key 清单 (Comdr 申请)
+
+| 域 | 服务 | 注册地址 | 环境变量 | 成本 |
+|---|---|---|---|---|
+| corporate | OpenCorporates API | https://opencorporates.com/api_accounts/new | `OPENCORPORATES_API_KEY` | 免费500req/月 |
+| shipping | AISHub 船舶AIS | https://www.aishub.net/ | `AISHUB_USERNAME` | 免费(需共享AIS数据) |
+| hiring | LinkedIn / Indeed 官方API | — | (需企业合作) | 付费 |
+| esg | Sustainalytics / MSCI ESG | — | — | 付费企业级 |
+
+### C代理 提示
+
+- Yahoo Finance / Binance 地区限制 → 设 `HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890`
+- `_proxy_utils.get_proxies()` 已被 rss/shipping/corporate 读取, 无 env 自动跳过
+- 验证: `curl -x $HTTP_PROXY https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d`
+
+### 验证命令 (Comdr 重启后端后执行)
+
+```bash
+# 1. RSS 新闻 (应含本地缓存回退, ≥1条)
+curl -s "http://127.0.0.1:8888/api/latest_news?limit=5" | jq '.[0] | {title, source, published_at}'
+
+# 2. Registry news 域 (tried 应非空, 有数据)
+curl -s "http://127.0.0.1:8888/api/p3/news?limit=3"
+
+# 3. Shipping BDI (全降级时应见 note 字段)
+curl -s "http://127.0.0.1:8888/api/p3/shipping/bdi?days=30"
+
+# 4. Sentiment social (需 opencli + Browser Bridge)
+curl -s "http://127.0.0.1:8888/api/p3/sentiment/social?code=000001"
+```
+
+### Commits
+
+1. `fix(adapter): R4 rss_news 源清单换新+本地缓存兜底`
+2. `fix(adapter): R4 opencli_bridge 命令格式+映射对齐 opencli@1.7.3`
+3. `fix(adapter): R4 shipping 国内备源+Google Referer+占位兜底`
+4. `docs(data): R4 alt_data 六域治理追溯`
