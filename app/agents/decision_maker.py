@@ -69,6 +69,9 @@ class DecisionMakerAgent:
             reports.append(f"【看多论据】{state['bull_case'][:300]}")
         if state.get('bear_case'):
             reports.append(f"【看空论据】{state['bear_case'][:300]}")
+        # [R2 Q4 P5 2026-04-15] 辩论综合: 优先于决策引用, 提供平衡视角
+        if state.get('debate_summary'):
+            reports.append(f"【辩论综合】{state['debate_summary'][:500]}")
         if state.get('risk_assessment') and 'error' not in state.get('risk_assessment', {}):
             reports.append(f"【风险评估】{str(state['risk_assessment'])[:300]}")
 

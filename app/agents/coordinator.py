@@ -61,6 +61,65 @@ def _wrap_with_events(agent_fn, agent_name):
     return wrapped
 
 
+def _summarize_debate(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    [R2 Q4 P5 2026-04-15] 辩论综合节点 (内联, 不新建agent文件):
+    基于 bull_case + bear_case 合成 debate_summary, 为决策者提供平衡视角。
+
+    输出 debate_summary (str, 符合 state schema) - 包含:
+      - 多方主论点摘要
+      - 空方主论点摘要
+      - 综合倾向判断 (看多/看空/分歧)
+    """
+    bull_case = state.get('bull_case') or ''
+    bear_case = state.get('bear_case') or ''
+
+    if not bull_case and not bear_case:
+        return {
+            'debate_summary': '辩论双方均未产出有效分析',
+            'execution_log': [{'agent': '辩论综合', 'status': 'skipped', 'reason': 'empty_cases'}]
+        }
+
+    def _extract_confidence(text: str) -> str:
+        """从 bull/bear 文本中抽取置信度关键词 (高/中/低)"""
+        if not text:
+            return '未知'
+        for kw in ['高', '中', '低']:
+            if f'置信度' in text and kw in text[max(0, text.find('置信度')):text.find('置信度')+50]:
+                return kw
+        return '未标注'
+
+    bull_conf = _extract_confidence(bull_case)
+    bear_conf = _extract_confidence(bear_case)
+
+    # 截取 bull/bear 前300字作为主论点摘要
+    bull_thesis = (bull_case[:300] + '...') if len(bull_case) > 300 else bull_case
+    bear_thesis = (bear_case[:300] + '...') if len(bear_case) > 300 else bear_case
+
+    # 综合倾向
+    if bull_conf == '高' and bear_conf != '高':
+        tendency = '多方论据更充分, 综合倾向看多'
+    elif bear_conf == '高' and bull_conf != '高':
+        tendency = '空方论据更充分, 综合倾向看空'
+    elif bull_conf == bear_conf:
+        tendency = f'双方置信度相当({bull_conf}), 观点分歧, 建议谨慎'
+    else:
+        tendency = f'多方置信度{bull_conf}, 空方置信度{bear_conf}, 综合需权衡'
+
+    summary = (
+        f"【多方主论点】{bull_thesis}\n\n"
+        f"【空方主论点】{bear_thesis}\n\n"
+        f"【多方置信度】{bull_conf}\n"
+        f"【空方置信度】{bear_conf}\n"
+        f"【综合研判】{tendency}"
+    )
+
+    return {
+        'debate_summary': summary,
+        'execution_log': [{'agent': '辩论综合', 'status': 'success'}]
+    }
+
+
 def _route_after_technical(state: Dict[str, Any]) -> str:
     """
     技术分析之后的条件路由函数。
@@ -173,19 +232,21 @@ def build_analysis_graph(
         last_node = fan_in_target
 
         if research_depth >= 4:
-            # --- depth >= 4: bull 和 bear 并行 (fan-out / fan-in) ---
+            # [R2 Q4 P1+P5 2026-04-15] 串行辩论: bull → bear → debate_summary
+            # 原并行版本 bear 读不到 bull_case 导致退化为独立看空, 现改为串行使 bear 可真实反驳 bull_case
             graph.add_node("bull", _wrap_with_events(BullResearcherAgent.analyze, "多头研究员"))
             graph.add_node("bear", _wrap_with_events(BearResearcherAgent.analyze, "空头研究员"))
+            graph.add_node("debate_summary", _wrap_with_events(_summarize_debate, "辩论综合"))
 
-            # fan-out: sentiment → bull 和 bear 并行
+            # 串行链: sentiment → bull → bear → debate_summary
             graph.add_edge(last_node, "bull")
-            graph.add_edge(last_node, "bear")
+            graph.add_edge("bull", "bear")
+            graph.add_edge("bear", "debate_summary")
 
             if research_depth >= 5:
                 # fan-in 到 risk
                 graph.add_node("risk", _wrap_with_events(RiskManagerAgent.analyze, "风险管理师"))
-                graph.add_edge("bull", "risk")
-                graph.add_edge("bear", "risk")
+                graph.add_edge("debate_summary", "risk")
                 last_node = "risk"
 
                 # 投资者人格分析（可选，在风险评估后）
@@ -197,9 +258,8 @@ def build_analysis_graph(
                 except ImportError:
                     pass  # 投资者模块未安装
             else:
-                # depth=4: bull 和 bear fan-in 到 decision
-                graph.add_edge("bull", "decision")
-                graph.add_edge("bear", "decision")
+                # depth=4: debate_summary 直接到 decision
+                graph.add_edge("debate_summary", "decision")
                 last_node = None  # decision 已连接
 
         # 连接最后一个节点到 decision（如果还没连接）
