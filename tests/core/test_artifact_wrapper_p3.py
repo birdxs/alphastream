@@ -318,3 +318,16 @@ class TestWrapAltData:
         result = wrap_alt_data_v2("空")
         assert result["type"] == "alt_data"
         assert result["data"] == {}
+
+    # [N1 2026-04-15 15:18 +08:00] stock_code 契约回归
+    def test_stock_code_transmitted(self):
+        """P1: stock_code 参数正确透传到 artifact.stock_code"""
+        result = wrap_alt_data_v2("Apple Inc", stock_code="AAPL")
+        assert result["stock_code"] == "AAPL"
+        assert result["stock_name"] == "Apple Inc"
+
+    def test_stock_code_fallback_to_name(self):
+        """P1: 未传 stock_code 时 fallback 到 stock_name, 不返回 None"""
+        result = wrap_alt_data_v2("600519")
+        assert result["stock_code"] == "600519"
+        assert result["stock_code"] is not None

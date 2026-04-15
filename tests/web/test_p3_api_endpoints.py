@@ -259,6 +259,105 @@ def test_alt_data_invalid_ticker(client):
 
 
 # ======================================================
+# [N1 2026-04-15 15:18 +08:00] M1遗留bug回归
+# P0: details 空字符串修复
+# P1: stock_code None 修复 / partial_errors 无静默丢失
+# ======================================================
+def test_n1_alt_data_all_fail_details_not_empty(client):
+    """[N1 P0] 4域全失败时, details 的 4 个 domain 都有非空错误信息 (含 type)"""
+    from app.web import web_server as ws
+
+    def fake_call(domain, method, timeout=20, **kw):
+        # 模拟不同异常: 空字符串异常 / 正常异常 / 超时 / 无message
+        if domain == "commodity_shipping":
+            raise Exception("")  # 空 message, 旧实现会产生空 details
+        if domain == "esg_rating":
+            raise RuntimeError("")  # 同样空
+        if domain == "hiring_signal":
+            raise ValueError("hiring upstream down")
+        if domain == "corporate_entity":
+            raise TimeoutError("corp upstream timeout")
+        raise ValueError(domain)
+
+    with patch.object(ws, "_p3_call_with_timeout", side_effect=fake_call):
+        r = client.get("/api/alt_data/600519")
+    assert r.status_code == 502
+    body = r.get_json()
+    assert body["success"] is False
+    details = body.get("details", {})
+    # 4 个 domain 都在, 且都非空
+    for k in ("shipping", "esg", "hiring", "corporate"):
+        assert k in details, f"details 缺少 {k}"
+        assert details[k], f"details[{k}] 为空字符串"
+        # 空 message 也能给 type name
+        assert "Error" in details[k] or ":" in details[k]
+
+
+def test_n1_alt_data_stock_code_transmitted(client):
+    """[N1 P1] 部分成功时 artifact.stock_code == ticker, 不是 None"""
+    from app.web import web_server as ws
+
+    def fake_call(domain, method, timeout=20, **kw):
+        if domain == "esg_rating":
+            return {"ticker": kw.get("ticker"), "esg_score": 75, "source": "esgbook"}
+        raise Exception(f"{domain} unavailable")
+
+    with patch.object(ws, "_p3_call_with_timeout", side_effect=fake_call):
+        r = client.get("/api/alt_data/AAPL")
+    assert r.status_code == 200
+    art = r.get_json()["artifact"]
+    assert art.get("stock_code") == "AAPL"
+    assert art.get("stock_code") is not None
+
+
+def test_n1_alt_data_partial_errors_all_four_domains(client):
+    """[N1 P1] 部分成功时 metadata.partial_errors + data 含全部 4 个 domain key"""
+    from app.web import web_server as ws
+
+    def fake_call(domain, method, timeout=20, **kw):
+        if domain == "esg_rating":
+            return {"ticker": kw.get("ticker"), "esg_score": 60}
+        raise Exception(f"{domain} network error")
+
+    with patch.object(ws, "_p3_call_with_timeout", side_effect=fake_call):
+        r = client.get("/api/alt_data/AAPL")
+    assert r.status_code == 200
+    body = r.get_json()
+    art = body["artifact"]
+    # data 含全部 4 key (失败 → None 占位)
+    data_keys = set(art.get("data", {}).keys())
+    assert data_keys >= {"shipping", "esg", "hiring", "corporate"}, f"缺 domain: {data_keys}"
+    # esg 有数据
+    assert art["data"]["esg"] is not None
+    # 其余 3 个应该是 None (静默丢失修复后明确占位)
+    for k in ("shipping", "hiring", "corporate"):
+        assert art["data"][k] is None, f"{k} 应 None 占位"
+    # partial_errors 含 3 个失败 domain
+    pe = art.get("metadata", {}).get("partial_errors") or body.get("partial_errors")
+    assert pe, "partial_errors 缺失"
+    assert set(pe.keys()) == {"shipping", "hiring", "corporate"}
+    for k, v in pe.items():
+        assert v, f"partial_errors[{k}] 为空"
+
+
+def test_n1_alt_data_coverage_metadata(client):
+    """[N1] metadata.coverage 正确反映填充数 (1/4 或 4/4)"""
+    from app.web import web_server as ws
+
+    def fake_call(domain, method, timeout=20, **kw):
+        if domain == "hiring_signal":
+            return pd.DataFrame([{"title": "Eng", "company": "A", "tags": "ml", "created_at": "2026-04-01"}])
+        raise Exception(f"{domain} down")
+
+    with patch.object(ws, "_p3_call_with_timeout", side_effect=fake_call):
+        r = client.get("/api/alt_data/AAPL")
+    assert r.status_code == 200
+    art = r.get_json()["artifact"]
+    assert art["metadata"]["coverage"] == "1/4"
+    assert art["metadata"]["ticker"] == "AAPL"
+
+
+# ======================================================
 # G2 批修 5 bug 回归测试 [2026-04-15 13:45 +08:00]
 # ======================================================
 def test_g2_b1_shipping_bdi_soft_degrade(client):
