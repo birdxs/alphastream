@@ -10,6 +10,7 @@
 | `akshare_adapter.py` | 主数据源 | akshare 多数据源冗余（东财/同花顺/新浪/腾讯） |
 | `baostock_adapter.py` | 备援数据源 | baostock 日线/周线/月线兜底 |
 | `opencli_bridge.py` | 爬取桥(P0-A1 2026-04-15) | OpenCLI 子进程桥：三大热股榜+浏览器爬取；Node/opencli未装降级为空 |
+| `efinance_adapter.py` | 高频补充(P0-A2 2026-04-15) | efinance东财反向接口：分钟K/龙虎榜/实时；融资融券由akshare兜底；未装efinance降级为空 [NEW-FILE:#20260415-04] |
 | `yfinance_adapter.py` | 跨市场(P0-A3 2026-04-15) | yfinance港美股+日股+ETF+期权链；未装yfinance降级为空 [NEW-FILE:#20260415-05] |
 | `__init__.py` | 导出 | 统一入口 |
 
