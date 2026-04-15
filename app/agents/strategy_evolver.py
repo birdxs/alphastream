@@ -2,6 +2,9 @@
 Input: 历史反思记录 + 历史决策表现
 Output: 优化后的Agent策略配置
 Pos: app/agents/strategy_evolver.py - Agent自主策略演进系统
+[E3 2026-04-15] 接入 AdapterRegistry 前瞻性信号:
+  - hiring_signal (扩张招聘→基本面前瞻) + esg_rating (ESG趋势)
+  - 失败降级为空, 不影响原策略演化AI流程
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -12,6 +15,28 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch。失败返回None。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[StrategyEvolver] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _collect_evolve_context(stock_code: str) -> str:
+    """拉取招聘前瞻 + ESG趋势, 作为策略演化的附加信号。"""
+    parts = []
+    hiring = _registry_fetch('hiring_signal', 'get_hiring_trend', query=stock_code)
+    if hiring:
+        parts.append(f"【招聘扩张信号】{str(hiring)[:250]}")
+    esg = _registry_fetch('esg_rating', 'get_esg_rating', code=stock_code)
+    if esg:
+        parts.append(f"【ESG趋势】{str(esg)[:200]}")
+    return "\n".join(parts)
 
 STRATEGY_DIR = os.path.join(os.path.dirname(__file__), '../../data/agent_strategies')
 
@@ -53,6 +78,15 @@ class StrategyEvolver:
         if not client:
             return current_strategy
 
+        # === Registry 前瞻信号 (双保险) ===
+        forward_signals = ""
+        try:
+            ctx = _collect_evolve_context(stock_code)
+            if ctx:
+                forward_signals = f"\n\n前瞻性另类数据信号（用于调整focus_areas）：\n{ctx}"
+        except Exception as e:
+            logger.info(f"[StrategyEvolver] 前瞻信号聚合失败: {type(e).__name__}")
+
         prompt = f"""你是一位量化策略优化专家。基于以下信息，优化分析策略配置：
 
 当前策略配置：
@@ -62,7 +96,7 @@ class StrategyEvolver:
 {chr(10).join(f'- {i}' for i in improvements[:10])}
 
 检测到的分析偏差：
-{chr(10).join(f'- {b}' for b in biases[:5])}
+{chr(10).join(f'- {b}' for b in biases[:5])}{forward_signals}
 
 请输出优化后的策略配置（JSON格式，保持与当前配置相同的键结构）：
 {{"focus_areas": ["应重点关注的分析维度"], "risk_sensitivity": "low/medium/high", "confidence_threshold": 0.0-1.0, "analysis_notes": ["分析时的注意事项"], "weight_adjustments": {{"technical": 0.0-1.0, "fundamental": 0.0-1.0, "sentiment": 0.0-1.0, "capital_flow": 0.0-1.0}}}}"""

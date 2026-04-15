@@ -2,14 +2,46 @@
 Input: StockAnalysisState (所有已填充的分析报告) + 语义相关历史决策
 Output: StockAnalysisState (final_decision已填充, progress=100)
 Pos: app/agents/decision_maker.py - 投资决策Agent，综合所有分析结果与语义历史记忆
+[E3 2026-04-15] 接入 AdapterRegistry 聚合增强:
+  - news + sentiment_social + esg_rating 三域聚合作为决策综合输入
+  - 失败降级为空上下文, 不中断AI决策
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch。失败返回None, 不抛。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[DecisionMaker] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _collect_decision_context(stock_code: str) -> str:
+    """跨域聚合: news + sentiment_social + esg_rating, 作为决策综合输入。"""
+    parts = []
+    news = _registry_fetch('news', 'get_latest_news', code=stock_code, days=7, limit=5)
+    if news:
+        try:
+            titles = [str(n.get('title', ''))[:60] for n in news[:5]]
+            parts.append(f"【最新新闻】{' | '.join(titles)}")
+        except Exception:
+            pass
+    social = _registry_fetch('sentiment_social', 'get_social_sentiment', code=stock_code)
+    if social:
+        parts.append(f"【社交舆情】{str(social)[:200]}")
+    esg = _registry_fetch('esg_rating', 'get_esg_rating', code=stock_code)
+    if esg:
+        parts.append(f"【ESG评级】{str(esg)[:200]}")
+    return "\n".join(parts)
 
 
 class DecisionMakerAgent:
@@ -39,6 +71,14 @@ class DecisionMakerAgent:
             reports.append(f"【看空论据】{state['bear_case'][:300]}")
         if state.get('risk_assessment') and 'error' not in state.get('risk_assessment', {}):
             reports.append(f"【风险评估】{str(state['risk_assessment'])[:300]}")
+
+        # === Registry 跨域聚合 (双保险: 失败不阻塞) ===
+        try:
+            reg_context = _collect_decision_context(state['stock_code'])
+            if reg_context:
+                reports.append(f"【多源聚合】{reg_context}")
+        except Exception as e:
+            logger.info(f"[DecisionMaker] registry 聚合失败, 跳过: {type(e).__name__}")
 
         # 注入语义相关的历史决策
         try:

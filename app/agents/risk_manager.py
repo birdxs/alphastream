@@ -2,14 +2,40 @@
 Input: StockAnalysisState (stock_code, market_type, 前置分析结果)
 Output: StockAnalysisState (risk_assessment已填充，含AI风险评分/等级/多维度风险分析/工具调用记录)
 Pos: 风险管理Agent，通过Function Calling让AI自主获取数据并评估风险，降级时使用硬编码模式
+[E3 2026-04-15] 接入 AdapterRegistry 另类风险源:
+  - commodity_shipping (BDI异常→供应链风险) + corporate_entity (股权变动风险)
+  - 失败降级为空, 不影响原AI function-calling 路径
+
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    """模块级 AdapterRegistry 多源降级 fetch。失败返回None。"""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[RiskManager] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _collect_alt_risk_context(stock_code: str) -> str:
+    """拉取航运BDI异常 + 企业实体股权变动, 作为另类风险信号。"""
+    parts = []
+    shipping = _registry_fetch('commodity_shipping', 'get_bdi_index')
+    if shipping:
+        parts.append(f"【BDI航运指数】{str(shipping)[:250]}")
+    entity = _registry_fetch('corporate_entity', 'search_entity', query=stock_code)
+    if entity:
+        parts.append(f"【企业股权实体】{str(entity)[:250]}")
+    return "\n".join(parts)
 
 
 class RiskManagerAgent:
@@ -131,6 +157,16 @@ def _build_system_prompt(state: Dict[str, Any]) -> str:
     if context_parts:
         base_prompt += "\n\n【前置分析结果参考】\n" + "\n".join(context_parts)
         base_prompt += "\n请结合以上前置分析结果，综合评估该股票的整体风险水平。"
+
+    # === Registry 另类风险源 (双保险) ===
+    try:
+        stock_code = state.get('stock_code', '')
+        if stock_code:
+            alt_ctx = _collect_alt_risk_context(stock_code)
+            if alt_ctx:
+                base_prompt += "\n\n【另类风险信号 (供应链/股权)】\n" + alt_ctx
+    except Exception as e:
+        logger.info(f"[RiskManager] 另类风险聚合失败, 跳过: {type(e).__name__}")
 
     return base_prompt
 

@@ -2,14 +2,42 @@
 Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
 Output: Dict 包含 investor_lynch 字段 (recommendation + reasoning) + 保存分析记忆
 Pos: app/agents/investors/lynch.py - 彼得·林奇风格投资者人格Agent，带历史记忆注入
+[E3 2026-04-15] 接入 AdapterRegistry 双保险:
+  - 优先 ('a_stock_kline', ...) 成长节奏 + ('corporate_entity', ...) 消费者品牌延伸
+  - 失败降级为空上下文
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[LynchAgent] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _collect_registry_context(stock_code: str) -> str:
+    """拉取长期K线 + 企业实体信息, 辅助林奇的6类分类与品牌延伸判断。"""
+    parts = []
+    kline = _registry_fetch('a_stock_kline', 'get_stock_history', code=stock_code)
+    if kline is not None:
+        try:
+            tail = kline.tail(10).to_string() if hasattr(kline, 'tail') else str(kline)[:300]
+            parts.append(f"【K线近10日】{tail[:400]}")
+        except Exception:
+            pass
+    entity = _registry_fetch('corporate_entity', 'search_entity', query=stock_code)
+    if entity:
+        parts.append(f"【企业实体】{str(entity)[:300]}")
+    return "\n\n".join(parts)
 
 
 class LynchAgent:
@@ -38,6 +66,11 @@ class LynchAgent:
                 return _error_result('AI客户端不可用', state)
 
             reports_summary = _compile_reports(state)
+
+            # === Registry 数据增强 (双保险) ===
+            registry_context = _collect_registry_context(stock_code)
+            if registry_context:
+                reports_summary = f"{reports_summary}\n\n【多源数据增强】\n{registry_context}"
 
             # === 记忆注入（分析前） ===
             memory_context = ""

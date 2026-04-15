@@ -2,14 +2,42 @@
 Input: StockAnalysisState (所有已完成的分析报告) + 历史语义记忆
 Output: Dict 包含 investor_munger 字段 (recommendation + reasoning) + 保存分析记忆
 Pos: app/agents/investors/munger.py - 芒格风格投资者人格Agent，带历史记忆注入
+[E3 2026-04-15] 接入 AdapterRegistry 双保险:
+  - 优先 ('xbrl_financials', ...) + ('news', ...) 护城河+丑闻线索
+  - 失败降级为空上下文
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        return AdapterRegistry.default().call_with_fallback(domain, method, **kwargs)
+    except Exception as e:
+        logger.info(f"[MungerAgent] registry fetch {domain}.{method} 降级失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _collect_registry_context(stock_code: str) -> str:
+    """拉取XBRL财务 + 新闻丑闻线索, 拼接 prompt 上下文。"""
+    parts = []
+    xbrl = _registry_fetch('xbrl_financials', 'get_financials', code=stock_code)
+    if xbrl:
+        parts.append(f"【XBRL财报】{str(xbrl)[:400]}")
+    news = _registry_fetch('news', 'get_latest_news', code=stock_code, days=30, limit=10)
+    if news:
+        try:
+            titles = [str(n.get('title', ''))[:80] for n in news[:8]]
+            parts.append(f"【近期新闻】{' | '.join(titles)}")
+        except Exception:
+            pass
+    return "\n\n".join(parts)
 
 
 class MungerAgent:
@@ -38,6 +66,11 @@ class MungerAgent:
                 return _error_result('AI客户端不可用', state)
 
             reports_summary = _compile_reports(state)
+
+            # === Registry 数据增强 (双保险) ===
+            registry_context = _collect_registry_context(stock_code)
+            if registry_context:
+                reports_summary = f"{reports_summary}\n\n【多源数据增强】\n{registry_context}"
 
             # === 记忆注入（分析前） ===
             memory_context = ""
