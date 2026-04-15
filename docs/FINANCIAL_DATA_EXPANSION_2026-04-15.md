@@ -2046,3 +2046,72 @@ python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_e
 - ✓ 11 routes 全量生成
 - ✓ 15种 ArtifactType dispatch 完整覆盖,无缺口
 - ✓ 前后端 type 契约 100% 对齐 (单一真相源: 前端 ArtifactType union)
+
+---
+
+## H3 搜索层与数据层分工 [2026-04-15 14:05 +08:00]
+
+### 审计结论：不合并、不新增第 18 引擎
+
+对 `app/core/search_engines.py`（17 引擎 + `multi_search` + 6 fallback 链）与 P3 新增 adapter（CorporateAdapter/ESGAdapter 等）协同审计后，确认两层职责正交解耦：
+
+| 维度 | search_engines.py (搜索层) | AdapterRegistry (数据层) |
+|---|---|---|
+| 输入 | 自然语言 query | 结构化参数 (code/jurisdiction/date_range) |
+| 输出 | `List[Dict{title, content, url, source}]` 文本片段 | `pd.DataFrame` / `dict` 强类型字段 |
+| 数据源 | HTML 抓取 + Wikipedia API + 可选 Tavily/SERP | 权威 REST API (OpenCorporates / SEC EDGAR / NBS …) |
+| 一致性接口 | 统一文本结果 | 统一 `BaseAdapter` 6 抽象方法 |
+| 失败策略 | 6 fallback 链串行/并发 | `call_with_fallback` domain→多 adapter |
+| 典型用例 | LLM 查舆情/新闻/百科 | Agent 拉 K 线/财报/工商 |
+
+### 为何不把 CorporateAdapter.search_company 作为第 18 引擎
+
+1. **输出异构**：OpenCorporates 返回严格字段 (company_number/jurisdiction_code/incorporation_date)，塞进 `{title, content, url}` 会丢失关键字段；
+2. **接口一致性破坏**：`multi_search` 调用方预期文本片段，若混入强结构化条目则下游文本拼接/去重逻辑失效；
+3. **正确解耦路径**：LLM 通过 `tools.py` 的工具注册分别调用——
+   - `search_web(query, engine='auto')` → 舆情/新闻（走 search_engines）
+   - `get_corporate_info(name)` → 工商/股权（走 Registry.corporate_entity）
+   - `get_esg_score(code)` → ESG（走 Registry.esg）
+4. **未来扩展预留**：若需"公司名→多源聚合"，应在 Agent 层编排 (coordinator 并行 fan-out)，而非在搜索层拼接。
+
+### 证据锚点
+- `app/core/search_engines.py:34-149` — ENGINES_CONFIG + FALLBACK_CHAINS
+- `app/adapters/corporate_adapter.py:39-50` — CorporateAdapter.search_company 返回 DataFrame
+- `app/adapters/adapter_registry.py` — 16 domain 映射 (含 corporate_entity / esg)
+- `docs/SEARCH_ENGINES.md` — 17 引擎权威来源交叉验证
+
+### 决策
+**代码零改动**（`search_engines.py` 不追加 corporate_lookup/esg_lookup 引擎），仅文档落盘分工说明。
+
+---
+
+## H3 项目总纪律落盘 [2026-04-15 14:08 +08:00]
+
+### 文档变更清单
+
+| 文件 | 变更类型 | 内容 |
+|---|---|---|
+| `README.md` (根) | 扩展 +23 行 | 新增 "7. 数据层 v2" 核心能力段 / 技术栈补 OpenCLI + 21 Adapter / .env 追加 5 P3 Key / v3.1.0 版本段 |
+| `docs/README.md` | 重写 | 承担 docs/ 总索引职责 (避免新建 INDEX.md, 遵循"只改不增") — 12 篇文档按"架构/数据/作战"分类 |
+| `app/adapters/README.md` | 保留 | 已完整列 21 adapter (含 P3 五支柱)，无需改动 |
+| `clis/README.md` | 保留 | 已完整列 3 JS 爬虫 |
+| `frontend/src/components/artifacts/README.md` | 保留 | 已完整列 16 tsx (含 P3 五 Artifact) |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 追加 H3 两节 | 搜索/数据分工 + 纪律落盘摘要 |
+
+### NEW-FILE 审批：取消
+
+原计划 `docs/INDEX.md [NEW-FILE:#20260415-37]` **取消新建**。理由：
+- `docs/README.md` 已具备领地标记功能，扩展其为索引符合"优先只改不增"硬性原则；
+- 无同类 OVERVIEW/TOC 文档，但文件夹级 README 是更自然的索引载体；
+- 节省 1 commit，总 commits 压至 ≤ 3 个。
+
+### 项目级 CLAUDE.md
+根目录 `CLAUDE.md` **不存在**。遵循"优先只改不增"原则**不创建**；近期 44+ commits 的证据锚点已落在 `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` 本文内（Phase-4 总验收表 + H3 节）。
+
+### Git 提交计划 (≤ 3)
+1. `docs(readme): 根README v3.1含数据层v2成果+OpenCLI技术栈+5 P3 Key`
+2. `docs(folder): docs/README.md扩展为总索引 (替代新建INDEX.md, 只改不增)`
+3. `docs(data): H3搜索/数据分工审计+项目总纪律落盘`
+
+### 时间基准锚点
+所有 H3 记录时间引用本文顶部 "0. 时间真实性校验"：2026-04-15 13:46:42 +08:00 (本机 `date` 命令)，阈值内一致。
