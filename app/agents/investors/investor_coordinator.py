@@ -48,10 +48,20 @@ class InvestorCoordinator:
             ('damodaran', DamodaranAgent),
         ]
 
+        # [R3 Q4 P3 2026-04-15] 用 _wrap_with_events 包装 4 人格 analyze,
+        # 让前端终端看到每个投资者 agent 的 started/completed 事件 (d=5深度时避免 30-60s 静默)
+        try:
+            from app.agents.coordinator import _wrap_with_events as _wrap
+        except Exception:
+            _wrap = None
+
         for key, agent_cls in agents:
             try:
                 logger.info(f"[投资者协调器] 调用 {agent_cls.name}...")
-                result = agent_cls.analyze(state)
+                if _wrap is not None:
+                    result = _wrap(agent_cls.analyze, agent_cls.name)(state)
+                else:
+                    result = agent_cls.analyze(state)
                 investor_key = f'investor_{key}'
 
                 if investor_key in result:
