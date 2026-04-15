@@ -2732,3 +2732,78 @@ docker compose -f docker-compose.prod.yml down
 git revert <此commit>   # 代码层
 ```
 
+
+---
+
+## K3 健康检查+监控端点 [2026-04-15 14:32 +08:00]
+
+### 目标
+为生产灰度提供可观测性入口 (docker HEALTHCHECK / nginx upstream / Prometheus 抓取源).
+
+### 3 端点 Schema
+
+**GET /health** (轻量存活, <100ms)
+```json
+{ "status": "ok", "uptime_s": 123.456, "version": "3.1.0", "ts": 1744698720 }
+```
+
+**GET /api/adapters/status** (21 adapter 逐一 health_check)
+```json
+{
+  "status": "ok",
+  "total": 21,
+  "healthy": 18,
+  "unhealthy": 3,
+  "adapters": {
+    "AkshareAdapter":   { "ok": true,  "msg": "ok",                        "latency_ms": 245 },
+    "EDGARAdapter":     { "ok": false, "msg": "ConnectionError: ...",      "latency_ms": 5012 },
+    "ESGAdapter":       { "ok": true,  "msg": "ok",                        "latency_ms":  12 }
+  },
+  "ts": 1744698720
+}
+```
+
+**GET /api/registry/stats** (16 domain × adapter 注册映射)
+```json
+{
+  "status": "ok",
+  "domain_count": 16,
+  "domains": [
+    {
+      "name": "a_stock_kline",
+      "configured": ["AkshareAdapter","BaostockAdapter","EfinanceAdapter","AshareAdapter","YFinanceAdapter"],
+      "configured_count": 5,
+      "available": ["akshare","baostock","efinance","ashare","yfinance"],
+      "available_count": 5,
+      "first_available": "akshare"
+    }
+  ],
+  "fail_count": { "akshare": 0, "yfinance": 2 },
+  "ts": 1744698720
+}
+```
+
+### 实现摘要
+- `app/web/web_server.py`: 追加 `START_TIME`/`APP_VERSION` + 3 路由, 不改现有.
+- `_ADAPTER_SPECS`: 21 adapter (class, module) 清单, 与 `AdapterRegistry.DEFAULT_DOMAIN_MAP` 对齐.
+- `_hc_one()`: 单 adapter 隔离执行, 永不外抛, 返回 `{ok,msg,latency_ms}`.
+- `/api/registry/stats`: 只读 Registry 字典 + `get_status()` 快照, 无网络调用.
+
+### 测试结果
+`pytest tests/web/test_health_endpoints.py -v` → **9 passed / 4.26s**
+
+覆盖:
+1. `/health` 200 + schema (status/uptime_s/version/ts)
+2. `/health` 延迟 <500ms (CI 抖动放宽)
+3. `/api/adapters/status` 全 healthy (21/21, mock)
+4. `/api/adapters/status` 单 adapter fail 整体仍 200 (healthy=20, unhealthy=1)
+5. `_hc_one` 对不存在模块捕获异常, 返回 ok=False
+6. `/api/registry/stats` domain_count=16
+7. `/api/registry/stats` domain 对象 schema + 关键 domain 齐全
+8. `/api/registry/stats` a_stock_kline 首选=AkshareAdapter
+9. `/api/registry/stats` fail_count 字典存在
+
+### 文件清单
+- 修改: `app/web/web_server.py` (+132 行, 0 删除)
+- 新增: `tests/web/test_health_endpoints.py` [NEW-FILE:#20260415-49]
+- 更新: `docs/OPERATIONS.md` §6 故障排查追加"健康检查"小节
