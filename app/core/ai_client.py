@@ -8,6 +8,7 @@ Pos: app/core/ai_client.py - 所有AI调用的统一入口，支持被动问答�
 """
 import os
 import json
+import time
 import logging
 from openai import OpenAI
 import httpx
@@ -156,12 +157,52 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
 
             logger.info(f"[Round {round_idx + 1}] 执行工具: {tool_name}({arguments})")
 
+            # [UI-Q3 2026-04-15] publish tool_call_start 到 event_bus (SSE桥接)
+            _tc_start_ts = time.time()
+            try:
+                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_START
+                _args_preview = arguments
+                try:
+                    _args_str = json.dumps(arguments, ensure_ascii=False)
+                    if len(_args_str) > 200:
+                        _args_preview = _args_str[:200] + '...'
+                except Exception:
+                    _args_preview = str(arguments)[:200]
+                get_event_bus().publish(EVENT_TOOL_CALL_START, {
+                    'event_type': 'tool_call_start',
+                    'data': {
+                        'tool_call_id': tc.id,
+                        'tool_name': tool_name,
+                        'arguments': _args_preview,
+                    }
+                })
+            except Exception:
+                pass
+
             # 执行工具
             try:
                 result = tool_executor(tool_name, arguments)
             except Exception as e:
                 result = f"工具执行异常: {str(e)}"
                 logger.error(f"工具 {tool_name} 执行异常: {e}")
+
+            # [UI-Q3 2026-04-15] publish tool_call_result 到 event_bus
+            try:
+                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_RESULT
+                _result_summary = result if isinstance(result, str) else str(result)
+                if len(_result_summary) > 200:
+                    _result_summary = _result_summary[:200] + '...'
+                get_event_bus().publish(EVENT_TOOL_CALL_RESULT, {
+                    'event_type': 'tool_call_result',
+                    'data': {
+                        'tool_call_id': tc.id,
+                        'tool_name': tool_name,
+                        'result_summary': _result_summary,
+                        'duration_ms': int((time.time() - _tc_start_ts) * 1000),
+                    }
+                })
+            except Exception:
+                pass
 
             # 记录调用日志
             tool_calls_log.append({
@@ -375,12 +416,33 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
 
             logger.info(f"[流式 Round {round_idx + 1}] 执行工具: {tool_name}({arguments})")
 
+            _tc_start_ts = time.time()
             if event_callback:
                 event_callback('tool_call_start', {
                     'tool_call_id': tc_msg['id'],
                     'tool_name': tool_name,
                     'arguments': arguments
                 })
+            # [UI-Q3 2026-04-15] 同时publish到event_bus, 让SSE桥接方式也能收到
+            try:
+                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_START
+                _args_preview = arguments
+                try:
+                    _args_str = json.dumps(arguments, ensure_ascii=False)
+                    if len(_args_str) > 200:
+                        _args_preview = _args_str[:200] + '...'
+                except Exception:
+                    _args_preview = str(arguments)[:200]
+                get_event_bus().publish(EVENT_TOOL_CALL_START, {
+                    'event_type': 'tool_call_start',
+                    'data': {
+                        'tool_call_id': tc_msg['id'],
+                        'tool_name': tool_name,
+                        'arguments': _args_preview,
+                    }
+                })
+            except Exception:
+                pass
 
             # 执行工具
             try:
@@ -395,6 +457,23 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                     'tool_name': tool_name,
                     'result': result[:500] if isinstance(result, str) else str(result)[:500]
                 })
+            # [UI-Q3 2026-04-15] 同时publish到event_bus
+            try:
+                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_RESULT
+                _result_summary = result if isinstance(result, str) else str(result)
+                if len(_result_summary) > 200:
+                    _result_summary = _result_summary[:200] + '...'
+                get_event_bus().publish(EVENT_TOOL_CALL_RESULT, {
+                    'event_type': 'tool_call_result',
+                    'data': {
+                        'tool_call_id': tc_msg['id'],
+                        'tool_name': tool_name,
+                        'result_summary': _result_summary,
+                        'duration_ms': int((time.time() - _tc_start_ts) * 1000),
+                    }
+                })
+            except Exception:
+                pass
 
             # 记录调用日志
             tool_calls_log.append({
