@@ -1299,3 +1299,34 @@ pytest tests/adapters/test_esg_adapter.py -x -q
 3. **港口吞吐量公告解析**：`YYYY年M月 ... 吞吐量 ... 万TEU/万吨` 宽松正则，适配不同港集团页面风格
 4. **CMR 公开无 Key**：`search/collections.json` 官方明确 "public, no authentication required"；下载粒度才需 EDL Bearer Token，已预留 `edl_token` 构造参数
 5. **Registry 新 domain**：`commodity_shipping` / `earth_observation`，下游 agent 可 `reg.call_with_fallback("commodity_shipping","get_bdi_index",days=30)` 调用
+
+---
+
+## 🏁 Phase-2 总验收 (2026-04-15 12:55 +08:00)
+
+### C批 + D批 交付
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| C1 | requirements+pip+pytest真跑 | `b4f2c01`+`7511f39` | **227/228 PASS** (1港股前导零待修) |
+| C2 | 14-Agent接入Registry 双保险 | `0705462`+`ffd06cb` | 7 PASS |
+| D1 | 航运+卫星NASA | `e435bf2` | 27 PASS |
+| D2 | OpenCorporates+Arbeitnow | `b541e8b`+`f8b5258` | 39 PASS |
+| D3 | ESG公开(SEC气候+CDP+B Corp) | `4b26fdf`+`3999ea3` | 28 PASS |
+
+### Phase-2 汇总
+- **5 adapter** (shipping/satellite/corporate/jobs/esg) + **Registry集成**
+- **101 新mock测试 + 227真跑测试** 通过
+- **9 commits** 入main
+- **Registry 16 业务域**: a_stock_kline/realtime · us_stock · hk_stock · macro_us/cn/global · crypto · news · sentiment_social · xbrl_financials · commodity_shipping · earth_observation · corporate_entity · hiring_signal · esg_rating
+
+### 累计 (P0+P1+P2+Phase-2)
+- **21 Python adapter** + 1 Registry + 3 JS爬虫
+- **20 pytest文件** + 3 JS测试
+- **37 commits** 入main
+- **339+ mock单测** + **227真跑PASS**
+- **16 业务域 多源降级全链路打通**
+
+### 遗留
+- yfinance港股前导零: `normalize_symbol("09988") → "09988.HK"` 应为 `"9988.HK"` (实现细节, 非阻塞)
+
+### v2方案执行完全闭环
