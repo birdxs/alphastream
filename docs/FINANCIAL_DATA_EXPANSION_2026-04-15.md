@@ -528,3 +528,198 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 3. **长表输出**：NBS原始 JSON 为 `datanodes+wdnodes` 分离结构，适配器内扁平化为 `[date,code,cname,unit,value]` 长表，Agent 层可直接 pivot
 4. **3次重试+退避**：`0.5*n + rand(0.3)` 线性+jitter，匹配 `edgar_adapter` 风格
 5. **`verify=False`**：NBS 站点历史上出现过证书链问题，降级处理；生产可通过参数覆盖
+
+---
+
+### A5 FRED (Federal Reserve Economic Data) [2026-04-15]
+
+**目标**：接入 St. Louis Fed 的 FRED 宏观数据库 (80万+ 经济序列)，补齐美国/全球宏观指标维度 (GDP/CPI/失业率/联邦基金利率/美债收益率/期限利差/货币供给/非农就业/工业生产指数等)，供宏观 Agent 与风险/择时模型使用。
+
+**联网权威源 (检索时间：2026-04-15 12:00 +08:00)**：
+
+| 序号 | 来源 | URL | 日期 | 采纳点 |
+|---|---|---|---|---|
+| 1 | FRED API 官方文档 | https://fred.stlouisfed.org/docs/api/fred/ | 官方现行 | 端点 `series/observations` `series/search` `release`；Fair Use 无硬限额 |
+| 2 | fredapi Python SDK (PyPI) | https://pypi.org/project/fredapi/ | v0.5.x | `Fred(api_key).get_series(id, start, end)` 接口签名；返回 pd.Series |
+| 3 | fredapi 源码 | https://github.com/mortada/fredapi | 主干 | `.search(query, limit)` / `.get_series_info` / `.get_release` |
+| 4 | API Key 申请页 | https://fred.stlouisfed.org/docs/api/api_key.html | 官方 | 免费 + 仅需邮箱；无付费层 |
+
+**关键约束（均已在代码中落实）**：
+
+1. **API Key 三级覆盖**：构造参数 > env `FRED_API_KEY` > 无（降级）；无 Key → `log.warning` 指向官方申请页，所有方法返回空结构，不抛异常。
+2. **fredapi 软依赖**：`try-import fredapi` → `_FREDAPI_AVAILABLE` 门闩；未安装 → 首次 import 告警，所有方法空结构降级。
+3. **Fair Use**：官方无硬限额（建议 ≤120 req/min），适配器内不加强制限流以简化；若未来踩线可叠加 `_throttle` 仿 EDGAR。
+4. **常用指标包**：`COMMON_INDICATORS` 预置 10 个高频宏观序列（GDP/CPIAUCSL/UNRATE/FEDFUNDS/DGS10/T10Y2Y/DEXUSEU/M2SL/PAYEMS/INDPRO），一次调用打包返回。
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/fred_adapter.py` | 新建 | [NEW-FILE:#20260415-07] |
+| `tests/adapters/test_fred_adapter.py` | 新建 | — (测试文件) |
+| `app/adapters/__init__.py` | 修改 | 导出 FREDAdapter |
+| `app/adapters/README.md` | 修改 | 追加 A5 条目 |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 修改 | 本章节追加 |
+
+**对外接口**：
+
+- `FREDAdapter(api_key=None)` — 缺省读 `FRED_API_KEY` env
+- `get_series(series_id, start=None, end=None) -> pd.DataFrame` (columns: `date/value/series_id`)
+- `search_series(query, limit=20) -> pd.DataFrame` (FRED 原生字段)
+- `get_release(release_id: int) -> dict`
+- `get_common_indicators() -> Dict[str, pd.DataFrame]` (10 个常用宏观)
+- `get_stock_info(series_id) -> dict` (复用为 series 元数据)
+- `health_check()` / `name="fred"` — 接入 `fallback_manager`
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_fred_adapter.py -v` (设计覆盖 22+ 用例)
+  - 无Key降级 × 4：env缺失告警 / 全方法空结构 / env读取 / 参数优先级
+  - fredapi缺失降级 × 1
+  - 核心方法 × 11：get_series OK/empty/exception + 参数透传；search OK/exception；get_release DataFrame/dict/exception；common_indicators全覆盖；get_series_info；health_check OK/fail
+  - Base 接口兼容 × 5
+- 集成：通过 `BaseAdapter` 契约，`fallback_manager` 可按 `health_check()` 判活，与 EDGAR/NBS 同构
+- 端到端：**不发真实请求**（指令要求），mock `fredapi.Fred` 类 + 构造期绕过真实客户端
+
+**Git 提交**：
+- commit1: `feat(adapter): FRED宏观80万序列(免费Key) [NEW-FILE:#20260415-07]`
+- commit2: `docs(data): P1-A5追溯`
+
+**关键设计决策**：
+
+1. **软依赖优先**：`fredapi` 未装不影响模块 import，符合 `yfinance_adapter`/`efinance_adapter` 既有模式
+2. **无Key降级而非硬失败**：宏观数据属"增强型"而非必需路径，Key 缺失不应阻断系统启动
+3. **常用指标中文Key映射**：`COMMON_INDICATORS` 显式列出 10 个高频宏观，避免调用方手背 series_id
+4. **series 元数据复用 `get_stock_info`**：保持 `BaseAdapter` 抽象方法签名兼容，允许 fallback_manager 统一调度
+
+---
+
+### A9 ccxt [2026-04-15]
+
+**任务**：P1-A9 — ccxt 加密货币统一交易所适配器（100+交易所）
+**时间基准**：2026-04-15 12:00 +08:00 (Asia/Singapore)
+**执行者**：agent team (A9) / 验收：🌿 香草少校
+
+**联网调研（≥3 权威源交叉验证）**：
+
+| # | 来源 | URL | 版本/日期 | 采纳 |
+|---|------|-----|---------|------|
+| 1 | ccxt 官方仓库 | https://github.com/ccxt/ccxt | MIT, v4.x 现行 | 100+交易所统一接口 |
+| 2 | ccxt 官方文档 | https://docs.ccxt.com/ | 官方现行 | fetch_ticker/fetch_ohlcv/fetch_order_book/load_markets API 契约 |
+| 3 | ccxt PyPI | https://pypi.org/project/ccxt/ | v4+ | Python 依赖/发布矩阵 |
+| 4 | ccxt Manual 符号格式 | https://docs.ccxt.com/#/README?id=symbols-and-market-ids | 官方 | `BASE/QUOTE` 符号、`1m/1h/1d/1w/1M` timeframe 枚举 |
+
+**关键约束**：
+
+1. **软依赖降级**：`try import ccxt` 失败时，`_CCXT_AVAILABLE=False`，所有方法返回空结构，不向上抛异常（对齐 efinance/yfinance）。
+2. **`enableRateLimit=True`**：启用 ccxt 内建限流，自动按交易所的 `rateLimit` 间隔（Binance ≈50ms/req），免除业务层限流压力。
+3. **符号规范强约束**：`BTC/USDT` 而非 `BTCUSDT`；timeframe 白名单校验，非法值降级为 `1d`。
+4. **默认 Binance**：作为加密货币 BTC/USDT 基准深度最佳的交易所；支持通过 `exchange_id` 构造切换。
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/ccxt_adapter.py` | 新建 | [NEW-FILE:#20260415-11] |
+| `tests/adapters/test_ccxt_adapter.py` | 新建 | — (测试文件) |
+| `app/adapters/__init__.py` | 修改 | 导出 CCXTAdapter |
+| `app/adapters/README.md` | 修改 | 领地标记 |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 修改 | 本章节追加 |
+
+**对外接口**：
+
+- `CCXTAdapter(exchange_id="binance")` — 默认 Binance，可切换任意 ccxt 支持的交易所
+- `get_ticker(symbol) -> dict` — fetch_ticker，last/bid/ask/high/low/volume
+- `get_ohlcv(symbol, timeframe="1d", limit=100) -> pd.DataFrame` — 标准 OHLCV DataFrame
+- `get_order_book(symbol, limit=20) -> dict` — bids/asks/timestamp
+- `list_markets() -> pd.DataFrame` — 全交易对清单（symbol/base/quote/active/type）
+- `health_check()` / `name="ccxt:{exchange_id}"` — fallback_manager 接入
+- Base 契约：`get_stock_history` 按日期区间裁剪 OHLCV；`get_financial_data/get_index_stocks` 返回空（加密无此概念）
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_ccxt_adapter.py -v` → **12 passed**
+  - 可用性 × 2：未装降级 / name
+  - Ticker × 2：正常 / 异常降级
+  - OHLCV × 3：正常 DataFrame / 非法 timeframe 降级 / 空响应
+  - OrderBook+Markets × 3：盘口解析 / 市场列表 / health_check
+  - Base 契约 × 2：日期过滤 / get_index_stocks 空
+  - 全程 mock `ccxt.binance`，**不发真实请求**
+- 集成：加入 `app/adapters/__init__.py` 导出 + README 领地表登记
+- 端到端：留待 P1 fallback_manager + agent 调度回归
+
+**Git 提交**：
+- commit1: `feat(adapter): ccxt+CoinGecko加密货币市场 [NEW-FILE:#20260415-11,12]`
+- commit2: `docs(data): P1-A9/A10追溯`
+
+**关键设计决策**：
+1. **ccxt 而非交易所私有 SDK**：统一接口，一次代码覆盖 Binance/OKX/Coinbase/Kraken 100+交易所；切换成本为零
+2. **内建限流**：`enableRateLimit=True` 委托 ccxt 处理，避免重复造轮子
+3. **`timestamp` 字段保留**：OHLCV 保留 ms 时间戳 + `date` 人类可读列，方便时序 join
+4. **健康检查用 `load_markets`**：比 `fetch_ticker` 更稳定，不依赖特定交易对
+
+---
+
+### A10 CoinGecko [2026-04-15]
+
+**任务**：P1-A10 — CoinGecko 公开 API 加密货币市场概览
+**时间基准**：2026-04-15 12:00 +08:00 (Asia/Singapore)
+**执行者**：agent team (A10) / 验收：🌿 香草少校
+
+**联网调研（≥3 权威源交叉验证）**：
+
+| # | 来源 | URL | 版本/日期 | 采纳 |
+|---|------|-----|---------|------|
+| 1 | CoinGecko 官方 API 文档 | https://www.coingecko.com/api/documentation | 官方现行 | 端点结构 + 免费层政策 |
+| 2 | CoinGecko API Reference | https://docs.coingecko.com/reference/introduction | 官方 Demo Plan | **30 calls/min** 硬上限 |
+| 3 | pycoingecko Python SDK | https://github.com/man-c/pycoingecko | MIT, v3.x | 端点映射参考实现 |
+| 4 | PyPI pycoingecko | https://pypi.org/project/pycoingecko/ | 稳定版 | 端点兼容矩阵 |
+
+**关键约束**：
+
+1. **无 API Key**：免费 Demo 层纯 HTTP GET，无需鉴权；`User-Agent: StockAnalSys/CoinGeckoAdapter`。
+2. **限流 ≤30 req/min**：`_MIN_INTERVAL = 2.1s`（留余量），线程安全锁保证并发调用下也守约；`429` 触发 2s 退避。
+3. **纯 requests 无软依赖**：不引入 pycoingecko，减少依赖面（项目已有 requests）。
+4. **端点覆盖**：`/simple/price` `/coins/{id}/market_chart` `/search/trending` `/global` `/ping`（健康检查）。
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/coingecko_adapter.py` | 新建 | [NEW-FILE:#20260415-12] |
+| `tests/adapters/test_coingecko_adapter.py` | 新建 | — (测试文件) |
+| `app/adapters/__init__.py` | 修改 | 导出 CoinGeckoAdapter |
+| `app/adapters/README.md` | 修改 | 领地标记 |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 修改 | 本章节追加 |
+
+**对外接口**：
+
+- `CoinGeckoAdapter(timeout=15)` — 无需 Key
+- `get_price(coin_ids, vs="usd") -> dict` — `/simple/price` 批量价格
+- `get_market_chart(coin_id, days=30, vs="usd") -> pd.DataFrame` — `/coins/{id}/market_chart` 含 price/market_cap/volume 三列
+- `get_trending() -> list[dict]` — `/search/trending` 24h 热搜榜
+- `get_global() -> dict` — `/global` 总市值+BTC/ETH 占比+活跃币种数
+- `health_check()` — `/ping` `gecko_says` 判活
+- `name="coingecko"` 供 fallback_manager 调度
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_coingecko_adapter.py -v` → **12 passed**
+  - Price × 3：正常批量 / 空 coin_ids 短路 / 429 降级
+  - MarketChart × 2：完整 DataFrame 解析 / 空响应
+  - Trending + Global × 2：item 解构 / data inner 解构
+  - 限流 × 1：连续调用触发 sleep
+  - 契约 × 4：health_check / get_stock_info 委托 / financial 空 / index 空
+  - 全程 mock `requests.get`，**不发真实请求**
+- 集成：加入 `__init__.py` 导出 + README 登记
+- 端到端：留待 fallback_manager 回归
+
+**Git 提交**：
+- commit1: `feat(adapter): ccxt+CoinGecko加密货币市场 [NEW-FILE:#20260415-11,12]`
+- commit2: `docs(data): P1-A9/A10追溯`
+
+**关键设计决策**：
+1. **与 ccxt 互补**：ccxt 偏交易所微观（深度/分笔），CoinGecko 偏宏观（总市值/趋势/跨交易所聚合价），两者形成完整加密画像
+2. **线程安全限流**：`threading.Lock` + 时间戳比较，保证 agent 并发调度下不超 30/min
+3. **`/global` 扁平化**：CoinGecko 原始结构 `data.total_market_cap.usd` 三级嵌套，扁平成 `total_market_cap_usd` 单键，Agent 直接消费
+4. **`_MIN_INTERVAL=2.1`**：30/min ≈ 2.0s/req，加 5% 余量防抖

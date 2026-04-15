@@ -14,6 +14,11 @@
 | `yfinance_adapter.py` | 跨市场(P0-A3 2026-04-15) | yfinance港美股+日股+ETF+期权链；未装yfinance降级为空 [NEW-FILE:#20260415-05] |
 | `edgar_adapter.py` | 美股基本面(P0-A4 2026-04-15) | SEC EDGAR官方XBRL：申报历史/companyfacts/concept；10req/s限流+UA规范 |
 | `nbs_adapter.py` | 国内宏观(P1-A6 2026-04-15) | 国家统计局easyquery：GDP/CPI/PMI/工业；无Key+UA伪装+3重试 [NEW-FILE:#20260415-08] |
+| `fred_adapter.py` | 全球宏观(P1-A5 2026-04-15) | FRED St.Louis Fed 80万+序列：get_series/search/release/common_indicators；免费Key+fredapi软依赖降级 [NEW-FILE:#20260415-07] |
+| `ccxt_adapter.py` | 加密货币(P1-A9 2026-04-15) | ccxt 100+交易所统一接口：ticker/ohlcv/order_book/markets；未装ccxt降级为空 [NEW-FILE:#20260415-11] |
+| `coingecko_adapter.py` | 加密市场概览(P1-A10 2026-04-15) | CoinGecko公开API：价格/市值图/趋势/全球总览；限流≤30/min无需Key [NEW-FILE:#20260415-12] |
+| `worldbank_adapter.py` | 世界银行(P1-A7 2026-04-15) | World Bank Open Data：get_indicator时序/list_indicators搜索/compare_countries横向对比；无Key免费 [NEW-FILE:#20260415-09] |
+| `imf_adapter.py` | 国际货币基金(P1-A8 2026-04-15) | IMF SDMX-JSON REST：get_dataset/get_ifs/get_data_structure，支持IFS/WEO/DOT；无Key免费 [NEW-FILE:#20260415-10] |
 | `__init__.py` | 导出 | 统一入口 |
 
 ## 约定
