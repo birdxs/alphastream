@@ -3394,3 +3394,45 @@ curl -s -m 60 http://127.0.0.1:8888/api/alt_data/AAPL | jq '.artifact.stock_code
 2. `urllib3` / `werkzeug` / `tornado` 传递漏洞统一 patch 升级, 配 pytest 全量回归
 3. `next` 16.2.2 → 16.2.3 major 窗口 (DoS GHSA-q4gf-8mx6-v5v3), 需联动 tsc/build
 4. CI 接入 `npm audit --audit-level=high` + `pip-audit` 每日跑
+
+---
+
+## 🏁 Phase-10 (M+N批) 终极验收 (2026-04-15 15:30 +08:00)
+
+| Agent | 交付 | Commits |
+|---|---|---|
+| M1 e2e真跑 | Playwright脚本+curl验证+暴露3 bug | `71699d5`+`2103ce9` |
+| M2 CI/CD | 3 workflows (ci/smoke-weekly/dependabot)+徽章 | `faf363f`+`d90325c` |
+| M3 安全审计 | npm 5→1漏洞+Python 28包记录+OPS §12 | `97c6e44`+`e4ef6ed` |
+| N1 bug修复 | Registry错误收集+stock_code契约+partial_errors | `4fb644f`+`24205e5`+`f417361` |
+
+### M+N批收益
+- **长期维护保障**: CI自动化每push触发 + 周度冒烟 + dependabot依赖自动PR
+- **安全基线**: npm漏洞从5降到1, Python清单明确, 响应流程入OPS
+- **真用户链路可用**: M1暴露的bug N1全修, alt_data contract 完整
+- **pytest 527** (+6 from N1)
+
+### 数据层v2 一日 10 Phase 终极闭环 ✅
+```
+P0/P1/P2 → C+D → E → F+G → H → I → J → K → L → M+N(维护+修复)
+```
+
+### 📊 Final 终极数值 (2026-04-15 一日作战 108 commits)
+| 维度 | 值 |
+|---|---|
+| Python adapter | 21 + 重试+代理 |
+| Registry domain | 16 (全对齐) |
+| Agent接入 | 12 |
+| Flask API端点 | 13 (10 P3 + 3 监控) |
+| MCP tools | 16 |
+| 前端Artifact | 15 |
+| Docker服务 | 5 |
+| GitHub Workflows | 3 (ci/smoke/dependabot) |
+| Git commits today | **108** |
+| pytest PASS | **527 / 0 FAIL** |
+| smoke v4 | 🟢10/🟡11/🔴0/⚫1 |
+| npm漏洞 | 5→1 (遗留 next major) |
+| 死链 | 0 |
+| 真TODO债 | 0 |
+
+**数据层v2 + 生态MCP + 用户可见UI + CI自动化 + 安全基线 五位一体生产级**
