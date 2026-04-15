@@ -4,6 +4,9 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 // [UI-Q2 2026-04-15 +08:00] 重构为毛玻璃(backdrop-blur-xl + bg-foreground/0.03 + 主题token色彩)，
 //   废弃硬编码 #1E1E1E/#F8F8F8 让项目 Dark Glassmorphism 统一。
+// [UI-Q4 2026-04-15 +08:00] 增加 TypewriterRow 打字机动画 — reasoning/tool_result/progress 文本逐字流入
+//   并识别 type=reasoning 的流式行 (meta.streaming=true) 实时追加 token。仅对最近3条活跃行做动画,
+//   更早的直接显示完成态, 避免百行同时打字机拖慢 UI。
 
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -59,7 +62,8 @@ function eventToLine(ev: AgentEvent): TerminalLine {
       const failed = /fail|error|降级|未|timeout/i.test(ev.detail || "");
       const m = (ev.meta || {}) as { duration_ms?: number };
       const dur = m.duration_ms != null ? `${(m.duration_ms / 1000).toFixed(1)}s` : "";
-      const summary = ev.detail ? ev.detail.slice(0, 60) : "";
+      // [UI-Q4] 零截断 - 完整detail交给TerminalRow渲染, 由Collapsible决定展开
+      const summary = ev.detail || "";
       return {
         ...common,
         kind: failed ? "warn" : "done",
@@ -70,7 +74,11 @@ function eventToLine(ev: AgentEvent): TerminalLine {
     }
     case "reasoning": {
       const detail = ev.detail || ev.title;
-      const text = detail.length > 80 ? detail.slice(0, 80) + "…" : detail;
+      // streaming reasoning: 不截断, 完整展示累积的token流 (由 appendReasoningToken 构建)
+      const isStreaming = !!(ev.meta && (ev.meta as { streaming?: boolean }).streaming);
+      const text = isStreaming
+        ? detail
+        : detail.length > 80 ? detail.slice(0, 80) + "…" : detail;
       return { ...common, kind: "info", text: `💭 ${text}` };
     }
     default:
@@ -99,7 +107,69 @@ const PREFIX_CLASS: Record<TerminalLine["kind"], string> = {
   error:  "text-[#EF4444]",                           // 红
 };
 
-function TerminalRow({ line, isLast }: { line: TerminalLine; isLast: boolean }) {
+/* 打字机动画Hook — 逐字显示text, 速度约 35ms/char (~28 chars/sec)
+ * animate=false 直接返回完整text (不动画), 用于"已完成"或"非活跃"行,
+ * 这样只有最近3条活跃行会做动画, 百条历史直接静态显示, 性能安全。
+ */
+const TYPE_SPEED_MS = 35;
+function useTypewriter(text: string, animate: boolean): { shown: string; done: boolean } {
+  const [len, setLen] = useState<number>(animate ? 0 : text.length);
+  const prevTextRef = useRef<string>(text);
+
+  useEffect(() => {
+    if (!animate) {
+      setLen(text.length);
+      prevTextRef.current = text;
+      return;
+    }
+    // 文本缩短(极少见) → 重置
+    if (text.length < prevTextRef.current.length) {
+      setLen(0);
+    }
+    prevTextRef.current = text;
+    if (len >= text.length) return;
+    const id = setTimeout(() => {
+      setLen((l) => Math.min(l + 1, text.length));
+    }, TYPE_SPEED_MS);
+    return () => clearTimeout(id);
+  }, [text, len, animate]);
+
+  const shown = animate ? text.slice(0, len) : text;
+  return { shown, done: !animate || len >= text.length };
+}
+
+// [UI-Q4] 长文本折叠阈值 — 超过3行或300字符时默认折叠, 点击展开
+const FOLD_LINE_THRESHOLD = 3;
+const FOLD_CHAR_THRESHOLD = 300;
+
+function TerminalRow({
+  line,
+  isLast,
+  animate,
+}: {
+  line: TerminalLine;
+  isLast: boolean;
+  animate: boolean;
+}) {
+  // 仅对文本型行做打字机; start/done/prompt 一行即完整显示
+  const canAnimate = animate && (line.kind === "info" || line.kind === "child" || line.kind === "warn");
+  const { shown, done } = useTypewriter(line.text, canAnimate);
+  const showCursor = isLast || (canAnimate && !done);
+
+  // 折叠控制
+  const fullLines = shown.split("\n");
+  const isLong = fullLines.length > FOLD_LINE_THRESHOLD || shown.length > FOLD_CHAR_THRESHOLD;
+  const [expanded, setExpanded] = useState(false);
+  const displayText = !isLong || expanded
+    ? shown
+    : fullLines.slice(0, FOLD_LINE_THRESHOLD).join("\n") +
+      (fullLines.length > FOLD_LINE_THRESHOLD ? "\n..." : "");
+  const hiddenCount = isLong
+    ? (fullLines.length - FOLD_LINE_THRESHOLD > 0
+        ? `${fullLines.length - FOLD_LINE_THRESHOLD}行`
+        : `${shown.length - FOLD_CHAR_THRESHOLD}字`)
+    : "";
+
   return (
     <div className="flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1 duration-300 whitespace-pre-wrap break-words rounded px-1 -mx-1 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors">
       <span className="shrink-0 tabular-nums select-none text-foreground/40 text-[11px] pt-[1px]">
@@ -107,9 +177,18 @@ function TerminalRow({ line, isLast }: { line: TerminalLine; isLast: boolean }) 
       </span>
       <span className="min-w-0 flex-1 text-foreground/85">
         <span className={PREFIX_CLASS[line.kind]}>{PREFIX[line.kind]}</span>
-        <span>{line.text}</span>
-        {isLast && (
+        <span>{displayText}</span>
+        {showCursor && (
           <span className="inline-block w-[6px] h-[12px] ml-1 align-middle bg-[#3737CC] dark:bg-[#7F7FFF] animate-[blink_1s_step-end_infinite]" />
+        )}
+        {isLong && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="ml-2 text-[10px] text-[#3737CC] dark:text-[#7F7FFF] hover:underline select-none"
+          >
+            {expanded ? "收起" : `展开${hiddenCount}`}
+          </button>
         )}
       </span>
     </div>
@@ -281,13 +360,18 @@ export function AgentSidePanel() {
         className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-0.5 agent-term-scroll bg-transparent"
         style={{ fontSize: "12px", lineHeight: "1.65" }}
       >
-        {lines.map((line, idx) => (
-          <TerminalRow
-            key={line.id}
-            line={line}
-            isLast={idx === lines.length - 1 && isAnalyzing}
-          />
-        ))}
+        {lines.map((line, idx) => {
+          // 仅对"最近3条"做打字机动画, 更早的直接显示完成态, 防止百行同时打字机卡顿
+          const animate = isAnalyzing && idx >= lines.length - 3;
+          return (
+            <TerminalRow
+              key={line.id}
+              line={line}
+              isLast={idx === lines.length - 1 && isAnalyzing}
+              animate={animate}
+            />
+          );
+        })}
       </div>
 
       {/* 底部状态栏 */}
