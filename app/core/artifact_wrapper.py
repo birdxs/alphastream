@@ -976,7 +976,8 @@ def wrap_alt_data_v2(stock_name: str,
                      shipping: Optional[Dict[str, Any]] = None,
                      esg: Optional[Dict[str, Any]] = None,
                      hiring: Optional[Dict[str, Any]] = None,
-                     corporate: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                     corporate: Optional[Dict[str, Any]] = None,
+                     stock_code: Optional[str] = None) -> Dict[str, Any]:
     """另类数据聚合 Artifact 包装 (4子域Tab) — 对齐 alt-data-panel.tsx 字段契约
 
     前端契约 (frontend/src/components/artifacts/alt-data-panel.tsx):
@@ -1013,5 +1014,6 @@ def wrap_alt_data_v2(stock_name: str,
         "type": "alt_data",
         "title": f"{stock_name} 另类数据聚合".strip() or "另类数据聚合",
         "stock_name": stock_name or "",
+        "stock_code": stock_code or stock_name or "",  # [N1] 契约透传, 避免 None
         "data": data,
     }

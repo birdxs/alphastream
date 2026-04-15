@@ -3461,7 +3461,13 @@ def api_satellite_search():
 # -------- Alt Data Aggregate --------
 @app.route('/api/alt_data/<string:ticker>', methods=['GET'])
 def api_alt_data(ticker: str):
-    """聚合另类数据: shipping(BDI) + esg + hiring + corporate. 部分失败不阻断。"""
+    """聚合另类数据: shipping(BDI) + esg + hiring + corporate. 部分失败不阻断。
+
+    [N1 2026-04-15 15:18 +08:00] 修复:
+      - P0: errors 记录 type+message+tried, 避免 details 空字符串
+      - P1: stock_code 正确透传到 artifact
+      - P1: 每个 domain 独立记录到 partial_errors/details, 无静默丢失
+    """
     from app.core.artifact_wrapper import (
         wrap_shipping_v2, wrap_esg_v2, wrap_hiring_v2,
         wrap_alt_data_v2, _build_p3_artifact,
@@ -3470,37 +3476,42 @@ def api_alt_data(ticker: str):
         return _p3_error("ticker非法", 400)
 
     shipping = esg = hiring = corp = None
-    errors = {}
+    errors = {}  # type: ignore[var-annotated]
 
-    try:
-        shipping = _p3_call_with_timeout(
-            "commodity_shipping", "get_bdi_index", timeout=15, days=30
-        )
-    except Exception as e:
-        errors["shipping"] = str(e)
+    def _fmt_err(exc: Exception) -> str:
+        """标准化错误消息: 含 type + message, 至少不空。"""
+        msg = str(exc) if exc is not None else ""
+        tname = type(exc).__name__ if exc is not None else "UnknownError"
+        if not msg:
+            msg = f"{tname}: <no message>"
+        else:
+            msg = f"{tname}: {msg}"
+        return msg[:500]
 
-    try:
-        esg = _p3_call_with_timeout(
-            "esg_rating", "get_esg_score", timeout=15, ticker=ticker
-        )
-    except Exception as e:
-        errors["esg"] = str(e)
+    _subtasks = [
+        ("shipping",  "commodity_shipping", "get_bdi_index",       {"days": 30}),
+        ("esg",       "esg_rating",         "get_esg_score",       {"ticker": ticker}),
+        ("hiring",    "hiring_signal",      "get_company_postings", {"company": ticker}),
+        ("corporate", "corporate_entity",   "search_company",       {"name": ticker}),
+    ]
+    _results = {"shipping": None, "esg": None, "hiring": None, "corporate": None}
+    for key, domain, method, kw in _subtasks:
+        try:
+            _results[key] = _p3_call_with_timeout(domain, method, timeout=15, **kw)
+        except Exception as e:
+            errors[key] = _fmt_err(e)
+            app.logger.info(f"[alt_data] {key}({domain}.{method}) 失败: {errors[key]}")
+    shipping = _results["shipping"]
+    esg      = _results["esg"]
+    hiring   = _results["hiring"]
+    corp     = _results["corporate"]
 
-    try:
-        hiring = _p3_call_with_timeout(
-            "hiring_signal", "get_company_postings", timeout=15, company=ticker
-        )
-    except Exception as e:
-        errors["hiring"] = str(e)
-
-    try:
-        corp = _p3_call_with_timeout(
-            "corporate_entity", "search_company", timeout=15, name=ticker
-        )
-    except Exception as e:
-        errors["corporate"] = str(e)
-
+    # 4域全败 → 502 + 完整 details (每个 domain 至少有 type+msg, 不空串)
     if all(v is None for v in (shipping, esg, hiring, corp)):
+        # 确保 4 个 domain 都在 details 中 (若某域既无异常也返回 None, 补占位)
+        for k in ("shipping", "esg", "hiring", "corporate"):
+            if k not in errors or not errors[k]:
+                errors[k] = "Unknown: 返回空且未抛异常"
         return _p3_error("所有另类数据源均失败", 502, details=errors)
 
     # 各子域 adapter 原始结果 → v2 包装 dict → wrap_alt_data_v2 聚合
@@ -3535,12 +3546,17 @@ def api_alt_data(ticker: str):
 
     aggregated = wrap_alt_data_v2(
         stock_name=ticker,
+        stock_code=ticker,
         shipping=shipping_wrapped,
         esg=esg_wrapped,
         hiring=hiring_wrapped,
         corporate=corp_wrapped,
     )
     filled = sum(1 for v in (shipping_wrapped, esg_wrapped, hiring_wrapped, corp_wrapped) if v)
+    # [N1] 4 domain 均进入 data (失败/空值 → None 占位, 前端可明确感知)
+    for k in ("shipping", "esg", "hiring", "corporate"):
+        if k not in aggregated.get("data", {}):
+            aggregated.setdefault("data", {})[k] = None
     # 补充 F3 兼容元数据字段
     aggregated["artifact_type"] = "alt_data_aggregate"
     aggregated["metadata"] = {
