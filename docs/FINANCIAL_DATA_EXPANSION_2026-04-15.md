@@ -880,3 +880,65 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 2. **中文数字解析**：`"1.2万"` 统一 `toInt()` 处理 `万` 乘以 10000
 3. **Strategy.COOKIE**：三站均需浏览器会话，沿用 hot-rank PR#1025 模式
 4. **Python侧入参校验前置**：`code` 非6位数字直接降级，避免无意义 Node 启动开销
+
+---
+
+### B3 RSS新闻聚合 [2026-04-15]
+
+**检索时间基准**：2026-04-15 12:30 +08:00 (Asia/Singapore)
+
+**交付文件**：
+- `app/adapters/rss_news_adapter.py` **[NEW-FILE:#20260415-19]** (RSSNewsAdapter 继承 BaseAdapter)
+- `tests/adapters/test_rss_news_adapter.py` (12 mock 单元测试, **12/12 PASS**, 0.80s)
+- `app/adapters/__init__.py` 导出
+- `app/adapters/README.md` 追加条目
+
+**权威源交叉验证 (≥6)**：
+
+| # | 来源 | URL | 版本/发布 | 采用 |
+|---|---|---|---|---|
+| 1 | feedparser (MIT, 2k+⭐) | https://github.com/kurtmckee/feedparser | v6.0.11 (2024-03) | 采用：Atom/RSS 统一解析；软依赖降级 |
+| 2 | feedparser PyPI | https://pypi.org/project/feedparser/ | v6.0.11 | 采用：官方发行渠道 |
+| 3 | 新浪财经官方RSS | https://rss.sina.com.cn/news/allnews/finance.xml | 存活 (财经滚动) | 采用：唯一保留官方原生RSS的大厂 |
+| 4 | RSShub (MIT, 32k+⭐) | https://docs.rsshub.app/ | 路由文档 | 采用：代理华尔街见闻/财联社/雪球/金融界/央视财经 |
+| 5 | 华尔街见闻 wallstreetcn.com | https://rsshub.app/wallstreetcn/news/global | RSShub 路由 | 采用：官网无RSS |
+| 6 | 财联社电报 | https://rsshub.app/cls/telegraph | RSShub 路由 | 采用 |
+| 7 | 雪球头条 | https://rsshub.app/xueqiu/hots | RSShub 路由 xqtl | 采用：官方无公开RSS |
+| 8 | 金融界 | https://rsshub.app/jrj/news/list | RSShub 路由 | 采用：旧版 rss.jrj.com.cn 已下线 |
+| 9 | 央视财经 | https://rsshub.app/cctv/caijing | RSShub 路由 | 补充主流媒体源 |
+
+**fallback 策略**：主 URL (`rsshub.app`) 失败 → fallback (`rsshub.rssforever.com` 镜像) 二次尝试。新浪则反向 fallback 到 RSShub 代理。
+
+**核心能力**：
+- `get_feed(source, limit=50)` 单源抓取
+- `get_all_feeds(sources=None, limit_per_source=50)` 并发聚合 + 标题 sha1 去重
+- `search_news(keyword, sources=None)` 关键词过滤 (title/summary/tags 任一命中)
+- 输出字段: `{source, title, link, published, summary, author, tags}`
+- 并发：`ThreadPoolExecutor(max_workers=4)`
+- 韧性：超时 10s + 3 次重试 + UA 伪装池 (Chrome/Safari/Linux)
+- 降级：`feedparser` 未装 → `_HAS_FEEDPARSER=False` → 空 DF + 日志警告；不崩栈
+
+**测试覆盖 (12 PASS)**：
+1. FEED_SOURCES 6源完整性
+2. 未知源返回空DF
+3. 正常抓取 + tags 解析
+4. 主URL失败 → fallback 成功
+5. limit 截断
+6. 并发聚合 + 标题去重
+7. 过滤非法源
+8. 关键词命中 title/summary
+9. 空关键词返回全部
+10. feedparser 未装降级
+11. BaseAdapter 契约（K线/成分股/信息/财务空实现）
+12. _parse_feed 重试至第 3 次成功
+
+**Git 提交**：
+- commit1: `feat(adapter): RSS新闻聚合(华尔街/财联社/雪球/新浪/金融界) [NEW-FILE:#20260415-19]`
+- commit2: `docs(data): P2-B3追溯`
+
+**关键设计决策**：
+1. **官方优先 + RSShub 兜底**：仅新浪财经有原生 RSS，其余 5 站全走 RSShub 公共代理（含镜像备选）
+2. **feedparser 软依赖**：未装不影响其他 adapter；一律空 DF + warning
+3. **标题哈希去重**：同一事件多源首发常标题雷同，sha1 折叠避免重复消费；保留首条
+4. **BaseAdapter 契约**：K线/成分股/信息/财务均返回空，仅 `health_check` 反映 feedparser 可用性
+5. **纯 mock 测试**：`feedparser.parse` 和 `_parse_feed` 双层 monkeypatch，零真实网络，CI 稳定
