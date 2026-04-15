@@ -2637,3 +2637,98 @@ Phase-7(J): 16域全对齐+浏览器端到端+pytest 460/0
 | 5 免费Key字段 | 预留待申请 |
 
 **v2方案一日7 Phase完整闭环. 数据全通. 前后端对齐. 无遗漏功能**
+
+---
+
+## K2 生产级docker-compose整合 [2026-04-15 14:45 +08:00]
+
+### 拓扑 (5服务)
+
+```
+         Internet
+            │
+      ┌─────┴─────┐
+      │  nginx    │  80/443 (SSL终结 + 安全头 + gzip)
+      │ 1.27-alpine│
+      └──┬─────┬──┘
+         │     │
+    ┌────▼─┐ ┌─▼────────┐
+    │front │ │ backend  │
+    │ :3000│ │  :8888   │
+    │Next16│ │Flask+gun │
+    │stand.│ │4workers  │
+    └──────┘ └────┬─────┘
+                  │
+               ┌──▼──┐
+               │redis│ :6379 (LRU 512MB + AOF)
+               │  7  │
+               └─────┘
+   [可选 opencli:4000 via --profile opencli]
+
+内网: stockanal_net (bridge)
+对外: 仅 nginx 80/443
+```
+
+### 服务/端口/Volume表
+
+| 服务 | 镜像 | 对外端口 | 内网expose | Volume | depends_on |
+|---|---|---|---|---|---|
+| backend | stockanal-backend:prod (build Dockerfile) | — | 8888 | `./logs` `./data` `./third_party:ro` | redis |
+| frontend | stockanal-frontend:prod (build frontend/Dockerfile) | — | 3000 | — | backend |
+| redis | redis:7-alpine | — | 6379 | `redis_data` (named) | — |
+| nginx | nginx:1.27-alpine | **80/443** | — | `./nginx/prod.conf:ro` `./nginx/ssl:ro` `./logs/nginx` | frontend, backend |
+| opencli | stockanal-opencli:prod | — | 4000 | — | — (profile `opencli`) |
+
+### 环境变量透传 (`.env` → backend)
+
+| 类别 | 变量 |
+|---|---|
+| AI | `OPENAI_API_KEY` `OPENAI_API_URL` `OPENAI_API_MODEL` `NEWS_MODEL` `EMBEDDING_MODEL` |
+| 数据层v2 Key | `FRED_API_KEY` `OPENCORPORATES_API_KEY` `SEC_EDGAR_UA` `AISHUB_USERNAME` |
+| 搜索 | `TAVILY_API_KEY` `SERP_API_KEY` `FINNHUB_API_KEY` |
+| H4代理 | `HTTP_PROXY` `HTTPS_PROXY` `NO_PROXY` (默认补 `redis,frontend,backend`) |
+| 运行时 | `FLASK_ENV=production` `USE_AGENT_SYSTEM=true` `USE_REDIS_CACHE=true` `REDIS_URL=redis://redis:6379` |
+
+### 新建文件清单 (3个, 含NEW-FILE审批理由)
+
+| 路径 | 标签 | 理由 |
+|---|---|---|
+| `docker-compose.prod.yml` | `[NEW-FILE:#20260415-46]` | 现有 `docker-compose.yml`(单backend+redis) 和 `docker-compose.frontend.yml`(无Redis/无健康检查/无网络) 均非生产完整拓扑; 合并式修改会破坏开发场景兼容, 故独立新建. 保留原有2个yml作为开发备用. |
+| `nginx/prod.conf` | `[NEW-FILE:#20260415-47]` | 现有 `nginx/default.conf` 为开发模板(无SSL/无HSTS/无upstream keepalive/无HTTPS server块). 生产需独立prod配置: HTTP→HTTPS跳转占位 + 443 TLS1.2/1.3 + HSTS + gzip完整 + SSE长连接600s. 不破坏原default.conf. |
+| `frontend/Dockerfile` | 已存在(复用) | standalone模式3-stage已就绪, 无需新建. |
+
+### `.dockerignore` 增强
+- 原仅排除 `__pycache__/*.pyc/.git/.env/docs/images/*.md/data`
+- 新增: `logs/` `eval_results/` `frontend/node_modules/` `frontend/.next/` `tests/` `.pytest_cache/` `.ruff_cache/` `third_party/` `.idea/.vscode/.DS_Store` `*.log *.tmp *.swp`
+- 效果: backend镜像构建上下文缩减, 避免密钥/日志意外进镜像
+
+### 启动命令 (Quick Start)
+
+```bash
+cp .env-example .env && vi .env
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs -f
+curl http://localhost/api/market_indices
+```
+
+### 健康检查策略
+- backend: `urllib GET /api/market_indices` every 30s, start_period 60s, retries 3
+- redis: `redis-cli ping` every 30s
+- nginx/frontend: 依赖上游健康, 无独立check
+
+### SSL占位
+- `nginx/ssl/` 目录挂载, 文件由 Comdr 放入 (`fullchain.pem` + `privkey.pem`)
+- 配置就绪后取消 `nginx/prod.conf` 中 443 server 块和 `return 301` 的注释即可
+- ACME challenge 路径已预留 (`/.well-known/acme-challenge/`)
+
+### 未执行项 (按K2约束)
+- 未执行 `docker build` / `docker compose up` (仅落盘yml+文档)
+- 未清理 `docker-compose.yml` `docker-compose.frontend.yml` (保留为dev用途, 文档标注)
+- SSL证书由Comdr后续配置
+
+### 回滚
+```bash
+docker compose -f docker-compose.prod.yml down
+git revert <此commit>   # 代码层
+```
+

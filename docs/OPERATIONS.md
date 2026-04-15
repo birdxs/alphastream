@@ -31,12 +31,54 @@ npm run build && npm start      # 生产模式 (H1已验证 next build全绿)
 
 前端通过 `NEXT_PUBLIC_API_BASE` 代理到 `http://localhost:8888`。
 
-### 1.3 Docker 一键
+### 1.3 Docker 一键 (开发)
 
 ```bash
 docker-compose up -d                                   # 后端
 docker-compose -f docker-compose.frontend.yml up -d    # 前端
 ```
+
+### 1.4 Docker 生产启动 (K2整合版, 推荐)
+
+一键启动 5 服务拓扑 (backend + frontend + redis + nginx + [opencli可选])：
+
+```bash
+# 1) 配置环境变量 (首次)
+cp .env-example .env
+vi .env    # 编辑 OPENAI_API_KEY / FRED_API_KEY / HTTP_PROXY 等
+
+# 2) SSL证书 (可选, 未配置走80端口HTTP模式)
+mkdir -p nginx/ssl
+cp /path/to/fullchain.pem nginx/ssl/
+cp /path/to/privkey.pem  nginx/ssl/
+# 然后编辑 nginx/prod.conf 取消 443 server 块注释 + return 301 跳转
+
+# 3) 构建并启动 (首次+全服务)
+docker compose -f docker-compose.prod.yml up -d --build
+
+# 4) 实时日志
+docker compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f backend   # 单服务
+
+# 5) 健康检查
+curl http://localhost/api/market_indices                    # via nginx
+docker compose -f docker-compose.prod.yml ps                # 服务状态
+docker inspect --format='{{.State.Health.Status}}' stockanal_backend
+
+# 6) 滚动更新 (仅重启 backend, 不中断其他)
+docker compose -f docker-compose.prod.yml up -d --build --no-deps backend
+
+# 7) 停止 / 清理
+docker compose -f docker-compose.prod.yml down              # 保留volume
+docker compose -f docker-compose.prod.yml down -v           # 清空redis持久化
+
+# 8) OpenCLI桥(可选)
+docker compose -f docker-compose.prod.yml --profile opencli up -d
+```
+
+**端口映射**: 对外仅暴露 nginx `80/443`, 后端/前端/Redis 均走内网 `stockanal_net`。
+
+**Volume**: `./logs` `./data` `./third_party` `./nginx/ssl` `./nginx/prod.conf` 宿主挂载; `redis_data` 持久化。
 
 ---
 
@@ -181,6 +223,39 @@ hitl (Human-in-the-Loop) — 正交审批
 调试工具：
 - `AdapterRegistry.default().get_status()` — 查各域注册与失败计数。
 - `scripts/smoke_adapters.py` — 真网络冒烟 (授权后运行)。
+
+### 健康检查 / 监控端点 (K3 2026-04-15 14:32 +08:00)
+
+| 端点 | 用途 | SLA |
+|---|---|---|
+| `GET /health` | 基础存活 (docker HEALTHCHECK / nginx upstream) | <100ms |
+| `GET /api/adapters/status` | 21 个 adapter 逐一 health_check | 10s (每 adapter 5s) |
+| `GET /api/registry/stats` | 16 domain × adapter 注册映射 + fail_count | <50ms |
+
+示例:
+```bash
+# 基础存活
+curl http://localhost:8888/health
+# → {"status":"ok","uptime_s":123.45,"version":"3.1.0","ts":1744698720}
+
+# 找出不健康的 adapter
+curl -s http://localhost:8888/api/adapters/status \
+  | jq '.adapters | to_entries[] | select(.value.ok==false) | {adapter: .key, msg: .value.msg}'
+
+# 查看 16 domain 可用实例
+curl -s http://localhost:8888/api/registry/stats \
+  | jq '.domains[] | {name, available_count, first_available}'
+```
+
+docker-compose.prod.yml 建议 HEALTHCHECK:
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-fsS", "http://localhost:8888/health"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+```
 
 ---
 
