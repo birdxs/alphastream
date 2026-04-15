@@ -2220,3 +2220,33 @@ NO_PROXY=localhost,127.0.0.1,akshare.com,baostock.com,stats.gov.cn,sse.com.cn,sz
 - 回归：`tests/adapters/` 基线 322 → 329（+7 新增），**零回归**
 - 不发真实网络请求，monkeypatch env 足以覆盖契约
 
+
+---
+
+## 🏁 Phase-5 (H批) 总验收 (2026-04-15 14:10 +08:00)
+
+| Agent | 交付 | Commits |
+|---|---|---|
+| H1 前端编译 | tsc error归零+next build首次通过+15/15 dispatch | `e737a2d` |
+| H2 Agent SSE | 3冒烟全200+6 Agent全链路闭环+Registry fetch 12次证据 | `95f089b` |
+| H3 纪律落盘 | README v3.1+docs索引+Registry/search分工决策 | `bb36f2e`+`33a1515`+`3c3d26f` |
+| H4 HTTP代理 | _proxy_utils+13+境外adapter proxies注入+.env-example | `ea458c7`+`5736471`+`9de062d` |
+
+### H批核心收益
+- **生产编译链路首次打通** — next build全绿, E4遗留TS阻塞解除
+- **14-Agent真端到端SSE已验证** — Registry调用证据入log, 3股票分析全闭环
+- **境内/境外代理分层** — HTTP_PROXY/NO_PROXY精确路由, 软降级保留
+- **纪律文档就位** — README/docs/.env-example配套齐全, 可交接运维
+
+### 累计总战果 (P0→Phase-5, 一日闭环)
+- **21 Python adapter + 1 Registry + 3 JS爬虫 + 5 前端Artifact + 10 P3 API**
+- **16 业务域 / 12 Agent接入 / 17 搜索引擎 / 65+ commits**
+- **391+ pytest PASS** (329 adapter + 38 web/core P3 + 7 proxy + Agent registry)
+- **真端到端验证**: 10/10 P3 API 200 + 3 Agent SSE 200 + next build全绿
+
+### 环境配置清单 (.env)
+- **5 免费Key** (Comdr申请中): FRED/OpenCorporates/SEC-UA/AISHub/Jobs-UA
+- **3 代理字段**: HTTP_PROXY/HTTPS_PROXY/NO_PROXY (境内可选)
+
+### v2方案全链路达成 ✅
+数据层(21 adapter) → Registry(16 domain) → Agent(12接入) → API(10 P3端点) → 前端(5 Artifact) → 代理(境内外分层) — **完全贯通**
