@@ -3725,3 +3725,79 @@ const SSE_BASE = ... || (window.location.hostname === 'localhost' ? 'http://loca
 - [ ] Comdr 实测：浏览器 DevTools Network 可见 `/api/ai/chat` POST 发出
 - [ ] Comdr 实测：终端面板从 192.168.43.125:3000 访问显示毛玻璃, 背景能透出主题色
 
+
+---
+
+## UI-Q3 细粒度事件接通 [2026-04-15 20:55 +08:00]
+
+**问题**: Mac终端Agent面板只显示 `agent_started / agent_completed` 两条粗线, 看不到每个agent内部的工具调用/推理中间事件。
+
+**根因**: backend `app/core/event_bus.py` 虽定义了 `EVENT_TOOL_CALL_START / RESULT / REASONING` 常量, 但 `chat_with_tools()` (非流式, agent-analyze路径主用) 执行工具时只 `logger.info('执行工具:...')`, **从未 publish 到 event_bus**, 故 SSE 桥接队列收不到→前端 store 无细粒度事件。
+
+### 事件链路图 (修复后)
+
+```
+app/core/ai_client.py::chat_with_tools              (每个Agent内部工具调用)
+        │ publish tool_call_start                    ┐
+        │ publish tool_call_result                   │
+        ▼                                            │
+app/core/event_bus.py::EventBus.publish             │
+        │                                            │
+        ├─→ _subscribers (同步回调, 既有)             │
+        │                                            │  ┐
+        └─→ _sse_bridges (队列桥接, filter=None全通过)│  │
+                │                                    │  │
+                ▼                                    │  │
+app/web/web_server.py::/api/agent-analyze-stream    │  │
+        bridge_queue.get() → yield emit(event_type) │  │
+                │                                    │  │
+                ▼ SSE                                │  │
+frontend/src/lib/api/client.ts switch(type)         │  │
+        case 'tool_call_start' → onToolCallStart    │  │
+        case 'tool_call_result' → onToolCallResult  │  │
+        case 'reasoning' → onReasoning              │  │
+                │                                    │  │
+                ▼                                    │  │
+frontend/src/lib/hooks/use-chat-stream.ts           │  │
+        agentStore.appendEvent({type, meta...})     │  │
+                │                                    │  │
+                ▼                                    │  │
+frontend/src/components/agent/agent-side-panel.tsx  │  │
+        eventToLine(ev) → TerminalRow (渲染)         │  │
+                                                     ┘  │
+                                                        │
+app/agents/coordinator.py::_wrap_with_events            │
+        publish reasoning (agent 开始时)  ──────────────┘
+```
+
+### 新增 publish 位置
+
+| 位置 | 事件 | 触发时机 | 载荷 |
+|---|---|---|---|
+| `app/core/ai_client.py::chat_with_tools` line ~159 | `tool.call.start` | 每个工具执行前 | `{tool_call_id, tool_name, arguments}` |
+| `app/core/ai_client.py::chat_with_tools` line ~192 | `tool.call.result` | 工具执行完 | `{tool_call_id, tool_name, result_summary(≤200字), duration_ms}` |
+| `app/core/ai_client.py::chat_with_tools_stream` line ~380 | `tool.call.start` | 流式模式工具执行前 (同时保持 event_callback) | 同上 |
+| `app/core/ai_client.py::chat_with_tools_stream` line ~395 | `tool.call.result` | 流式模式工具执行完 | 同上 |
+| `app/agents/coordinator.py::_wrap_with_events` line ~30 | `reasoning` | 每个 agent 启动事件后 | `{agent, content: "{agent}开始分析 {stock_code}"}` |
+
+### 前端 eventToLine 映射表 (新/改)
+
+| 事件类型 | 改进前 | 改进后 | 终端渲染样例 |
+|---|---|---|---|
+| `tool_call_start` | `fetching (调用工具 get_xxx)` | `⚙ {tool_name}({args浓缩40字})` | `├─ ⚙ get_technical_indicators(600519,60,MA,RSI)` |
+| `tool_call_result` | `{title} ok/failed` | `✓ {duration秒}s · {summary≤60字}` 或 `✖ {title} — {summary}` | `└─ ✓ 12.3s · {"ma5":15.2,"ma10":14.8,...}` |
+| `reasoning` | `{title}` (即"Agent 思考") | `💭 {detail≤80字 or title}` | `· 💭 技术分析师开始分析 600519` |
+
+### 文件改动
+
+- `app/core/ai_client.py` — `import time`; `chat_with_tools` 加 publish (tool_call_start / tool_call_result, try/except 兜底, 不影响主流程); `chat_with_tools_stream` 加双通道 publish (event_callback + event_bus)
+- `app/agents/coordinator.py` — `_wrap_with_events` 在 agent_started 后追发一条 reasoning 事件
+- `frontend/src/components/agent/agent-side-panel.tsx` — eventToLine 对 `tool_call_start/result/reasoning` 映射升级, 读取 `ev.meta.tool_name/arguments/duration_ms` 渲染成精致终端行
+
+### 约束与安全
+
+- 所有 publish 用 try/except 包裹, event_bus 故障不影响工具链
+- args / result 均截断到 200 字符, 防 SSE 过大
+- 不重启服务 (Comdr 在测), 仅 code change + 文档追溯
+- 前端 store / api client 零改动 (前端早已就位, 只等 backend 发事件)
+
