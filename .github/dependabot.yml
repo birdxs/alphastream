@@ -1,0 +1,26 @@
+# Dependabot 依赖自动更新 — 每周扫描
+# Input  : GitHub 定时扫描 pip / npm / actions 生态
+# Output : 自动 PR (最多 5 个开启 PR)
+# Pos    : .github/dependabot.yml — M2 依赖治理
+# [NEW-FILE:#20260415-54]
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: [dependencies, ci]

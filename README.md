@@ -1,5 +1,8 @@
 # AI-Native 智能金融分析平台（Dark Glassmorphism）
 
+[![CI](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/ci.yml/badge.svg)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/ci.yml)
+[![Adapter Smoke (Weekly)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/adapter-smoke-weekly.yml/badge.svg)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/adapter-smoke-weekly.yml)
+
 ![版本](https://img.shields.io/badge/版本-3.0.0-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
 ![React](https://img.shields.io/badge/React-19-61DAFB.svg)
