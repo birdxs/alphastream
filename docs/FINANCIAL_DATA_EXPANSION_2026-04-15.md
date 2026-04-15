@@ -6,6 +6,19 @@
 
 ---
 
+## P0 批次验收 ✅ (2026-04-15 11:57 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| A1 OpenCLI桥 | `opencli_bridge.py` + 3热榜 | `1a67059` + `236b4db` | 6 mock PASS |
+| A2 efinance | `efinance_adapter.py` (API偏差说明) | `b042d24` + `e0e9eb4` | 19 mock PASS |
+| A3 yfinance | `yfinance_adapter.py` 港美股+ETF+期权 | `1c0df1e` + `aafda10` | 13 mock PASS |
+| A4 SEC EDGAR | `edgar_adapter.py` (10/s限流+UA规范) | `471978a` + `756b643` | 18 mock PASS |
+
+**汇总**：4 adapter + 4 test + 文档追溯，56 mock单测全通过，8 commits入main。下一批启动 P1 (FRED/国统局/世行/ccxt)。
+
+---
+
 ## v2 修订说明 (Comdr 2026-04-15 驳回 v1)
 
 **驳回理由**：v1清单混入 Tushare Pro(积分制)、Finnhub/Alpha Vantage/FMP/polygon.io(Key+商业额度)、Bloomberg/Wind/iFinD(企业账户)，违反"纯开源免费无Key"硬约束。
