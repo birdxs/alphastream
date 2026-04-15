@@ -486,3 +486,45 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 2. **UA 三级覆盖**：构造参数 > env `SEC_EDGAR_UA` > 默认兜底；并做 `' ' in ua and '@' in ua` 格式预警
 3. **revenue tag 回落**：美股 XBRL 不同公司使用的营收 tag 不一致（老 `Revenues` vs ASC 606 后 `RevenueFromContractWithCustomerExcludingAssessedTax`），三级回落保证覆盖率
 4. **抽象方法占位**：EDGAR 不提供 K 线/行情/指数成分，`get_stock_history` 等返回空对象，供 `fallback_manager` 跳过而非抛错
+
+---
+
+### A6 国家统计局NBS [2026-04-15]
+
+**交付**：`app/adapters/nbs_adapter.py` + `tests/adapters/test_nbs_adapter.py` [NEW-FILE:#20260415-08]
+
+**权威源交叉验证 (3+)**：
+1. 国家统计局-国家数据 https://data.stats.gov.cn/ — easyquery.htm 官方接口
+2. 指标树接口 `easyquery.htm?m=getTree&dbcode=<db>&wdcode=zb&id=<parent>` — dbcode 规范：`hgjd`季度/`hgyd`月度/`hgnd`年度/`fsyd`分省月度
+3. GitHub 开源 `awolfly9/stats-gov-cn` + `tushare` 历史爬虫实现 — 确认 `wds=[]` + `dfwds=[{"wdcode":"sj","valuecode":"LAST10"}]` 参数协议
+4. sj 时期编码：`LAST10`/`LAST13` 最近N期；`2023` 指定年；`2020-2023` 区间
+
+**API 能力矩阵**：
+- `query(dbcode, rowcode, colcode="sj", sj="LAST10")` — 通用 easyquery；返回长表 `[date, code, cname, unit, value]`
+- `get_gdp(freq)` — hgjd/A010101 当季值 or hgnd/A020101 年度值
+- `get_cpi(freq)` — hgyd/A01010G01 同比
+- `get_pmi()` — hgyd/A0B0101 制造业PMI
+- `get_industrial_output()` — hgyd/A020102 规上工业同比
+- `health_check()` / `name="nbs"` 供 `fallback_manager` 调度
+- Base 抽象方法（个股/成分股/财务）按宏观源语义返回空
+
+**三重验证**：
+- 单元：`pytest tests/adapters/test_nbs_adapter.py -v` → **12 passed**
+  - query × 3：成功扁平化 / 业务错误 returncode≠200 / HTTP 503 重试3次
+  - 快捷封装 × 4：cpi/gdp(quarterly+yearly)/pmi/industrial 的 dbcode+rowcode 精确断言
+  - Base 契约 × 3：个股方法返回空 / name / health_check pass+fail
+  - Header × 1：UA 浏览器伪装
+  - 纯 mock，不发真实请求
+- 集成：加入 `app/adapters/__init__.py` + README 领地表
+- 端到端：留待 P1 fallback_manager 整合后回归
+
+**Git 提交**：
+- commit1: `feat(adapter): 国家统计局NBS开放接口(GDP/CPI/PMI/工业) [NEW-FILE:#20260415-08]`
+- commit2: `docs(data): P1-A6追溯`
+
+**关键设计决策**：
+1. **无Key但UA伪装**：NBS官方对 `python-requests/*` UA 返回空数据，必须伪装 Chrome UA + Referer
+2. **限流保守1QPS**：官方未公布QPS上限，参考社区实测设最小间隔1s，避免误伤
+3. **长表输出**：NBS原始 JSON 为 `datanodes+wdnodes` 分离结构，适配器内扁平化为 `[date,code,cname,unit,value]` 长表，Agent 层可直接 pivot
+4. **3次重试+退避**：`0.5*n + rand(0.3)` 线性+jitter，匹配 `edgar_adapter` 风格
+5. **`verify=False`**：NBS 站点历史上出现过证书链问题，降级处理；生产可通过参数覆盖
