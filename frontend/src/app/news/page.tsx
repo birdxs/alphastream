@@ -100,23 +100,31 @@ export default function NewsPage() {
         days: "1",
       });
       if (res?.success && res.news?.length) {
+        // 去重逻辑必须放在 updater 外部 —— React StrictMode 下 updater 会双调用，
+        // 若在 updater 内修改 seenKeysRef（副作用），第二次调用时 incoming 全被过滤空，
+        // 导致 allNews 始终为空、终端永远卡在"监听中"。
+        const seen = seenKeysRef.current;
+        const incoming = res.news.filter((n) => {
+          const k = newsKey(n);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        if (incoming.length === 0) {
+          return;
+        }
         setAllNews((prev) => {
-          const seen = seenKeysRef.current;
-          const incoming = res.news.filter((n) => {
-            const k = newsKey(n);
-            if (seen.has(k)) return false;
-            seen.add(k);
-            return true;
-          });
-          if (incoming.length === 0) return prev;
           const merged = [...incoming, ...prev].sort((a, b) =>
             newsTimestamp(b).localeCompare(newsTimestamp(a))
           );
           // 保持上限 200 条，防内存膨胀
-          const capped = merged.slice(0, 200);
-          if (capped[0]) setNewestKey(newsKey(capped[0]));
-          return capped;
+          return merged.slice(0, 200);
         });
+        // newestKey 计算同样是派生的纯数据，放在 updater 外
+        const newestIncoming = [...incoming].sort((a, b) =>
+          newsTimestamp(b).localeCompare(newsTimestamp(a))
+        )[0];
+        if (newestIncoming) setNewestKey(newsKey(newestIncoming));
       }
     } catch {
       // 静默失败
