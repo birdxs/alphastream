@@ -9,12 +9,58 @@ Pos: app/agents/strategy_evolver.py - Agent自主策略演进系统
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import os
+import re
 import json
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_json_parse(text: str) -> Optional[Dict[str, Any]]:
+    """[I2-2026-04-15] 容错 JSON 解析:
+       - 去 markdown code fence (```json ... ``` / ``` ... ```)
+       - 去 trailing comma
+       - 提取首个 {...} 块作兜底
+       - 失败返回 None, 不抛异常
+    """
+    if not text or not isinstance(text, str):
+        return None
+    s = text.strip()
+    # 去 fence
+    if s.startswith('```'):
+        # 剥第一行 fence
+        parts = s.split('\n', 1)
+        if len(parts) == 2:
+            s = parts[1]
+        # 去末尾 fence
+        if s.rstrip().endswith('```'):
+            s = s.rstrip()[:-3]
+        s = s.strip()
+    # 尝试直接解析
+    try:
+        obj = json.loads(s)
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        pass
+    # 去 trailing comma: ,} 或 ,]
+    try:
+        s2 = re.sub(r',\s*([}\]])', r'\1', s)
+        obj = json.loads(s2)
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        pass
+    # 提取首个大括号块
+    try:
+        m = re.search(r'\{.*\}', s, re.DOTALL)
+        if m:
+            candidate = re.sub(r',\s*([}\]])', r'\1', m.group(0))
+            obj = json.loads(candidate)
+            return obj if isinstance(obj, dict) else None
+    except Exception:
+        pass
+    return None
 
 
 def _registry_fetch(domain: str, method: str, **kwargs) -> Optional[Any]:
@@ -112,21 +158,21 @@ class StrategyEvolver:
             logger.warning(f"策略演化失败: {error}")
             return current_strategy
 
-        content = get_completion_content(response)
+        content = get_completion_content(response) or ""
+        # [I2-2026-04-15] 使用 _safe_json_parse 容错解析
+        new_strategy = _safe_json_parse(content)
+        if not new_strategy:
+            logger.warning(f"策略JSON解析失败, 保留当前策略. content前200字: {content[:200]!r}")
+            return current_strategy
         try:
-            content = content.strip()
-            if content.startswith('```'):
-                content = content.split('\n', 1)[1].rsplit('```', 1)[0]
-            new_strategy = json.loads(content)
             new_strategy['last_evolved'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             new_strategy['evolution_count'] = current_strategy.get('evolution_count', 0) + 1
-
             # 保存新策略
             self._save_strategy(f"{stock_code}_strategy", new_strategy)
             logger.info(f"策略已演化: {stock_code}, 第{new_strategy['evolution_count']}次")
             return new_strategy
         except Exception as e:
-            logger.warning(f"策略JSON解析失败: {e}")
+            logger.warning(f"策略保存失败: {e}")
             return current_strategy
 
     def get_strategy_prompt(self, stock_code: str) -> str:

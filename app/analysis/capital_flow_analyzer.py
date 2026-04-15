@@ -126,6 +126,13 @@ class CapitalFlowAnalyzer:
         try:
             self.logger.info(f"Getting fund flow for stock: {stock_code}, market: {market_type}")
 
+            # [I2-2026-04-15] 美股/港股短路: akshare stock_individual_fund_flow 仅支持A股,
+            # 对美股symbol(如AAPL)会返回None或抛异常, 导致下游 None.iterrows() NoneType.
+            # 非A股直接返回mock, 避免触底爬网.
+            if market_type in ('US', 'us', 'HK', 'hk'):
+                self.logger.info(f"非A股市场 {market_type}, 资金流向接口不支持, 返回mock数据")
+                return self._generate_mock_individual_fund_flow(stock_code, market_type)
+
             # 转换market参数为akshare期望的 'sh'/'sz' 格式
             # 'A'/'a'/None/空字符串 均需根据股票代码自动判断
             if market_type in ('A', 'a', None, ''):
@@ -155,6 +162,11 @@ class CapitalFlowAnalyzer:
 
             # 从akshare获取数据
             flow_data = ak.stock_individual_fund_flow(stock=stock_code, market=market_type)
+
+            # [I2-2026-04-15] None/空 guard: 某些股票/市场组合akshare会返回None而非抛异常
+            if flow_data is None or (hasattr(flow_data, 'empty') and flow_data.empty):
+                self.logger.warning(f"akshare 返回空数据 stock={stock_code} market={market_type}, 降级mock")
+                return self._generate_mock_individual_fund_flow(stock_code, market_type)
 
             # 处理数据
             result = {
