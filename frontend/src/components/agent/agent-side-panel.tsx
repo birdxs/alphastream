@@ -1,55 +1,16 @@
 // Input: agent-store 实时事件流 (events) + theme-store (light/dark) + 当前时间
-// Output: Mac风格终端Agent实时面板 — 三点标题栏 + 等宽字体 + 树形日志 + 暗/亮双主题
+// Output: Mac风格终端Agent实时面板 — 毛玻璃主题(backdrop-blur+半透明+主题token) + 三点标题栏 + 等宽字体 + 树形日志
 // Pos: 首页第4列, 取代旧AgentSidePanel空态+AgentProgressPanel复合结构
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+// [UI-Q2 2026-04-15 +08:00] 重构为毛玻璃(backdrop-blur-xl + bg-foreground/0.03 + 主题token色彩)，
+//   废弃硬编码 #1E1E1E/#F8F8F8 让项目 Dark Glassmorphism 统一。
 
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAgentStore, type AgentEvent } from "@/lib/stores/agent-store";
-import { useThemeStore } from "@/lib/stores/theme-store";
 import { ChevronRight, ChevronLeft, Trash2, Download, Circle } from "lucide-react";
 
 const STORAGE_KEY = "agent-panel-collapsed";
-
-/* ---------- 主题色板 ---------- */
-type Palette = {
-  bg: string; bgHeader: string; bgStatus: string;
-  text: string; muted: string;
-  prompt: string; info: string; warn: string; error: string; agent: string;
-  timestamp: string; border: string; cursor: string;
-};
-const THEME: { dark: Palette; light: Palette } = {
-  dark: {
-    bg: "#1E1E1E",
-    bgHeader: "#2D2D2D",
-    bgStatus: "#181818",
-    text: "#D4D4D4",
-    muted: "#6A6A6A",
-    prompt: "#50FA7B",
-    info: "#8BE9FD",
-    warn: "#F1FA8C",
-    error: "#FF5555",
-    agent: "#BD93F9",
-    timestamp: "#6272A4",
-    border: "rgba(255,255,255,0.08)",
-    cursor: "#50FA7B",
-  },
-  light: {
-    bg: "#F8F8F8",
-    bgHeader: "#ECECEC",
-    bgStatus: "#E5E5E5",
-    text: "#333333",
-    muted: "#888888",
-    prompt: "#28A745",
-    info: "#0366D6",
-    warn: "#D73A49",
-    error: "#D73A49",
-    agent: "#6F42C1",
-    timestamp: "#6A737D",
-    border: "rgba(0,0,0,0.08)",
-    cursor: "#28A745",
-  },
-};
 
 /* ---------- 事件→终端行 映射 ---------- */
 type TerminalLine = {
@@ -92,46 +53,38 @@ function eventToLine(ev: AgentEvent): TerminalLine {
   }
 }
 
-/* ---------- 行渲染 ---------- */
-function TerminalRow({ line, palette, isLast }: { line: TerminalLine; palette: Palette; isLast: boolean }) {
-  const prefixMap = {
-    prompt: "$ ",
-    start: "▶ ",
-    child: "  ├─ ",
-    done: "  └─ ",
-    info: "  · ",
-    warn: "  ⚠ ",
-    error: "  ✖ ",
-  } as const;
-  const colorMap = {
-    prompt: palette.prompt,
-    start: palette.agent,
-    child: palette.info,
-    done: palette.prompt,
-    info: palette.text,
-    warn: palette.warn,
-    error: palette.error,
-  } as const;
+/* ---------- 行渲染（毛玻璃主题版） ---------- */
+// 色彩均用 Tailwind 主题 token（text-foreground/X、品牌紫蓝/琥珀红）; 不再硬编码
+const PREFIX: Record<TerminalLine["kind"], string> = {
+  prompt: "$ ",
+  start: "▶ ",
+  child: "  ├─ ",
+  done: "  └─ ",
+  info: "  · ",
+  warn: "  ⚠ ",
+  error: "  ✖ ",
+};
+const PREFIX_CLASS: Record<TerminalLine["kind"], string> = {
+  prompt: "text-[#3737CC] dark:text-[#7F7FFF]",      // 品牌紫蓝
+  start:  "text-[#7F00FF] dark:text-[#BD93F9]",      // agent 紫
+  child:  "text-foreground/60",                       // info 中性
+  done:   "text-[#46BEA3]",                           // 成功青绿
+  info:   "text-foreground/55",
+  warn:   "text-[#F59E0B]",                           // 琥珀
+  error:  "text-[#EF4444]",                           // 红
+};
 
+function TerminalRow({ line, isLast }: { line: TerminalLine; isLast: boolean }) {
   return (
-    <div
-      className="flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1 duration-300 whitespace-pre-wrap break-words"
-      style={{ color: palette.text }}
-    >
-      <span className="shrink-0 tabular-nums select-none" style={{ color: palette.timestamp }}>
+    <div className="flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1 duration-300 whitespace-pre-wrap break-words rounded px-1 -mx-1 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors">
+      <span className="shrink-0 tabular-nums select-none text-foreground/40 text-[11px] pt-[1px]">
         [{fmtTs(line.ts)}]
       </span>
-      <span className="min-w-0 flex-1">
-        <span style={{ color: colorMap[line.kind] }}>{prefixMap[line.kind]}</span>
-        {line.kind !== "prompt" && line.agent && line.kind === "start" && (
-          <span style={{ color: palette.agent }}>{""}</span>
-        )}
+      <span className="min-w-0 flex-1 text-foreground/85">
+        <span className={PREFIX_CLASS[line.kind]}>{PREFIX[line.kind]}</span>
         <span>{line.text}</span>
         {isLast && (
-          <span
-            className="inline-block w-[6px] h-[12px] ml-1 align-middle animate-[blink_1s_step-end_infinite]"
-            style={{ background: palette.cursor }}
-          />
+          <span className="inline-block w-[6px] h-[12px] ml-1 align-middle bg-[#3737CC] dark:bg-[#7F7FFF] animate-[blink_1s_step-end_infinite]" />
         )}
       </span>
     </div>
@@ -145,8 +98,6 @@ export function AgentSidePanel() {
   const events = useAgentStore((s) => s.events);
   const isAnalyzing = useAgentStore((s) => s.isAnalyzing);
   const agentProgresses = useAgentStore((s) => s.agentProgresses);
-  const theme = useThemeStore((s) => s.theme);
-  const palette = theme === "dark" ? THEME.dark : THEME.light;
   const scrollRef = useRef<HTMLDivElement>(null);
   const startRef = useRef<number>(Date.now());
 
@@ -212,27 +163,19 @@ export function AgentSidePanel() {
 
   if (collapsed) {
     return (
-      <div
-        className="hidden md:flex w-10 shrink-0 flex-col items-center py-2 gap-2 border-l"
-        style={{ background: palette.bgStatus, borderColor: palette.border }}
-      >
+      <div className="hidden md:flex w-10 shrink-0 flex-col items-center py-2 gap-2 border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.6)] backdrop-blur-xl backdrop-saturate-150">
         <button
           onClick={toggle}
-          className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-          style={{ color: palette.muted }}
+          className="h-8 w-8 flex items-center justify-center rounded-md text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
           title="展开 Agent Stream"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
         <div className="flex flex-col items-center gap-1 mt-2">
           <Circle
-            className="h-2.5 w-2.5 fill-current"
-            style={{ color: isAnalyzing ? palette.prompt : palette.muted }}
+            className={`h-2.5 w-2.5 fill-current ${isAnalyzing ? "text-[#46BEA3]" : "text-foreground/30"}`}
           />
-          <span
-            className="text-[9px] font-mono rotate-90 origin-center whitespace-nowrap mt-8"
-            style={{ color: palette.muted }}
-          >
+          <span className="text-[9px] font-mono rotate-90 origin-center whitespace-nowrap mt-8 text-foreground/50">
             Agent Stream
           </span>
         </div>
@@ -241,61 +184,49 @@ export function AgentSidePanel() {
   }
 
   return (
-    <div
-      className="hidden md:flex w-72 xl:w-96 shrink-0 flex-col border-l font-mono"
-      style={{ background: palette.bg, borderColor: palette.border }}
-    >
-      {/* macOS 风格标题栏 */}
-      <div
-        className="flex items-center justify-between px-3 h-9 shrink-0 border-b"
-        style={{ background: palette.bgHeader, borderColor: palette.border }}
-      >
+    <div className="hidden md:flex w-72 xl:w-96 shrink-0 flex-col font-mono border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-foreground/[0.06] dark:shadow-black/30">
+      {/* macOS 风格标题栏（毛玻璃） */}
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.03] dark:bg-white/[0.03]">
         <div className="flex items-center gap-2">
-          {/* 三点 */}
+          {/* Mac 三点 */}
           <div className="flex items-center gap-1.5 mr-2">
-            <span className="w-3 h-3 rounded-full" style={{ background: "#FF5F57" }} />
-            <span className="w-3 h-3 rounded-full" style={{ background: "#FEBC2E" }} />
-            <span className="w-3 h-3 rounded-full" style={{ background: "#28C840" }} />
+            <span className="w-3 h-3 rounded-full bg-[#FF5F57] shadow-sm" />
+            <span className="w-3 h-3 rounded-full bg-[#FEBC2E] shadow-sm" />
+            <span className="w-3 h-3 rounded-full bg-[#28C840] shadow-sm" />
           </div>
-          <span className="text-[11px] tracking-wide" style={{ color: palette.text }}>
+          <span className="text-[11px] tracking-wide text-foreground/70">
             ⎔ AGENT STREAM · stock-analysis · zsh
           </span>
         </div>
-        <span className="text-[10px] tabular-nums" style={{ color: palette.muted }}>
+        <span className="text-[10px] tabular-nums text-foreground/45">
           {fmtTs(now)}
         </span>
       </div>
 
       {/* 工具条 */}
-      <div
-        className="flex items-center justify-between px-3 h-7 shrink-0 border-b"
-        style={{ background: palette.bgStatus, borderColor: palette.border }}
-      >
-        <span className="text-[10px]" style={{ color: palette.muted }}>
+      <div className="flex items-center justify-between px-3 h-7 shrink-0 border-b border-foreground/[0.06] dark:border-white/[0.06] bg-foreground/[0.02] dark:bg-white/[0.02]">
+        <span className="text-[10px] text-foreground/50">
           {events.length} events · {agentProgresses.filter((p) => p.status === "completed").length}/
           {agentProgresses.length || 10} agents
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCleared((c) => !c)}
-            className="h-5 w-5 flex items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10"
-            style={{ color: palette.muted }}
+            className="h-5 w-5 flex items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
             title={cleared ? "恢复显示" : "清空视图 (不删除store)"}
           >
             <Trash2 className="h-3 w-3" />
           </button>
           <button
             onClick={handleExport}
-            className="h-5 w-5 flex items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10"
-            style={{ color: palette.muted }}
+            className="h-5 w-5 flex items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
             title="导出日志"
           >
             <Download className="h-3 w-3" />
           </button>
           <button
             onClick={toggle}
-            className="h-5 w-5 flex items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10"
-            style={{ color: palette.muted }}
+            className="h-5 w-5 flex items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
             title="折叠"
           >
             <ChevronRight className="h-3 w-3" />
@@ -303,41 +234,34 @@ export function AgentSidePanel() {
         </div>
       </div>
 
-      {/* 终端内容 */}
+      {/* 终端内容（透明，让毛玻璃容器透过） */}
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-0.5 agent-term-scroll"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-0.5 agent-term-scroll bg-transparent"
         style={{ fontSize: "12px", lineHeight: "1.65" }}
       >
         {lines.map((line, idx) => (
           <TerminalRow
             key={line.id}
             line={line}
-            palette={palette}
             isLast={idx === lines.length - 1 && isAnalyzing}
           />
         ))}
       </div>
 
       {/* 底部状态栏 */}
-      <div
-        className="flex items-center justify-between px-3 h-6 shrink-0 border-t text-[10px] tabular-nums"
-        style={{ background: palette.bgStatus, borderColor: palette.border, color: palette.muted }}
-      >
+      <div className="flex items-center justify-between px-3 h-6 shrink-0 border-t border-foreground/[0.06] dark:border-white/[0.06] bg-foreground/[0.02] dark:bg-white/[0.02] text-[10px] tabular-nums text-foreground/50">
         <span className="flex items-center gap-1.5">
           <span
-            className="w-2 h-2 rounded-full"
-            style={{
-              background: isAnalyzing ? palette.prompt : palette.muted,
-              boxShadow: isAnalyzing ? `0 0 6px ${palette.prompt}` : undefined,
-            }}
+            className={`w-2 h-2 rounded-full ${isAnalyzing ? "bg-[#46BEA3]" : "bg-foreground/30"}`}
+            style={isAnalyzing ? { boxShadow: "0 0 6px #46BEA3" } : undefined}
           />
           <span>{isAnalyzing ? "connected · streaming" : "idle"}</span>
         </span>
         <span>uptime {uptimeStr}</span>
       </div>
 
-      {/* 光标闪烁 + 自定义滚动条 */}
+      {/* 光标闪烁 + 自定义滚动条（细、透明 track） */}
       <style jsx>{`
         @keyframes blink {
           0%, 50% { opacity: 1; }
@@ -346,11 +270,11 @@ export function AgentSidePanel() {
         .agent-term-scroll::-webkit-scrollbar { width: 6px; }
         .agent-term-scroll::-webkit-scrollbar-track { background: transparent; }
         .agent-term-scroll::-webkit-scrollbar-thumb {
-          background: ${palette.border};
+          background: rgba(127,127,127,0.25);
           border-radius: 3px;
         }
         .agent-term-scroll::-webkit-scrollbar-thumb:hover {
-          background: ${palette.muted};
+          background: rgba(127,127,127,0.45);
         }
       `}</style>
     </div>
