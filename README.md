@@ -126,6 +126,13 @@ StockAnal_Sys/
 ### 6. MCP 工具服务器
 - `app/mcp/stock_data_server.py` 对外暴露标准化工具接口，支持跨系统 Agent 调用。
 
+### 7. 数据层 v2（2026-04-15 扩张）
+- **21 Adapter + 16 业务域 Registry**：A股双源冗余 + 美股SEC EDGAR + 港股/日股yfinance + 宏观(NBS/FRED/World Bank/IMF) + 加密(ccxt/CoinGecko) + 新闻RSS六源 + OpenBB桥 + **P3 另类数据 5 支柱**(航运BDI+港口+AIS / 卫星NASA CMR / 产业链OpenCorporates / 招聘Arbeitnow / ESG多源公开)。
+- **`AdapterRegistry.call_with_fallback`**：domain→多 adapter 自动降级；14 Agent + 4 投资者人格全量接入。
+- **10 P3 REST API 端点** + **5 P3 Artifact 组件**：后端/前端字段契约唯一化 (v2 wrap)，软降级契约 (空数据 200+success:true+空 artifact)。
+- **3 OpenCLI JS 爬虫**：雪球讨论 / 东财股吧 / 财联社电报，浏览器态 Cookie 策略。
+- **搜索层与数据层分工**：`search_engines`=文本/URL搜索(17引擎HTML抓取), `Registry`=结构化DataFrame(工商/财报/K线)，互补解耦。
+
 ---
 
 ## 🛠️ 技术栈
@@ -134,7 +141,8 @@ StockAnal_Sys/
 |----|------|
 | 前端 | Next.js 16, React 19, Tailwind 4, shadcn/ui, Zustand, Jotai, TradingView LWC, Recharts, react-markdown, AI SDK |
 | 后端 | Python 3.9+, Flask 3.1, LangGraph, LangChain, OpenAI-compatible API |
-| 数据源 | AKShare + BaoStock（双源冗余） |
+| 数据源 | AKShare + BaoStock 双源冗余 + 21 Adapter/16 Domain Registry (efinance/yfinance/SEC EDGAR/NBS/FRED/WB/IMF/ccxt/CoinGecko/OpenBB/RSS×6/Ashare/easyquotation + P3 另类: Shipping/Satellite/Corporate/Jobs/ESG) |
+| 爬取 | **OpenCLI (jackwener/OpenCLI, 15.8k⭐)** 浏览器态 Cookie 策略桥 + 3 JS adapter (雪球/东财股吧/财联社) |
 | 搜索 | 17 引擎（8 中文 + 9 全球 + 2 知识），无需 API Key 可跑 |
 | 缓存 | Redis（可选）/ 内存降级 |
 | 通信 | SSE（Server-Sent Events）实时流 |
@@ -181,6 +189,11 @@ docker-compose -f docker-compose.frontend.yml up -d   # 前端
 | `USE_AGENT_SYSTEM` | Agent 系统开关 | `true` |
 | `USE_REDIS_CACHE` | Redis 缓存开关 | `false` |
 | `TAVILY_API_KEY` / `SERP_API_KEY` | 可选搜索增强 | 无 |
+| `FRED_API_KEY` | FRED 宏观 80 万序列（免费申请） | 无 (降级为空) |
+| `OPENCORPORATES_API_KEY` | 产业链/工商（免费 500/月；匿名亦可） | 无 |
+| `SEC_EDGAR_UA` | SEC EDGAR UA 规范（格式：`App Name email`） | 项目默认 |
+| `AISHUB_USERNAME` | AIS 船舶位置（免费注册 username） | 无 (降级为空) |
+| `JOBS_ADAPTER_UA` | Jobs 招聘 UA 伪装（可选） | 项目默认 |
 | `ALLOWED_ORIGINS` | CORS 白名单 | `localhost:8888,localhost:3000` |
 
 ---
@@ -197,7 +210,15 @@ docker-compose -f docker-compose.frontend.yml up -d   # 前端
 
 ## 📋 版本
 
-### v3.0.0（当前，重构版）
+### v3.1.0（2026-04-15，数据层 v2）
+- 21 Adapter + 16 Domain Registry + `call_with_fallback` 自动降级
+- 10 P3 REST API 端点 (shipping/esg/corporate/jobs/satellite/alt_data) + 5 P3 Artifact 组件
+- 12 Agent + 4 投资者人格全量接入 Registry；55+ commits 入 main；384 pytest PASS
+- 3 OpenCLI JS 爬虫 (雪球/东财股吧/财联社)
+- 软降级契约统一（空数据 200+success:true+空 artifact）
+- 搜索层与数据层职责分离：search_engines=文本搜索 / Registry=结构化数据
+
+### v3.0.0（重构版）
 - 全新 Next.js 16 + React 19 前端替代 Jinja 模板
 - 14 Agent + LangGraph 动态编排 + Function Calling
 - SSE 实时透传 + Zustand 持久化 + 10 种 Artifact
