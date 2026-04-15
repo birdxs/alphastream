@@ -359,7 +359,9 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 - `TestGetKline` — 正常/未安装降级/非法period降级
 - `TestMisc` — info/financials三表/options_chain/options未安装/health_check
 
-**Commit Hash**：见 git log（commit1: 代码落盘；commit2: 本追溯文档）
+**Commit Hash**：
+- commit1（代码落盘）：`1c0df1e` — `feat(adapter): yfinance港美股+ETF+期权 [NEW-FILE:#20260415-05]`
+- commit2（本追溯文档锚点）：由后续 A3 追溯专属 commit 指向本章节
 
 
 ---
