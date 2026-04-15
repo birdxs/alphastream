@@ -32,6 +32,8 @@ import requests
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._retry_utils import random_ua, retry_with_backoff, rotate_ua
+from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +98,15 @@ class ESGAdapter(BaseAdapter):
 
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": self.user_agent,
+            "User-Agent": self.user_agent or random_ua(),
             "Accept": "application/json, text/html;q=0.8, */*;q=0.5",
             "Accept-Encoding": "gzip, deflate",
+            "Accept-Language": "en-US,en;q=0.9",
         })
+        # K1 [NEW-FILE:#20260415-44] 代理强制应用
+        proxies = get_proxies()
+        if proxies:
+            self.session.proxies.update(proxies)
 
     @property
     def name(self) -> str:
@@ -108,27 +115,24 @@ class ESGAdapter(BaseAdapter):
     # ============================ 内部工具 ============================
 
     def _get(self, url: str, params: Optional[Dict] = None) -> Optional[requests.Response]:
-        """带重试的统一 GET；失败返回 None。"""
-        last_exc: Optional[Exception] = None
-        for attempt in range(self.max_retries):
-            try:
-                resp = self.session.get(url, params=params or {}, timeout=self.timeout)
-                if resp.status_code == 200:
-                    return resp
-                if resp.status_code in (429, 503):
-                    logger.warning(
-                        f"[ESG] 限流/不可用 {resp.status_code} {url} (attempt={attempt+1})"
-                    )
-                    continue
-                logger.warning(f"[ESG] HTTP {resp.status_code} {url}")
-                return None
-            except Exception as e:
-                last_exc = e
-                logger.warning(
-                    f"[ESG] 请求失败 {url} (attempt={attempt+1}): {type(e).__name__}: {e}"
-                )
-        if last_exc:
-            logger.debug(f"[ESG] 放弃 {url}: {last_exc}")
+        """K1: UA池轮询 + retry_with_backoff 指数退避的统一 GET；失败返回 None。"""
+        rotate_ua(self.session)
+        try:
+            resp = retry_with_backoff(
+                lambda: self.session.get(url, params=params or {}, timeout=self.timeout),
+                max_retries=self.max_retries,
+                backoff_base=0.5,
+                status_codes_to_retry=(429, 500, 502, 503, 504),
+                name="esg",
+            )
+        except Exception as e:
+            logger.warning(f"[ESG] 请求失败 {url}: {type(e).__name__}: {e}")
+            return None
+        if resp is None:
+            return None
+        if resp.status_code == 200:
+            return resp
+        logger.warning(f"[ESG] HTTP {resp.status_code} {url}")
         return None
 
     def _get_json(self, url: str, params: Optional[Dict] = None) -> dict:

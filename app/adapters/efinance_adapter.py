@@ -44,6 +44,38 @@ except Exception as _e:  # pragma: no cover - 环境缺失降级
     logger.warning(f"efinance未安装或导入失败，EfinanceAdapter进入降级模式: {type(_e).__name__}: {_e}")
 
 
+# K1 [NEW-FILE:#20260415-44]: 对抗东财反爬 — 注入 UA池/Referer 到 efinance.shared.session
+# 原理: efinance 内部所有HTTP走 efinance.shared.session (requests.Session)，可注入 headers
+def _inject_efinance_session_headers() -> bool:
+    if not _EF_AVAILABLE:
+        return False
+    try:
+        from ._retry_utils import random_ua
+        from ._proxy_utils import get_proxies
+        import efinance.shared as _ef_shared  # type: ignore
+        sess = getattr(_ef_shared, "session", None)
+        if sess is None:
+            return False
+        sess.headers.update({
+            "User-Agent": random_ua(),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate",
+            "Referer": "https://quote.eastmoney.com/",
+            "Connection": "keep-alive",
+        })
+        proxies = get_proxies()
+        if proxies:
+            sess.proxies.update(proxies)
+        return True
+    except Exception as e:
+        logger.debug(f"efinance session 注入失败（降级无害）: {type(e).__name__}: {e}")
+        return False
+
+
+_EF_SESSION_PATCHED = _inject_efinance_session_headers()
+
+
 # 东财原始中文列 → 统一英文列（与akshare_adapter对齐）
 _KLINE_FIELD_MAP = {
     '股票名称': 'name', '股票代码': 'code',

@@ -32,6 +32,8 @@ import requests
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._retry_utils import random_ua, retry_with_backoff, rotate_ua
+from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,13 @@ class CorporateAdapter(BaseAdapter):
         self.session.headers.update({
             "User-Agent": self.user_agent,
             "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate",
         })
+        # K1 [NEW-FILE:#20260415-44]: 代理强制应用
+        proxies = get_proxies()
+        if proxies:
+            self.session.proxies.update(proxies)
 
         self._lock = threading.Lock()
         self._last_request_ts = 0.0
@@ -101,38 +109,52 @@ class CorporateAdapter(BaseAdapter):
             self._last_request_ts = time.monotonic()
 
     def _get_json(self, path: str, params: Optional[dict] = None) -> dict:
-        """统一GET。无Key降级, 失败返回空dict"""
+        """K1: UA池轮询 + retry_with_backoff 统一GET; 401失败后fall back匿名重试一次; 失败返回空dict"""
         self._throttle()
         params = dict(params or {})
         if self.api_key:
             params["api_token"] = self.api_key
         url = f"{self.BASE_URL}{path}"
+        rotate_ua(self.session)
         try:
-            resp = self.session.get(url, params=params, timeout=self.timeout)
-            if resp.status_code == 401:
-                logger.warning(
-                    f"OpenCorporates 401 未授权, 可能 api_key 无效: {url}"
+            resp = retry_with_backoff(
+                lambda: self.session.get(url, params=params, timeout=self.timeout),
+                max_retries=3,
+                backoff_base=0.8,
+                status_codes_to_retry=(429, 500, 502, 503, 504),
+                name="opencorp",
+            )
+        except Exception as e:
+            logger.warning(f"OpenCorporates 请求失败 {url}: {type(e).__name__}: {e}")
+            return {}
+        if resp is None:
+            return {}
+        # 401 未授权：若带了 key，fallback 到匿名再试一次
+        if resp.status_code == 401 and self.api_key:
+            logger.warning(f"OpenCorporates 401 api_key 无效 → 降级匿名重试: {url}")
+            params.pop("api_token", None)
+            try:
+                resp = retry_with_backoff(
+                    lambda: self.session.get(url, params=params, timeout=self.timeout),
+                    max_retries=2, backoff_base=0.5,
+                    status_codes_to_retry=(429, 500, 502, 503, 504),
+                    name="opencorp-anon",
                 )
+            except Exception as e:
+                logger.warning(f"OpenCorporates 匿名重试失败: {type(e).__name__}: {e}")
                 return {}
-            if resp.status_code == 403:
-                logger.warning(
-                    f"OpenCorporates 403 禁止/免费层耗尽: {url}"
-                )
-                return {}
-            if resp.status_code == 429:
-                logger.warning(f"OpenCorporates 429 限流: {url}, 退避2s")
-                time.sleep(2.0)
-                return {}
-            if resp.status_code != 200:
-                logger.warning(
-                    f"OpenCorporates HTTP {resp.status_code}: {url}"
-                )
-                return {}
+        if resp is None:
+            return {}
+        if resp.status_code in (401, 403):
+            logger.warning(f"OpenCorporates {resp.status_code} 未授权/禁止: {url}")
+            return {}
+        if resp.status_code != 200:
+            logger.warning(f"OpenCorporates HTTP {resp.status_code}: {url}")
+            return {}
+        try:
             return resp.json() or {}
         except Exception as e:
-            logger.warning(
-                f"OpenCorporates 请求失败 {url}: {type(e).__name__}: {e}"
-            )
+            logger.warning(f"OpenCorporates JSON解析失败 {url}: {e}")
             return {}
 
     # --------------------------- 核心端点 ---------------------------

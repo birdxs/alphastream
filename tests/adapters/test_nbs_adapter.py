@@ -158,6 +158,8 @@ class TestBaseAdapterContract:
 
 class TestHeaders:
     def test_ua_is_browser(self):
+        # K1 [NEW-FILE:#20260415-44] UA改为池化随机，不再固定Chrome
         ad = NBSAdapter()
         ua = ad._session.headers.get("User-Agent", "")
-        assert "Mozilla" in ua and "Chrome" in ua
+        assert "Mozilla" in ua
+        assert any(k in ua for k in ("Chrome", "Firefox", "Safari", "Edg"))

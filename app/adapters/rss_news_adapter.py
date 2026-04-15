@@ -34,6 +34,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._retry_utils import UA_POOL as _SHARED_UA_POOL, random_ua
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +81,8 @@ FEED_SOURCES: Dict[str, Dict[str, str]] = {
     },
 }
 
-_UA_POOL = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-]
+# K1: 复用 _retry_utils.UA_POOL (8+ UA) 提升反爬对抗
+_UA_POOL = list(_SHARED_UA_POOL)
 
 _EMPTY_COLUMNS = ["source", "title", "link", "published", "summary", "author", "tags"]
 
@@ -136,27 +134,34 @@ class RSSNewsAdapter(BaseAdapter):
         return random.choice(_UA_POOL)
 
     def _parse_feed(self, url: str) -> Optional[object]:
-        """调用 feedparser.parse，带重试。失败返回 None。"""
+        """K1: UA池轮询 + 指数退避 + Referer伪造；失败返回 None。"""
         if not _HAS_FEEDPARSER:
             return None
         last_err: Optional[Exception] = None
+        # 反爬Referer: rsshub站点伪造主页来源
+        headers_base = {
+            "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.5",
+            "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
+        }
+        if "rsshub" in url:
+            headers_base["Referer"] = "https://docs.rsshub.app/"
+        elif "sina" in url:
+            headers_base["Referer"] = "https://finance.sina.com.cn/"
         for attempt in range(1, self.max_retries + 1):
             try:
-                parsed = feedparser.parse(
-                    url,
-                    request_headers={"User-Agent": self._ua()},
-                )
-                # feedparser 不抛异常，用 bozo 标志+entries长度判断
+                req_headers = dict(headers_base)
+                req_headers["User-Agent"] = self._ua()
+                parsed = feedparser.parse(url, request_headers=req_headers)
                 entries = getattr(parsed, "entries", []) or []
                 bozo = getattr(parsed, "bozo", 0)
-                # 无 entries 且 bozo=1 才视为失败（部分源 bozo=1 但仍有 entries）
                 if not entries and bozo:
                     raise RuntimeError(f"feedparser bozo: {getattr(parsed, 'bozo_exception', None)}")
                 return parsed
-            except Exception as e:  # pragma: no cover - 实际依赖 feedparser 行为
+            except Exception as e:  # pragma: no cover
                 last_err = e
                 logger.debug("feedparser 第%d次失败 url=%s err=%s", attempt, url, e)
-                time.sleep(0.3 * attempt)
+                # K1: 指数退避 + jitter
+                time.sleep(min(4.0, 0.5 * (2 ** (attempt - 1))) + random.random() * 0.3)
         logger.warning("feedparser 解析失败 url=%s err=%s", url, last_err)
         return None
 

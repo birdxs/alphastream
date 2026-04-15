@@ -27,6 +27,8 @@ import requests
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._retry_utils import random_ua, retry_with_backoff, rotate_ua
+from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -59,26 +61,27 @@ class NBSAdapter(BaseAdapter):
 
     BASE_URL = "https://data.stats.gov.cn/easyquery.htm"
     DEFAULT_TIMEOUT = 15
-    MAX_RETRIES = 3
+    MAX_RETRIES = 4  # K1: 403 反爬需更多尝试
     # 推荐 ≤1 QPS，两次请求间隔
     _MIN_INTERVAL = 1.0
 
-    # 常见浏览器UA，避免默认 python-requests 被拒
-    _UA = (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    )
+    # K1 [NEW-FILE:#20260415-44] UA 改为 UA_POOL 轮询
 
     def __init__(self, timeout: int = DEFAULT_TIMEOUT):
         self.timeout = timeout
         self._session = requests.Session()
         self._session.headers.update({
-            "User-Agent": self._UA,
+            "User-Agent": random_ua(),
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate",
             "Referer": "https://data.stats.gov.cn/",
+            "Connection": "keep-alive",
         })
+        # K1: 强制代理应用
+        proxies = get_proxies()
+        if proxies:
+            self._session.proxies.update(proxies)
         self._last_request_ts = 0.0
 
     @property
@@ -214,43 +217,41 @@ class NBSAdapter(BaseAdapter):
     # ---------- 内部 ----------
 
     def _get_json(self, url: str, params: Dict) -> Optional[Dict]:
-        """带重试+限流的GET；失败返回None"""
+        """K1: UA池轮询 + retry_with_backoff (429/5xx/403指数退避)，失败返回None"""
         # 限流
         elapsed = time.time() - self._last_request_ts
         if elapsed < self._MIN_INTERVAL:
             time.sleep(self._MIN_INTERVAL - elapsed)
 
-        last_err = None
-        for attempt in range(1, self.MAX_RETRIES + 1):
+        # 每请求轮换UA，增强反爬
+        rotate_ua(self._session)
+
+        try:
+            resp = retry_with_backoff(
+                lambda: self._session.get(url, params=params,
+                                          timeout=self.timeout, verify=False),
+                max_retries=self.MAX_RETRIES,
+                backoff_base=0.8,
+                # 国统局偶现 403 伪 Not-Found，加入重试码尝试 UA 轮换
+                status_codes_to_retry=(403, 429, 500, 502, 503, 504),
+                name="nbs",
+            )
+            self._last_request_ts = time.time()
+            if resp is None or resp.status_code != 200:
+                logger.warning(f"NBS最终失败 status={getattr(resp,'status_code',None)}")
+                return None
             try:
-                resp = self._session.get(url, params=params,
-                                         timeout=self.timeout, verify=False)
-                self._last_request_ts = time.time()
-                if resp.status_code != 200:
-                    last_err = f"HTTP {resp.status_code}"
-                    logger.warning(f"NBS请求失败 attempt={attempt} {last_err}")
-                else:
-                    try:
-                        data = resp.json()
-                    except Exception as je:
-                        last_err = f"JSON解析失败: {je}"
-                        logger.warning(f"NBS {last_err}")
-                    else:
-                        # NBS 返回结构: {"returncode":200,"returndata":{...}}
-                        if data.get("returncode") == 200:
-                            return data
-                        last_err = f"returncode={data.get('returncode')}"
-                        logger.warning(f"NBS业务错误 {last_err}")
-            except requests.RequestException as e:
-                last_err = f"{type(e).__name__}: {e}"
-                logger.warning(f"NBS网络异常 attempt={attempt} {last_err}")
-
-            # 退避
-            if attempt < self.MAX_RETRIES:
-                time.sleep(0.5 * attempt + random.random() * 0.3)
-
-        logger.error(f"NBS请求最终失败: {last_err}")
-        return None
+                data = resp.json()
+            except Exception as je:
+                logger.warning(f"NBS JSON解析失败: {je}")
+                return None
+            if data.get("returncode") == 200:
+                return data
+            logger.warning(f"NBS业务错误 returncode={data.get('returncode')}")
+            return None
+        except Exception as e:
+            logger.error(f"NBS请求最终失败: {type(e).__name__}: {e}")
+            return None
 
     @staticmethod
     def _parse_easyquery(raw: Dict) -> pd.DataFrame:

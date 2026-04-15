@@ -32,6 +32,8 @@ import requests
 import pandas as pd
 
 from .base_adapter import BaseAdapter
+from ._retry_utils import random_ua, retry_with_backoff, rotate_ua
+from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +62,16 @@ class ShippingAdapter(BaseAdapter):
     """航运 & 港口另类数据源适配器"""
 
     DEFAULT_TIMEOUT = 15
-    MAX_RETRIES = 3
+    MAX_RETRIES = 4  # K1: 反爬站需要更多尝试
     _MIN_INTERVAL = 1.0  # ≤1 QPS
 
-    _UA = (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    )
+    # K1 [NEW-FILE:#20260415-44] UA由_retry_utils.UA_POOL轮询提供
+
+    # K1 反爬Referer伪造：investing.com 等
+    _REFERER_MAP = {
+        "investing.com": "https://www.investing.com/",
+        "tradingeconomics.com": "https://tradingeconomics.com/",
+    }
 
     def __init__(self, timeout: int = DEFAULT_TIMEOUT,
                  aishub_username: Optional[str] = None):
@@ -76,10 +80,16 @@ class ShippingAdapter(BaseAdapter):
         self.aishub_username = aishub_username or os.environ.get("AISHUB_USERNAME")
         self._session = requests.Session()
         self._session.headers.update({
-            "User-Agent": self._UA,
-            "Accept": "application/json, text/html, */*",
+            "User-Agent": random_ua(),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.5",
             "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
         })
+        # K1: 代理强制应用 (H4 proxy utils)
+        proxies = get_proxies()
+        if proxies:
+            self._session.proxies.update(proxies)
         self._last_request_ts = 0.0
 
     @property
@@ -209,45 +219,59 @@ class ShippingAdapter(BaseAdapter):
         if elapsed < self._MIN_INTERVAL:
             time.sleep(self._MIN_INTERVAL - elapsed)
 
-    def _get_text(self, url: str, params: Optional[Dict] = None) -> Optional[str]:
-        """带重试+限流的GET，返回text；失败返回None"""
-        self._throttle()
-        last_err = None
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                resp = self._session.get(url, params=params, timeout=self.timeout)
-                self._last_request_ts = time.time()
-                if resp.status_code == 200 and resp.text:
-                    return resp.text
-                last_err = f"HTTP {resp.status_code}"
-            except requests.RequestException as e:
-                last_err = f"{type(e).__name__}: {e}"
-            if attempt < self.MAX_RETRIES:
-                time.sleep(0.5 * attempt + random.random() * 0.3)
-        logger.warning(f"Shipping GET 最终失败 url={url} err={last_err}")
+    def _pick_referer(self, url: str) -> Optional[str]:
+        """根据URL匹配Referer伪造，K1反爬强化"""
+        for host, ref in self._REFERER_MAP.items():
+            if host in url:
+                return ref
         return None
 
-    def _get_json(self, url: str, params: Dict) -> Optional[List]:
-        """AISHub 返回形如 [{...metadata}, [{...vessels}]]"""
+    def _get_text(self, url: str, params: Optional[Dict] = None) -> Optional[str]:
+        """K1: UA池轮询+retry_with_backoff指数退避+Referer伪造，失败返回None"""
         self._throttle()
-        last_err = None
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                resp = self._session.get(url, params=params, timeout=self.timeout)
-                self._last_request_ts = time.time()
-                if resp.status_code == 200:
-                    try:
-                        return resp.json()
-                    except Exception as je:
-                        last_err = f"JSON解析失败: {je}"
-                else:
-                    last_err = f"HTTP {resp.status_code}"
-            except requests.RequestException as e:
-                last_err = f"{type(e).__name__}: {e}"
-            if attempt < self.MAX_RETRIES:
-                time.sleep(0.5 * attempt + random.random() * 0.3)
-        logger.warning(f"AISHub GET 最终失败 err={last_err}")
-        return None
+        # 每请求轮换UA
+        rotate_ua(self._session)
+        headers = {}
+        ref = self._pick_referer(url)
+        if ref:
+            headers["Referer"] = ref
+        try:
+            resp = retry_with_backoff(
+                lambda: self._session.get(url, params=params, headers=headers, timeout=self.timeout),
+                max_retries=self.MAX_RETRIES,
+                backoff_base=0.5,
+                name=f"shipping:{url[:60]}",
+            )
+            self._last_request_ts = time.time()
+            if resp is not None and resp.status_code == 200 and resp.text:
+                return resp.text
+            logger.warning(f"Shipping GET 最终非200 url={url} status={getattr(resp,'status_code',None)}")
+            return None
+        except Exception as e:
+            logger.warning(f"Shipping GET 最终失败 url={url} err={type(e).__name__}: {e}")
+            return None
+
+    def _get_json(self, url: str, params: Dict) -> Optional[List]:
+        """AISHub K1重试包装"""
+        self._throttle()
+        rotate_ua(self._session)
+        try:
+            resp = retry_with_backoff(
+                lambda: self._session.get(url, params=params, timeout=self.timeout),
+                max_retries=self.MAX_RETRIES,
+                backoff_base=0.5,
+                name="aishub",
+            )
+            self._last_request_ts = time.time()
+            if resp is not None and resp.status_code == 200:
+                try:
+                    return resp.json()
+                except Exception as je:
+                    logger.warning(f"AISHub JSON解析失败: {je}")
+            return None
+        except Exception as e:
+            logger.warning(f"AISHub GET 最终失败 err={type(e).__name__}: {e}")
+            return None
 
     # ---------- 解析器 ----------
 
