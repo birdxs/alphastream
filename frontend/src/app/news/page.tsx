@@ -12,9 +12,11 @@ import { apiClient } from "@/lib/api/client";
 interface NewsItem {
   title: string;
   content?: string;
-  datetime?: string;       // 后端返回 "2024-01-01 10:30:00"
-  date?: string;           // 后端返回 "2024-01-01"
-  time?: string;           // 后端返回 "10:30:00"
+  // R1 Q3契约收尾 (2026-04-15 21:28): 后端统一输出 published_at (ISO8601+08:00)
+  published_at?: string;
+  datetime?: string;       // 兼容: "2024-01-01 10:30:00"
+  date?: string;           // 兼容: "2024-01-01"
+  time?: string;           // 兼容: "10:30:00"
   publish_time?: string;   // 兼容旧字段
   source?: string;
 }
@@ -75,11 +77,11 @@ const SECTORS = [
 /* ---------- 组件 ---------- */
 /* ---------- 去重 & 时间键 ---------- */
 function newsKey(n: NewsItem): string {
-  const t = n.datetime || (n.date && n.time ? `${n.date} ${n.time}` : "") || n.publish_time || "";
+  const t = n.published_at || n.datetime || (n.date && n.time ? `${n.date} ${n.time}` : "") || n.publish_time || "";
   return `${t}|${(n.title || "").slice(0, 80)}`;
 }
 function newsTimestamp(n: NewsItem): string {
-  return n.datetime || (n.date && n.time ? `${n.date} ${n.time}` : "") || n.publish_time || "";
+  return n.published_at || n.datetime || (n.date && n.time ? `${n.date} ${n.time}` : "") || n.publish_time || "";
 }
 
 export default function NewsPage() {
@@ -201,6 +203,13 @@ export default function NewsPage() {
    * 优先级：datetime > date+time > publish_time
    */
   const fmtTime = (news: NewsItem) => {
+    // R1 Q3契约收尾: 优先 published_at (ISO8601+08:00)
+    const pa = news.published_at;
+    if (pa && pa.trim()) {
+      const tPart = pa.includes("T") ? pa.split("T")[1] : pa;
+      const match = tPart.match(/(\d{1,2}):(\d{2})/);
+      if (match) return `${match[1].padStart(2, "0")}:${match[2]}`;
+    }
     // 1. 尝试 datetime 字段（"2024-01-01 10:30:00"）
     const dt = news.datetime;
     if (dt && dt.trim() && dt.trim() !== "None") {

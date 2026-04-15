@@ -1,6 +1,6 @@
-// Input: 后端 /api/market_indices、/api/latest_news、/api/stock_data (行存储)、/api/stock_name、watchlist-store、portfolio-store、useStockNames、useStockPrices
+// Input: 后端 /api/market_indices、/api/latest_news、watchlist-store、portfolio-store、useStockNames、useStockPrices
 // Output: 投资看板页面 — Bento Grid布局、自选股+持仓表格实时补全中文名与最新价，Dark Glassmorphism风格
-// Pos: app/dashboard/page.tsx - Dashboard看板主页面 (Q3契约审计 2026-04-15 对齐: stock_data行存储/news title+datetime fallback)
+// Pos: app/dashboard/page.tsx - Dashboard看板主页面 (R1 Q3契约收尾 2026-04-15 21:28: DEDUP fetchWatchQuotes→useStockPrices+useStockNames; news published_at/source 字段统一)
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
@@ -45,8 +45,11 @@ interface MarketIndicesResponse {
 interface NewsItem {
   title: string;
   content?: string;
+  // R1 Q3契约收尾 (2026-04-15 21:28): 后端已统一输出 published_at(ISO8601+08:00) 与 source
+  // 仍保留 datetime / publish_time 作兜底兼容老数据文件
+  published_at?: string;
+  datetime?: string;
   publish_time?: string;
-  datetime?: string; // 后端实际字段 (Q3契约审计 2026-04-15)
   source?: string;
 }
 
@@ -58,7 +61,6 @@ interface NewsResponse {
 interface WatchQuote extends WatchItem {
   price?: number;
   change_pct?: number;
-  loading?: boolean;
 }
 
 /* ---------- 智能问候 ---------- */
@@ -97,10 +99,8 @@ export default function DashboardPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
 
-  // 自选股行情
+  // 自选股行情 (R1 Q3契约收尾: DEDUP, 统一用 useStockNames + useStockPrices hook)
   const watchItems = useWatchlistStore((s) => s.items);
-  const [watchQuotes, setWatchQuotes] = useState<WatchQuote[]>([]);
-  const [watchLoading, setWatchLoading] = useState(false);
 
   // 持仓
   const holdings = usePortfolioStore((s) => s.holdings);
@@ -156,63 +156,8 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const fetchWatchQuotes = useCallback(async () => {
-    if (!watchItems.length) {
-      setWatchQuotes([]);
-      return;
-    }
-    setWatchLoading(true);
-
-    const results: WatchQuote[] = await Promise.all(
-      watchItems.map(async (item) => {
-        let resolvedName = item.name;
-        // 1) 先走轻量name端点（靠A股全量缓存，不依赖实时网络）
-        try {
-          const r = await apiClient.get<{ stock_name?: string }>("/api/stock_name", { stock_code: item.code });
-          if (r.stock_name && r.stock_name !== item.code) resolvedName = r.stock_name;
-        } catch { /* ignore, fall back */ }
-        // 2) 再尝试 stock_data 取价格（失败不影响name）
-        // Q3契约审计 2026-04-15: 后端 /api/stock_data 实际返回 orient=records 行存储
-        // {data: [{date, close, open, ...}, ...]}, 非历史的列存储格式。改为行存储解析。
-        try {
-          const res = await apiClient.get<{
-            stock_name?: string;
-            data?: Array<{ date?: string; close?: number; change_pct?: number }>;
-          }>("/api/stock_data", {
-            stock_code: item.code,
-            market_type: "A",
-            period: "1m",
-          });
-          const rows = res?.data;
-          if (res?.stock_name && res.stock_name !== item.code) resolvedName = res.stock_name;
-          if (Array.isArray(rows) && rows.length > 0) {
-            const last = rows[rows.length - 1];
-            const prev = rows.length > 1 ? rows[rows.length - 2] : last;
-            const close = typeof last.close === "number" ? last.close : undefined;
-            const prevClose = typeof prev.close === "number" ? prev.close : close;
-            if (close !== undefined) {
-              const pct =
-                typeof last.change_pct === "number"
-                  ? last.change_pct
-                  : prevClose && prevClose > 0
-                    ? ((close - prevClose) / prevClose) * 100
-                    : 0;
-              return {
-                ...item,
-                name: resolvedName,
-                price: close,
-                change_pct: pct,
-              };
-            }
-          }
-        } catch { /* ignore */ }
-        return { ...item, name: resolvedName };
-      })
-    );
-
-    setWatchQuotes(results);
-    setWatchLoading(false);
-  }, [watchItems]);
+  // R1 Q3契约收尾 (2026-04-15 21:28): 原 fetchWatchQuotes 本地实现已删除,
+  // 统一用 useStockNames + useStockPrices hook (见下方 watchCodes/watchNames/watchPrices)
 
   /* ---- 初始化 + 自动刷新 ---- */
 
@@ -221,11 +166,6 @@ export default function DashboardPage() {
     fetchNews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    fetchWatchQuotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchItems]);
 
   useEffect(() => {
     // 30秒自动刷新指数
@@ -263,12 +203,11 @@ export default function DashboardPage() {
       setPullDistance(50); // 保持在刷新指示位置
       setIndicesLoading(true);
       await fetchIndices();
-      fetchWatchQuotes();
       fetchNews();
       setIsRefreshing(false);
     }
     setPullDistance(0);
-  }, [isPulling, pullDistance, fetchIndices, fetchWatchQuotes, fetchNews]);
+  }, [isPulling, pullDistance, fetchIndices, fetchNews]);
 
   /* ---- 操作 ---- */
 
@@ -286,7 +225,6 @@ export default function DashboardPage() {
   const handleRefresh = () => {
     setIndicesLoading(true);
     fetchIndices();
-    fetchWatchQuotes();
     fetchNews();
   };
 
@@ -297,6 +235,27 @@ export default function DashboardPage() {
     ) : (
       <TrendingDown className="h-4 w-4 stock-down" />
     );
+
+  /* ---- 自选股：实时名+实时价（R1 Q3契约收尾 DEDUP：统一hook） ---- */
+  const watchCodes = watchItems.map((w) => w.code);
+  const watchNames = useStockNames(watchCodes);
+  const watchPrices = useStockPrices(watchCodes);
+  const watchQuotes: WatchQuote[] = watchItems.map((item) => {
+    const liveName = watchNames[item.code];
+    const priceInfo = watchPrices[item.code];
+    const name = liveName && liveName !== item.code
+      ? liveName
+      : (item.name && item.name !== item.code ? item.name : item.code);
+    return {
+      ...item,
+      name,
+      price: priceInfo?.price,
+      change_pct: priceInfo?.change_pct,
+    };
+  });
+  const watchLoading =
+    watchItems.length > 0 &&
+    watchItems.some((w) => watchPrices[w.code] === undefined);
 
   /* ---- 持仓：实时名+实时价（derived state，不持久化回store） ---- */
   const holdingCodes = holdings.map((h) => h.code);
@@ -660,8 +619,8 @@ export default function DashboardPage() {
                           </span>
                         )}
                         <span className="text-[10px] text-muted-foreground dark:text-[#8888A0]/60">
-                          {/* Q3契约审计: 后端实际返回datetime, publish_time仅兜底 */}
-                          {formatTime(item.datetime || item.publish_time)}
+                          {/* R1 Q3契约收尾 2026-04-15: 优先 published_at(ISO8601+08:00), datetime/publish_time作兜底 */}
+                          {formatTime(item.published_at || item.datetime || item.publish_time)}
                         </span>
                       </div>
                     </li>
