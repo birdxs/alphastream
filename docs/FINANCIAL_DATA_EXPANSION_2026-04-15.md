@@ -15,7 +15,20 @@
 | A3 yfinance | `yfinance_adapter.py` 港美股+ETF+期权 | `1c0df1e` + `aafda10` | 13 mock PASS |
 | A4 SEC EDGAR | `edgar_adapter.py` (10/s限流+UA规范) | `471978a` + `756b643` | 18 mock PASS |
 
-**汇总**：4 adapter + 4 test + 文档追溯，56 mock单测全通过，8 commits入main。下一批启动 P1 (FRED/国统局/世行/ccxt)。
+**汇总**：4 adapter + 4 test + 文档追溯，56 mock单测全通过，8 commits入main。
+
+## P1 批次验收 ✅ (2026-04-15 12:25 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| A5 FRED | `fred_adapter.py` 宏观80万序列 | `62cd133` | 22 PASS |
+| A6 国家统计局 | `nbs_adapter.py` GDP/CPI/PMI/工业 | `5847a90`+`86bb054` | 12 PASS |
+| A7 WorldBank | `worldbank_adapter.py` 全球指标 | `9e1113e`+`2ca75de` | 15 PASS |
+| A8 IMF | `imf_adapter.py` SDMX-JSON | (同A7) | 20 PASS |
+| A9 ccxt | `ccxt_adapter.py` 100+交易所 | `46bf732`+`b83d6db` | 24合计 |
+| A10 CoinGecko | `coingecko_adapter.py` 公开免Key | (同A9) | — |
+
+**P1汇总**：6 adapter + 6 test + 文档追溯，93 mock单测通过，6 commits入main。累计P0+P1=12 adapter/10 test，149 mock PASS。并发观察：shared `__init__.py`/README 由先完成agent合并无冲突。下一批启动 P2 (自建OpenCLI爬虫+Ashare/easyquotation+RSS聚合+OpenBB桥)。
 
 ---
 
