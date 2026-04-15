@@ -200,6 +200,7 @@ docker-compose -f docker-compose.frontend.yml up -d   # 前端
 
 ## 📚 文档
 
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — **v3.1 运维手册**（启动/Key/代理/故障/Agent链路）
 - [docs/API.md](docs/API.md) — 40+ 路由对接标准
 - [docs/FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md) — 前端架构
 - [docs/BACKEND_GAPS.md](docs/BACKEND_GAPS.md) — 后端差距追踪
