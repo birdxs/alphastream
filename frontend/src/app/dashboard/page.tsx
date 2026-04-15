@@ -1,6 +1,6 @@
-// Input: 后端 /api/market_indices、/api/latest_news、watchlist-store、portfolio-store、useStockNames、useStockPrices
+// Input: 后端 /api/market_indices、/api/latest_news、/api/stock_data (行存储)、/api/stock_name、watchlist-store、portfolio-store、useStockNames、useStockPrices
 // Output: 投资看板页面 — Bento Grid布局、自选股+持仓表格实时补全中文名与最新价，Dark Glassmorphism风格
-// Pos: app/dashboard/page.tsx - Dashboard看板主页面
+// Pos: app/dashboard/page.tsx - Dashboard看板主页面 (Q3契约审计 2026-04-15 对齐: stock_data行存储/news title+datetime fallback)
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
@@ -46,6 +46,7 @@ interface NewsItem {
   title: string;
   content?: string;
   publish_time?: string;
+  datetime?: string; // 后端实际字段 (Q3契约审计 2026-04-15)
   source?: string;
 }
 
@@ -171,24 +172,38 @@ export default function DashboardPage() {
           if (r.stock_name && r.stock_name !== item.code) resolvedName = r.stock_name;
         } catch { /* ignore, fall back */ }
         // 2) 再尝试 stock_data 取价格（失败不影响name）
+        // Q3契约审计 2026-04-15: 后端 /api/stock_data 实际返回 orient=records 行存储
+        // {data: [{date, close, open, ...}, ...]}, 非历史的列存储格式。改为行存储解析。
         try {
           const res = await apiClient.get<{
             stock_name?: string;
-            data?: { dates?: string[]; close?: number[]; change_pct?: number[] };
+            data?: Array<{ date?: string; close?: number; change_pct?: number }>;
           }>("/api/stock_data", {
             stock_code: item.code,
+            market_type: "A",
             period: "1m",
           });
-          const data = res?.data;
+          const rows = res?.data;
           if (res?.stock_name && res.stock_name !== item.code) resolvedName = res.stock_name;
-          if (data?.close?.length) {
-            const lastIdx = data.close.length - 1;
-            return {
-              ...item,
-              name: resolvedName,
-              price: data.close[lastIdx],
-              change_pct: data.change_pct?.[lastIdx] ?? 0,
-            };
+          if (Array.isArray(rows) && rows.length > 0) {
+            const last = rows[rows.length - 1];
+            const prev = rows.length > 1 ? rows[rows.length - 2] : last;
+            const close = typeof last.close === "number" ? last.close : undefined;
+            const prevClose = typeof prev.close === "number" ? prev.close : close;
+            if (close !== undefined) {
+              const pct =
+                typeof last.change_pct === "number"
+                  ? last.change_pct
+                  : prevClose && prevClose > 0
+                    ? ((close - prevClose) / prevClose) * 100
+                    : 0;
+              return {
+                ...item,
+                name: resolvedName,
+                price: close,
+                change_pct: pct,
+              };
+            }
           }
         } catch { /* ignore */ }
         return { ...item, name: resolvedName };
@@ -635,7 +650,8 @@ export default function DashboardPage() {
                       className="group py-2 border-b border-foreground/[0.04] dark:border-white/[0.04] last:border-0 hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] rounded px-1.5 -mx-1.5 transition-colors cursor-default"
                     >
                       <p className="text-xs text-foreground dark:text-[#F0F0F5] leading-relaxed line-clamp-2 group-hover:text-white transition-colors">
-                        {item.title}
+                        {/* Q3契约审计 2026-04-15: 上游(财联社)多数条目无独立title, 数据实际在content, fallback显示content首60字 */}
+                        {item.title?.trim() || item.content?.slice(0, 60) || "(无标题)"}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         {item.source && (
@@ -644,7 +660,8 @@ export default function DashboardPage() {
                           </span>
                         )}
                         <span className="text-[10px] text-muted-foreground dark:text-[#8888A0]/60">
-                          {formatTime(item.publish_time)}
+                          {/* Q3契约审计: 后端实际返回datetime, publish_time仅兜底 */}
+                          {formatTime(item.datetime || item.publish_time)}
                         </span>
                       </div>
                     </li>
