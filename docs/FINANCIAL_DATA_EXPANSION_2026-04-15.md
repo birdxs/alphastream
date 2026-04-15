@@ -284,3 +284,40 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 - 所有新源接入须先通过 §三 的代码片段冒烟测试，再纳入 Agent
 
 — END v2 —
+
+---
+
+## 三、P0执行追溯
+
+### A1 OpenCLI桥 [2026-04-15]
+
+**时间基准**：2026-04-15 11:30 +08:00（Asia/Singapore）
+
+**权威源交叉验证（≥3独立源）**：
+
+| # | 来源 | URL | 版本/参考 | 检索时间 | 采纳结论 |
+|---|---|---|---|---|---|
+| 1 | OpenCLI 主仓 README | https://github.com/jackwener/OpenCLI | main (15.8k⭐) | 2026-04-15 11:30 +08:00 | 采纳 `opencli <adapter> --format=json` 作为统一调用签名；Strategy.COOKIE 用于登录态爬取（本期暂不启用） |
+| 2 | OpenCLI PR#1025 | https://github.com/jackwener/OpenCLI/pull/1025 | hot-rank 三适配器 | 2026-04-15 11:30 +08:00 | 采纳适配器路径 `eastmoney/hot-rank`、`tdx/hot-rank`、`ths/hot-rank`；输出 schema 兼容 `list[dict]` 与 `{"data":[...]}` 两种包装 |
+| 3 | Python 3.12 subprocess 官方文档 | https://docs.python.org/3.12/library/subprocess.html | Python 3.12 | 2026-04-15 11:30 +08:00 | 采纳 `subprocess.run(..., capture_output=True, text=True, timeout=30, check=False)` 范式；显式捕获 `TimeoutExpired/OSError`，避免异常穿透 |
+| 4 | Node.js Releases | https://nodejs.org/en/about/previous-releases | Node 20 LTS (Active 至 2026-04) / Node 22 LTS | 2026-04-15 11:30 +08:00 | 采纳 `node ≥ 20` 作为运行时底线；运行期通过 `shutil.which('node')` 探测，未装即降级 |
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/opencli_bridge.py` | 新建 | [NEW-FILE:#20260415-02] |
+| `tests/adapters/test_opencli_bridge.py` | 新建 | [NEW-FILE:#20260415-03] |
+| `app/adapters/README.md` | 新建(领地标记) | — |
+| `app/adapters/__init__.py` | 修改 | 导出 OpenCLIBridge |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 修改 | 本章节追加 |
+
+**关键设计决策**：
+
+1. **降级优先**：Node/opencli 任一缺失 → `log.warning` + 返回 `[]`，绝不阻断主流程（对齐 §七 回滚策略）
+2. **5min TTL 缓存**：`lru_cache(maxsize=32)` + 时间桶 `int(time.time() // 300)` 作缓存键，桶跨越自然失效，无需额外依赖
+3. **Schema 兼容**：同时支持裸 `list` 与 `{"data":[...]}/{"items":[...]}` 包装，适配 PR#1025 两种 adapter 写法
+4. **抽象接口占位**：OpenCLI 非 K线/财务能力域，`BaseAdapter` 6 抽象方法以空对象实现，供 `fallback_manager` 按 `health_check()` 正确跳过
+
+**Commit Hash**：见 git log（commit1: 代码落盘；commit2: 本追溯文档）
+
