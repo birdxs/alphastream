@@ -4139,3 +4139,67 @@ sentiment ──> bull ──> bear ──> debate_summary ──> decision (dep
 - `feat(agent): R2 bull/bear串行辩论 + debate_summary moderator节点`
 - `feat(agent): bear_researcher 引用bull_case反驳式prompt`
 - `docs(data): R2追溯 [NEW-FILE:#20260415-R2]`
+
+---
+
+## R3 HITL+RiskAlert publish + Investor可观测 [21:35]
+
+### 背景
+Q4 审计发现:
+- **P2**: `EVENT_APPROVAL_NEEDED` / `EVENT_RISK_ALERT` 在 `event_bus.py` L113-114 定义常量, 全库 0 调用 → 前端终端永不出现 HITL/风险告警
+- **P3**: `InvestorCoordinator` 内部 for 循环调 4 人格 (buffett/munger/lynch/damodaran), 子 agent 未经 `_wrap_with_events` 包装 → d=5 深度时终端静默 30-60s
+
+### P2 交付 — 真 publish
+**HITL (`app/agents/hitl.py`)** 新增 `_publish_approval_event(action, task_id, decision, risk_level)`:
+- `request_approval(low)` → publish `action=auto_pass`
+- `request_approval(medium)` → publish `action=auto_pass`
+- `request_approval(high)` → publish `action=pending` (等待人工前)
+- `submit_approval(approved/rejected)` → publish `action=approved/rejected` (人工后)
+- payload `event_type='reasoning'`, content 前缀 `[APPROVAL]`
+
+**RiskManager (`app/agents/risk_manager.py`)** 新增 `_publish_risk_alert(stock_code, result)`:
+- AI/fallback 两条路径出结果后都调用
+- 阈值: score≥80 或 risk_level含"高风险" → level=high; score≥60 或 "中高" → medium; score≥40 或 "中等" → low; 其他静默
+- content 前缀 `[RISK_ALERT] level=X score=Y`
+
+### P3 交付 — Investor 包装
+`app/agents/investors/investor_coordinator.py`:
+```python
+from app.agents.coordinator import _wrap_with_events as _wrap
+for key, agent_cls in agents:
+    result = _wrap(agent_cls.analyze, agent_cls.name)(state)  # 包装前: agent_cls.analyze(state)
+```
+效果: 4 人格每个都 publish `EVENT_AGENT_STARTED` + 一条 `reasoning "{name}开始分析"` + `EVENT_AGENT_COMPLETED`, 终端不再 30-60s 静默。
+
+### 前端映射 (`agent-side-panel.tsx::eventToLine`)
+| content 前缀 | meta.level | kind | 图标 | 颜色 |
+|-------------|-----------|------|------|------|
+| `[APPROVAL]` | — | warn | 🚨 | 琥珀 |
+| `[RISK_ALERT]` | high | error | ⚠ | 琥珀红 |
+| `[RISK_ALERT]` | medium/low | warn | ⚠ | 琥珀 |
+| (其他 reasoning) | — | info | 💭 | 中性灰 |
+
+### 事件流示例 (d=5 深度)
+```
+▶ 技术分析师 → started
+  ├─ ⚙ get_stock_data(300750.SZ)
+  ✓ tool_result 2.3s
+⚠ 风险管理师: [RISK_ALERT] level=medium score=65 中高风险 — 波动率偏高; 成交量放大异常
+🚨 HITL审批官: [APPROVAL] pending task=dec_xxx risk=high — 减仓
+▶ 巴菲特 → started
+💭 巴菲特开始分析 300750.SZ
+✔ 巴菲特 completed
+▶ 芒格 → started
+...
+```
+
+### 验证
+- Python AST: hitl/risk_manager/investor_coordinator 三文件全通过
+- Frontend tsc --noEmit: PASS (无类型错误)
+- 不启服务, 路径静态校验
+
+### Commit
+- `feat(agent): R3 HITL+RiskAlert真publish到event_bus`
+- `feat(agent): R3 InvestorCoordinator 4人格接入_wrap_with_events 可观测`
+- `feat(fe): R3 前端approval/risk_alert前缀 kind 映射`
+- `docs(data): R3追溯`
