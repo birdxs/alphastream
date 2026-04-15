@@ -2517,3 +2517,19 @@ v3 无 SKIPPED — 21 个 adapter 全部被扫到并返回真实状态; 10 DEGRA
 - **文档齐备**: Phase 索引 + 运维手册 + 审批单 + 冗余治理报告
 - **数据层 v2 全链路最终达成** — 一日 7 Phase 闭环, 从 P0 落盘到 J3 最终验收, 无阻塞遗留。
 
+
+## J2 前后端浏览器端到端 [2026-04-15 14:21 +08:00]
+
+**范围**: E4 5 P3 Artifact 真 API 数据渲染验证
+**方式**: Flask 8888 + Next 16.2.1 Turbopack 3000 同时启动, curl 降级(Playwright 未预装)
+
+**路由存活 (9/9 = 200)**: `/`, `/dashboard`, `/stock/600519`, `/screener`, `/portfolio`, `/watchlist`, `/compare`, `/news`, `/settings`
+
+**P3 契约对齐 (5/5 ✓)**:
+- `shipping/bdi` ↔ `shipping-chart.tsx` (bdi_series/port_throughput/ais_count)
+- `esg/AAPL` ↔ `esg-scorecard.tsx` (primary/esg_score/e_score/s_score/g_score/grade)
+- `jobs/search` ↔ `hiring-signal.tsx` (items/total_postings/monthly_trend/skill_distribution)
+- `corporate/search` ↔ `corporate-network.tsx` (items/count/query)
+- `alt_data/AAPL` ↔ `alt-data-panel.tsx` (data.{esg,shipping,hiring,corporate}/coverage/partial_errors)
+
+**结论**: PASS. 全部 artifact 结构与前端 TS interface 100% 对齐, 降级路径 `partial_errors` 正常暴露, 前端有 DEMO fallback。详见 `logs/e2e_j2_2026-04-15.md`。
