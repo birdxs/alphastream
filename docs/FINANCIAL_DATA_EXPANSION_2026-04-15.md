@@ -3669,3 +3669,59 @@ P0/P1/P2 → C+D → E → F+G → H → I → J → K → L → M+N → O(维�
 
 **TypeScript**: `npx tsc --noEmit` 0 错误通过。
 
+
+---
+
+## UI-Q2 聊天发送修复+Mac毛玻璃终端 [2026-04-15 20:15 +08:00]
+
+### P0.1 聊天发送无反应 — 根因定位
+
+**现象**: 前端显示"AI正在分析中", 后端 log 12min 未收到 `/api/ai/chat` POST, 仅见 `/api/conversations HEAD` 轮询。
+
+**根因**: `frontend/src/lib/api/client.ts` 的 `SSE_BASE` fallback 逻辑与新加的局域网访问(`allowedDevOrigins: ['192.168.43.125']`)冲突：
+```ts
+// 旧逻辑 (commit 4735a8d)
+const SSE_BASE = ... || (window.location.hostname === 'localhost' ? 'http://localhost:8888' : '');
+```
+- **场景 A**：Comdr 从 `http://192.168.43.125:3000` 访问前端 → `hostname !== 'localhost'` → `SSE_BASE=''` → fetch 相对路径 → 经 Next dev rewrites 代理 → Turbopack dev 对流式 POST 可能延迟/吞首 chunk
+- **场景 B**：若真直连 `http://192.168.43.125:8888` → 后端 CORS `allowed_origins` 未含该 origin（默认只有 localhost/127.0.0.1:3000/8888）→ preflight 被拒 → 后端永远不会收到实际 POST
+
+**修复**（仅动前端 2 文件）:
+1. `lib/api/client.ts` — `SSE_BASE` 默认始终走**同源相对 URL**（经 Next rewrites 代理，避 CORS）；显式设置 `NEXT_PUBLIC_SSE_URL` 才直连（留给生产 Nginx 反代）
+2. `lib/api/client.ts::streamPost` — 加 `console.log('[SSE] POST', sseUrl, status, ok, hasBody)`, 后续可在 DevTools 直接定位失败阶段
+3. `lib/hooks/use-chat-stream.ts::lookupCodeByName` — 加**单次 800ms + 整体 2500ms 超时**，防上游 `/api/stock_name_search` 慢响应阻塞 sendMessage
+4. `lib/hooks/use-chat-stream.ts::sendMessage` — 加 `console.log('[chat-stream]', endpoint, isAnalyze, resolvedCode)`
+
+### P0.2 Mac 终端 UI 毛玻璃重构 — 主题 Token 映射表
+
+废弃硬编码 `#1E1E1E/#F8F8F8`（与项目 Dark Glassmorphism 不融）, 改用 Tailwind 主题 token + `backdrop-blur`：
+
+| 元素        | 修复前 (硬编码)              | 修复后 (主题 token + 毛玻璃)                                                |
+|-------------|------------------------------|------------------------------------------------------------------------------|
+| 容器背景    | `#1E1E1E / #F8F8F8`          | `bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150` |
+| 容器边框    | `rgba(255,255,255,0.08)`     | `border-foreground/[0.08] dark:border-white/[0.08]`                          |
+| 容器阴影    | 无                           | `shadow-2xl shadow-foreground/[0.06] dark:shadow-black/30`                   |
+| 标题栏背景  | `#2D2D2D / #ECECEC`          | `bg-foreground/[0.03] dark:bg-white/[0.03]` (透明叠加)                       |
+| 工具/底栏   | `#181818 / #E5E5E5`          | `bg-foreground/[0.02] dark:bg-white/[0.02]`                                  |
+| 终端内容区  | 继承容器硬色                 | `bg-transparent` (让毛玻璃透过)                                              |
+| prompt `$`  | `#50FA7B / #28A745`          | `text-[#3737CC] dark:text-[#7F7FFF]` (品牌紫蓝)                              |
+| agent `▶`   | `#BD93F9 / #6F42C1`          | `text-[#7F00FF] dark:text-[#BD93F9]`                                         |
+| child `├─`  | `#8BE9FD / #0366D6`          | `text-foreground/60`                                                         |
+| done `└─`   | `#50FA7B / #28A745`          | `text-[#46BEA3]` (成功青绿)                                                  |
+| warn `⚠`    | `#F1FA8C / #D73A49`          | `text-[#F59E0B]` (琥珀)                                                      |
+| error `✖`   | `#FF5555 / #D73A49`          | `text-[#EF4444]`                                                             |
+| 时间戳      | `#6272A4 / #6A737D`          | `text-foreground/40 tabular-nums`                                            |
+| 行 hover    | 无                           | `hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]`                      |
+| 光标块      | `#50FA7B / #28A745`          | `bg-[#3737CC] dark:bg-[#7F7FFF]`                                             |
+| 滚动条 thumb| `palette.border`             | `rgba(127,127,127,0.25)` (中性, 亮暗通用)                                    |
+
+**结构保留**: Mac 三点红黄绿、标题栏 `⎔ AGENT STREAM · stock-analysis · zsh`、树形日志、动画 (`animate-in fade-in slide-in-from-bottom-1`)、工具条 (events/agents/clear/export/collapse)、底部状态栏 (`connected · streaming` + uptime)、所有 store 订阅逻辑**零修改**。
+
+**事件订阅逻辑**: 完全未动 — `useAgentStore((s) => s.events)` / `isAnalyzing` / `agentProgresses` 挂载点一致；同样调用 `eventToLine` 映射；光标只在 `isLast && isAnalyzing` 时显示。
+
+### 验证清单
+
+- [x] `tsc --noEmit` → Exit 0
+- [ ] Comdr 实测：浏览器 DevTools Network 可见 `/api/ai/chat` POST 发出
+- [ ] Comdr 实测：终端面板从 192.168.43.125:3000 访问显示毛玻璃, 背景能透出主题色
+
