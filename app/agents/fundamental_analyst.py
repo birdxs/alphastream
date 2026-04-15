@@ -85,7 +85,8 @@ class FundamentalAnalystAgent:
 
             content, tool_log, error = chat_with_tools(
                 client, messages, FUNDAMENTAL_TOOLS_SCHEMA,
-                max_tool_rounds=2, temperature=0.7
+                max_tool_rounds=2, temperature=0.7,
+                agent_name='基本面分析师'  # [UI-Q4]
             )
 
             if error:

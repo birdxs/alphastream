@@ -88,7 +88,9 @@ class EventBus:
         Returns:
             queue.Queue 实例，调用方需在完成后调用 destroy_sse_bridge()
         """
-        bridge_queue = queue.Queue(maxsize=1000)
+        # [UI-Q4 2026-04-15 +08:00] maxsize 从 1000 → 10000, token级真实时流每秒10-50事件,
+        #   一次深度分析可产生数千 token事件, 1000易被打满导致丢token
+        bridge_queue = queue.Queue(maxsize=10000)
         with self._bridge_lock:
             self._sse_bridges.append((bridge_queue, filter_events))
         logger.debug(f"创建SSE桥接队列, filter={filter_events}")

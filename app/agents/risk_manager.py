@@ -93,7 +93,8 @@ class RiskManagerAgent:
 
             content, tool_log, error = chat_with_tools(
                 client, messages, tools_schema,
-                max_tool_rounds=3, temperature=0.7
+                max_tool_rounds=3, temperature=0.7,
+                agent_name='风险管理师'  # [UI-Q4]
             )
 
             if error:

@@ -71,7 +71,8 @@ class TechnicalAnalystAgent:
 
             content, tool_log, error = chat_with_tools(
                 client, messages, TECHNICAL_TOOLS_SCHEMA,
-                max_tool_rounds=3, temperature=0.7
+                max_tool_rounds=3, temperature=0.7,
+                agent_name='技术分析师'  # [UI-Q4] 标记token/tool事件所属agent
             )
 
             if error:

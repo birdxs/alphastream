@@ -83,8 +83,59 @@ def get_completion_content(response):
     return None
 
 
+_TRUNC_MAX = 10240  # 10KB上限, 超过加 "...(truncated)" 后缀
+_REASONING_EVENT = 'reasoning'
+_LLM_REQUEST_EVENT = 'llm_request'
+
+
+def _truncate_large(text: str) -> str:
+    """[UI-Q4] 零截断策略: 默认不截断; 仅当超过10KB才截断并标记"""
+    if not isinstance(text, str):
+        try:
+            text = str(text)
+        except Exception:
+            return ''
+    if len(text) > _TRUNC_MAX:
+        return text[:_TRUNC_MAX] + '\n...(truncated, total={}KB)'.format(len(text) // 1024)
+    return text
+
+
+def _publish_reasoning(agent_name, content):
+    """[UI-Q4] publish reasoning 事件 (system prompt / LLM request 等) 到 event_bus"""
+    try:
+        from app.core.event_bus import get_event_bus
+        get_event_bus().publish(_REASONING_EVENT, {
+            'event_type': 'reasoning',
+            'data': {
+                'agent': agent_name or '',
+                'content': _truncate_large(content),
+            }
+        })
+    except Exception:
+        pass
+
+
+def _publish_llm_request(agent_name, model, messages):
+    """[UI-Q4] 发LLM前publish llm_request, 让Comdr看到完整prompt工程"""
+    try:
+        import json as _json
+        msgs_str = _json.dumps(messages, ensure_ascii=False, default=str)
+        content = f'[LLM_REQ] model={model} messages={msgs_str}'
+        from app.core.event_bus import get_event_bus
+        get_event_bus().publish(_LLM_REQUEST_EVENT, {
+            'event_type': 'reasoning',
+            'data': {
+                'agent': agent_name or '',
+                'content': _truncate_large(content),
+            }
+        })
+    except Exception:
+        pass
+
+
 def chat_with_tools(client, messages, tools_schema, tool_executor=None,
-                    max_tool_rounds=3, temperature=0.7, max_tokens=4096):
+                    max_tool_rounds=3, temperature=0.7, max_tokens=4096,
+                    agent_name=None):
     """
     带工具调用循环的AI对话（Function Calling）。
 
@@ -116,10 +167,13 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
         tool_executor = execute_tool
 
     tool_calls_log = []
+    model = get_ai_model()
 
     for round_idx in range(max_tool_rounds):
-        # 调用AI（带工具定义）
-        response, error = chat_completion(
+        # [UI-Q4 2026-04-15 +08:00] 真·stream=True 逐token publish EVENT_TOKEN_GENERATED
+        #   替代原 chat_completion 的一次性返回, 让Comdr看到"所见即所得"逐字流
+        _publish_llm_request(agent_name, model, messages)
+        stream, error = chat_completion_stream(
             client, messages,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -129,51 +183,113 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
 
         if error:
             return None, tool_calls_log, error
+        if stream is None:
+            return None, tool_calls_log, "AI返回空流"
 
-        if not response or not response.choices:
-            return None, tool_calls_log, "AI返回空响应"
+        full_content = ""
+        pending_tool_calls = {}  # {index: {id,name,arguments}}
+        try:
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                # 文本 token → 逐token publish
+                if delta.content:
+                    full_content += delta.content
+                    try:
+                        from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                        get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                            'event_type': 'token',
+                            'data': {
+                                'content': delta.content,
+                                'agent': agent_name or '',
+                                'round': round_idx,
+                            }
+                        })
+                    except Exception:
+                        pass
+                # 工具调用 delta 累积
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in pending_tool_calls:
+                            pending_tool_calls[idx] = {'id': tc_delta.id or '', 'name': '', 'arguments': ''}
+                        if tc_delta.id:
+                            pending_tool_calls[idx]['id'] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                pending_tool_calls[idx]['name'] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                pending_tool_calls[idx]['arguments'] += tc_delta.function.arguments
+        except Exception as e:
+            error_type = type(e).__name__
+            friendly_msg = ERROR_MESSAGES.get(error_type, f'AI流式读取出错: {str(e)}')
+            logger.error(f"AI流式读取失败 [{error_type}]: {str(e)}")
+            return None, tool_calls_log, friendly_msg
 
-        assistant_message = response.choices[0].message
-
-        # 检查是否有工具调用
-        if not assistant_message.tool_calls:
-            # AI没有调用工具，返回最终文本
-            final_content = assistant_message.content or ""
-            logger.info(f"Function Calling完成，共{round_idx}轮工具调用，"
-                        f"调用了{len(tool_calls_log)}个工具")
-            return final_content, tool_calls_log, None
-
-        # 将assistant消息（含tool_calls）追加到消息列表
-        messages.append(assistant_message)
-
-        # 执行每个工具调用
-        for tc in assistant_message.tool_calls:
-            tool_name = tc.function.name
+        # 无工具调用 → 最终文本
+        if not pending_tool_calls:
+            # token流结束 → publish 一次 finish_reason=stop 的空token 便于前端 finalize
             try:
-                arguments = json.loads(tc.function.arguments)
+                from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                    'event_type': 'token',
+                    'data': {
+                        'content': '',
+                        'agent': agent_name or '',
+                        'round': round_idx,
+                        'finish_reason': 'stop',
+                    }
+                })
+            except Exception:
+                pass
+            logger.info(f"Function Calling完成，共{round_idx}轮工具调用，调用了{len(tool_calls_log)}个工具")
+            return full_content, tool_calls_log, None
+
+        # 构造 assistant 消息追加到messages
+        tool_calls_for_message = []
+        for idx in sorted(pending_tool_calls.keys()):
+            tc_info = pending_tool_calls[idx]
+            tool_calls_for_message.append({
+                "id": tc_info['id'],
+                "type": "function",
+                "function": {"name": tc_info['name'], "arguments": tc_info['arguments']}
+            })
+        messages.append({
+            "role": "assistant",
+            "content": full_content or None,
+            "tool_calls": tool_calls_for_message
+        })
+
+        # 执行每个工具调用 (tc 已是 dict 结构)
+        for tc in tool_calls_for_message:
+            tc_id = tc["id"]
+            tool_name = tc["function"]["name"]
+            raw_args = tc["function"]["arguments"]
+            try:
+                arguments = json.loads(raw_args)
             except json.JSONDecodeError:
                 arguments = {}
-                logger.warning(f"工具 {tool_name} 参数解析失败: {tc.function.arguments}")
+                logger.warning(f"工具 {tool_name} 参数解析失败: {raw_args}")
 
             logger.info(f"[Round {round_idx + 1}] 执行工具: {tool_name}({arguments})")
 
-            # [UI-Q3 2026-04-15] publish tool_call_start 到 event_bus (SSE桥接)
+            # [UI-Q3→UI-Q4] publish tool_call_start 到 event_bus (完整arguments, 零截断除非>10KB)
             _tc_start_ts = time.time()
             try:
                 from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_START
-                _args_preview = arguments
                 try:
-                    _args_str = json.dumps(arguments, ensure_ascii=False)
-                    if len(_args_str) > 200:
-                        _args_preview = _args_str[:200] + '...'
+                    _args_full = json.dumps(arguments, ensure_ascii=False)
                 except Exception:
-                    _args_preview = str(arguments)[:200]
+                    _args_full = str(arguments)
                 get_event_bus().publish(EVENT_TOOL_CALL_START, {
                     'event_type': 'tool_call_start',
                     'data': {
-                        'tool_call_id': tc.id,
+                        'tool_call_id': tc_id,
                         'tool_name': tool_name,
-                        'arguments': _args_preview,
+                        'arguments': arguments,  # 结构化对象, 前端可决定如何显示
+                        'arguments_raw': _truncate_large(_args_full),  # 完整原始
+                        'agent': agent_name or '',
                     }
                 })
             except Exception:
@@ -186,25 +302,24 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
                 result = f"工具执行异常: {str(e)}"
                 logger.error(f"工具 {tool_name} 执行异常: {e}")
 
-            # [UI-Q3 2026-04-15] publish tool_call_result 到 event_bus
+            # [UI-Q3→UI-Q4] publish tool_call_result 到 event_bus (完整结果, 零截断除非>10KB)
             try:
                 from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_RESULT
-                _result_summary = result if isinstance(result, str) else str(result)
-                if len(_result_summary) > 200:
-                    _result_summary = _result_summary[:200] + '...'
+                _result_str = result if isinstance(result, str) else str(result)
                 get_event_bus().publish(EVENT_TOOL_CALL_RESULT, {
                     'event_type': 'tool_call_result',
                     'data': {
-                        'tool_call_id': tc.id,
+                        'tool_call_id': tc_id,
                         'tool_name': tool_name,
-                        'result_summary': _result_summary,
+                        'result_summary': _truncate_large(_result_str),
                         'duration_ms': int((time.time() - _tc_start_ts) * 1000),
+                        'agent': agent_name or '',
                     }
                 })
             except Exception:
                 pass
 
-            # 记录调用日志
+            # 记录调用日志 (内存保留摘要500字避免 tool_calls_log 无限膨胀)
             tool_calls_log.append({
                 "tool_name": tool_name,
                 "arguments": arguments,
@@ -212,10 +327,10 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
                 "round": round_idx + 1
             })
 
-            # 将工具结果追加为 tool role message
+            # 将工具结果追加为 tool role message (完整内容送回LLM)
             messages.append({
                 "role": "tool",
-                "tool_call_id": tc.id,
+                "tool_call_id": tc_id,
                 "content": result if isinstance(result, str) else str(result)
             })
 
@@ -272,7 +387,7 @@ def chat_completion_stream(client, messages, temperature=0.7, max_tokens=4096, t
 
 def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                            max_tool_rounds=3, temperature=0.7, max_tokens=4096,
-                           event_callback=None):
+                           event_callback=None, agent_name=None):
     """带工具调用循环的流式AI对话。
 
     与chat_with_tools()逻辑一致，但流式输出每个token和事件。
@@ -337,6 +452,21 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                     full_content += delta.content
                     if event_callback:
                         event_callback('token', {'content': delta.content})
+                    # [UI-Q4 2026-04-15 +08:00] token-level publish 到 event_bus,
+                    #   让 agent-analyze SSE bridge 能真实时转发到前端打字机终端
+                    try:
+                        from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                        get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                            'event_type': 'token',
+                            'data': {
+                                'content': delta.content,
+                                'agent': agent_name or '',
+                                'round': round_idx,
+                            }
+                        })
+                    except Exception:
+                        # token publish 失败不中断 LLM 流(静默降级)
+                        pass
 
                 # 处理工具调用（流式中分chunk传递，需要累积）
                 if delta.tool_calls:
@@ -423,22 +553,21 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                     'tool_name': tool_name,
                     'arguments': arguments
                 })
-            # [UI-Q3 2026-04-15] 同时publish到event_bus, 让SSE桥接方式也能收到
+            # [UI-Q3→UI-Q4] publish到event_bus, 完整arguments零截断
             try:
                 from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_START
-                _args_preview = arguments
                 try:
-                    _args_str = json.dumps(arguments, ensure_ascii=False)
-                    if len(_args_str) > 200:
-                        _args_preview = _args_str[:200] + '...'
+                    _args_full = json.dumps(arguments, ensure_ascii=False)
                 except Exception:
-                    _args_preview = str(arguments)[:200]
+                    _args_full = str(arguments)
                 get_event_bus().publish(EVENT_TOOL_CALL_START, {
                     'event_type': 'tool_call_start',
                     'data': {
                         'tool_call_id': tc_msg['id'],
                         'tool_name': tool_name,
-                        'arguments': _args_preview,
+                        'arguments': arguments,
+                        'arguments_raw': _truncate_large(_args_full),
+                        'agent': agent_name or '',
                     }
                 })
             except Exception:
@@ -457,19 +586,18 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                     'tool_name': tool_name,
                     'result': result[:500] if isinstance(result, str) else str(result)[:500]
                 })
-            # [UI-Q3 2026-04-15] 同时publish到event_bus
+            # [UI-Q3→UI-Q4] publish到event_bus, 完整result零截断(>10KB才标记)
             try:
                 from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_RESULT
-                _result_summary = result if isinstance(result, str) else str(result)
-                if len(_result_summary) > 200:
-                    _result_summary = _result_summary[:200] + '...'
+                _result_str = result if isinstance(result, str) else str(result)
                 get_event_bus().publish(EVENT_TOOL_CALL_RESULT, {
                     'event_type': 'tool_call_result',
                     'data': {
                         'tool_call_id': tc_msg['id'],
                         'tool_name': tool_name,
-                        'result_summary': _result_summary,
+                        'result_summary': _truncate_large(_result_str),
                         'duration_ms': int((time.time() - _tc_start_ts) * 1000),
+                        'agent': agent_name or '',
                     }
                 })
             except Exception:
