@@ -7,20 +7,23 @@ Pos: app/adapters层 — 新闻情绪/事件驱动Agent的资讯底座；feedpar
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
-权威源（≥3交叉验证, 检索时间 2026-04-15 12:30 +08:00）：
-  1) feedparser 官方库 https://github.com/kurtmckee/feedparser (MIT, 2k+⭐, v6.0.11)
-     https://pypi.org/project/feedparser/ — Atom/RSS 0.9x–2.0/RDF 统一解析
-  2) 新浪财经 RSS 官方入口 https://rss.sina.com.cn/news/allnews/finance.xml
-     https://roll.finance.sina.com.cn/ (滚动新闻源)
-  3) RSShub 公共路由 https://docs.rsshub.app/ (MIT, 32k+⭐)
-     - 华尔街见闻: https://rsshub.app/wallstreetcn/news/global
-     - 财联社电报: https://rsshub.app/cls/telegraph
-     - 雪球头条:   https://rsshub.app/xueqiu/hots
-     - 金融界:     https://rsshub.app/jrj/news/list
-     - 央视财经:   https://rsshub.app/cctv/caijing
-  4) 华尔街见闻官网 https://wallstreetcn.com/ — 官方无RSS，RSShub代理
-  5) 金融界 https://www.jrj.com.cn/ — 旧版 rss.jrj.com.cn 已下线，统一走RSShub
-  6) 雪球 https://xueqiu.com/ — 官方无公开RSS，RSShub代理 xqtl
+权威源（R4治理, 检索时间 2026-04-15 21:35 +08:00）：
+  1) feedparser 官方库 https://github.com/kurtmckee/feedparser (MIT, v6.0.11)
+  2) 新浪财经官方 RSS (主源稳定):
+     - https://rss.sina.com.cn/news/allnews/finance.xml (全量财经)
+     - https://rss.sina.com.cn/roll/finance/hot_roll.xml (滚动)
+     - https://rss.sina.com.cn/news/marketing/economics.xml (经济)
+  3) 人民网财经 http://www.people.com.cn/rss/finance.xml
+  4) FT中文网 https://www.ftchinese.com/rss/feed (全站新闻RSS)
+  5) RSShub 公共镜像 (备源, 主站反爬严重):
+     - https://rsshub.rssforever.com/wallstreetcn/news/global
+     - https://rsshub.rssforever.com/cls/telegraph
+  6) 本地缓存兜底: app.analysis.news_fetcher (data/news/*.json, 财联社AKShare管道)
+
+R4变更 (原 rsshub.app 全面返 HTML 反爬):
+  - 移除: wallstreetcn/cls/xueqiu/jrj/cctv 的 rsshub.app 主源
+  - 新增: sina 官方 3 路径 + people + ftchinese
+  - 失败兜底: get_latest_news 失败时回落 news_fetcher.get_latest_news(days,limit)
 
 合规：仅研究用途；UA伪装；超时10s + 3次重试；并发≤4；去重基于 title_hash。
 """
@@ -47,37 +50,40 @@ except ImportError:
     logger.warning("feedparser 未安装，RSSNewsAdapter 降级为空DF；pip install feedparser")
 
 
-# 内置 FEED_SOURCES 映射：官方优先 + RSShub备选
+# 内置 FEED_SOURCES 映射
+# R4治理 (2026-04-15 21:35 +08:00): rsshub.app 全面反爬返HTML导致 bozo 100%,
+# 改为以官方/准官方 RSS/Atom 端点为主源、rssforever 公共镜像为备源。
+# 失败兜底: news_fetcher.get_latest_news() 本地缓存 (data/news/*.json).
 FEED_SOURCES: Dict[str, Dict[str, str]] = {
-    "wallstreetcn": {
-        "name": "华尔街见闻",
-        "url": "https://rsshub.app/wallstreetcn/news/global",
-        "fallback": "https://rsshub.rssforever.com/wallstreetcn/news/global",
-    },
-    "cls": {
-        "name": "财联社",
-        "url": "https://rsshub.app/cls/telegraph",
-        "fallback": "https://rsshub.rssforever.com/cls/telegraph",
-    },
-    "xueqiu": {
-        "name": "雪球头条",
-        "url": "https://rsshub.app/xueqiu/hots",
-        "fallback": "https://rsshub.rssforever.com/xueqiu/hots",
-    },
     "sina_finance": {
-        "name": "新浪财经",
+        "name": "新浪财经(官方)",
         "url": "https://rss.sina.com.cn/news/allnews/finance.xml",
-        "fallback": "https://rsshub.app/sina/finance",
+        "fallback": "https://rss.sina.com.cn/roll/finance/hot_roll.xml",
     },
-    "jrj": {
-        "name": "金融界",
-        "url": "https://rsshub.app/jrj/news/list",
-        "fallback": "https://rsshub.rssforever.com/jrj/news/list",
+    "sina_stock": {
+        "name": "新浪股票(官方)",
+        "url": "https://rss.sina.com.cn/roll/finance/0/index.xml",
+        "fallback": "https://rss.sina.com.cn/news/marketing/economics.xml",
     },
-    "cctv_finance": {
-        "name": "央视财经",
-        "url": "https://rsshub.app/cctv/caijing",
-        "fallback": "https://rsshub.rssforever.com/cctv/caijing",
+    "people_economy": {
+        "name": "人民网财经",
+        "url": "http://www.people.com.cn/rss/finance.xml",
+        "fallback": "",
+    },
+    "ftchinese": {
+        "name": "FT中文网",
+        "url": "https://www.ftchinese.com/rss/feed",
+        "fallback": "https://www.ftchinese.com/rss/news",
+    },
+    "rsshub_wscn": {
+        "name": "华尔街见闻(RSShub镜像)",
+        "url": "https://rsshub.rssforever.com/wallstreetcn/news/global",
+        "fallback": "https://rsshub.app/wallstreetcn/news/global",
+    },
+    "rsshub_cls": {
+        "name": "财联社(RSShub镜像)",
+        "url": "https://rsshub.rssforever.com/cls/telegraph",
+        "fallback": "https://rsshub.app/cls/telegraph",
     },
 }
 
@@ -305,10 +311,54 @@ class RSSNewsAdapter(BaseAdapter):
                 df = self.search_news(keyword=str(code), sources=sources, limit_per_source=limit)
             else:
                 df = self.get_all_feeds(sources=sources, limit_per_source=limit)
-            if df is None or df.empty:
-                return []
-            df = df.head(int(max(1, limit)))
-            return df.to_dict(orient="records")
+            if df is not None and not df.empty:
+                df = df.head(int(max(1, limit)))
+                return df.to_dict(orient="records")
+            # R4治理: RSS全降级 → 回退 news_fetcher 本地缓存 (data/news/*.json)
+            fallback = self._fallback_local_cache(days=int(max(1, days)), limit=int(max(1, limit)))
+            if fallback:
+                logger.info("[RSSNews] RSS全降级, 回退本地缓存 %d 条", len(fallback))
+                if code:
+                    k = str(code).strip().lower()
+                    fallback = [
+                        it for it in fallback
+                        if k in (str(it.get("title", "")) + str(it.get("content", ""))).lower()
+                    ] or fallback
+                return fallback[:limit]
+            return []
         except Exception as e:
             logger.warning("[RSSNews] get_latest_news 失败 code=%s: %s", code, e)
+            try:
+                return self._fallback_local_cache(days=int(max(1, days)), limit=int(max(1, limit)))[:limit]
+            except Exception:
+                return []
+
+    # ============================ R4 本地缓存兜底 ============================
+    @staticmethod
+    def _fallback_local_cache(days: int = 7, limit: int = 50) -> List[Dict]:
+        """R4治理: 回落到 app.analysis.news_fetcher 的本地 data/news/*.json.
+
+        仅本地I/O, 无网络依赖. 失败返回 []. 不抛异常.
+        """
+        try:
+            from app.analysis.news_fetcher import NewsFetcher  # 局部导入避免循环
+            fetcher = NewsFetcher()
+            items = fetcher.get_latest_news(days=days, limit=limit) or []
+            # 字段对齐 RSS schema (source/title/link/published/summary/author/tags)
+            rows: List[Dict] = []
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                rows.append({
+                    "source": it.get("source") or "local_cache",
+                    "title": it.get("title") or "",
+                    "link": it.get("url") or it.get("link") or "",
+                    "published": it.get("published_at") or it.get("datetime") or "",
+                    "summary": (it.get("content") or "")[:500],
+                    "author": it.get("author") or "",
+                    "tags": "",
+                })
+            return rows
+        except Exception as e:
+            logger.debug("[RSSNews] 本地缓存回退失败: %s", e)
             return []
