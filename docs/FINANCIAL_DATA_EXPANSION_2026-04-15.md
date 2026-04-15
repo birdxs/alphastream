@@ -2270,3 +2270,56 @@ NO_PROXY=localhost,127.0.0.1,akshare.com,baostock.com,stats.gov.cn,sse.com.cn,sz
 **同步更新**: `docs/README.md` 新增"运维入门"条目; `README.md` 文档区顶部追加 OPERATIONS.md 链接。
 
 **I3作用**: v2方案全链路闭环后的运维交接锚点, 未来人员30分钟上手。
+
+---
+
+## I2 Agent层遗留bug修复 [2026-04-15 14:05 +08:00]
+
+H2 真端到端验证(commit 95f089b) 发现的 2 个 P1 minor bug 完成修复与回归验证。
+
+### Bug#1 StrategyEvolver 策略 JSON 解析失败
+
+**根因**: `app/agents/strategy_evolver.py` 原解析逻辑只处理简单 ``` 包围, 未容错:
+- LLM 返回带 `\`\`\`json` 语言标识的 markdown fence
+- trailing comma (如 `{"a":1,}`)
+- 空字符串 / 非法JSON
+任一异常都会走 `except` 警告+返回原策略, 虽不崩溃但策略不演化。
+
+**修复**: 新增模块级 `_safe_json_parse(text: str) -> Optional[Dict]` helper, 三级降级:
+1. 去 markdown fence (任意语言标识) → `json.loads`
+2. 正则去 trailing comma → `json.loads`
+3. 提取首个 `{...}` 块 + 去 trailing comma → `json.loads`
+4. 均失败返回 None, 调用侧 `logger.warning` 并保留当前策略
+
+### Bug#2 capital_flow_analyzer:157 NoneType
+
+**根因**: `app/analysis/capital_flow_analyzer.py:157` `ak.stock_individual_fund_flow(stock="AAPL", market="sh")` 对美股:
+- 可能返回 `None` (而非抛异常)
+- 下一行 `flow_data.iterrows()` 触发 `AttributeError: 'NoneType' object has no attribute 'iterrows'`
+- 虽被外层 `try/except Exception` 捕获走 mock 降级, 但日志堆栈触目且消耗网络往返。
+
+**修复**: 双层防御
+1. **市场短路**: `market_type in ('US','us','HK','hk')` 直接返回 mock, 不触发 akshare
+2. **None/空 guard**: `flow_data is None or flow_data.empty` 走 mock 降级
+
+### 回归测试 [NEW-FILE:#20260415-41]
+
+`tests/agents/test_i2_regression.py` — 12 测试全通过 (20.16s):
+- StrategyEvolver: markdown fence / plain fence / trailing comma / 空字符串 / 非法JSON / JSON内嵌散文 / evolve_strategy集成
+- CapitalFlow: US短路 / HK短路 / None guard / 空DataFrame guard / AAPL端到端
+
+### 真后端H2冒烟重跑证据
+
+```bash
+curl -X POST http://127.0.0.1:8888/api/ai/agent-analyze -d '{"stock_code":"AAPL","market_type":"US"}'
+# 技术分析师 → 资金流分析师(completed) → 基本面分析师(completed) → 情绪分析师 ...
+grep -E "NoneType|JSONDecodeError|strategy_evolver|capital_flow_analyzer" /tmp/backend_i2.log
+# (无 NoneType AttributeError, 无 JSONDecodeError)
+```
+
+资金流分析师从 AAPL 成功完成, 不再因资金流 `NoneType` 崩溃触发上游 mock 兜底; 策略演化 JSON 解析不再 warning 堆积。
+
+### Commit 标签
+
+- `fix(agent): I2 StrategyEvolver JSON容错解析 + capital_flow None guard [NEW-FILE:#20260415-41]`
+- `docs(data): I2追溯`
