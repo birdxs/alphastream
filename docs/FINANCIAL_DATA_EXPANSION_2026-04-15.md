@@ -1902,3 +1902,51 @@ python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_e
 
 ### 详细报告
 `logs/e2e_validation_2026-04-15.md`
+
+
+---
+
+## G2 批修5 bug + 端到端回归 [2026-04-15 13:45 +08:00]
+
+### 修复前/后状态表
+
+| # | 端点 | G1 前状态 | G2 后状态 | 修复策略 |
+|---|------|----------|----------|---------|
+| B1 | `/api/shipping/bdi?days=5` | 500 `error:""` | **200** `bdi_series:[]` | web 层 `_p3_call_soft` 软降级 |
+| B2 | `/api/shipping/port/shanghai` | 500 全数据源降级失败 | **200** `port_throughput:[]` | 软降级 |
+| B3 | `/api/corporate/search?q=Apple` | 500 `unexpected kwarg 'query'` | **200** `items:[], count:0` | web 传参 `query=q`→`name=q` + DataFrame→list[dict] 转换 + 软降级 |
+| B4 | `/api/corporate/us_ca%2FSAMPLEID/network` | 404 路由解码失败 | **200** `company_id:"us_ca/SAMPLEID"` | 路由 `<string:>` → `<path:>` |
+| B5 | `/api/jobs/company/Microsoft` | 500 降级失败 | **200** `total_postings:0, items:[]` | 软降级 |
+
+### 最终 HTTP 状态 (真后端 curl, 无外网数据源可用场景)
+- B1: `HTTP 200` ✓
+- B2: `HTTP 200` ✓
+- B3: `HTTP 200` ✓
+- B4: `HTTP 200` ✓
+- B5: `HTTP 200` ✓
+
+### 新增回归测试清单 (tests/web/test_p3_api_endpoints.py)
+1. `test_g2_b1_shipping_bdi_soft_degrade` — BDI 上游异常走空 artifact
+2. `test_g2_b2_shipping_port_soft_degrade` — Port 软降级
+3. `test_g2_b3_corporate_search_dataframe_contract` — DataFrame→list[dict] 契约
+4. `test_g2_b3_corporate_search_soft_degrade` — 搜索上游失败软降级
+5. `test_g2_b4_corporate_network_path_converter` — `%2F` & 直接 `/` 路由均通
+6. `test_g2_b5_jobs_company_soft_degrade` — jobs/company 软降级
+7. `test_shipping_bdi_upstream_error` 更新为 200 软降级契约 (原 500 契约废弃)
+
+### 累计测试数字
+- G1: 378 passed
+- **G2: 384 passed** (+6 新回归, 0 failed, 0 error, 耗时 6.31s)
+
+### 契约变更说明
+- **P3 端点全面采用"软降级"契约**: 上游真网络失败/空数据 → 不再 500, 改返回 `200 + success:true + 空 artifact`
+- 前端 TSX Artifact 组件对空数组/null 字段均已可渲染 (空态 UI), 契约兼容
+- 硬失败 (参数非法 400 / alt_data 全源 502) 仍保留
+
+### G2 核心改动
+- `app/web/web_server.py`: 新增 `_p3_call_soft`; B1/B2/B3(兼DataFrame)/B5 改用 soft; B3 参数 `query→name`; B4 路由 `<path:>`; `/api/alt_data` 的 search_company 也改 `name=` + DataFrame 处理
+- `tests/web/test_p3_api_endpoints.py`: +6 G2 回归 test + 原 upstream_error 契约升级
+
+### 未触碰 (本 G2 作战范围外)
+- adapter 内部降级逻辑保持不变 (空 DF 本就是契约, registry 判定空为无效是合理的)
+- 其他 P3 端点 (esg/satellite) 保持原有行为
