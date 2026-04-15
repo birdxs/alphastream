@@ -942,3 +942,144 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 3. **标题哈希去重**：同一事件多源首发常标题雷同，sha1 折叠避免重复消费；保留首条
 4. **BaseAdapter 契约**：K线/成分股/信息/财务均返回空，仅 `health_check` 反映 feedparser 可用性
 5. **纯 mock 测试**：`feedparser.parse` 和 `_parse_feed` 双层 monkeypatch，零真实网络，CI 稳定
+
+---
+
+### B2 Ashare + easyquotation [2026-04-15]
+
+**目标**：A股行情兜底双适配器补位 — Ashare 单文件库零依赖日/周/月/分钟K线；easyquotation 新浪/腾讯/集思录 批量实时+基金净值高并发补充。
+
+**联网调研（≥3 权威源，Asia/Singapore 2026-04-15 12:30 +08:00 基准）**：
+
+| 来源 | URL | 关键信息 | 采用性 |
+|---|---|---|---|
+| GitHub mpquant/Ashare | https://github.com/mpquant/Ashare | 单文件~200行；`get_price(code, frequency, count)`；frequency∈{1d,1w,1M,1m,5m,15m,30m,60m}；code规范sh600519/sz000001 | 采用：API签名+代码规范 |
+| GitHub shidenggui/easyquotation | https://github.com/shidenggui/easyquotation | `use('sina'|'tencent'|'qq'|'daykline'|'jsl')`；`.stocks(codes)` 批量；`.market_snapshot(prefix=False)` 全市场；jsl `.funda()/.fundb()/.fundm()` | 采用：多源路由+批量接口 |
+| PyPI easyquotation | https://pypi.org/project/easyquotation/ | MIT协议；纯Python；requests+aiohttp并发 | 采用：License + 并发模型 |
+| 集思录 jsl.cn | https://www.jisilu.cn/data/ | 分级基金A/B/母基三张表公开JSON | 采用：基金净值数据源 |
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/ashare_adapter.py` | 新建 | [NEW-FILE:#20260415-17] |
+| `app/adapters/easyquotation_adapter.py` | 新建 | [NEW-FILE:#20260415-18] |
+| `tests/adapters/test_ashare_adapter.py` | 新建 | — |
+| `tests/adapters/test_easyquotation_adapter.py` | 新建 | — |
+| `app/adapters/__init__.py` | 修改 | 导出 `AshareAdapter`+`EasyquotationAdapter` |
+| `app/adapters/README.md` | 修改 | 清单追加 B2 行 |
+
+**对外接口**：
+
+Ashare:
+- `AshareAdapter()` — 零参构造
+- `get_price(code, frequency="1d", count=100) -> pd.DataFrame` — 核心K线
+- `_normalize(code, market=None) -> str` — sh/sz前缀规范化（6/9→sh，0/3→sz）
+- `get_stock_history(code, start, end)` — BaseAdapter契约，内部取count=2000再按日期切片
+- `health_check()` / `name="ashare"`
+
+Easyquotation:
+- `EasyquotationAdapter(source="sina")` — sina/tencent/qq/daykline/jsl
+- `get_realtime(codes) -> dict` — 批量实时 `.stocks()` 优先、`.real()` 兜底
+- `get_stocks_all() -> dict` — `.market_snapshot(prefix=False)` 全市场5000+
+- `get_fund_nav(codes=None) -> dict` — jsl源 funda+fundb+fundm 合并；支持dict与list[dict]两种上游响应
+- `get_stock_info(code)` / `get_stock_history(code,...)` — daykline 派生
+- `health_check()` / `name="easyquotation:{source}"`
+
+**三重验证**：
+
+- 单元：
+  - `test_ashare_adapter.py` — 13 cases（_normalize×4 / get_price×5 / BaseAdapter×6 / meta×1）
+  - `test_easyquotation_adapter.py` — 18 cases（init×3 / realtime×5 / stocks_all×2 / fund_nav×4 / BaseAdapter×5）
+  - 全部 mock，不发真实请求
+- 集成：`from app.adapters import AshareAdapter, EasyquotationAdapter` 导入通过
+- 端到端：**不发真实网络请求**（作战指令要求）；mock 验证URL/参数/降级路径
+
+**Git 提交**：
+- commit1: `feat(adapter): Ashare+easyquotation A股实时分钟线补位 [NEW-FILE:#20260415-17,18]`
+- commit2: `docs(data): P2-B2追溯`
+
+**关键设计决策**：
+1. **Ashare 单文件库零依赖**：无需pip包，最小侵入；软import失败→空DF+warning
+2. **代码规范统一**：`_normalize` 按首位数字推断市场（6/9→sh，0/3→sz），向上兼容 `.SH/.SZ` 后缀
+3. **frequency 白名单校验**：非法值回退 `1d` 并warning，不抛
+4. **easyquotation 多源路由**：`source` 参数显式选择，非法值回退 `sina`；`stocks()` 优先、`real()` 兜底兼容老版
+5. **jsl 基金净值弹性解析**：funda/fundb/fundm 依次合并，同时适配 dict 与 list[dict] 两种上游响应形态
+6. **批量codes过滤**：`get_fund_nav(codes=[...])` 服务端不支持按code过滤时，客户端集合筛
+7. **BaseAdapter 占位空返回**：两者不提供指数成分/财务，抽象方法返回空，供 `fallback_manager` 安全跳过
+
+---
+
+### B4 OpenBB + Registry [2026-04-15]
+
+**检索时间基准**：2026-04-15 12:30 +08:00（同附录 D 时间真实性校验）
+
+**联网权威来源（≥3）**：
+
+| 来源 | URL | 要点 | 采用 |
+|---|---|---|---|
+| OpenBB 官方仓库 | https://github.com/OpenBB-finance/OpenBB | Platform v4.x，核心代码 AGPL-3.0，按 provider 拆分子包 | 采用：SDK桥接方式 |
+| OpenBB Platform Docs | https://docs.openbb.co/platform | `from openbb import obb` 路由：`obb.equity.price.historical / equity.profile / crypto.price.historical / economy.gdp.real / economy.cpi` | 采用：接口路由 |
+| PyPI `openbb` | https://pypi.org/project/openbb/ | 元包 >=4.0，按需装 providers；与 pandas/pydantic 生态 | 采用：软依赖策略 |
+| OpenBB Provider 免费层 | docs.openbb.co/platform/developer_guide/providers | yfinance(免费)/fred(免费Key)/sec(免费)/fmp(部分免费)/intrinio(沙盒) | 采用：FREE_PROVIDERS 白名单 |
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/openbb_adapter.py` | 新建 | [NEW-FILE:#20260415-20] |
+| `app/adapters/adapter_registry.py` | 新建 | [NEW-FILE:#20260415-21] |
+| `tests/adapters/test_openbb_adapter.py` | 新建 | — (测试) |
+| `tests/adapters/test_adapter_registry.py` | 新建 | — (测试) |
+| `app/adapters/__init__.py` | 修改 | 导出 OpenBBAdapter + AdapterRegistry + 补齐Efinance/YFinance/Ashare/Easyquotation |
+| `app/adapters/README.md` | 修改 | 清单追加 B4 两条 |
+
+**对外接口（OpenBBAdapter）**：
+
+- `OpenBBAdapter(default_equity_provider="yfinance", default_economy_provider="fred")`
+- `get_equity_price(symbol, start=None, end=None, provider="yfinance") -> pd.DataFrame`
+- `get_equity_profile(symbol, provider="yfinance") -> dict`
+- `get_crypto_price(symbol, provider="yfinance") -> pd.DataFrame`
+- `get_economy_indicator(indicator, provider="fred") -> pd.DataFrame` (gdp/cpi/unemployment/自定义FRED序列)
+- BaseAdapter 契约：`get_stock_history / get_index_stocks / get_stock_info / get_financial_data / health_check`
+
+**对外接口（AdapterRegistry）**：
+
+- `AdapterRegistry.default()` — 进程级单例，自动 `register_adapters()`
+- `register(domain, adapter)` / `register_adapters(domain_map=None)`
+- `get_adapters(domain) -> list[BaseAdapter]`
+- `call_with_fallback(domain, method, **kwargs) -> Any` — 首个 `_is_valid_result` 即返回
+- `get_status() / list_domains() / reset_default()`
+
+**Domain 完整映射表**：
+
+| Domain | 优先级链（从左至右） |
+|---|---|
+| `a_stock_kline` | Akshare → Baostock → Efinance → Ashare → YFinance |
+| `a_stock_realtime` | Efinance → Easyquotation → Akshare → OpenCLI |
+| `us_stock` | YFinance → OpenBB → EDGAR |
+| `hk_stock` | YFinance → Akshare |
+| `macro_us` | FRED → OpenBB → WorldBank |
+| `macro_cn` | NBS → Akshare |
+| `macro_global` | WorldBank → IMF → OpenBB |
+| `crypto` | CCXT → CoinGecko → YFinance → OpenBB |
+| `news` | RSSNews → OpenCLI → Akshare |
+| `sentiment_social` | OpenCLI |
+| `xbrl_financials` | EDGAR → YFinance → OpenBB |
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_openbb_adapter.py tests/adapters/test_adapter_registry.py -v` → **30 passed**
+  - OpenBB × 17：未装降级 5 / equity_price 3 / profile+crypto 2 / economy 2 / BaseContract 5
+  - Registry × 13：register+list 2 / fallback（成功/空降级/异常降级/全fail/未注册/无method）6 / DEFAULT_MAP 2 / _is_valid_result 4
+- 集成：`from app.adapters import OpenBBAdapter, AdapterRegistry` 导入通过
+- 端到端：**不发真实网络请求**（作战指令要求），全部 mock `obb.*` 路由与 `OBBject.to_df()/results` 两种返回形态
+
+**关键设计决策**：
+
+1. **免费 provider 白名单**：`FREE_PROVIDERS = {yfinance,fred,sec,intrinio,fmp}`，非白名单自动降级 yfinance，避免无声调用付费接口
+2. **OBBject 双形态兼容**：`_obb_to_df` 先试 `.to_df()` 再回落 `.results[*].model_dump()`，兼容 OpenBB Platform v4 不同 provider 的返回约定
+3. **Registry 延迟导入**：`importlib.import_module` + 单适配器实例缓存，模块缺失/构造失败不阻塞整体注册
+4. **_is_valid_result 与 FallbackManager 对齐**：None/空DataFrame/空list/空dict 视为无效，降级继续；非空 str/数值 视为有效
+5. **单例 + reset_default**：生产单例 `AdapterRegistry.default()`；测试 `reset_default()` 避免跨用例污染
+6. **AGPL 合规提醒**：OpenBB 核心 AGPL-3.0，仅作为可选软依赖通过 SDK 调用，不内嵌其源码，不触发 copyleft 传染

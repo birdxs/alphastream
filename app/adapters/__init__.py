@@ -10,7 +10,17 @@ from .ccxt_adapter import CCXTAdapter
 from .coingecko_adapter import CoinGeckoAdapter
 from .worldbank_adapter import WorldBankAdapter
 from .imf_adapter import IMFAdapter
+from .rss_news_adapter import RSSNewsAdapter
+from .efinance_adapter import EfinanceAdapter
+from .yfinance_adapter import YFinanceAdapter
+from .ashare_adapter import AshareAdapter
+from .easyquotation_adapter import EasyquotationAdapter
+from .openbb_adapter import OpenBBAdapter
+from .adapter_registry import AdapterRegistry
 
 __all__ = ['BaseAdapter', 'AkshareAdapter', 'BaostockAdapter', 'OpenCLIBridge',
            'EDGARAdapter', 'NBSAdapter', 'FREDAdapter', 'CCXTAdapter',
-           'CoinGeckoAdapter', 'WorldBankAdapter', 'IMFAdapter']
+           'CoinGeckoAdapter', 'WorldBankAdapter', 'IMFAdapter',
+           'RSSNewsAdapter', 'EfinanceAdapter', 'YFinanceAdapter',
+           'AshareAdapter', 'EasyquotationAdapter', 'OpenBBAdapter',
+           'AdapterRegistry']

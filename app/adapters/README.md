@@ -20,6 +20,10 @@
 | `worldbank_adapter.py` | 世界银行(P1-A7 2026-04-15) | World Bank Open Data：get_indicator时序/list_indicators搜索/compare_countries横向对比；无Key免费 [NEW-FILE:#20260415-09] |
 | `imf_adapter.py` | 国际货币基金(P1-A8 2026-04-15) | IMF SDMX-JSON REST：get_dataset/get_ifs/get_data_structure，支持IFS/WEO/DOT；无Key免费 [NEW-FILE:#20260415-10] |
 | `rss_news_adapter.py` | RSS新闻聚合(P2-B3 2026-04-15) | 华尔街见闻/财联社/雪球/新浪财经/金融界/央视财经 6源 RSS 并发聚合 + 去重 + 关键词过滤；feedparser软依赖 [NEW-FILE:#20260415-19] |
+| `ashare_adapter.py` | A股轻量兜底(P2-B2 2026-04-15) | Ashare 单文件库直调：新浪/腾讯 日/周/月/分钟K线；code规范sh/sz前缀；未装Ashare降级为空 [NEW-FILE:#20260415-17] |
+| `easyquotation_adapter.py` | 批量实时(P2-B2 2026-04-15) | easyquotation sina/tencent/qq/daykline/jsl：批量实时+全市场快照+jsl基金净值；未装降级为空 [NEW-FILE:#20260415-18] |
+| `openbb_adapter.py` | OpenBB桥(P2-B4 2026-04-15) | OpenBB Platform SDK：equity/crypto/economy 路由；免费provider白名单(yfinance/fred/sec/intrinio/fmp)；软依赖降级 [NEW-FILE:#20260415-20] |
+| `adapter_registry.py` | 注册中心(P2-B4 2026-04-15) | 统一 domain→adapters 映射 + call_with_fallback 自动降级；覆盖11业务域(a_stock_kline/realtime/us/hk/macro_us/cn/global/crypto/news/sentiment_social/xbrl_financials) [NEW-FILE:#20260415-21] |
 | `__init__.py` | 导出 | 统一入口 |
 
 ## 约定
