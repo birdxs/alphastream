@@ -143,16 +143,19 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   const activeConversationId = useChatStore(s => s.activeConversationId);
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
   const setMessages = useChatStore(s => s.setMessages);
+  // Q2(2026-04-15): 订阅 refreshTick — use-chat-stream onDone 递增后自动重载列表
+  const refreshTick = useChatStore(s => s.conversationsRefreshTick);
 
   const showError = (msg: string) => {
     setError(msg);
     setTimeout(() => setError(null), 3000);
   };
 
-  // 加载对话列表
+  // 加载对话列表 — 首次 mount + refreshTick 递增时均触发
   useEffect(() => {
     loadConversations();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTick]);
 
   const loadConversations = async () => {
     setLoading(true);

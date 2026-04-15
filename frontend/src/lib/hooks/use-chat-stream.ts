@@ -9,7 +9,7 @@ import { useCallback, useRef } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useChatStore } from '@/lib/stores/chat-store';
 import { useAgentStore } from '@/lib/stores/agent-store';
-import type { SSEHandlers, ChatMessage } from '@/lib/types';
+import type { SSEHandlers, ChatMessage, StreamDone } from '@/lib/types';
 
 // ===== 意图识别规则 =====
 // 分析类动词（触发agent路径的语义信号）
@@ -254,6 +254,15 @@ export function useChatStream() {
           chatStore.setStreaming(false); agentStore.setAnalyzing(false);
           chatStore.setFollowUps(data?.follow_up_questions || []);
 
+          // Q2(2026-04-15): 对话自动入 sidebar
+          //   1) 后端 done 事件附带 conversation_id（新建会话亦返回）；若当前 activeId 为空则写入 store
+          //   2) 递增 refreshTick 触发 sidebar 重新拉取 /api/conversations，使新会话/更新时间立即可见
+          const doneConvId = (data as StreamDone | undefined)?.conversation_id;
+          if (doneConvId && !useChatStore.getState().activeConversationId) {
+            useChatStore.getState().setActiveConversation(doneConvId);
+          }
+          useChatStore.getState().bumpConversationsRefresh();
+
           // Tab标题闪烁提醒 + 浏览器通知
           if (document.hidden) {
             const originalTitle = document.title;
@@ -322,6 +331,8 @@ export function useChatStream() {
             cs.setStreaming(false);
           }
           if (ags.isAnalyzing) ags.setAnalyzing(false);
+          // Q2(2026-04-15): 兜底刷新 sidebar — agent-analyze/错误/超时路径无 done 事件时仍保证列表同步
+          useChatStore.getState().bumpConversationsRefresh();
         },
       };
 

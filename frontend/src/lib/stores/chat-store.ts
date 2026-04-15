@@ -17,6 +17,8 @@ interface ChatState {
   streamingContent: string;
   artifacts: Artifact[];
   followUpQuestions: string[];
+  // Q2(2026-04-15): 对话列表刷新计数器 — onDone 递增后 sidebar 自动重载
+  conversationsRefreshTick: number;
 
   // Actions
   setActiveConversation: (id: string | null) => void;
@@ -30,6 +32,7 @@ interface ChatState {
   setConversations: (convs: Conversation[]) => void;
   setMessages: (msgs: ChatMessage[]) => void;
   updateConversationTitle: (id: string, title: string) => void;
+  bumpConversationsRefresh: () => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -42,8 +45,11 @@ export const useChatStore = create<ChatState>()(
       streamingContent: '',
       artifacts: [],
       followUpQuestions: [],
+      conversationsRefreshTick: 0,
 
       setActiveConversation: (id) => set({ activeConversationId: id }),
+      bumpConversationsRefresh: () =>
+        set((s) => ({ conversationsRefreshTick: s.conversationsRefreshTick + 1 })),
       addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
       setStreaming: (streaming) => set({ isStreaming: streaming }),
       appendStreamContent: (content) =>
