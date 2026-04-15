@@ -4203,3 +4203,62 @@ for key, agent_cls in agents:
 - `feat(agent): R3 InvestorCoordinator 4人格接入_wrap_with_events 可观测`
 - `feat(fe): R3 前端approval/risk_alert前缀 kind 映射`
 - `docs(data): R3追溯`
+
+---
+
+## R1 Q3契约收尾 [21:33]
+
+- 时间基准: 2026-04-15 21:33 +08:00
+- 范围: `app/analysis/news_fetcher.py` + `frontend/src/app/dashboard/page.tsx` + `frontend/src/app/news/page.tsx`
+- 目标: Q3 审计遗留 5 个 P1/P2 TODO 全部清零
+
+### 修复清单
+
+| # | 项 | 代码位置 | 状态 |
+|---|---|---|---|
+| P1-a | 后端 news title 空回填 | `news_fetcher.py::_derive_title()` + `fetch_and_save()` + `get_latest_news()` 出参回填 | ✅ |
+| P1-b | 前端 DEDUP fetchWatchQuotes → useStockPrices+useStockNames | `dashboard/page.tsx` 删55行本地实现, 改派生 `watchQuotes` | ✅ |
+| P2-a | `/api/stock_data` 返回 stock_name | `web_server.py:1211` 历史已实现, 本次复核 | ✅ |
+| P2-b | news 时间字段统一 ISO8601 `published_at` | `news_fetcher.py::_compose_published_at()` + 前端 NewsItem 优先消费 | ✅ |
+| P2-c | news `source` 字段 | `news_fetcher.py` 每条 `source: "财联社"` | ✅ |
+
+### 字段契约终版 (2026-04-15 R1)
+
+**`/api/latest_news` item**:
+
+| 字段 | 类型 | 说明 | 前端消费 |
+|---|---|---|---|
+| `title` | str | 标题 (空则从 content 首40字派生) | 主显示 |
+| `content` | str | 全文 | 辅助/title 兜底 |
+| `published_at` | str | **R1新增** ISO8601 `YYYY-MM-DDTHH:mm:ss+08:00` | **优先** |
+| `datetime` | str | 兼容 `YYYY-MM-DD HH:MM:SS` | 兜底 |
+| `date`/`time`/`publish_time` | str | 兼容历史 | 末位兜底 |
+| `source` | str | **R1新增** `"财联社"` | `item.source && <span>` |
+| `hash`/`fetch_time` | str | 内部去重/审计 | 不消费 |
+
+**`/api/stock_data` 响应**:
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `data` | `Array<{date, open, close, high, low, ...}>` | 行存储 records |
+| `stock_name` | str | R1 复核字段已存在 (`web_server.py:1211`) |
+
+### 实施细节
+
+1. **`_derive_title(content)`** — 句末标点(。！？.!?)断句优先, 否则 40字硬截断+`…`
+2. **`_compose_published_at(date, time)`** — 宽松解析 4 种格式, 统一输出 `+08:00`
+3. **`get_latest_news()` 出参回填** — 不重写磁盘老 JSON, 仅 API 出参统一, 向后兼容
+4. **Dashboard DEDUP** — `fetchWatchQuotes` 55行 Promise.all 删除; 改为 `watchCodes → useStockNames+useStockPrices → watchQuotes derived`, watchlist 变化自动刷新
+5. **NewsItem 类型** (dashboard/news 两页) 加 `published_at?:string`, 消费顺序 `published_at → datetime → publish_time`
+
+### 验证
+
+- **tsc**: `cd frontend && npx tsc --noEmit` 0 错误
+- **Python 冒烟**: `_derive_title` / `_compose_published_at` 6 个断言 PASS; NewsFetcher 模块加载成功, 历史 636 条哈希正常
+- **Comdr 手动重启后端后 curl 验证**: `/api/latest_news?limit=5` 检查 `title`/`published_at`/`source` 齐全; `/api/stock_data?stock_code=600519` 检查 `stock_name` 齐全
+
+### Commits
+
+1. `feat(be): R1 news title/published_at/source统一 + stock_data复核`
+2. `refactor(fe): R1 Dashboard DEDUP fetchWatchQuotes → useStockPrices+useStockNames hook`
+3. `docs(data): R1 Q3契约收尾追溯 + 字段契约终版表`
