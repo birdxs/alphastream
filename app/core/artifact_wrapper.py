@@ -521,88 +521,18 @@ def _build_p3_artifact(artifact_type: str, title: str, data: Any,
     }
 
 
-def wrap_shipping(result: Any, subtype: str = "bdi",
-                  title: Optional[str] = None, **meta) -> Dict:
-    """航运数据artifact封装 (BDI指数/港口吞吐/AIS船舶)"""
-    records = _df_to_records(result, max_rows=90)
-    default_title = {
-        "bdi": "BDI波罗的海干散货指数",
-        "port": "港口吞吐量",
-        "ais": "AIS在港船舶",
-    }.get(subtype, "航运数据")
-    return _build_p3_artifact(
-        artifact_type=f"shipping_{subtype}",
-        title=title or default_title,
-        data={"subtype": subtype, "records": records, "count": len(records)},
-        domain="shipping",
-        confidence=0.80,
-        metadata=meta,
-    )
+# ============================================================
+# [DEDUP 2026-04-15 13:25 +08:00] F3版 wrap_shipping/wrap_esg/wrap_corporate/
+# wrap_jobs/wrap_satellite/wrap_alt_data 已删除(共6函数).
+# 唯一实现: 下方 wrap_shipping_v2/wrap_esg_v2/wrap_hiring_v2/
+# wrap_corporate_network_v2/wrap_alt_data_v2 (严格对齐前端 TSX 契约).
+# Satellite 域无前端组件, 端点内直接使用 _build_p3_artifact 内联.
+# 详见 docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md F4 章节.
+# ============================================================
 
 
-def wrap_esg(result: Any, ticker: str = "", subtype: str = "score", **meta) -> Dict:
-    """ESG评级/气候披露artifact封装"""
-    if isinstance(result, dict):
-        data = result
-    else:
-        data = {"records": _df_to_records(result)}
-    title_prefix = ticker.upper() if ticker else ""
-    default_title = {
-        "score": f"{title_prefix} ESG评级".strip(),
-        "climate": f"{title_prefix} 气候风险披露".strip(),
-    }.get(subtype, f"{title_prefix} ESG".strip())
-    return _build_p3_artifact(
-        artifact_type=f"esg_{subtype}",
-        title=default_title or "ESG数据",
-        data=data,
-        domain="esg",
-        confidence=0.70,
-        metadata={"ticker": ticker, **meta},
-    )
-
-
-def wrap_corporate(result: Any, subtype: str = "search", query: str = "", **meta) -> Dict:
-    """企业图谱artifact封装"""
-    if isinstance(result, dict):
-        data = result
-    elif isinstance(result, list):
-        data = {"items": result, "count": len(result)}
-    else:
-        data = {"records": _df_to_records(result)}
-    default_title = {
-        "search": f"企业搜索: {query}" if query else "企业搜索",
-        "network": "企业关系网络",
-        "details": "企业详情",
-    }.get(subtype, "企业数据")
-    return _build_p3_artifact(
-        artifact_type=f"corporate_{subtype}",
-        title=default_title,
-        data=data,
-        domain="corporate",
-        confidence=0.75,
-        metadata={"query": query, **meta},
-    )
-
-
-def wrap_jobs(result: Any, subtype: str = "search", query: str = "", **meta) -> Dict:
-    """招聘信号artifact封装"""
-    records = _df_to_records(result, max_rows=50)
-    default_title = {
-        "search": f"职位搜索: {query}" if query else "职位搜索",
-        "company": f"公司招聘: {query}" if query else "公司招聘",
-    }.get(subtype, "招聘数据")
-    return _build_p3_artifact(
-        artifact_type=f"jobs_{subtype}",
-        title=default_title,
-        data={"items": records, "count": len(records), "query": query},
-        domain="jobs",
-        confidence=0.70,
-        metadata=meta,
-    )
-
-
-def wrap_satellite(result: Any, keyword: str = "", **meta) -> Dict:
-    """卫星对地观测artifact封装"""
+def wrap_satellite_artifact(result: Any, keyword: str = "", **meta) -> Dict:
+    """卫星对地观测 artifact (无前端组件,保留最小 artifact 层)"""
     if isinstance(result, dict):
         data = result
     elif isinstance(result, list):
@@ -616,27 +546,6 @@ def wrap_satellite(result: Any, keyword: str = "", **meta) -> Dict:
         domain="satellite",
         confidence=0.65,
         metadata={"keyword": keyword, **meta},
-    )
-
-
-def wrap_alt_data(ticker: str, shipping: Any = None, esg: Any = None,
-                  hiring: Any = None, corporate: Any = None, **meta) -> Dict:
-    """另类数据聚合artifact"""
-    data = {
-        "ticker": ticker,
-        "shipping": _df_to_records(shipping, max_rows=30) if shipping is not None else None,
-        "esg": esg if isinstance(esg, dict) else None,
-        "hiring": _df_to_records(hiring, max_rows=20) if hiring is not None else None,
-        "corporate": corporate if isinstance(corporate, (dict, list)) else None,
-    }
-    filled = sum(1 for v in [data["shipping"], data["esg"], data["hiring"], data["corporate"]] if v)
-    return _build_p3_artifact(
-        artifact_type="alt_data_aggregate",
-        title=f"{ticker.upper()} 另类数据聚合",
-        data=data,
-        domain="alt_data",
-        confidence=0.60,
-        metadata={"ticker": ticker, "coverage": f"{filled}/4", **meta},
     )
 
 

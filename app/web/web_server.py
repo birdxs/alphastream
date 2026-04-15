@@ -3239,10 +3239,15 @@ def _p3_ok(artifact: dict, **extra):
     return custom_jsonify(payload)
 
 
+# ============================================================
+# [DEDUP 2026-04-15 13:25 +08:00] 10 端点改调 wrap_*_v2 (唯一实现),
+# 前后端 Artifact 字段契约严格对齐 (详见 F4 章节).
+# ============================================================
+
 # -------- Shipping --------
 @app.route('/api/shipping/bdi', methods=['GET'])
 def api_shipping_bdi():
-    from app.core.artifact_wrapper import wrap_shipping
+    from app.core.artifact_wrapper import wrap_shipping_v2
     try:
         days = request.args.get('days', '30')
         try:
@@ -3252,7 +3257,9 @@ def api_shipping_bdi():
         if days_i <= 0 or days_i > 365:
             return _p3_error("days范围应在[1,365]", 400)
         result = _p3_call_with_timeout("commodity_shipping", "get_bdi_index", days=days_i)
-        artifact = wrap_shipping(result, subtype="bdi", days=days_i)
+        artifact = wrap_shipping_v2(stock_name="", bdi_df=result)
+        artifact["artifact_type"] = "shipping_bdi"
+        artifact["metadata"] = {"days": days_i, "domain": "shipping"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/shipping/bdi 失败: {e}")
@@ -3261,7 +3268,7 @@ def api_shipping_bdi():
 
 @app.route('/api/shipping/port/<string:port>', methods=['GET'])
 def api_shipping_port(port: str):
-    from app.core.artifact_wrapper import wrap_shipping
+    from app.core.artifact_wrapper import wrap_shipping_v2
     try:
         if not port or len(port) > 50:
             return _p3_error("port名称非法", 400)
@@ -3271,7 +3278,9 @@ def api_shipping_port(port: str):
         result = _p3_call_with_timeout(
             "commodity_shipping", "get_port_throughput", port=port, period=period
         )
-        artifact = wrap_shipping(result, subtype="port", port=port, period=period)
+        artifact = wrap_shipping_v2(stock_name="", port_df=result)
+        artifact["artifact_type"] = "shipping_port"
+        artifact["metadata"] = {"port": port, "period": period, "domain": "shipping"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/shipping/port/{port} 失败: {e}")
@@ -3281,7 +3290,7 @@ def api_shipping_port(port: str):
 # -------- ESG --------
 @app.route('/api/esg/<string:ticker>', methods=['GET'])
 def api_esg_score(ticker: str):
-    from app.core.artifact_wrapper import wrap_esg
+    from app.core.artifact_wrapper import wrap_esg_v2
     try:
         if not ticker or len(ticker) > 20:
             return _p3_error("ticker非法", 400)
@@ -3289,7 +3298,9 @@ def api_esg_score(ticker: str):
         result = _p3_call_with_timeout(
             "esg_rating", "get_esg_score", ticker=ticker, source=source
         )
-        artifact = wrap_esg(result, ticker=ticker, subtype="score", source=source)
+        artifact = wrap_esg_v2(stock_name=ticker, scores=result or {})
+        artifact["artifact_type"] = "esg_score"
+        artifact["metadata"] = {"ticker": ticker, "source": source, "domain": "esg"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/esg/{ticker} 失败: {e}")
@@ -3299,14 +3310,16 @@ def api_esg_score(ticker: str):
 @app.route('/api/esg/climate/<string:cik>', methods=['GET'])
 def api_esg_climate(cik: str):
     """EDGAR气候披露（通过 ESGAdapter.get_climate_disclosure）"""
-    from app.core.artifact_wrapper import wrap_esg
+    from app.core.artifact_wrapper import wrap_esg_v2
     try:
         if not cik or not cik.strip():
             return _p3_error("cik不能为空", 400)
         result = _p3_call_with_timeout(
             "esg_rating", "get_climate_disclosure", cik=cik
         )
-        artifact = wrap_esg(result, ticker=cik, subtype="climate")
+        artifact = wrap_esg_v2(stock_name=cik, disclosures=result or {})
+        artifact["artifact_type"] = "esg_climate"
+        artifact["metadata"] = {"cik": cik, "domain": "esg"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/esg/climate/{cik} 失败: {e}")
@@ -3316,7 +3329,7 @@ def api_esg_climate(cik: str):
 # -------- Corporate --------
 @app.route('/api/corporate/search', methods=['GET'])
 def api_corporate_search():
-    from app.core.artifact_wrapper import wrap_corporate
+    from app.core.artifact_wrapper import _build_p3_artifact
     try:
         q = request.args.get('q', '').strip()
         if not q:
@@ -3326,7 +3339,16 @@ def api_corporate_search():
         result = _p3_call_with_timeout(
             "corporate_entity", "search_company", query=q
         )
-        artifact = wrap_corporate(result, subtype="search", query=q)
+        # search_company 返回 list[dict]
+        items = result if isinstance(result, list) else (result or {}).get("items") or []
+        artifact = _build_p3_artifact(
+            artifact_type="corporate_search",
+            title=f"企业搜索: {q}",
+            data={"items": items, "count": len(items), "query": q},
+            domain="corporate",
+            confidence=0.75,
+            metadata={"query": q},
+        )
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/corporate/search 失败: {e}")
@@ -3335,14 +3357,16 @@ def api_corporate_search():
 
 @app.route('/api/corporate/<string:company_id>/network', methods=['GET'])
 def api_corporate_network(company_id: str):
-    from app.core.artifact_wrapper import wrap_corporate
+    from app.core.artifact_wrapper import wrap_corporate_network_v2
     try:
         if not company_id:
             return _p3_error("company_id非法", 400)
         result = _p3_call_with_timeout(
             "corporate_entity", "get_company_network", company_id=company_id
         )
-        artifact = wrap_corporate(result, subtype="network", query=company_id)
+        artifact = wrap_corporate_network_v2(stock_name=company_id, network=result or {})
+        artifact["artifact_type"] = "corporate_network"
+        artifact["metadata"] = {"company_id": company_id, "domain": "corporate"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/corporate/{company_id}/network 失败: {e}")
@@ -3352,7 +3376,7 @@ def api_corporate_network(company_id: str):
 # -------- Jobs --------
 @app.route('/api/jobs/search', methods=['GET'])
 def api_jobs_search():
-    from app.core.artifact_wrapper import wrap_jobs
+    from app.core.artifact_wrapper import wrap_hiring_v2
     try:
         q = request.args.get('q', '').strip()
         if not q:
@@ -3366,7 +3390,9 @@ def api_jobs_search():
         result = _p3_call_with_timeout(
             "hiring_signal", "search_jobs", query=q, limit=limit
         )
-        artifact = wrap_jobs(result, subtype="search", query=q, limit=limit)
+        artifact = wrap_hiring_v2(stock_name=q, postings_df=result)
+        artifact["artifact_type"] = "jobs_search"
+        artifact["metadata"] = {"query": q, "limit": limit, "domain": "jobs"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/jobs/search 失败: {e}")
@@ -3375,14 +3401,16 @@ def api_jobs_search():
 
 @app.route('/api/jobs/company/<string:company>', methods=['GET'])
 def api_jobs_company(company: str):
-    from app.core.artifact_wrapper import wrap_jobs
+    from app.core.artifact_wrapper import wrap_hiring_v2
     try:
         if not company or len(company) > 100:
             return _p3_error("company非法", 400)
         result = _p3_call_with_timeout(
             "hiring_signal", "get_company_postings", company=company
         )
-        artifact = wrap_jobs(result, subtype="company", query=company)
+        artifact = wrap_hiring_v2(stock_name=company, postings_df=result)
+        artifact["artifact_type"] = "jobs_company"
+        artifact["metadata"] = {"company": company, "domain": "jobs"}
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/jobs/company/{company} 失败: {e}")
@@ -3392,7 +3420,7 @@ def api_jobs_company(company: str):
 # -------- Satellite --------
 @app.route('/api/satellite/search', methods=['GET'])
 def api_satellite_search():
-    from app.core.artifact_wrapper import wrap_satellite
+    from app.core.artifact_wrapper import wrap_satellite_artifact
     try:
         q = request.args.get('q', '').strip()
         if not q:
@@ -3400,7 +3428,7 @@ def api_satellite_search():
         result = _p3_call_with_timeout(
             "earth_observation", "search_datasets", keyword=q
         )
-        artifact = wrap_satellite(result, keyword=q)
+        artifact = wrap_satellite_artifact(result, keyword=q)
         return _p3_ok(artifact)
     except Exception as e:
         app.logger.error(f"/api/satellite/search 失败: {e}")
@@ -3411,14 +3439,16 @@ def api_satellite_search():
 @app.route('/api/alt_data/<string:ticker>', methods=['GET'])
 def api_alt_data(ticker: str):
     """聚合另类数据: shipping(BDI) + esg + hiring + corporate. 部分失败不阻断。"""
-    from app.core.artifact_wrapper import wrap_alt_data
+    from app.core.artifact_wrapper import (
+        wrap_shipping_v2, wrap_esg_v2, wrap_hiring_v2,
+        wrap_alt_data_v2, _build_p3_artifact,
+    )
     if not ticker or len(ticker) > 20:
         return _p3_error("ticker非法", 400)
 
     shipping = esg = hiring = corp = None
     errors = {}
 
-    # shipping (独立超时, 失败不阻断)
     try:
         shipping = _p3_call_with_timeout(
             "commodity_shipping", "get_bdi_index", timeout=15, days=30
@@ -3450,11 +3480,47 @@ def api_alt_data(ticker: str):
     if all(v is None for v in (shipping, esg, hiring, corp)):
         return _p3_error("所有另类数据源均失败", 502, details=errors)
 
-    artifact = wrap_alt_data(
-        ticker=ticker, shipping=shipping, esg=esg, hiring=hiring, corporate=corp,
-        partial_errors=errors if errors else None,
+    # 各子域 adapter 原始结果 → v2 包装 dict → wrap_alt_data_v2 聚合
+    shipping_wrapped = wrap_shipping_v2(stock_name=ticker, bdi_df=shipping) if shipping is not None else None
+    esg_wrapped = wrap_esg_v2(stock_name=ticker, scores=esg if isinstance(esg, dict) else {}) if esg is not None else None
+    hiring_wrapped = wrap_hiring_v2(stock_name=ticker, postings_df=hiring) if hiring is not None else None
+    # corporate: search_company 返回 list, 转为最小 corporate 子域 dict (company_name 用首条)
+    corp_wrapped = None
+    if corp is not None:
+        corp_items = corp if isinstance(corp, list) else []
+        first = corp_items[0] if corp_items else {}
+        corp_wrapped = {
+            "data": {
+                "company_id": first.get("company_number", ""),
+                "company_name": first.get("name", ticker),
+                "jurisdiction_code": first.get("jurisdiction_code", ""),
+                "incorporation_date": "",
+                "current_status": "",
+                "parents": [],
+                "children": [],
+                "officers": [],
+                "opencorporates_url": "",
+                "search_results": corp_items,
+            }
+        }
+
+    aggregated = wrap_alt_data_v2(
+        stock_name=ticker,
+        shipping=shipping_wrapped,
+        esg=esg_wrapped,
+        hiring=hiring_wrapped,
+        corporate=corp_wrapped,
     )
-    return _p3_ok(artifact, partial_errors=errors if errors else None)
+    filled = sum(1 for v in (shipping_wrapped, esg_wrapped, hiring_wrapped, corp_wrapped) if v)
+    # 补充 F3 兼容元数据字段
+    aggregated["artifact_type"] = "alt_data_aggregate"
+    aggregated["metadata"] = {
+        "ticker": ticker, "coverage": f"{filled}/4", "domain": "alt_data",
+        "partial_errors": errors if errors else None,
+    }
+    aggregated["confidence"] = 0.60
+    aggregated["sources"] = [{"name": "聚合:航运+ESG+招聘+企业", "type": "另类数据"}]
+    return _p3_ok(aggregated, partial_errors=errors if errors else None)
 
 
 # 在应用启动时启动清理线程（保持原有代码不变）

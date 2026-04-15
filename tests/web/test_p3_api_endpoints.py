@@ -58,14 +58,19 @@ def _patch_call(return_value=None, side_effect=None):
 # Shipping
 # ======================================================
 def test_shipping_bdi_happy(client):
-    df = pd.DataFrame([{"date": "2026-04-14", "bdi": 1500}, {"date": "2026-04-15", "bdi": 1520}])
+    df = pd.DataFrame([
+        {"date": "2026-04-14", "value": 1500, "indicator": "BDI", "source": "te"},
+        {"date": "2026-04-15", "value": 1520, "indicator": "BDI", "source": "te"},
+    ])
     with _patch_call(return_value=df):
         r = client.get("/api/shipping/bdi?days=10")
     assert r.status_code == 200
     data = r.get_json()
     assert data["success"] is True
     assert data["artifact"]["artifact_type"] == "shipping_bdi"
-    assert data["artifact"]["data"]["count"] == 2
+    # F4[DEDUP]: v2 契约 data.bdi_series
+    assert len(data["artifact"]["data"]["bdi_series"]) == 2
+    assert data["artifact"]["data"]["bdi_series"][0]["indicator"] == "BDI"
 
 
 def test_shipping_bdi_invalid_days(client):
@@ -87,11 +92,14 @@ def test_shipping_bdi_upstream_error(client):
 
 
 def test_shipping_port_happy(client):
-    df = pd.DataFrame([{"month": "2026-03", "throughput": 12345}])
+    df = pd.DataFrame([{"date": "2026-03", "port": "shanghai", "value": 12345, "unit": "万TEU", "indicator": "throughput"}])
     with _patch_call(return_value=df):
         r = client.get("/api/shipping/port/shanghai?period=monthly")
     assert r.status_code == 200
-    assert r.get_json()["artifact"]["artifact_type"] == "shipping_port"
+    art = r.get_json()["artifact"]
+    assert art["artifact_type"] == "shipping_port"
+    assert len(art["data"]["port_throughput"]) == 1
+    assert art["data"]["port_name"] == "shanghai"
 
 
 def test_shipping_port_bad_period(client):
@@ -103,19 +111,24 @@ def test_shipping_port_bad_period(client):
 # ESG
 # ======================================================
 def test_esg_score_happy(client):
-    with _patch_call(return_value={"ticker": "AAPL", "score": 78, "grade": "A"}):
+    with _patch_call(return_value={"ticker": "AAPL", "esg_score": 78, "grade": "A", "source": "esgbook"}):
         r = client.get("/api/esg/AAPL")
     assert r.status_code == 200
     payload = r.get_json()
     assert payload["artifact"]["artifact_type"] == "esg_score"
-    assert payload["artifact"]["data"]["score"] == 78
+    # F4[DEDUP]: v2 契约 esg_score 顶层扁平
+    assert payload["artifact"]["data"]["esg_score"] == 78
+    assert payload["artifact"]["data"]["grade"] == "A"
 
 
 def test_esg_climate_happy(client):
-    with _patch_call(return_value={"cik": "0000320193", "climate_items": []}):
+    with _patch_call(return_value={"cik": "0000320193", "scope1_latest": 12.5, "scope2_latest": 45.0, "tags": {}}):
         r = client.get("/api/esg/climate/0000320193")
     assert r.status_code == 200
-    assert r.get_json()["artifact"]["artifact_type"] == "esg_climate"
+    art = r.get_json()["artifact"]
+    assert art["artifact_type"] == "esg_climate"
+    tags = [c["tag"] for c in art["data"]["climate_disclosures"]]
+    assert "Scope 1" in tags
 
 
 def test_esg_score_upstream_fail(client):
@@ -141,21 +154,32 @@ def test_corporate_search_missing_q(client):
 
 
 def test_corporate_network_happy(client):
-    with _patch_call(return_value={"nodes": [{"id": "c1"}], "edges": []}):
+    with _patch_call(return_value={
+        "company_id": "us_123",
+        "parents": [],
+        "children": [{"name": "Sub Co", "jurisdiction_code": "us_ca", "company_number": "X1"}],
+        "officers": [{"name": "CEO A", "position": "CEO", "start_date": "2020", "end_date": None}],
+    }):
         r = client.get("/api/corporate/us_123/network")
     assert r.status_code == 200
-    assert r.get_json()["artifact"]["artifact_type"] == "corporate_network"
+    art = r.get_json()["artifact"]
+    assert art["artifact_type"] == "corporate_network"
+    assert len(art["data"]["children"]) == 1
+    assert len(art["data"]["officers"]) == 1
 
 
 # ======================================================
 # Jobs
 # ======================================================
 def test_jobs_search_happy(client):
-    df = pd.DataFrame([{"title": "Python Dev", "company": "X"}])
+    df = pd.DataFrame([{"title": "Python Dev", "company": "X", "tags": "python,ML", "created_at": "2026-04-01"}])
     with _patch_call(return_value=df):
         r = client.get("/api/jobs/search?q=python&limit=5")
     assert r.status_code == 200
-    assert r.get_json()["artifact"]["data"]["count"] == 1
+    art = r.get_json()["artifact"]
+    # F4[DEDUP]: v2 契约 total_postings 取代 count
+    assert art["data"]["total_postings"] == 1
+    assert len(art["data"]["items"]) == 1
 
 
 def test_jobs_search_bad_limit(client):
@@ -193,13 +217,13 @@ def test_alt_data_happy(client):
 
     def fake_call(domain, method, timeout=20, **kw):
         if domain == "commodity_shipping":
-            return pd.DataFrame([{"date": "2026-04-15", "bdi": 1500}])
+            return pd.DataFrame([{"date": "2026-04-15", "value": 1500, "indicator": "BDI", "source": "te"}])
         if domain == "esg_rating":
-            return {"ticker": kw.get("ticker"), "score": 80}
+            return {"ticker": kw.get("ticker"), "esg_score": 80, "source": "esgbook"}
         if domain == "hiring_signal":
-            return pd.DataFrame([{"title": "Eng"}])
+            return pd.DataFrame([{"title": "Eng", "company": "TSLA", "tags": "ML", "created_at": "2026-04-01"}])
         if domain == "corporate_entity":
-            return [{"name": "Tesla Inc"}]
+            return [{"name": "Tesla Inc", "company_number": "T1", "jurisdiction_code": "us_de"}]
         raise ValueError(domain)
 
     with patch.object(ws, "_p3_call_with_timeout", side_effect=fake_call):
@@ -208,6 +232,8 @@ def test_alt_data_happy(client):
     art = r.get_json()["artifact"]
     assert art["artifact_type"] == "alt_data_aggregate"
     assert art["metadata"]["coverage"] == "4/4"
+    # F4[DEDUP]: v2 聚合 data 含 4 子域
+    assert set(art["data"].keys()) >= {"shipping", "esg", "hiring", "corporate"}
 
 
 def test_alt_data_all_fail(client):
