@@ -95,3 +95,6 @@ node_modules/
 
 # Eval results
 eval_results/
+
+# Third-party vendored sources (non-PyPI)
+third_party/
