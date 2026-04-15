@@ -3253,3 +3253,111 @@ Playwright CLI 已装 (1.59.1) 但 `@playwright/test` 包未安装 → 真浏览
 - 修 Registry: 失败 adapter 的异常 message 必须全部进 `details[domain]`，禁止空字符串
 - 修 artifact 契约: stock_code 字段必须与入参一致
 - 补 CI: 在 `.github/workflows/frontend-e2e.yml` 里装 playwright 并跑 `m1_alt_data.spec.ts`
+
+---
+
+## N1 M1遗留bug修复 [2026-04-15 15:18 +08:00]
+
+> Input: M1端到端scenario真跑暴露的 3 个契约 bug (commit `71699d5`/`2103ce9`)
+> Output: `/api/alt_data/<ticker>` 契约修复 + 4 新回归测试 + 真后端双向验证
+> Pos: `app/web/web_server.py` / `app/core/artifact_wrapper.py` / `tests/{web,core}/test_*_p3*.py`
+
+### 3 Bug 根因分析
+
+| # | 级别 | 现象 | 根因 | 修复文件 |
+|---|---|---|---|---|
+| 1 | P0 | 600519/AAPL `details.{shipping,esg}` 返回空字符串 `""` | `str(exception)` 对 `TimeoutError("")` / `Exception("")` 等无 message 异常产生空串 | `app/web/web_server.py::api_alt_data` — 引入 `_fmt_err(e)` 强制拼接 `type(e).__name__ + ": " + msg or "<no message>"` |
+| 2 | P1 | AAPL `artifact.stock_code == None` | `wrap_alt_data_v2()` 签名缺 `stock_code` 参数; 调用端也未透传 | `app/core/artifact_wrapper.py::wrap_alt_data_v2` 新增 `stock_code` 形参, `web_server.py` 调用处透传 `stock_code=ticker` |
+| 3 | P1 | AAPL `artifact.data` 只有 esg 一个 key, 其它 3 domain 静默丢失, 前端不知 why | 聚合端只把成功域 merge 进 data, 失败域既不在 data 也未保证进 `partial_errors` (当 `_is_valid_result=False` 返回 None 时不抛异常) | web_server.py — 4 domain 强制占位 (`data[k] = None`); 全败时 `errors` 对 4 key 全部补占位; 加 `app.logger.info` 留痕 |
+
+### 修复 diff 摘要
+
+```python
+# web_server.py::api_alt_data (要点)
+def _fmt_err(exc):
+    tname = type(exc).__name__
+    msg = str(exc) or "<no message>"
+    return f"{tname}: {msg}"[:500]
+
+_subtasks = [("shipping",...), ("esg",...), ("hiring",...), ("corporate",...)]
+for key, domain, method, kw in _subtasks:
+    try:
+        _results[key] = _p3_call_with_timeout(domain, method, timeout=15, **kw)
+    except Exception as e:
+        errors[key] = _fmt_err(e)
+        app.logger.info(f"[alt_data] {key}({domain}.{method}) 失败: {errors[key]}")
+
+# 全败兜底: 4 key 都占位, 不漏
+for k in ("shipping","esg","hiring","corporate"):
+    if not errors.get(k):
+        errors[k] = "Unknown: 返回空且未抛异常"
+
+# 聚合 artifact
+aggregated = wrap_alt_data_v2(stock_name=ticker, stock_code=ticker, ...)  # ← 新增 stock_code
+for k in ("shipping","esg","hiring","corporate"):
+    aggregated["data"].setdefault(k, None)   # ← 4 domain 强制占位
+```
+
+```python
+# artifact_wrapper.py::wrap_alt_data_v2 (签名+返回)
+def wrap_alt_data_v2(..., stock_code: Optional[str] = None) -> Dict[str, Any]:
+    ...
+    return {..., "stock_code": stock_code or stock_name or "", ...}  # ← 契约透传
+```
+
+### 回归测试 (新增 6 个)
+
+| 测试 | 覆盖 |
+|---|---|
+| `test_stock_code_transmitted` (core) | P1: wrap_alt_data_v2(stock_code=...) 正确透传 |
+| `test_stock_code_fallback_to_name` (core) | P1: 未传 stock_code 时 fallback, 非 None |
+| `test_n1_alt_data_all_fail_details_not_empty` (web) | P0: 空 message 异常 (`Exception("")`) 的 details 含 type 名非空 |
+| `test_n1_alt_data_stock_code_transmitted` (web) | P1: 部分成功 artifact.stock_code == ticker |
+| `test_n1_alt_data_partial_errors_all_four_domains` (web) | P1: data 4 key 全在 (失败 None 占位) + partial_errors 含 3 失败域 |
+| `test_n1_alt_data_coverage_metadata` (web) | metadata.coverage=`1/4` 准确 |
+
+### 测试数字
+
+- **修复前 M1**: 460+ pytest passed (M1 scenario 脚本独立发现 3 bug)
+- **修复后 N1**: `pytest -q` → **527 passed** (含 +6 新 N1 测试, 0 失败, 0 跳过)
+- 命令: `python3 -m pytest -q` → `527 passed, 12 warnings in 28.86s`
+
+### 端到端证据 — 修复前 vs 修复后
+
+**600519** (A股)
+
+| 字段 | 修复前 (M1) | 修复后 (N1) |
+|---|---|---|
+| `details.shipping` | `""` (空串) | `TimeoutError: <no message>` 或全成功时无 (None) |
+| `details.esg` | `""` | 同上 |
+| `artifact.stock_code` | N/A (502 无 artifact) | `"600519"` (若部分成功) |
+
+**AAPL** (美股)
+
+| 字段 | 修复前 (M1) | 修复后 (N1) 真跑 |
+|---|---|---|
+| `artifact.stock_code` | `None` ❌ | `"AAPL"` ✅ |
+| `artifact.data.keys` | `["esg"]` 只 1 个 ❌ | `["esg","shipping","hiring","corporate"]` 全 4 ✅ |
+| `data.shipping/hiring/corporate` | 缺失 ❌ | `null` 明确占位 ✅ |
+| `metadata.partial_errors` | 不存在或不完整 ❌ | 3 个失败域全含 type+msg ✅ |
+| `partial_errors.shipping` | `""` ❌ | `"TimeoutError: <no message>"` ✅ |
+| `partial_errors.corporate` | N/A | `"Exception: domain=corporate_entity method=search_company 全部数据源降级失败 (tried=['opencorporates'])"` ✅ |
+
+**验证命令**:
+
+```bash
+pkill -f "python3 run.py"; python3 run.py > /tmp/backend_n1.log 2>&1 &
+sleep 12
+curl -s -m 60 http://127.0.0.1:8888/api/alt_data/AAPL | jq '.artifact.stock_code, .artifact.data | keys, .artifact.metadata.partial_errors'
+# → "AAPL" / ["corporate","esg","hiring","shipping"] / {shipping:"TimeoutError:...", hiring:"TimeoutError:...", corporate:"Exception:..."}
+```
+
+### 提交
+
+- `fix(api): N1 /api/alt_data details/stock_code/partial_errors 契约修复`
+- `test(regression): N1 alt_data 4 domain 错误收集 + stock_code 回归 (+6 测试)`
+- `docs(data): N1追溯 M1遗留修复证据 + 前后对比`
+
+### 结论
+
+3 bug 全部修复, 真后端 AAPL 返回体完全符合前端契约 (stock_code/4 domain data/partial_errors)。测试 527/527 通过, 未降低基线。前端 `alt-data-panel.tsx` 现可明确展示"4 个 tab, 哪个有数据哪个失败为什么失败"。
