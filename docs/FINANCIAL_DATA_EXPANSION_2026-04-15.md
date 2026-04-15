@@ -830,3 +830,53 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 2. **SDMX 弹性解析**：IMF Series/Obs 可能为 dict 或 list，`_extract_series` 统一转 list，避免调用方分叉
 3. **BaseAdapter 占位空返回**：两者不提供行情/成分/个股信息，抽象方法全部返回空对象，供 `fallback_manager` 安全跳过
 4. **横向对比便捷化**：`WorldBankAdapter.compare_countries` 用 `;` 多国分隔单次请求完成，减少 N 次往返
+
+---
+
+## P2批次追溯
+
+### B1 自建OpenCLI爬虫 [2026-04-15]
+
+**时间基准**：2026-04-15 12:30 +08:00 (Asia/Singapore)
+**交付人**：B1 agent (香草少校PM调度)
+**性质**：新增3个 JS adapter 至 `clis/` (OpenCLI 约定目录)，Python侧仅在 `opencli_bridge.py` 追加3个便捷方法，不改已有代码。
+
+| # | JS Adapter | 路径 | 必填 args | 可选 args | 数据字段 | NEW-FILE |
+|---|-----------|------|-----------|-----------|----------|----------|
+| 1 | xueqiu/discuss | `clis/xueqiu/discuss.js` | symbol | limit=30 | user/time/content/likes/comments/reposts | #20260415-13 |
+| 2 | eastmoney/guba | `clis/eastmoney/guba.js` | code(6位) | pages=1 | rank/title/author/time/reads/replies/url | #20260415-14 |
+| 3 | cls/telegraph | `clis/cls/telegraph.js` | — | limit=50 | time/title/content/tags/isImportant | #20260415-15 |
+
+**目录领地标记**：`clis/README.md` [NEW-FILE:#20260415-16] 列出3个 adapter 用法与依赖。
+
+**权威源 (≥3 验证)**：
+
+- https://github.com/jackwener/OpenCLI (主仓 clis/<site>/<action>.js 目录约定, v2026最近主线)
+- https://github.com/jackwener/OpenCLI/pull/1025 (hot-rank adapter 合入模板: Strategy.COOKIE + page.evaluate)
+- https://xueqiu.com/S/{symbol}/TIMELINE (雪球讨论页 DOM: `.home__timeline__item`)
+- https://guba.eastmoney.com/list,{code}.html (东财股吧 DOM: `table.default_list tr.articleh` + `.l1`~`.l5`)
+- https://www.cls.cn/telegraph (财联社电报 DOM: `.telegraph-content-box` + `.telegraph-time-box`)
+
+**Python桥接追加**：`app/adapters/opencli_bridge.py` 新增：
+
+- `get_xueqiu_discuss(symbol, limit=30)` → timeout=45s
+- `get_eastmoney_guba(code, pages=1)` → timeout=60s (入参 6位数字校验)
+- `get_cls_telegraph(limit=50)` → timeout=30s
+
+三个方法均复用 `opencli_call()` 通用链路，环境未就绪自动降级 `[]` + `log.warning`，不影响上游。
+
+**测试**：3 个 `*.test.js` 共 12 个 mock 单元测试（节点内置 `node:test`，零依赖），覆盖：
+- 元信息契约 (name/strategy/args)
+- 正常解析（含 rank 递增、tags 数组、isImportant 布尔）
+- 边界入参（symbol/code 缺失或非法抛异常）
+- 空 evaluate 返回空数组
+
+**Git 提交**：
+- commit1: `feat(clis): OpenCLI自建雪球/股吧/财联社爬虫 [NEW-FILE:#20260415-13,14,15,16]`
+- commit2: `docs(data): P2-B1追溯`
+
+**关键设计决策**：
+1. **DOM 多选择器 fallback**：雪球/东财/财联社前端常迭代，每个选择器给 2-3 套备选（如 `.home__timeline__item, .timeline__item, article`）
+2. **中文数字解析**：`"1.2万"` 统一 `toInt()` 处理 `万` 乘以 10000
+3. **Strategy.COOKIE**：三站均需浏览器会话，沿用 hot-rank PR#1025 模式
+4. **Python侧入参校验前置**：`code` 非6位数字直接降级，避免无意义 Node 启动开销
