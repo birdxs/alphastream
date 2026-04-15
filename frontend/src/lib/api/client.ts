@@ -11,13 +11,18 @@ import type { SSEHandlers } from '@/lib/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-// SSE 专用后端直连 URL — 绕过 Next.js 16 dev rewrites 对流式响应的 buffer。
-// 证据：curl 直连 8888 立刻流式刷 bytes；curl http://localhost:3000 代理要 ~10s 才刷第一批。
-// 浏览器 fetch().body.getReader() 依赖实时 chunked 刷写，被 Next 代理 buffer 后 reader.read() 长时间挂起。
-// 开发环境直连后端；生产环境若设置了 NEXT_PUBLIC_API_URL 则继承。
+// SSE 后端 URL 策略（2026-04-15 UI-Q2 修复）
+// 问题：原策略直连 http://localhost:8888，但从局域网 IP(如 192.168.43.125:3000)访问前端时
+//   a) `window.location.hostname === 'localhost'` 为 false → SSE_BASE='' 走相对 URL
+//   b) 若真直连 localhost 也不可达（浏览器的 localhost 是客户端本机）
+//   c) 若直连 http://192.168.x:8888 则后端 CORS allowed_origins 未含该 origin → preflight 失败 → 后端 0 POST
+// 新策略：默认始终走同源相对 URL，经 Next dev rewrites 代理到后端(同 origin，无 CORS)；
+//   若用户显式设置 NEXT_PUBLIC_SSE_URL 才直连（生产 Nginx 反代场景）。
+// 关于 rewrites buffer：Next.js 16 dev rewrites 对 text/event-stream 响应会延迟首 chunk ~1s
+// 但最终可流，不会永远卡死；权衡之下"能到达后端"比"理论上最快 SSE"更重要。
 const SSE_BASE = process.env.NEXT_PUBLIC_SSE_URL
   || process.env.NEXT_PUBLIC_API_URL
-  || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8888' : '');
+  || '';
 
 // 兼容历史 API 返回字面 NaN/Infinity 的响应 (非标 JSON)。
 // 后端已修复为输出 null, 但旧 conversation 持久化数据可能仍含 NaN, 前端做双保险。
@@ -73,14 +78,20 @@ class ApiClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        // SSE 必须直连后端（SSE_BASE）以避开 Next dev rewrites 的流式 buffer
+        // SSE 走 SSE_BASE（默认同源，经 Next dev rewrites；显式设置 NEXT_PUBLIC_SSE_URL 则直连）
         const sseUrl = `${SSE_BASE}${path}`;
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[SSE] POST', sseUrl, 'attempt', attempt + 1, 'body:', body);
+        }
         const res = await fetch(sseUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal,
         });
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[SSE] response status', res.status, 'ok:', res.ok, 'hasBody:', !!res.body);
+        }
 
         if (!res.ok || !res.body) {
           if (attempt < MAX_RETRIES) {

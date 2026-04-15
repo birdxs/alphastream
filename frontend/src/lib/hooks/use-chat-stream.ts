@@ -43,14 +43,20 @@ function extractStockNameCandidates(message: string): string[] {
 
 async function lookupCodeByName(message: string): Promise<string | null> {
   const cands = extractStockNameCandidates(message);
+  // 整体 2.5s 上限避免上游慢响应阻塞 sendMessage
+  const overallStart = Date.now();
+  const OVERALL_TIMEOUT_MS = 2500;
   for (const q of cands) {
+    if (Date.now() - overallStart > OVERALL_TIMEOUT_MS) break;
     try {
-      const resp = await fetch(`/api/stock_name_search?q=${encodeURIComponent(q)}`);
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 800);
+      const resp = await fetch(`/api/stock_name_search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+      clearTimeout(tid);
       if (!resp.ok) continue;
       const data = await resp.json();
       const hit = Array.isArray(data?.results) && data.results[0];
       if (hit?.stock_code && /^\d{6}$/.test(hit.stock_code)) {
-        // 偏好精确匹配
         const exact = data.results.find((r: { stock_name?: string; stock_code?: string }) => r.stock_name === q);
         if (exact?.stock_code) return exact.stock_code;
         return hit.stock_code;
@@ -331,6 +337,9 @@ export function useChatStream() {
       }
 
       const endpoint = isAnalyze ? '/api/ai/agent-analyze' : '/api/ai/chat';
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[chat-stream] sendMessage', { endpoint, isAnalyze, resolvedCode, _hasAnalyzeVerb, msgLen: message.length });
+      }
       const body = isAnalyze
         ? {
             stock_code: resolvedCode,
