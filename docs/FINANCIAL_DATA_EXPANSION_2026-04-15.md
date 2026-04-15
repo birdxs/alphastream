@@ -28,7 +28,28 @@
 | A9 ccxt | `ccxt_adapter.py` 100+交易所 | `46bf732`+`b83d6db` | 24合计 |
 | A10 CoinGecko | `coingecko_adapter.py` 公开免Key | (同A9) | — |
 
-**P1汇总**：6 adapter + 6 test + 文档追溯，93 mock单测通过，6 commits入main。累计P0+P1=12 adapter/10 test，149 mock PASS。并发观察：shared `__init__.py`/README 由先完成agent合并无冲突。下一批启动 P2 (自建OpenCLI爬虫+Ashare/easyquotation+RSS聚合+OpenBB桥)。
+**P1汇总**：6 adapter + 6 test + 文档追溯，93 mock单测通过，6 commits入main。累计P0+P1=12 adapter/10 test，149 mock PASS。
+
+## P2 批次验收 ✅ (2026-04-15 12:55 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| B1 自建OpenCLI | `clis/{xueqiu,eastmoney,cls}/*.js` 3适配+3测试+README | `21bbabd`+`5acfb34` | 12 JS mock |
+| B2 Ashare+eq | `ashare_adapter.py`+`easyquotation_adapter.py` | `68231c4`+`9f3b761` | 35 PASS |
+| B3 RSS聚合 | `rss_news_adapter.py` 6源并发去重 | `3baefd3`+`40183e3` | 12 PASS |
+| B4 OpenBB+Registry | `openbb_adapter.py`+`adapter_registry.py` 11-domain降级 | `a5c123b` | 30 PASS |
+
+**P2汇总**：5 Python adapter + 1 Registry + 3 JS爬虫，77 Python mock + 12 JS mock，7 commits。
+
+## 🏁 三阶段总验收 (P0+P1+P2)
+
+- **代码**：17 Python文件 (16 adapter + Registry) + 3 JS爬虫
+- **测试**：15 pytest文件 + 3 JS测试, **累计238 mock单测通过 (零真实网络)**
+- **Git**：27 commits入main (含3次批次汇总)
+- **Registry 11域**：a_stock_kline/realtime · us_stock · hk_stock · macro_us/cn/global · crypto · news · sentiment_social · xbrl_financials, 按优先级多源自动降级
+- **合规**：UA规范/限流/重试/软依赖降级全覆盖, 爬虫类标"仅研究禁止商用"
+
+**v2方案执行闭环**。下一步待Comdr授权：(a) pip安装依赖+pytest真实运行 (b) 14-Agent接入Registry (c) 冒烟测试 (d) P3扩展(另类数据)。
 
 ---
 
