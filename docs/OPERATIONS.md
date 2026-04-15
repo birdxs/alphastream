@@ -386,4 +386,34 @@ act -j backend-pytest
 
 ---
 
+## 12. 安全审计 (M3 2026-04-15)
+
+### 12.1 定期扫描命令
+
+```bash
+# Node.js (frontend)
+cd frontend && npm audit --registry=https://registry.npmjs.org
+cd frontend && npm audit fix                    # 仅 patch/minor 自动升
+# --force 不建议无人值守执行 (可能触发 major)
+
+# Python (venv 当前快照)
+pip-audit --format columns --progress-spinner=off
+# 直接跑 requirements.txt 若 resolution-too-deep, 改用:
+pip freeze > /tmp/freeze.txt && pip-audit -r /tmp/freeze.txt
+```
+
+### 12.2 漏洞响应流程
+
+1. 发现高危 (High/Critical): 24h 内在 `logs/security_audit_YYYY-MM-DD.md` 记录 CVE + 影响面
+2. 评估修复窗口: patch → 立即修; minor → 同版本发布合并修; major → 排入下一 Sprint
+3. 修复后必须回归: `pytest`, `npx tsc --noEmit`, `npm run build`
+4. commit 格式: `chore(security): <生态> <动作> <CVE概览>`
+
+### 12.3 最近扫描记录
+
+- **2026-04-15 15:05 +08:00** — [logs/security_audit_2026-04-15.md](../logs/security_audit_2026-04-15.md)
+  - npm: 5 → 1 漏洞 (剩 Next DoS, 待 major 窗口); pip: 28 包 60+ 漏洞 (3 个直接依赖, 其余传递)
+
+---
+
 > **此项目的任何功能、架构更新，必须在结束后同步更新相关文档。这是我们契约的一部分。**

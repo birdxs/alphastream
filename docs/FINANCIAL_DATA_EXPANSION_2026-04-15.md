@@ -3361,3 +3361,36 @@ curl -s -m 60 http://127.0.0.1:8888/api/alt_data/AAPL | jq '.artifact.stock_code
 ### 结论
 
 3 bug 全部修复, 真后端 AAPL 返回体完全符合前端契约 (stock_code/4 domain data/partial_errors)。测试 527/527 通过, 未降低基线。前端 `alt-data-panel.tsx` 现可明确展示"4 个 tab, 哪个有数据哪个失败为什么失败"。
+
+---
+
+## M3 Security Audit [2026-04-15 15:25 +08:00]
+
+> 完整报告: [logs/security_audit_2026-04-15.md](../logs/security_audit_2026-04-15.md)
+
+### Python pip-audit 摘要
+
+- 扫描方式: `pip-audit --format columns` (requirements.txt 直接解析触发 resolution-too-deep, 改用 venv 快照)
+- 结果: 28 个包 / 60+ 漏洞条目
+- 直接依赖受影响: `pytest 7.3.1`, `scikit-learn 1.2.2`, `streamlit 1.50.0`
+- 关键传递依赖: `urllib3 2.5.0`, `werkzeug 3.1.3`, `tornado 6.4.1`, `python-jose 3.3.0` (JWT 算法混淆), `pillow 10.2.0`, `protobuf 5.29.5`, `transformers 4.52.4`, `torch 2.7.1`
+
+### npm audit 摘要
+
+| 阶段 | 漏洞数 | 分布 |
+|------|-------|------|
+| 修复前 | 5 | Moderate 3 + High 2 |
+| 修复后 | 1 | High 1 (next DoS, 需 --force major) |
+
+### 修复动作
+
+- `cd frontend && npm audit fix` 执行成功 — @hono/node-server / brace-expansion / hono / path-to-regexp 全修复
+- package-lock.json 变更 12±行, 仅 patch 版本升级, 源码 tsc 无回归
+- Python 端按任务约束**未自动修**, 仅记录遗留
+
+### 遗留安全建议
+
+1. `python-jose` 3.3.0 → 3.4.0 (PYSEC-2024-232/233 算法混淆, 若使用 JWT 鉴权请优先)
+2. `urllib3` / `werkzeug` / `tornado` 传递漏洞统一 patch 升级, 配 pytest 全量回归
+3. `next` 16.2.2 → 16.2.3 major 窗口 (DoS GHSA-q4gf-8mx6-v5v3), 需联动 tsc/build
+4. CI 接入 `npm audit --audit-level=high` + `pip-audit` 每日跑
