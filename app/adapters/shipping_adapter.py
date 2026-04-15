@@ -38,11 +38,16 @@ from ._proxy_utils import get_proxies
 logger = logging.getLogger(__name__)
 
 
-# BDI / FBX 公开日值可靠来源（RSS/JSON/HTML均可），此处给出候选端点清单
+# BDI / FBX 公开日值可靠来源
+# R4治理 (2026-04-15 21:45 +08:00): investing.com 403反爬, 下移优先级,
+# 上海航运交易所 SSE 作为国内替代主源 (SCFI/BDI 同属干散货/集装箱指数).
 _BDI_ENDPOINTS = [
-    # TradingEconomics 公开图表 (无Key只读)
+    # TradingEconomics 公开图表 (无Key只读, 主源)
     "https://tradingeconomics.com/commodity/baltic",
-    # Investing.com 公开页(带反爬，仅备选)
+    # 上海航运交易所 (国内权威, 反爬弱) - SCFI 每周一/五发布
+    "http://www.sse.net.cn/",
+    "http://www1.chineseshipping.com.cn/gxh/xhzb/index.jhtml",
+    # Investing.com 公开页 (403反爬严重, 降为末位)
     "https://www.investing.com/indices/baltic-dry",
 ]
 
@@ -67,10 +72,12 @@ class ShippingAdapter(BaseAdapter):
 
     # K1 [NEW-FILE:#20260415-44] UA由_retry_utils.UA_POOL轮询提供
 
-    # K1 反爬Referer伪造：investing.com 等
+    # K1 反爬Referer伪造 (R4加强: investing.com 必须带 Referer+完整 Accept 才过403)
     _REFERER_MAP = {
-        "investing.com": "https://www.investing.com/",
-        "tradingeconomics.com": "https://tradingeconomics.com/",
+        "investing.com": "https://www.google.com/",   # R4: Google引流绕反爬
+        "tradingeconomics.com": "https://www.google.com/",
+        "sse.net.cn": "http://www.sse.net.cn/",
+        "chineseshipping.com.cn": "http://www.chineseshipping.com.cn/",
     }
 
     def __init__(self, timeout: int = DEFAULT_TIMEOUT,
@@ -119,8 +126,17 @@ class ShippingAdapter(BaseAdapter):
             except Exception as e:
                 logger.warning(f"BDI 端点 {url} 解析失败: {type(e).__name__}: {e}")
                 continue
-        logger.info("BDI 全部端点降级失败，返回空DF")
-        return pd.DataFrame()
+        # R4: 全降级时返回单行占位 (date+null+note), 让下游 Agent 感知"上游反爬",
+        # 而不是误以为"数据为空=无航运压力"
+        logger.info("BDI 全部端点降级失败, 返回占位行 (note=上游反爬)")
+        from datetime import datetime as _dt
+        return pd.DataFrame([{
+            "date": _dt.now().strftime("%Y-%m-%d"),
+            "indicator": "BDI",
+            "value": None,
+            "source": "fallback",
+            "note": "上游反爬/暂不可达, 请配置 HTTPS_PROXY 或稍后重试",
+        }])
 
     # ==================== 港口吞吐量 ====================
 
