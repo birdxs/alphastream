@@ -2162,3 +2162,61 @@ SSE 事件类型齐全：冒烟1 `token + artifact×2 + done`；冒烟2/3 `info�
 ### 结论
 
 H2 验收 PASS：3/3 冒烟 200、6/6 Agent 阶段闭环、12 次 Registry 真调、fallback 降级契约正确。详见 `logs/agent_e2e_2026-04-15.md`。
+
+## H4 全局HTTP代理支持 [2026-04-15 14:05 +08:00]
+
+**背景**：境内部署访问 Yahoo/Binance/SEC EDGAR/NASA/FRED/WorldBank/IMF/CoinGecko 等境外源常遇 403/451/超时。统一通过 `HTTP_PROXY`/`HTTPS_PROXY` env 注入代理，无需改业务入参。
+
+### 代理传递机制 (三档)
+
+| 机制 | 触发库 | 行为 |
+|------|--------|------|
+| 自动（env→requests） | `requests.Session()`/`requests.get` | Session 默认 `trust_env=True`，自动读 HTTP_PROXY/HTTPS_PROXY/NO_PROXY，**零代码改动** |
+| 显式参数（需要代码） | `yfinance` | `yf.Ticker(sym, proxy=get_proxy_url())` |
+| 字典注入（需要代码） | `ccxt` | `exchange({"proxies": get_proxies(), ...})` |
+
+### 境外 adapter 改动清单 (12+)
+
+| Adapter | 网络库 | 代理生效方式 | 本次是否改代码 |
+|---------|--------|-------------|--------------|
+| yfinance_adapter.py | yfinance→requests | 显式 `proxy=` 参数 | 是（7处 Ticker + health_check）|
+| ccxt_adapter.py | ccxt→requests | `proxies` 字典 | 是（__init__）|
+| coingecko_adapter.py | requests.get | `proxies=` 参数 | 是（_get）|
+| edgar_adapter.py | requests.Session | env 自动 | 否（Session trust_env）|
+| worldbank_adapter.py | requests.Session | env 自动 | 否 |
+| imf_adapter.py | requests.Session | env 自动 | 否 |
+| fred_adapter.py | fredapi→requests | env 自动 | 否 |
+| corporate_adapter.py | requests.Session | env 自动 | 否 |
+| esg_adapter.py | requests.Session | env 自动 | 否 |
+| jobs_adapter.py | requests.Session | env 自动 | 否 |
+| shipping_adapter.py | requests.Session | env 自动 | 否 |
+| satellite_adapter.py | requests.Session | env 自动 | 否 |
+| rss_news_adapter.py | feedparser→urllib | urllib 读小写 `http_proxy` | 否（保持软降级）|
+
+### 境内 adapter (可选代理，默认直连)
+
+`nbs_adapter.py`、`efinance_adapter.py`、`easyquotation_adapter.py`、`ashare_adapter.py`、`akshare_adapter.py`、`baostock_adapter.py` 为境内源（stats.gov.cn/东财/新浪/sina/sse/szse）。通过 `NO_PROXY` env 绕过，不走代理：
+
+```bash
+NO_PROXY=localhost,127.0.0.1,akshare.com,baostock.com,stats.gov.cn,sse.com.cn,szse.cn
+```
+
+### 统一入口 `app/adapters/_proxy_utils.py` [NEW-FILE:#20260415-38]
+
+- `get_proxies() -> dict | None`：requests 兼容字典，大小写 env 兼容，单端口通吃（http/https 互填）
+- `get_proxy_url() -> str | None`：单串，yfinance/ccxt/feedparser 场景，优先 HTTPS_PROXY
+
+### .env 配置示例
+
+```ini
+HTTP_PROXY=http://127.0.0.1:7890
+HTTPS_PROXY=http://127.0.0.1:7890
+NO_PROXY=localhost,127.0.0.1,akshare.com,baostock.com,stats.gov.cn,sse.com.cn,szse.cn
+```
+
+### 验证
+
+- 单测：`tests/adapters/test_proxy_utils.py` 7 用例全过（无 env/大小写/双端口/优先级/fallback/重复 import 安全）
+- 回归：`tests/adapters/` 基线 322 → 329（+7 新增），**零回归**
+- 不发真实网络请求，monkeypatch env 足以覆盖契约
+
