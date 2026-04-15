@@ -669,3 +669,440 @@ def _get_search_structured(arguments: dict) -> Optional[Dict]:
     except Exception as e:
         logger.warning(f"获取搜索结构化数据失败: {e}")
         return None
+
+
+# =====================================================================
+# F2 [2026-04-15 13:08 +08:00] P3 前端Artifact契约对齐包装 (5 新类型)
+# 仅追加, 不修改上方既有 wrap_shipping/wrap_esg/wrap_corporate/wrap_jobs/
+# wrap_satellite/wrap_alt_data (F3 API 端点版, 签名: result+subtype).
+#
+# 命名说明: 因既有同名函数签名冲突 (F3端点用 result+subtype),
+# 本批使用 `_v2` 后缀与之区分, 专供 Agent 回调/Generative UI 构造
+# 前端 Artifact 组件 (shipping-chart/esg-scorecard/hiring-signal/
+# corporate-network/alt-data-panel) 的 DataFrame → 前端字段契约.
+# 建议后续按 [DEDUP] 统一收敛, 见 docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md F2 章节.
+# =====================================================================
+
+
+def _safe_df_to_records(df, columns: Optional[List[str]] = None,
+                        limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """DataFrame → list[dict] 兼容 None/空/缺列/list[dict], 不抛异常"""
+    try:
+        if df is None:
+            return []
+        if isinstance(df, list):
+            rows = df[:limit] if limit else df
+            return [dict(r) for r in rows if isinstance(r, dict)]
+        if not hasattr(df, "empty") or df.empty:
+            return []
+        work = df
+        if columns:
+            present = [c for c in columns if c in work.columns]
+            if present:
+                work = work[present]
+        if limit:
+            work = work.head(limit)
+        records: List[Dict[str, Any]] = []
+        import math
+        for _, row in work.iterrows():
+            item: Dict[str, Any] = {}
+            for k, v in row.items():
+                try:
+                    if v is None:
+                        item[k] = None
+                    elif hasattr(v, "item"):
+                        val = v.item()
+                        item[k] = None if (isinstance(val, float) and math.isnan(val)) else val
+                    elif isinstance(v, float) and math.isnan(v):
+                        item[k] = None
+                    else:
+                        item[k] = v
+                except Exception:
+                    item[k] = str(v)
+            records.append(item)
+        return records
+    except Exception as e:
+        logger.debug(f"_safe_df_to_records 失败: {e}")
+        return []
+
+
+def wrap_shipping_v2(stock_name: str, bdi_df=None, port_df=None, ais_df=None) -> Dict[str, Any]:
+    """航运&大宗 Artifact 包装 — 对齐 shipping-chart.tsx 字段契约
+
+    前端契约 (frontend/src/components/artifacts/shipping-chart.tsx):
+      data: {
+        bdi_series:     [{date, value, indicator, source}],
+        port_throughput:[{date, port, value, unit, indicator}],
+        ais_vessels:    [{mmsi, name, ship_type, lat, lon, sog}],
+        ais_count: int, port_name: str,
+      }
+
+    后端 adapter 映射:
+      shipping_adapter.get_bdi_index()        → bdi_df [date, indicator, value, source]
+      shipping_adapter.get_port_throughput()  → port_df [date, port, indicator, value, unit, source]
+      shipping_adapter.get_ais_vessels()      → ais_df  [mmsi, name, lat, lon, sog, ..., ship_type, ts]
+    """
+    bdi_series = _safe_df_to_records(
+        bdi_df, columns=["date", "value", "indicator", "source"], limit=120
+    )
+    for p in bdi_series:
+        if p.get("date") is not None:
+            p["date"] = str(p["date"])
+        try:
+            if p.get("value") is not None:
+                p["value"] = float(p["value"])
+        except Exception:
+            pass
+
+    port_throughput = _safe_df_to_records(
+        port_df, columns=["date", "port", "value", "unit", "indicator"], limit=60
+    )
+    for p in port_throughput:
+        if p.get("date") is not None:
+            p["date"] = str(p["date"])
+        try:
+            if p.get("value") is not None:
+                p["value"] = float(p["value"])
+        except Exception:
+            pass
+
+    ais_records = _safe_df_to_records(
+        ais_df, columns=["mmsi", "name", "ship_type", "lat", "lon", "sog"], limit=50
+    )
+    ais_count = 0
+    try:
+        if ais_df is not None and hasattr(ais_df, "shape"):
+            ais_count = int(ais_df.shape[0])
+        elif isinstance(ais_df, list):
+            ais_count = len(ais_df)
+        else:
+            ais_count = len(ais_records)
+    except Exception:
+        ais_count = len(ais_records)
+
+    port_name = ""
+    if port_throughput:
+        port_name = str(port_throughput[0].get("port") or "")
+
+    return {
+        "type": "shipping",
+        "title": f"{stock_name} 航运 & 大宗数据".strip() or "航运 & 大宗数据",
+        "stock_name": stock_name or "",
+        "data": {
+            "bdi_series": bdi_series,
+            "port_throughput": port_throughput,
+            "ais_vessels": ais_records,
+            "ais_count": ais_count,
+            "port_name": port_name,
+        },
+    }
+
+
+def wrap_esg_v2(stock_name: str, scores: Optional[Dict[str, Any]] = None,
+                disclosures: Optional[Dict[str, Any]] = None,
+                cdp: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """ESG Artifact 包装 — 对齐 esg-scorecard.tsx 字段契约
+
+    前端契约 (frontend/src/components/artifacts/esg-scorecard.tsx):
+      data: {ticker, company, primary{source,esg_score,e_score,s_score,g_score,grade,as_of},
+             esg_score, e_score, s_score, g_score, grade, source, as_of,
+             sources[{source,esg_score,grade,as_of,...}],
+             climate_disclosures[{tag,label,filing_date,url}]}
+
+    后端 adapter 映射:
+      esg_adapter.get_esg_score(ticker,source)  → scores dict
+      esg_adapter.get_climate_disclosure(cik)   → disclosures dict (scope1/2/3 + tags)
+      esg_adapter.get_cdp_response(company, y)  → cdp dict (climate_score/disclosures...)
+    """
+    scores = scores or {}
+    ticker = scores.get("ticker", "")
+    company = scores.get("company", "") or stock_name
+    primary = {
+        "source": scores.get("source"),
+        "ticker": ticker,
+        "company": company,
+        "esg_score": scores.get("esg_score"),
+        "e_score": scores.get("e_score"),
+        "s_score": scores.get("s_score"),
+        "g_score": scores.get("g_score"),
+        "grade": scores.get("grade"),
+        "as_of": scores.get("as_of"),
+    }
+
+    sources_list: List[Dict[str, Any]] = [primary.copy()] if scores.get("esg_score") is not None else []
+
+    if cdp and (cdp.get("climate_score") or cdp.get("disclosures")):
+        sources_list.append({
+            "source": cdp.get("source", "cdp"),
+            "ticker": ticker,
+            "company": cdp.get("company") or company,
+            "esg_score": None,
+            "grade": cdp.get("climate_score"),
+            "as_of": str(cdp.get("year")) if cdp.get("year") else None,
+        })
+
+    climate: List[Dict[str, Any]] = []
+    if disclosures:
+        for scope_key, tag in (("scope1_latest", "Scope 1"),
+                               ("scope2_latest", "Scope 2"),
+                               ("scope3_latest", "Scope 3")):
+            v = disclosures.get(scope_key)
+            if v is not None:
+                climate.append({
+                    "tag": tag, "label": f"{tag} 披露",
+                    "filing_date": "", "url": "",
+                })
+        tags_dict = disclosures.get("tags") or {}
+        if isinstance(tags_dict, dict):
+            for tname, facts in tags_dict.items():
+                if not facts:
+                    continue
+                try:
+                    last = facts[-1] if isinstance(facts, list) else facts
+                    climate.append({
+                        "tag": str(tname),
+                        "label": str(tname),
+                        "filing_date": str((last or {}).get("end", "")),
+                        "url": "",
+                    })
+                except Exception:
+                    continue
+    if cdp and cdp.get("disclosures"):
+        for d in cdp.get("disclosures") or []:
+            if not isinstance(d, dict):
+                continue
+            climate.append({
+                "tag": d.get("tag") or d.get("program") or "CDP",
+                "label": d.get("label") or d.get("title") or "CDP 披露",
+                "filing_date": d.get("filing_date") or d.get("date") or "",
+                "url": d.get("url") or "",
+            })
+
+    return {
+        "type": "esg",
+        "title": f"{stock_name} ESG 评级".strip() or "ESG 评级",
+        "stock_name": stock_name or "",
+        "data": {
+            "ticker": ticker,
+            "company": company,
+            "primary": primary,
+            "esg_score": scores.get("esg_score"),
+            "e_score": scores.get("e_score"),
+            "s_score": scores.get("s_score"),
+            "g_score": scores.get("g_score"),
+            "grade": scores.get("grade"),
+            "source": scores.get("source"),
+            "as_of": scores.get("as_of"),
+            "sources": sources_list,
+            "climate_disclosures": climate,
+        },
+    }
+
+
+def wrap_hiring_v2(stock_name: str, postings_df=None, trend_df=None) -> Dict[str, Any]:
+    """招聘扩张 Artifact 包装 — 对齐 hiring-signal.tsx 字段契约
+
+    前端契约 (frontend/src/components/artifacts/hiring-signal.tsx):
+      data: {company, total_postings,
+             items[{title,company,location,tags,url,created_at,source}],
+             monthly_trend[{month,count}], skill_distribution[{name,value}],
+             expansion_level: "low"|"medium"|"high", yoy_change: number}
+
+    后端 adapter 映射:
+      jobs_adapter.search_jobs() / get_company_postings()
+      → DataFrame[title, company, location, remote, tags, url, created_at, source]
+      trend_df 可选, DataFrame[month, count]
+    """
+    items = _safe_df_to_records(
+        postings_df,
+        columns=["title", "company", "location", "tags", "url", "created_at", "source"],
+        limit=200,
+    )
+    for it in items:
+        if it.get("created_at") is not None:
+            it["created_at"] = str(it["created_at"])
+
+    total_postings = 0
+    try:
+        if postings_df is not None and hasattr(postings_df, "shape"):
+            total_postings = int(postings_df.shape[0])
+        else:
+            total_postings = len(items)
+    except Exception:
+        total_postings = len(items)
+
+    monthly_trend: List[Dict[str, Any]] = _safe_df_to_records(
+        trend_df, columns=["month", "count"], limit=36
+    )
+    if not monthly_trend and items:
+        bucket: Dict[str, int] = {}
+        for it in items:
+            d = it.get("created_at") or ""
+            m = str(d)[:7]
+            if len(m) == 7 and "-" in m:
+                bucket[m] = bucket.get(m, 0) + 1
+        monthly_trend = [{"month": k, "count": v} for k, v in sorted(bucket.items())]
+
+    skill_bucket: Dict[str, int] = {}
+    for it in items:
+        tags = it.get("tags") or ""
+        for t in str(tags).split(","):
+            t = t.strip()
+            if t:
+                skill_bucket[t] = skill_bucket.get(t, 0) + 1
+    skill_distribution = [
+        {"name": k, "value": v}
+        for k, v in sorted(skill_bucket.items(), key=lambda x: x[1], reverse=True)[:6]
+    ]
+
+    yoy_change: Optional[float] = None
+    if len(monthly_trend) >= 13:
+        try:
+            latest = float(monthly_trend[-1].get("count", 0))
+            prev = float(monthly_trend[-13].get("count", 0))
+            if prev > 0:
+                yoy_change = round((latest - prev) / prev * 100, 1)
+        except Exception:
+            yoy_change = None
+
+    if yoy_change is None:
+        expansion_level = "medium" if total_postings >= 50 else "low"
+    elif yoy_change > 30:
+        expansion_level = "high"
+    elif yoy_change > 10:
+        expansion_level = "medium"
+    else:
+        expansion_level = "low"
+
+    company = stock_name or ""
+    if items and items[0].get("company"):
+        company = str(items[0]["company"]) or company
+
+    return {
+        "type": "hiring",
+        "title": f"{stock_name} 招聘扩张信号".strip() or "招聘扩张信号",
+        "stock_name": stock_name or "",
+        "data": {
+            "company": company,
+            "total_postings": total_postings,
+            "items": items,
+            "monthly_trend": monthly_trend,
+            "skill_distribution": skill_distribution,
+            "expansion_level": expansion_level,
+            "yoy_change": yoy_change if yoy_change is not None else 0,
+        },
+    }
+
+
+def wrap_corporate_network_v2(stock_name: str,
+                              company_details: Optional[Dict[str, Any]] = None,
+                              network: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """企业关联 Artifact 包装 — 对齐 corporate-network.tsx 字段契约
+
+    前端契约 (frontend/src/components/artifacts/corporate-network.tsx):
+      data: {company_id, company_name, jurisdiction_code, incorporation_date, current_status,
+             parents[{name,jurisdiction_code,company_number}],
+             children[{name,jurisdiction_code,company_number}],
+             officers[{name,position,start_date,end_date}], opencorporates_url}
+
+    后端 adapter 映射:
+      corporate_adapter.get_company_details(company_id) → company_details dict
+      corporate_adapter.get_company_network(company_id) → network dict
+    """
+    details = company_details or {}
+    net = network or {}
+
+    company_id = net.get("company_id") or details.get("company_id") or ""
+    if not company_id:
+        jc = details.get("jurisdiction_code")
+        cn = details.get("company_number")
+        if jc and cn:
+            company_id = f"{jc}/{cn}"
+
+    parents = [
+        {
+            "name": (p or {}).get("name"),
+            "jurisdiction_code": (p or {}).get("jurisdiction_code"),
+            "company_number": (p or {}).get("company_number"),
+        }
+        for p in (net.get("parents") or [])
+    ]
+    children = [
+        {
+            "name": (c or {}).get("name"),
+            "jurisdiction_code": (c or {}).get("jurisdiction_code"),
+            "company_number": (c or {}).get("company_number"),
+        }
+        for c in (net.get("children") or [])
+    ]
+    officers = [
+        {
+            "name": (o or {}).get("name"),
+            "position": (o or {}).get("position"),
+            "start_date": (o or {}).get("start_date"),
+            "end_date": (o or {}).get("end_date"),
+        }
+        for o in (net.get("officers") or [])
+    ]
+
+    return {
+        "type": "corporate_network",
+        "title": f"{stock_name} 企业关联网络".strip() or "企业关联网络",
+        "stock_name": stock_name or "",
+        "data": {
+            "company_id": company_id,
+            "company_name": details.get("name") or stock_name or "",
+            "jurisdiction_code": details.get("jurisdiction_code", ""),
+            "incorporation_date": details.get("incorporation_date", ""),
+            "current_status": details.get("current_status", ""),
+            "parents": parents,
+            "children": children,
+            "officers": officers,
+            "opencorporates_url": details.get("opencorporates_url", ""),
+        },
+    }
+
+
+def wrap_alt_data_v2(stock_name: str,
+                     shipping: Optional[Dict[str, Any]] = None,
+                     esg: Optional[Dict[str, Any]] = None,
+                     hiring: Optional[Dict[str, Any]] = None,
+                     corporate: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """另类数据聚合 Artifact 包装 (4子域Tab) — 对齐 alt-data-panel.tsx 字段契约
+
+    前端契约 (frontend/src/components/artifacts/alt-data-panel.tsx):
+      data: { shipping?:{...}, esg?:{...}, hiring?:{...}, corporate?:{...} }
+      子域内字段对应 wrap_shipping_v2/wrap_esg_v2/wrap_hiring_v2/
+      wrap_corporate_network_v2 返回 dict 的 `data` 部分.
+
+    Args:
+      shipping/esg/hiring/corporate: 可传 wrap_*_v2() 完整返回 dict (含 type/data),
+      或直接传已提取的子 data dict, 自动识别.
+    """
+    def _extract(sub: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not sub:
+            return None
+        if isinstance(sub, dict) and "data" in sub and isinstance(sub.get("data"), dict):
+            return sub["data"]
+        return sub if isinstance(sub, dict) else None
+
+    data: Dict[str, Any] = {}
+    s = _extract(shipping)
+    e = _extract(esg)
+    h = _extract(hiring)
+    c = _extract(corporate)
+    if s is not None:
+        data["shipping"] = s
+    if e is not None:
+        data["esg"] = e
+    if h is not None:
+        data["hiring"] = h
+    if c is not None:
+        data["corporate"] = c
+
+    return {
+        "type": "alt_data",
+        "title": f"{stock_name} 另类数据聚合".strip() or "另类数据聚合",
+        "stock_name": stock_name or "",
+        "data": data,
+    }
