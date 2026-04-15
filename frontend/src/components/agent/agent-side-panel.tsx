@@ -79,6 +79,19 @@ function eventToLine(ev: AgentEvent): TerminalLine {
       const text = isStreaming
         ? detail
         : detail.length > 80 ? detail.slice(0, 80) + "…" : detail;
+      // [R3 Q4 P2 2026-04-15] 根据 reasoning content 前缀映射 kind:
+      //   [APPROVAL]   → warn  (HITL 审批提示, 琥珀色, 🚨)
+      //   [RISK_ALERT] level=high → error (红色), 其他 → warn, ⚠
+      const raw = detail || "";
+      if (raw.startsWith("[APPROVAL]")) {
+        return { ...common, kind: "warn", text: `🚨 ${text}` };
+      }
+      if (raw.startsWith("[RISK_ALERT]")) {
+        const meta = (ev.meta || {}) as { level?: string };
+        const level = meta.level || (/level=(\w+)/.exec(raw)?.[1] ?? "medium");
+        const kind: TerminalLine["kind"] = level === "high" ? "error" : "warn";
+        return { ...common, kind, text: `⚠ ${text}` };
+      }
       return { ...common, kind: "info", text: `💭 ${text}` };
     }
     default:
