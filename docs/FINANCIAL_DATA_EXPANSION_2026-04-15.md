@@ -3056,3 +3056,63 @@ function Demo({ ticker }: { ticker: string }) {
 - `npx tsc --noEmit` — 通过, 无新 TS 错误
 - `npx next build` — 通过, `/stock/[code]` 路由正常生成 (ƒ Dynamic), 11/11 静态页生成成功
 - 产物日志 `frontend/.next/` 可复核, 编译 10.6s + TS 2.3s
+
+
+---
+
+## L2 MCP Server 扩展 [2026-04-15 14:49 +08:00]
+
+### 权威源调研 (Asia/Singapore 2026-04-15 14:49 +08:00 检索)
+
+| # | 来源 | URL | 采用 |
+|---|---|---|---|
+| 1 | MCP 官网 (规范 2025-06-18 修订) | https://modelcontextprotocol.io/ | ✅ tools discovery / tools/call 语义 |
+| 2 | MCP Python SDK (`modelcontextprotocol/python-sdk` v1.x) | https://github.com/modelcontextprotocol/python-sdk | ✅ FastMCP 装饰器模式参考, 当前未引入 pip 依赖 |
+| 3 | Anthropic Claude Desktop 配置文档 | https://modelcontextprotocol.io/quickstart/user | ✅ claude_desktop_config.json mcpServers 字段规范 |
+
+> 已有 `stock_data_server.py` 采用 dict+handler 自研协议映射 (未依赖 `mcp` SDK),
+> 本次 L2 扩展保持一致风格, 避免引入新运行时依赖; 未来切换到官方 SDK 只需在
+> `registry_server.REGISTRY_TOOLS` 外包一层 `@mcp.tool()` 即可。
+
+### 交付 10+ MCP Tools (实际 16)
+
+| # | Tool | Registry Domain | 调用方法 |
+|---|---|---|---|
+| 1 | a_stock_kline       | a_stock_kline       | get_stock_history   |
+| 2 | a_stock_realtime    | a_stock_realtime    | get_realtime_quotes |
+| 3 | us_stock_quote      | us_stock            | get_stock_history   |
+| 4 | hk_stock_quote      | hk_stock            | get_stock_history   |
+| 5 | crypto_ticker       | crypto              | get_ticker          |
+| 6 | macro_us            | macro_us            | get_series          |
+| 7 | macro_cn            | macro_cn            | get_gdp/cpi/pmi/... |
+| 8 | macro_global        | macro_global        | get_indicator       |
+| 9 | xbrl_financials     | xbrl_financials     | get_financial_data  |
+| 10 | news_feed          | news                | get_feed            |
+| 11 | esg_rating         | esg_rating          | get_esg_score       |
+| 12 | corporate_search   | corporate_entity    | search_company      |
+| 13 | jobs_search        | hiring_signal       | get_hiring_trend    |
+| 14 | shipping_bdi       | commodity_shipping  | get_bdi_index       |
+| 15 | satellite_search   | earth_observation   | search_datasets     |
+| 16 | registry_status    | —                   | AdapterRegistry.get_status |
+
+### Claude Desktop 配置片段
+
+```json
+{
+  "mcpServers": {
+    "stockanal-registry": {
+      "command": "python",
+      "args": ["-m", "app.mcp.registry_server"],
+      "cwd": "/absolute/path/to/StockAnal_Sys",
+      "env": { "PYTHONPATH": "/absolute/path/to/StockAnal_Sys" }
+    }
+  }
+}
+```
+
+### 交付物
+
+- `app/mcp/registry_server.py` (新建, 16 tools + 序列化 + 错误兜底)
+- `app/mcp/README.md` (追加 L2 tools 清单 + Claude Desktop 配置)
+- `tests/mcp/test_registry_server.py` [NEW-FILE:#20260415-51] (9/9 PASS)
+- `docs/OPERATIONS.md` §9 MCP 集成章节

@@ -274,7 +274,63 @@ healthcheck:
 
 ---
 
-## 8. 文档索引
+## 9. MCP 集成 (Claude Desktop / Cursor)
+
+> L2 扩展 [2026-04-15 14:49 +08:00]: Registry 16 domain 暴露为 MCP tools.
+
+### 9.1 模块
+
+- `app/mcp/stock_data_server.py` — 基础 5 工具 (历史/技术/财务/资金/新闻)
+- `app/mcp/registry_server.py` — **L2 扩展** 16 工具 (直通 Registry.call_with_fallback)
+
+### 9.2 可调 tools 清单 (16)
+
+`a_stock_kline` / `a_stock_realtime` / `us_stock_quote` / `hk_stock_quote` /
+`crypto_ticker` / `macro_us` / `macro_cn` / `macro_global` / `xbrl_financials` /
+`news_feed` / `esg_rating` / `corporate_search` / `jobs_search` /
+`shipping_bdi` / `satellite_search` / `registry_status`
+
+每个 tool schema 见 `REGISTRY_TOOLS` (`app/mcp/registry_server.py`)
+与 `app/mcp/README.md`。
+
+### 9.3 Claude Desktop 配置示例
+
+路径: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) /
+`%APPDATA%\Claude\claude_desktop_config.json` (Windows)。
+
+```json
+{
+  "mcpServers": {
+    "stockanal-registry": {
+      "command": "python",
+      "args": ["-m", "app.mcp.registry_server"],
+      "cwd": "/absolute/path/to/StockAnal_Sys",
+      "env": { "PYTHONPATH": "/absolute/path/to/StockAnal_Sys" }
+    }
+  }
+}
+```
+
+> 当前实现沿用 `stock_data_server.py` 的 dict+handler 风格, 未 pip 安装 `mcp`
+> Python SDK (未在 requirements.txt)。若需 stdio/SSE 官方传输, 追加
+> `mcp.server.Server` 包装即可, discovery 直接读 `registry_server.REGISTRY_TOOLS`。
+
+### 9.4 本地验证
+
+```bash
+# 列出 tools
+python -c "from app.mcp.registry_server import list_tools; import json; print(json.dumps(list_tools(), ensure_ascii=False, indent=2))"
+
+# 调用示例 (触发真实 Registry 降级)
+python -c "from app.mcp.registry_server import as_json; print(as_json('registry_status'))"
+
+# 单元测试
+pytest tests/mcp/test_registry_server.py -v
+```
+
+---
+
+## 10. 文档索引
 
 - [README.md](../README.md) — v3.1 项目总入口
 - [docs/README.md](README.md) — 12篇文档索引
