@@ -6,10 +6,16 @@ Pos: app/adapters/opencli_bridge.py — OpenCLI浏览器爬取桥，作为第二
      覆盖三大热股榜(东财/通达信/同花顺)及后续雪球/股吧/1688等爬取适配器
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
-权威源（2026-04-15 11:30 +08:00 检索）：
-- https://github.com/jackwener/OpenCLI   README.md (Strategy.COOKIE / --format=json)
-- https://github.com/jackwener/OpenCLI/pull/1025   eastmoney/tdx/ths hot-rank 适配器
+权威源（R4治理 2026-04-15 21:40 +08:00 检索）：
+- https://github.com/jackwener/OpenCLI   README.md (Strategy.COOKIE / -f json)
+- `opencli xueqiu comments <symbol> --limit=N -f json` (内置, 替代原 xueqiu/discuss)
+- `opencli sinafinance news --limit=N -f json` (内置, 替代原 cls/telegraph)
+- `opencli sinafinance stock-rank -f json` (内置, 替代原 eastmoney/guba)
 - https://docs.python.org/3.12/library/subprocess.html  subprocess.run 最佳实践
+
+R4变更: opencli命令格式为 `opencli <group> <action> [pos_args] -f json`,
+  本 bridge 的 opencli_call() 已改造为自动拆分 group/action +
+  自动将 --symbol=/--code= 转为位置参数 (opencli 契约要求).
 
 [NEW-FILE:#20260415-02]
 """
@@ -71,10 +77,17 @@ class OpenCLIBridge(BaseAdapter):
     ) -> List[Dict]:
         """通用 OpenCLI 调用入口
 
+        R4治理 (2026-04-15 21:40 +08:00):
+          OpenCLI 实际命令格式为 `opencli <group> <action> [args] -f json`
+          (`--format=json` 也兼容), 而不是 `opencli <group>/<action>`.
+          - 若 adapter 含 "/" 自动拆为 [group, action].
+          - 参数 `--symbol=X` 自动转为位置参数 X (opencli 契约).
+          - `--format=json` 保留兼容, 首选 `-f json`.
+
         Args:
-            adapter: OpenCLI 适配器路径，如 "eastmoney/hot-rank"
-            args: 额外命令行参数
-            timeout: 子进程超时（秒），默认30，对齐文档 §七 回滚阈值
+            adapter: OpenCLI 适配器路径, 如 "xueqiu/comments" 或 "xueqiu comments"
+            args: 额外命令行参数 (--key=value 或 位置参数)
+            timeout: 子进程超时(秒), 默认30
 
         Returns:
             list[dict]：失败/异常时返回空列表
@@ -87,9 +100,32 @@ class OpenCLIBridge(BaseAdapter):
             )
             return []
 
-        cmd = [self.OPENCLI_BIN, adapter, "--format=json"]
-        if args:
-            cmd.extend(args)
+        # R4: 拆分 group/action
+        cmd_parts = [self.OPENCLI_BIN]
+        if "/" in adapter:
+            grp, act = adapter.split("/", 1)
+            cmd_parts.extend([grp, act])
+        elif " " in adapter:
+            cmd_parts.extend(adapter.split())
+        else:
+            cmd_parts.append(adapter)
+
+        # 位置参数优先(如 symbol), 然后 --key=value
+        positional: List[str] = []
+        flags: List[str] = []
+        for a in (args or []):
+            # opencli xueqiu comments 需要 symbol 作为位置参数而非 --symbol=
+            if a.startswith("--symbol="):
+                positional.append(a.split("=", 1)[1])
+            elif a.startswith("--code="):
+                positional.append(a.split("=", 1)[1])
+            else:
+                flags.append(a)
+        cmd_parts.extend(positional)
+        cmd_parts.extend(flags)
+        # 强制 JSON 输出
+        cmd_parts.extend(["-f", "json"])
+        cmd = cmd_parts
 
         try:
             proc = subprocess.run(
@@ -159,18 +195,22 @@ class OpenCLIBridge(BaseAdapter):
     def get_xueqiu_discuss(self, symbol: str, limit: int = 30) -> List[Dict]:
         """雪球个股讨论流
 
+        R4治理: 改用 opencli 内置 `xueqiu comments` (项目原 `xueqiu/discuss` 不存在于
+        opencli@1.7.3 内置命令中, 实际命令为 `xueqiu comments <symbol>`).
+
         Args:
-            symbol: 雪球股票代码，含交易所前缀 (如 ``SZ000001`` / ``SH600519``)
-            limit: 返回条数上限，默认30
+            symbol: 雪球股票代码, 含交易所前缀 (如 SZ000001 / SH600519)
+            limit: 返回条数上限, 默认30
 
         Returns:
-            list[dict]：[{user,time,content,likes,comments,reposts}]；异常降级 []
+            list[dict]: 雪球 comments 原生字段 [author,text,likes,replies,retweets,
+            created_at,url]; 异常降级 []
         """
         if not symbol:
-            logger.warning("[OpenCLI] xueqiu/discuss symbol必填")
+            logger.warning("[OpenCLI] xueqiu/comments symbol必填")
             return []
         return self.opencli_call(
-            "xueqiu/discuss",
+            "xueqiu/comments",
             args=[f"--symbol={symbol}", f"--limit={int(limit)}"],
             timeout=45,
         )
@@ -178,33 +218,40 @@ class OpenCLIBridge(BaseAdapter):
     def get_eastmoney_guba(self, code: str, pages: int = 1) -> List[Dict]:
         """东方财富股吧帖子列表
 
+        R4治理: opencli@1.7.3 内置无 eastmoney/guba, 改用 sinafinance stock-rank
+        作为替代情绪信号 (新浪财经热搜榜, code 作为参考不过滤).
+
         Args:
             code: 6位A股代码
-            pages: 抓取页数，默认1（每页约80条）
+            pages: 抓取页数(忽略, 仅为兼容)
 
         Returns:
-            list[dict]：[{rank,title,author,time,reads,replies,url}]；异常降级 []
+            list[dict]: 异常降级 []
         """
         if not code or not code.isdigit() or len(code) != 6:
             logger.warning("[OpenCLI] eastmoney/guba code必须为6位数字 got=%s", code)
             return []
+        # 替代源: sinafinance stock-rank 热搜榜 (cookie策略, 无需code参数)
         return self.opencli_call(
-            "eastmoney/guba",
-            args=[f"--code={code}", f"--pages={max(1, int(pages))}"],
-            timeout=60,
+            "sinafinance/stock-rank",
+            args=[],
+            timeout=45,
         )
 
     def get_cls_telegraph(self, limit: int = 50) -> List[Dict]:
         """财联社电报实时流
 
+        R4治理: opencli@1.7.3 内置无 cls/telegraph, 改用 sinafinance news
+        (新浪财经 7x24 实时快讯) 作为最接近的公开替代.
+
         Args:
-            limit: 返回条数上限，默认50
+            limit: 返回条数上限, 默认50
 
         Returns:
-            list[dict]：[{time,title,content,tags,isImportant}]；异常降级 []
+            list[dict]: 异常降级 []
         """
         return self.opencli_call(
-            "cls/telegraph",
+            "sinafinance/news",
             args=[f"--limit={int(limit)}"],
             timeout=30,
         )
