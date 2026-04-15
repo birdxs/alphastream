@@ -75,8 +75,15 @@ class YFinanceAdapter(BaseAdapter):
         if m == "A" or (m == "AUTO" and code.isdigit() and len(code) == 6):
             return f"{code}.SS" if code.startswith("6") else f"{code}.SZ"
 
-        if m == "HK" or (m == "AUTO" and code.isdigit() and len(code) <= 5):
-            return f"{code.zfill(4)}.HK"
+        if m == "AUTO" and code.isdigit() and len(code) <= 5:
+            # Yahoo Finance港股规范：去前导零短码+.HK (如 9988.HK / 700.HK)
+            # 不足4位zfill至4位 (腾讯700→0700.HK), 已>=4位保留去零后形态
+            stripped = code.lstrip("0") or "0"
+            return f"{stripped.zfill(4) if len(stripped) < 4 else stripped}.HK"
+
+        if m == "HK":
+            # 显式HK市场：短于4位补零，其他原样保留 (尊重调用方显式传入格式)
+            return f"{code.zfill(4)}.HK" if len(code) < 4 else f"{code}.HK"
 
         if m == "JP":
             return f"{code}.T"

@@ -1330,3 +1330,28 @@ pytest tests/adapters/test_esg_adapter.py -x -q
 - yfinance港股前导零: `normalize_symbol("09988") → "09988.HK"` 应为 `"9988.HK"` (实现细节, 非阻塞)
 
 ### v2方案执行完全闭环
+
+---
+
+### E1 yfinance港股归一化修复 [2026-04-15 12:55 +08:00]
+
+**Bug**: `normalize_symbol("09988")` 返回 `"09988.HK"`，Yahoo Finance规范应为 `"9988.HK"`（去前导零）。
+
+**权威源**:
+1. Yahoo Finance官方 (https://finance.yahoo.com/quote/9988.HK/) — 阿里巴巴=`9988.HK`，非`09988.HK`
+2. Yahoo Finance官方 (https://finance.yahoo.com/quote/0700.HK/) — 腾讯=`0700.HK`（4位保留）
+3. yfinance GitHub Issue #1707 (ranaroussi/yfinance) — 港股符号使用Yahoo官方短码格式
+
+**修复前后**:
+| 输入 | market | 修复前 | 修复后 |
+|------|--------|--------|--------|
+| `"09988"` | auto | `09988.HK` | `9988.HK` ✔ |
+| `"0700"`  | auto | `0700.HK`  | `0700.HK` (不变) |
+| `"700"`   | HK   | `0700.HK`  | `0700.HK` (不变) |
+| `"00700"` | HK   | `00700.HK` | `00700.HK` (不变，尊重显式) |
+
+**实现**: `app/adapters/yfinance_adapter.py::normalize_symbol` 拆分 `m == "AUTO"` 与 `m == "HK"` 两分支：auto先`lstrip("0")`再按需zfill(4)，显式HK保留原样只对<4位补零。
+
+**验证**: `pytest tests/adapters/test_yfinance_adapter.py -v` → 15 passed。
+
+**Commit**: `fix(adapter): yfinance港股normalize去前导零对齐Yahoo规范`
