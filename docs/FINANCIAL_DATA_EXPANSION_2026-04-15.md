@@ -3854,3 +3854,72 @@ Comdr反馈: UI-Q3 事件粒度仍"一次性炸出整段", 需要**真实时打�
 - tsc: 通过 (无错误)
 - Python ast: 通过
 - 未启服务: Comdr 自测验证
+
+---
+
+## Q1 新闻终端修复 [2026-04-15 21:30]
+
+### 故障现象
+`/news` 页 AI Sentiment Terminal 永远卡在 `AGENT $ 监听中...`，不流出任何新闻条目。
+后端 `/api/latest_news?limit=20&days=1` 已验证正常返回 20 条（success=true）。
+
+### 根因
+`frontend/src/app/news/page.tsx` 的 `fetchNews` 中将去重逻辑写在 `setAllNews((prev) => {...})` 的 updater 内，并在 updater 里直接 `seenKeysRef.current.add(k)`（副作用）。
+
+Next.js 默认 `reactStrictMode: true`，React 18+ 会故意**双调用 setter updater 函数**以检测副作用。
+- 第一次 invoke：把所有新闻 key 加入 `seenKeysRef.current`，返回合并后的 capped 数组。
+- 第二次 invoke：所有 key 已在 seen 中，`incoming.filter` 全部返回 false → `incoming.length === 0` → 返回原 `prev`（[]）。
+- 最终 React 采用第二次 invoke 的返回值 → `allNews` 永远为空数组 → 仅渲染启动信息 + "监听中"光标。
+
+Dashboard 页的新闻卡片使用简单 `setNews(res.news.slice(0,5))` 无副作用，故能正常显示。
+
+### 修复 diff
+将去重副作用移出 updater，updater 保持为纯函数：
+```diff
+- setAllNews((prev) => {
+-   const seen = seenKeysRef.current;
+-   const incoming = res.news.filter((n) => {
+-     const k = newsKey(n);
+-     if (seen.has(k)) return false;
+-     seen.add(k);            // ← StrictMode 双调用副作用陷阱
+-     return true;
+-   });
+-   if (incoming.length === 0) return prev;
+-   const merged = [...incoming, ...prev].sort(...);
+-   const capped = merged.slice(0, 200);
+-   if (capped[0]) setNewestKey(newsKey(capped[0]));
+-   return capped;
+- });
++ const seen = seenKeysRef.current;
++ const incoming = res.news.filter((n) => {
++   const k = newsKey(n);
++   if (seen.has(k)) return false;
++   seen.add(k);
++   return true;
++ });
++ if (incoming.length === 0) return;
++ setAllNews((prev) => {
++   const merged = [...incoming, ...prev].sort(...);
++   return merged.slice(0, 200);   // 纯函数 updater
++ });
++ const newestIncoming = [...incoming].sort(...)[0];
++ if (newestIncoming) setNewestKey(newsKey(newestIncoming));
+```
+
+### 前后对比
+| 项 | 修复前 | 修复后 |
+|---|---|---|
+| 首次打开 news 页 | 启动信息 + "监听中..."（空列表） | 立刻渲染 20 条新闻 |
+| 30s 轮询 | 同上（始终空） | 增量 prepend 最新条目 |
+| UI-Q1 保留项 | —— | 不清屏 / 去重 / 用户位置锁定全部保留 |
+
+### 验证
+- `npx tsc --noEmit`: 通过 (EXIT=0)
+- `curl /api/latest_news?limit=20&days=1` → `len(news)=20, success=true`
+- 不启服务，Comdr 自测确认终端流出新闻条目。
+
+### 文件清单
+- 修改: `frontend/src/app/news/page.tsx` (fetchNews 去重逻辑重构)
+
+### 教训
+React StrictMode updater 必须是纯函数，任何对 `useRef.current` / 外部变量的修改必须放在组件函数体或 effect 中，否则会被双调用放大成业务 bug。
