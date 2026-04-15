@@ -1,6 +1,7 @@
 // Input: URL路由参数 code (股票代码)
-// Output: 股票详情页面（头部信息 + Tab切换内容区：K线/基本面/资金流/新闻/风险）
+// Output: 股票详情页面（头部信息 + Tab切换内容区：K线/基本面/资金流/新闻/风险/另类数据）
 // Pos: /stock/[code] 路由页面，对标fiscal.ai的Company详情页
+// 更新: 2026-04-15 L1 新增"另类数据"Tab, 通过 useAltData hook 拉 /api/alt_data/<code>, 渲染 AltDataPanelArtifact
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
@@ -12,6 +13,7 @@ import { ArrowLeft, Star, StarOff, Bot, Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/common/glass-card";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { apiClient } from "@/lib/api/client";
+import { useAltData } from "@/lib/hooks/use-alt-data";
 
 /* ---------- 动态加载 Artifact 组件 ---------- */
 const CandlestickChartArtifact = dynamic(
@@ -54,8 +56,16 @@ const RiskRadarArtifact = dynamic(
   { ssr: false, loading: () => <LoadingSkeleton label="风险" /> }
 );
 
+const AltDataPanelArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/alt-data-panel").then((m) => ({
+      default: m.AltDataPanelArtifact,
+    })),
+  { ssr: false, loading: () => <LoadingSkeleton label="另类数据" /> }
+);
+
 /* ---------- 类型定义 ---------- */
-type TabKey = "kline" | "fundamental" | "capital" | "news" | "risk";
+type TabKey = "kline" | "fundamental" | "capital" | "news" | "risk" | "alt";
 
 interface TabDef {
   key: TabKey;
@@ -68,6 +78,7 @@ const TABS: TabDef[] = [
   { key: "capital", label: "资金流" },
   { key: "news", label: "新闻" },
   { key: "risk", label: "风险" },
+  { key: "alt", label: "另类数据" },
 ];
 
 /* ---------- 加载骨架 ---------- */
@@ -103,6 +114,11 @@ export default function StockDetailPage({
   /* Tab */
   const [activeTab, setActiveTab] = useState<TabKey>("kline");
 
+  /* 另类数据 — 仅在用户点击 alt Tab 后激活拉取 (懒加载, 避免首屏无关请求) */
+  const [altEnabled, setAltEnabled] = useState(false);
+  const altTicker = altEnabled ? code : "";
+  const { data: altData, loading: altLoading, error: altError, reload: reloadAlt } = useAltData(altTicker);
+
   /* 各Tab数据 */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [klineData, setKlineData] = useState<any[] | null>(null);
@@ -122,6 +138,7 @@ export default function StockDetailPage({
     capital: false,
     news: false,
     risk: false,
+    alt: false,
   });
   const [errorTab, setErrorTab] = useState<Record<TabKey, string | null>>({
     kline: null,
@@ -129,6 +146,7 @@ export default function StockDetailPage({
     capital: null,
     news: null,
     risk: null,
+    alt: null,
   });
 
   /* ---------- 数据获取 ---------- */
@@ -293,8 +311,18 @@ export default function StockDetailPage({
       case "risk":
         fetchRisk();
         break;
+      case "alt":
+        // 懒激活 useAltData hook (仅首次点击触发 fetch)
+        if (!altEnabled) setAltEnabled(true);
+        break;
     }
-  }, [activeTab, fetchKline, fetchFundamental, fetchCapital, fetchNews, fetchRisk]);
+  }, [activeTab, altEnabled, fetchKline, fetchFundamental, fetchCapital, fetchNews, fetchRisk]);
+
+  /* 同步 alt hook 状态到 loadingTab/errorTab, 复用统一 UI 分支 */
+  useEffect(() => {
+    setLoadingTab((p) => (p.alt === altLoading ? p : { ...p, alt: altLoading }));
+    setErrorTab((p) => (p.alt === altError ? p : { ...p, alt: altError }));
+  }, [altLoading, altError]);
 
   /* ---------- AI分析跳转 ---------- */
   const handleAIAnalysis = () => {
@@ -332,6 +360,7 @@ export default function StockDetailPage({
                 case "capital": setCapitalData(null); break;
                 case "news": setNewsData(null); break;
                 case "risk": setRiskData(null); break;
+                case "alt": reloadAlt(); break;
               }
             }}
           >
@@ -364,6 +393,11 @@ export default function StockDetailPage({
         return newsData ? <NewsFeedArtifact data={newsData} /> : null;
       case "risk":
         return riskData ? <RiskRadarArtifact data={riskData} /> : null;
+      case "alt":
+        // artifact.data = {shipping?, esg?, hiring?, corporate?} — 直接透传给面板
+        return altData && altData.data ? (
+          <AltDataPanelArtifact data={altData.data} />
+        ) : null;
       default:
         return null;
     }
@@ -377,6 +411,7 @@ export default function StockDetailPage({
       case "capital": return capitalData;
       case "news": return newsData;
       case "risk": return riskData;
+      case "alt": return altData;
     }
   };
 
