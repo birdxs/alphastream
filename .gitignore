@@ -93,6 +93,9 @@ akshare.md
 out/
 node_modules/
 
+# Ruff cache
+.ruff_cache/
+
 # Eval results
 eval_results/
 
