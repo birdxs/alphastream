@@ -1801,3 +1801,56 @@ python -m pytest tests/core/test_artifact_wrapper_p3.py -v
 - `docs(data): F2追溯 前后端字段契约表` — 待提交
 
 
+
+
+---
+
+## F4 冗余收敛+前后端契约对齐 [2026-04-15 13:35 +08:00]
+
+### 冲突分析 (F3 vs F2)
+- **F3版** (commit c1425d7): `wrap_shipping/wrap_esg/wrap_corporate/wrap_jobs/wrap_satellite/wrap_alt_data` — 签名 `(result, subtype, **meta)`, 面向 HTTP 响应, 返回 `{records: [...], count}` 扁平结构。被 `app/web/web_server.py` 第 3245-3414 行 10 个 P3 端点调用。
+- **F2版** (commit 3952c3d): `wrap_shipping_v2/wrap_esg_v2/wrap_hiring_v2/wrap_corporate_network_v2/wrap_alt_data_v2` — 签名 `(stock_name, df/dict...)`, 字段严格对齐 `frontend/src/components/artifacts/*.tsx` 的 `interface Props.data` 契约 (bdi_series/primary/sources/climate_disclosures/items/monthly_trend/skill_distribution/expansion_level/parents/children/officers)。
+
+**矛盾**: API 端点返回 F3 格式 → 前端组件读不出 `bdi_series/total_postings/parents` 等关键字段 → UI 渲染失败/DEMO 兜底。
+
+### 收敛决策 — 保留 v2, 删除 F3 版 (DEDUP)
+按 CLAUDE.md 冗余治理硬性关卡 "选定唯一主实现(功能完整、维护活跃、测试覆盖更好)" 原则:
+1. **v2 为唯一前端契约实现** (覆盖前端 5 组件字段对齐, 18 case 单测)
+2. **删除** F3 的 6 函数 (仅 web_server.py 内部使用, 无外部依赖)
+3. **10 个 P3 端点改调 v2**, adapter 原始返回直接作为 v2 DataFrame/dict 形参
+4. **satellite 域** 无前端组件 → 保留 `wrap_satellite_artifact` 最小实现 (从 `wrap_satellite` 重命名消歧)
+5. **alt_data 聚合端点** 内部将 4 子域 adapter 结果各自用对应 v2 包装后再 `wrap_alt_data_v2` 聚合, 保留 `artifact_type=alt_data_aggregate` + `metadata.coverage` 兼容字段
+
+### 最终唯一 wrap_* 函数 + 契约表 (后端 vs 前端 TSX)
+
+| API 端点                                | v2 函数                         | 后端 artifact.data 关键字段                                       | 前端 TSX interface Props.data (契约源)                        |
+|----------------------------------------|--------------------------------|-------------------------------------------------------------------|---------------------------------------------------------------|
+| GET /api/shipping/bdi                  | `wrap_shipping_v2`             | `bdi_series[{date,value,indicator,source}]`                       | `shipping-chart.tsx` BDIPoint                                 |
+| GET /api/shipping/port/<port>          | `wrap_shipping_v2`             | `port_throughput[{date,port,value,unit,indicator}], port_name`    | `shipping-chart.tsx` PortPoint                                |
+| GET /api/esg/<ticker>                  | `wrap_esg_v2`                  | `primary, esg_score, e_score, s_score, g_score, grade, sources[]` | `esg-scorecard.tsx` ESGSourceRow                              |
+| GET /api/esg/climate/<cik>             | `wrap_esg_v2`                  | `climate_disclosures[{tag,label,filing_date,url}]`                | `esg-scorecard.tsx` ClimateDisclosure                         |
+| GET /api/corporate/search              | `_build_p3_artifact` (内联)    | `items[], count, query`                                           | (无专用 TSX, 使用 search-results)                             |
+| GET /api/corporate/<id>/network        | `wrap_corporate_network_v2`    | `company_id, company_name, jurisdiction_code, parents[], children[], officers[]` | `corporate-network.tsx` RelatedEntity/Officer           |
+| GET /api/jobs/search                   | `wrap_hiring_v2`               | `items[], total_postings, monthly_trend[], skill_distribution[], expansion_level, yoy_change` | `hiring-signal.tsx` JobItem/MonthlyTrend/SkillDist |
+| GET /api/jobs/company/<company>        | `wrap_hiring_v2`               | 同上                                                              | 同上                                                          |
+| GET /api/satellite/search              | `wrap_satellite_artifact`      | `records[] / items[]`                                             | (无前端组件, 最小 artifact 结构)                              |
+| GET /api/alt_data/<ticker>             | `wrap_alt_data_v2` (聚合)      | `data:{shipping,esg,hiring,corporate}` (各子域对齐上方契约)      | `alt-data-panel.tsx` 4 Tab 逐个代理子组件                    |
+
+### 删除代码统计
+- `app/core/artifact_wrapper.py`: 删除 F3 版 6 函数, **共 -117 行** (从 1108 行 → ~1008 行, 新增 24 行 shim/注释 → 净 -93 行)
+- `app/web/web_server.py`: 10 端点改写, 调用方式从 `wrap_xxx(result, subtype=..., **meta)` → `wrap_xxx_v2(stock_name=..., df=result)` + `artifact["artifact_type"]` 手动补齐 (维持响应契约兼容)
+
+### 测试结果
+```bash
+python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_endpoints.py -v
+# ========== 38 passed, 542 warnings in 4.16s ==========
+```
+- `tests/core/test_artifact_wrapper_p3.py`: 18 cases PASS (v2 函数单元)
+- `tests/web/test_p3_api_endpoints.py`: 20 cases PASS (10 端点 happy/400/500/502)
+
+### 回滚策略
+若 v2 字段契约与某个 adapter 返回格式不匹配, 可在端点层用小 shim 调整 adapter 输出再传入 v2, 不回退到 F3 版。
+
+### Commit 追溯
+- `refactor(core): 收敛artifact_wrapper P3冗余 [DEDUP] — v2为唯一实现, F3版6函数删除`
+- `docs(data): F4前后端契约最终对齐`
