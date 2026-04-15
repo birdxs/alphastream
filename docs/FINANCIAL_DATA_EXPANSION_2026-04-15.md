@@ -1526,3 +1526,34 @@ _无_。所有 🔴 为 0，Python 层无 AttributeError/TypeError/KeyError 等�
 ### Commit
 - `feat(fe): 5个P3另类数据Artifact组件(航运/ESG/招聘/产业链/综合) [NEW-FILE:#20260415-30,31,32,33,34]`
 - `docs(data): E4前端Artifact追溯`
+
+---
+
+## 🏁 Phase-3 总验收 (2026-04-15 13:00 +08:00)
+
+### E批 (遗留修复+冒烟+生产增强+前端对接)
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| E1 | yfinance港股normalize去前导零 | `9ce175b` | 15/15 PASS (回归全绿) |
+| E2 | 真网络冒烟脚本+22 adapter验证 | `110cd41`+`ac237aa` | 🟢10/🟡10/🔴0/⚫2 |
+| E3 | 12 Agent接入Registry(4分析+4人格+3决策) | `601f72f` | 11 PASS (累计18) |
+| E4 | 5 P3 Artifact前端组件+tsc全过 | `3e2854d`+`0a1fe7a` | tsc --noEmit ✓ |
+
+### Phase-3 汇总
+- **零code bug**: 22个adapter真网络冒烟无一FAIL
+- **12 Agent全链路**: analyst(4) + investors(4) + decision_maker + risk_manager + strategy_evolver + coordinator ready
+- **5 前端Artifact**: alt-data-panel · shipping-chart · esg-scorecard · hiring-signal · corporate-network
+- **7 commits**入main
+
+### 累计全项目战果 (P0+P1+P2+Phase-2+Phase-3)
+- **21 Python adapter** + 1 Registry + 3 JS爬虫 + 5 前端Artifact
+- **22 pytest文件 + 3 JS测试 + 1冒烟脚本**
+- **354+ mock测试 + 242真跑PASS + tsc全过**
+- **44 commits**入main
+- **16 业务域Registry** / **12 Agent接入**
+
+### 下一步待Comdr授权
+(a) 后端 `artifact_wrapper.py` 新增5类型包装方法 (P3 adapter DataFrame → 前端字段契约)
+(b) 申请 FRED_API_KEY / OpenCorporates Key 解🟡降级
+(c) Efinance/NBS/Shipping 反爬增强 (UA池+proxy)
+(d) 端到端全链路灰度 (启服务+调Agent+Artifact渲染真数据)
