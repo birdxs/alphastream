@@ -3157,3 +3157,49 @@ P0/P1/P2 → Phase-2(C+D) → Phase-3(E) → Phase-4(F+G)
 | 真技术债 | 0 |
 
 **数据层v2 + 生态MCP集成 + 用户可见UI 三位一体生产级就绪. 主会话/loop终止待命.**
+
+---
+
+## M2 GitHub Actions CI/CD [2026-04-15 15:10 +08:00]
+
+**目标**：PR/push 触发自动化验证，替代手工跑 pytest/tsc/build 的心智负担。
+
+### Workflow 概要
+
+| 文件 | 标签 | 作用 | Job 数 |
+|---|---|---|---|
+| `.github/workflows/ci.yml` | [NEW-FILE:#20260415-52] | pytest + tsc + next build + docker compose build | 3 |
+| `.github/workflows/adapter-smoke-weekly.yml` | [NEW-FILE:#20260415-53] | 每周 smoke_adapters.py + 上传 artifact | 1 |
+| `.github/dependabot.yml` | [NEW-FILE:#20260415-54] | pip/npm/actions 依赖自动 PR | — |
+
+### 触发条件表
+
+| 事件 | ci.yml | adapter-smoke-weekly.yml | docker-image.yml (既有) |
+|---|---|---|---|
+| push → main | ✅ 全 3 job | ❌ | ✅ |
+| PR → main | ✅ pytest + frontend (docker-build 跳过) | ❌ | ✅ |
+| cron 周一 02:00 UTC | ❌ | ✅ | ❌ |
+| workflow_dispatch | ❌ | ✅ | ❌ |
+
+### 预期行为
+
+1. **PR 拦截**：任意破坏 pytest / tsc / next build 的 PR 被 checks 标红，阻塞合并。
+2. **镜像构建回归**：push 至 main 时额外验证 `docker-compose.prod.yml` 可成功构建。
+3. **数据源健康巡检**：每周自动跑 adapter smoke，artifact 保留 14 天，便于回溯 akshare/baostock 异常窗口。
+4. **依赖治理**：Dependabot 每周扫描三大生态，自动开 PR；配合 ci.yml 做门禁。
+
+### 版本锁定 (权威来源交叉验证)
+
+- `actions/checkout@v4` / `actions/setup-python@v5` / `actions/setup-node@v4` / `actions/upload-artifact@v4` — 均为 GitHub 官方当前推荐主版本。
+- Python `3.12` 对齐 `requirements.txt` 已测环境；Node `20` LTS 对齐 `next 16.2.1` + `react 19` 最低要求。
+
+### YAML 语法验证
+
+```
+python3 -c "import yaml; [yaml.safe_load(open(f)) for f in ['.github/workflows/ci.yml','.github/workflows/adapter-smoke-weekly.yml','.github/dependabot.yml']]"
+→ 全部通过，无异常。
+```
+
+### 回滚
+
+删除对应 yml 即可；既有 `docker-image.yml` 未动，旧流水线保持。

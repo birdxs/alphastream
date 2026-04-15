@@ -330,7 +330,49 @@ pytest tests/mcp/test_registry_server.py -v
 
 ---
 
-## 10. 文档索引
+## 10. CI/CD (GitHub Actions)
+
+### 10.1 Workflow 清单
+
+| 文件 | 名称 | 触发 | 作用 |
+|---|---|---|---|
+| `.github/workflows/ci.yml` | CI | push/pull_request → main | `backend-pytest` + `frontend-build`(tsc+next build) + `docker-build`(push时) |
+| `.github/workflows/adapter-smoke-weekly.yml` | Adapter Smoke (Weekly) | cron `0 2 * * 1` + 手动 | 每周执行 `scripts/smoke_adapters.py`，上传日志 artifact |
+| `.github/workflows/docker-image.yml` | Docker Image CI | push/pull_request → main | 构建并推送 `ghcr.io/<owner>/stockanal:latest` |
+| `.github/dependabot.yml` | Dependabot | 每周 | pip / npm / github-actions 依赖自动 PR |
+
+### 10.2 触发条件速查
+
+- **PR 进入 main**：`ci.yml` 的 `backend-pytest` + `frontend-build` 必须通过。
+- **push 至 main**：追加执行 `docker-build` 与 docker-image.yml 推送镜像。
+- **定时**：每周一 02:00 UTC (10:00 +08:00) 触发 adapter smoke。
+- **手动**：`Actions` 面板选择 workflow → `Run workflow`（仅对配置了 `workflow_dispatch` 的 smoke 生效）。
+
+### 10.3 本地模拟 (act)
+
+```bash
+# 安装 act
+brew install act
+
+# 模拟 PR 触发 CI
+act pull_request -W .github/workflows/ci.yml
+
+# 模拟手动触发 smoke
+act workflow_dispatch -W .github/workflows/adapter-smoke-weekly.yml
+
+# 只跑某个 job
+act -j backend-pytest
+```
+
+### 10.4 版本锁定
+
+- Python: `3.12` (via `actions/setup-python@v5`)
+- Node: `20` (via `actions/setup-node@v4`)
+- 升级版本需同步更新 `requirements.txt` / `frontend/package.json` 并跑通本地测试。
+
+---
+
+## 11. 文档索引
 
 - [README.md](../README.md) — v3.1 项目总入口
 - [docs/README.md](README.md) — 12篇文档索引
