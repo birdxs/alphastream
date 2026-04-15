@@ -723,3 +723,97 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 2. **线程安全限流**：`threading.Lock` + 时间戳比较，保证 agent 并发调度下不超 30/min
 3. **`/global` 扁平化**：CoinGecko 原始结构 `data.total_market_cap.usd` 三级嵌套，扁平成 `total_market_cap_usd` 单键，Agent 直接消费
 4. **`_MIN_INTERVAL=2.1`**：30/min ≈ 2.0s/req，加 5% 余量防抖
+
+---
+
+### A7 World Bank [2026-04-15]
+
+**目标**：接入 World Bank Open Data，免 Key 提供 200+ 国家宏观指标（GDP/CPI/人口/失业等）作为跨国对标数据源。
+
+**联网调研（≥3 权威源，Asia/Singapore 2026-04-15 12:00 +08:00 基准）**：
+
+| 来源 | URL | 关键信息 | 采用性 |
+|---|---|---|---|
+| World Bank Data Help Desk | https://datahelpdesk.worldbank.org/knowledgebase/articles/889392 | Indicator API 基础；`/v2/country/{cc}/indicator/{ind}?format=json` 响应为 `[meta, rows]` 二元数组 | 采用：URL 与响应结构 |
+| WB API Advanced Queries | https://datahelpdesk.worldbank.org/knowledgebase/articles/898581 | `date=YYYY:YYYY` 区间、`per_page` 分页、多国分号 `CN;US;JP` | 采用：分页与多国 |
+| World Bank Data Portal | https://data.worldbank.org/ | 指标代码表：`NY.GDP.MKTP.CD` / `FP.CPI.TOTL` / `SP.POP.TOTL` / `SL.UEM.TOTL.ZS` | 采用：指标清单 |
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/worldbank_adapter.py` | 新建 | [NEW-FILE:#20260415-09] |
+| `tests/adapters/test_worldbank_adapter.py` | 新建 | — (测试文件) |
+| `app/adapters/__init__.py` | 修改 | 导出 `WorldBankAdapter` |
+| `app/adapters/README.md` | 修改 | 清单追加 |
+
+**对外接口**：
+
+- `WorldBankAdapter(timeout=20, per_page=1000)` — 无 Key
+- `get_indicator(country, indicator, start=None, end=None) -> pd.DataFrame` — 单国(或分号多国)时序
+- `list_indicators(keyword=None) -> pd.DataFrame` — 指标目录 + 客户端关键字过滤
+- `compare_countries(countries: list, indicator, year) -> pd.DataFrame` — 横向对比，按 value 降序
+- `health_check()` / `name="worldbank"` — 拉 WLD/NY.GDP.MKTP.CD 判活
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_worldbank_adapter.py -v` → **15 passed**
+  - 基础 × 3（name/UA/_parse_rows 容错）
+  - get_indicator × 3（正常/空入参/HTTP 错误，含 URL+params 精确校验）
+  - list_indicators × 2（全量/keyword=cpi 命中 1 条）
+  - compare_countries × 2（3 国按 value 降序、空入参）
+  - BaseAdapter 接口 × 6（5 空返回 + 2 health_check）
+- 集成：`from app.adapters import WorldBankAdapter` 导入通过
+- 端到端：**不发真实网络请求**（作战指令要求），mock 验证 URL 与 query 精确到字符级
+
+---
+
+### A8 IMF [2026-04-15]
+
+**目标**：接入 IMF SDMX-JSON REST，免 Key 提供 IFS（国际金融统计）/ WEO / DOT 数据集，构成与 World Bank 互为交叉验证的国际机构宏观口径。
+
+**联网调研（≥3 权威源，Asia/Singapore 2026-04-15 12:00 +08:00 基准）**：
+
+| 来源 | URL | 关键信息 | 采用性 |
+|---|---|---|---|
+| IMF Data Help | https://datahelp.imf.org/knowledgebase/articles/630877-api | SDMX 2.1 JSON API：`CompactData/{dataset}/{freq}.{ref_area}.{indicator}`；`startPeriod/endPeriod` query | 采用：URL 结构与参数 |
+| SDMX Central (IMF) | https://sdmxcentral.imf.org/ | 数据集目录：IFS / WEO / DOT / BOP / GFS 等 | 采用：数据集选型 |
+| IMF DataMapper Help | https://www.imf.org/external/datamapper/api/help | Series 为 dict 或 list；Obs 同；`@TIME_PERIOD/@OBS_VALUE` SDMX 标准属性 | 采用：响应解析规范 |
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/imf_adapter.py` | 新建 | [NEW-FILE:#20260415-10] |
+| `tests/adapters/test_imf_adapter.py` | 新建 | — (测试文件) |
+| `app/adapters/__init__.py` | 修改 | 导出 `IMFAdapter` |
+| `app/adapters/README.md` | 修改 | 清单追加 |
+
+**对外接口**：
+
+- `IMFAdapter(timeout=30)` — 无 Key
+- `get_dataset(dataset_id, query, start_period=None, end_period=None) -> pd.DataFrame` — 通用 SDMX CompactData
+- `get_ifs(indicator, country, freq="A", ...) -> pd.DataFrame` — IFS 便捷封装（`A.{country}.{indicator}`）
+- `get_data_structure(dataset_id) -> dict` — 维度/编码表原始 JSON
+- `health_check()` / `name="imf"` — IFS/PCPI_IX/US 2020-2021 判活
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_imf_adapter.py -v` → **20 passed**
+  - 基础 × 5（name/UA/_extract_series 3 种形态）
+  - _flatten_series × 3（单 Series 多 Obs / 多 Series 混合 Obs 形态 / 缺失值转 NaN）
+  - 端点 × 5（get_dataset URL+params / get_ifs key 构造 / 空入参 / HTTP 错误 / data_structure URL）
+  - BaseAdapter 接口 × 7
+- 集成：`from app.adapters import IMFAdapter` 导入通过
+- 端到端：**不发真实网络请求**（作战指令要求），mock 验证 SDMX 解析与 URL 精确到字符级
+
+**Git 提交（A7 + A8 合并在本节描述）**：
+- commit1: `feat(adapter): 世界银行+IMF公开API [NEW-FILE:#20260415-09,10]`
+- commit2: `docs(data): P1-A7/A8追溯`
+
+**关键设计决策（A7/A8 共通）**：
+
+1. **无 Key 友好**：WB/IMF 均属联合国机构级免费公共数据，适配器不引入 Key 机制，降低接入摩擦
+2. **SDMX 弹性解析**：IMF Series/Obs 可能为 dict 或 list，`_extract_series` 统一转 list，避免调用方分叉
+3. **BaseAdapter 占位空返回**：两者不提供行情/成分/个股信息，抽象方法全部返回空对象，供 `fallback_manager` 安全跳过
+4. **横向对比便捷化**：`WorldBankAdapter.compare_countries` 用 `;` 多国分隔单次请求完成，减少 N 次往返
