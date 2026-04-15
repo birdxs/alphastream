@@ -2323,3 +2323,106 @@ grep -E "NoneType|JSONDecodeError|strategy_evolver|capital_flow_analyzer" /tmp/b
 
 - `fix(agent): I2 StrategyEvolver JSON容错解析 + capital_flow None guard [NEW-FILE:#20260415-41]`
 - `docs(data): I2追溯`
+
+---
+
+## I1 Registry domain map修复 [2026-04-15 14:10 +08:00]
+
+### H2原bug定位 (commit 95f089b)
+
+H2真端到端冒烟日志(/tmp/backend_h2.log)抽样:
+```
+registry fetch命中 12 次:
+- news.get_latest_news × 4      → tried=[]
+- sentiment_social.get_social_sentiment × 4 → tried=[]
+- esg_rating.get_esg_rating × 3 → tried=[]
+- hiring_signal.get_hiring_trend × 1 → tried=[]
+```
+
+`tried=[]` 意味 `call_with_fallback` 遍历 `get_adapters(domain)` 返回的 adapter 列表, 对每个 adapter 执行 `hasattr(adapter, method)` 全为 False, 导致直接 `continue` 跳过, `tried` 列表永不 append.
+
+### 根因分析
+
+Agent 层 `_registry_fetch(domain, method, **kwargs)` 调用 (见 `app/agents/sentiment_analyst.py:40`, `app/agents/decision_maker.py:31/38/41`, `app/agents/investors/munger.py:33`, `app/agents/strategy_evolver.py:33/36`) 使用语义化方法名:
+
+| Domain | Agent 调用 method | Adapter 真实 method |
+|--------|--------------------|--------------------|
+| `news` | `get_latest_news` | `RSSNewsAdapter.get_feed / get_all_feeds / search_news` |
+| `sentiment_social` | `get_social_sentiment` | `OpenCLIBridge.get_xueqiu_discuss / get_eastmoney_guba / *_hot_rank` |
+| `esg_rating` | `get_esg_rating` | `ESGAdapter.get_esg_score` |
+| `hiring_signal` | `get_hiring_trend` | `JobsAdapter.get_company_postings` |
+
+**契约错位 — 方法名不一致** 是唯一根因. Registry 本身 `DEFAULT_DOMAIN_MAP` / `module_index` 懒加载 / 实例化 / `get_adapters` 全链路无 bug (已通过 `get_status()` 快照确认 4 domain 分别注册了 `rss_news / opencli / esg_public / jobs_adapter`).
+
+### 修复方案 (选项A — Adapter加别名，Agent层不动)
+
+最小变更: 4 个 adapter 各加 1 个薄包装 method,转发至原实现, 保留签名容错(兼容 code/ticker/query 多种入参键名).
+
+**Diff 摘要**:
+
+1. `app/adapters/rss_news_adapter.py` 追加:
+   ```python
+   def get_latest_news(self, code=None, days=7, limit=20, sources=None, **kwargs) -> List[Dict]:
+       # code 非空走 search_news(keyword=code); 否则 get_all_feeds; 转 records
+   ```
+
+2. `app/adapters/opencli_bridge.py` 追加:
+   ```python
+   def get_social_sentiment(self, code=None, limit=30, **kwargs) -> List[Dict]:
+       # 6位A股码 → 拼SH/SZ前缀调 xueqiu_discuss + eastmoney_guba
+       # 附带 eastmoney_hot_rank 前 N 条作为全局基线
+   ```
+
+3. `app/adapters/esg_adapter.py` 追加:
+   ```python
+   def get_esg_rating(self, code=None, ticker=None, source="esgbook", **kwargs) -> dict:
+       # 等价 get_esg_score; 兼容 code/ticker/symbol 三种入参键
+   ```
+
+4. `app/adapters/jobs_adapter.py` 追加:
+   ```python
+   def get_hiring_trend(self, query=None, company=None, code=None, **kwargs) -> pd.DataFrame:
+       # query/company/code 任一作为公司名调 get_company_postings
+   ```
+
+### 验证证据 — tried=[] → tried=[...]
+
+**Registry resolve 脚本验证**:
+```
+news -> ['rss_news', 'opencli', 'akshare']
+news.get_latest_news hasattr hits: ['rss_news']
+sentiment_social -> ['opencli']
+sentiment_social.get_social_sentiment hasattr hits: ['opencli']
+esg_rating -> ['esg_public']
+esg_rating.get_esg_rating hasattr hits: ['esg_public']
+hiring_signal -> ['jobs_adapter']
+hiring_signal.get_hiring_trend hasattr hits: ['jobs_adapter']
+```
+
+**真后端 `python3 run.py` + curl 600519 冒烟** (/tmp/backend_i1b.log):
+```
+[SentimentAnalyst] registry fetch news.get_latest_news 降级失败:
+  Exception: domain=news method=get_latest_news 全部数据源降级失败 (tried=['rss_news'])
+[SentimentAnalyst] registry fetch sentiment_social.get_social_sentiment 降级失败:
+  Exception: domain=sentiment_social method=get_social_sentiment 全部数据源降级失败 (tried=['opencli'])
+```
+
+对比 H2 的 `tried=[]`, **本轮 `tried=['rss_news']` / `tried=['opencli']` 非空** — Registry 契约修复完成. 数据源本身在当前沙箱环境因网络受限返回空(RSSHub/OpenCLI子进程真实降级), 属 adapter 层行为, 已由 agent `try/except` 正常降级处理, 不再是 Registry bug.
+
+### pytest 新测试
+
+新增 `tests/adapters/test_registry_domains.py` [NEW-FILE:#20260415-40] — **57 测试全通过** (3.67s):
+- `test_default_map_has_16_domains` × 1
+- `test_all_domains_registered` × 1
+- `test_domain_has_at_least_one_adapter` × 16 (参数化)
+- `test_i1_fixed_domains_method_resolvable` × 4 (I1核心守卫)
+- `test_non_i1_agent_method_status` × 11 (非I1域, warn非阻塞, 为 I2+ 留追踪)
+- `test_adapter_module_importable` × 21 (全adapter import自检)
+- `test_call_with_fallback_tried_nonempty_on_registered_domain` × 1 (monkeypatch 注入异常后 tried 非空, 杜绝回归)
+- `test_registry_status_snapshot` × 1
+
+### Commit 标签
+
+- `fix(registry): I1 Registry domain map — news/sentiment/esg/hiring 4域tried=[]修复`
+- `test(registry): I1 domain map覆盖性测试 [NEW-FILE:#20260415-40]`
+- `docs(data): I1追溯 — H2遗留修复证据链`
