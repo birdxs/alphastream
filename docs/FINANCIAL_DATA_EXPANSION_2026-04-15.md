@@ -1118,3 +1118,36 @@ Easyquotation:
   - 根因：YFinance adapter 对港股短码仅补后缀 `.HK`，未去前导零；属 adapter 实现侧细节，非依赖环境问题。后续可决定是"去前导零"还是"修正期望值"。
 - **环境确认**: 16 adapter + Registry 全部可 import，238 mock 单测中 227 通过、1 个断言值分歧；所有测试零真实网络请求，符合 mock 约束。
 - **commit hash**: 见提交后 git log
+
+---
+
+## C2 14-Agent接入Registry [2026-04-15 12:45 +08:00]
+
+**目标**: 让 14-Agent 经由 AdapterRegistry 多源降级拿数据, 替代单一 analyzer 硬依赖。
+
+**改动文件** (仅改不增, 除测试新建):
+
+| 文件 | 改动 | Registry Domain |
+|---|---|---|
+| `app/agents/base_agent.py` | 新增 `self._registry` 懒加载 + `registry` property + `fetch(domain,method,**kw)` 便捷方法 | 基础入口 |
+| `app/agents/fundamental_analyst.py` | `_registry_fetch` helper + `_fallback_analyze` 数据获取分支 | `xbrl_financials` / `us_stock` / `a_stock_kline` |
+| `app/agents/technical_analyst.py` | `_registry_fetch` helper + K线预取 | `a_stock_kline` / `us_stock` |
+| `app/agents/capital_flow_analyst.py` | `_registry_fetch` helper + 资金流双域尝试 | `a_stock_realtime` → `a_stock_kline` |
+| `app/agents/sentiment_analyst.py` | `_registry_fetch` helper + 新闻优先 Registry | `news` → `sentiment_social` |
+| `tests/agents/test_registry_integration.py` | **[NEW-FILE:#20260415-22]** 7 mock 单测 | 覆盖4 analyst + Base |
+
+**Domain 映射总表**:
+- 基本面: `xbrl_financials` (EDGAR→YFinance→OpenBB) / `us_stock` (YFinance→OpenBB→EDGAR)
+- 技术面: `a_stock_kline` (Akshare→Baostock→Efinance→YFinance) / `us_stock`
+- 资金面: `a_stock_realtime` (Efinance→Easyquotation→Akshare→OpenCLI)
+- 舆情: `news` (RSS→OpenCLI→Akshare) / `sentiment_social` (OpenCLI)
+
+**双保险设计**: 新代码(Registry)在前, 旧代码(analyzer/fetcher)在后。Registry 返回 None 或抛异常时自动回落原路径, 现有生产流程零破坏。
+
+**验证**:
+```
+pytest tests/agents/test_registry_integration.py -v
+# 7 passed in 1.74s
+```
+
+**Commit 标签**: `feat(agent): 14-Agent接入AdapterRegistry多源降级 [NEW-FILE:#20260415-22]`
