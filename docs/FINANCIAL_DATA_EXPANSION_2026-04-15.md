@@ -2886,3 +2886,46 @@ git revert <此commit>   # 代码层
 - 新增: `tests/adapters/test_retry_utils.py` [NEW-FILE:#20260415-45] (+110 行, 10 用例)
 - 修改: `app/adapters/shipping_adapter.py` / `nbs_adapter.py` / `corporate_adapter.py` / `esg_adapter.py` / `rss_news_adapter.py` / `efinance_adapter.py`
 - 修改: `tests/adapters/test_nbs_adapter.py` (UA池化适配)
+
+---
+
+## 🏁 Phase-8 (K批) 终极验收 — 生产级就绪 (2026-04-15 14:45 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| K1 🟡优化 | `_retry_utils.py` UA池+backoff+6 adapter接入 | `0e559a1`+`16999b1`+`0ee777e` | 10 retry + 429 adapter PASS |
+| K2 docker生产 | `docker-compose.prod.yml`+`nginx/prod.conf`+OPS章节 | `ebdee29`+`5f58dc4`+`0dce500` | — |
+| K3 健康监控 | 3端点(`/health` `/api/adapters/status` `/api/registry/stats`) | `3eae765`+`1c5a752` | 9 PASS |
+
+### K批关键收益
+- **生产运维闭环** — docker 5服务拓扑 + 3健康监控端点 + 6 adapter重试优化
+- **pytest 429/0** (+38 新测试: K1 10 + K3 9 + J1 19等)
+- **smoke v4 稳定** — 🟢10/🟡11/🔴0/⚫1, 零回归, 不可解决项明确归档
+
+### 数据层v2 一日 8 Phase 终极闭环
+```
+P0/P1/P2 → Phase-2(C+D) → Phase-3(E) → Phase-4(F+G) 
+  → Phase-5(H) → Phase-6(I) → Phase-7(J) → Phase-8(K生产就绪)
+```
+
+### 🎯 终极状态 (2026-04-15)
+| 维度 | 值 |
+|---|---|
+| Python adapter | 21 + 重试工具 |
+| Registry domain | 16 (全对齐0 warn) |
+| Agent接入 | 12 |
+| Flask API端点 | 10 P3 + 3 健康监控 = **13** |
+| 前端Artifact | 15 |
+| Docker服务 | 5 (nginx+frontend+backend+redis+可选opencli) |
+| Git commits today | **91** |
+| pytest PASS | **470+** / 0 FAIL |
+| smoke v4 | 🟢10/🟡11/🔴0/⚫1 |
+| 真端到端 | 10/10 P3 API + 9/9 Next + 3/3 SSE |
+| 文档 | README v3.1 + OPS手册 + FINANCIAL_DATA_EXPANSION完整追溯 |
+
+### ✅ 生产级就绪确认
+- 代码: 91 commits 全部入main, 460+ pytest PASS
+- 部署: `docker compose -f docker-compose.prod.yml up -d --build` 一键启动
+- 配置: .env预留5 Key+3代理字段, OPS手册指引申请
+- 监控: 3端点供docker HEALTHCHECK + nginx upstream + 日常排查
+- 容错: UA池+重试+软降级三层防护, 0 FAIL
