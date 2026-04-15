@@ -91,18 +91,18 @@ NON_I1_DOMAIN_METHODS = {
 
 @pytest.mark.parametrize("domain,method", list(NON_I1_DOMAIN_METHODS.items()))
 def test_non_i1_agent_method_status(registry, domain, method):
-    """非I1范围: 仅要求domain注册有adapter (method对齐由后续任务守)"""
+    """J1 升级: 严格断言每个非I1 domain 至少1 adapter 实现 agent method。
+
+    追溯: J1 任务扫平 I1 遗留的 6 个 warn (a_stock_realtime/macro_*/earth_observation/
+    corporate_entity), 通过在对应 adapter 加 alias 薄包装对齐 agent 调用层method名。
+    """
     adapters = registry.get_adapters(domain)
     assert adapters, f"domain={domain} 未注册任何 adapter"
-    # method hasattr 仅打印不阻塞
     hits = [a.name for a in adapters if hasattr(a, method)]
-    if not hits:
-        import warnings
-        warnings.warn(
-            f"[非I1] domain={domain}.{method} 暂无adapter实现, "
-            f"注册={[a.name for a in adapters]} — 待后续任务对齐",
-            UserWarning,
-        )
+    assert hits, (
+        f"J1 REGRESSION: domain={domain}.{method} hasattr命中0; "
+        f"注册={[a.name for a in adapters]} — alias 缺失或被误删"
+    )
 
 
 # ============= adapter import 无异常 =============
