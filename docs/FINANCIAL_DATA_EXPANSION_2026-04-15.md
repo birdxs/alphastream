@@ -1712,3 +1712,92 @@ _无_。所有 🔴 为 0，Python 层无 AttributeError/TypeError/KeyError 等�
 - (c) efinance/NBS 加UA池+代理 → 降级数 -2
 - (d) yfinance 换 `openbb-yfinance` 内置 provider (已随openbb装好)
 
+---
+
+## F2 artifact_wrapper P3扩展 [2026-04-15 13:16 +08:00]
+
+### 交付物
+- `app/core/artifact_wrapper.py` 追加 5 个 P3 前端契约包装函数 (仅追加, 不改既有10种包装)
+- `tests/core/test_artifact_wrapper_p3.py` **[NEW-FILE:#20260415-35]** 18 mock 单元测试全过 (0.61s)
+- 前端 5 组件 (`shipping-chart/esg-scorecard/hiring-signal/corporate-network/alt-data-panel`) 字段契约对齐
+
+### 命名冲突说明 (重要)
+既有 `wrap_shipping/wrap_esg/wrap_corporate/wrap_jobs/wrap_satellite/wrap_alt_data`
+为 F3 API 端点服务 (`/api/shipping/bdi` 等, 签名 `(result, subtype, **meta)`),
+被 `app/web/web_server.py:3245-3414` 引用。为不破坏既有调用,
+**本批新函数统一使用 `_v2` 后缀** 区分, 专供 Agent 回调/Generative UI:
+
+| 函数名 (v2 后缀)                                                            | type 字段           | 对接前端组件           |
+|----------------------------------------------------------------------------|---------------------|-----------------------|
+| `wrap_shipping_v2(stock_name, bdi_df, port_df, ais_df)`                    | `shipping`          | shipping-chart.tsx    |
+| `wrap_esg_v2(stock_name, scores, disclosures, cdp)`                        | `esg`               | esg-scorecard.tsx     |
+| `wrap_hiring_v2(stock_name, postings_df, trend_df)`                        | `hiring`            | hiring-signal.tsx     |
+| `wrap_corporate_network_v2(stock_name, company_details, network)`          | `corporate_network` | corporate-network.tsx |
+| `wrap_alt_data_v2(stock_name, shipping, esg, hiring, corporate)`           | `alt_data`          | alt-data-panel.tsx    |
+
+**待后续 [DEDUP]**: F3 端点版与 v2 版应收敛为单一契约 (建议用 `artifact_type` 子命名分化, 移除 `_v2` 后缀并同步 `web_server.py` 路由)。
+
+### 字段契约表 (后端 adapter ↔ 前端 interface)
+
+#### wrap_shipping_v2 → shipping-chart.tsx
+| 后端 (adapter DF 列)                            | data 字段                        | 前端 interface                   |
+|------------------------------------------------|----------------------------------|----------------------------------|
+| bdi_df[date, value, indicator, source]         | `bdi_series[]`                   | `BDIPoint[]`                     |
+| port_df[date, port, value, unit, indicator]    | `port_throughput[]`              | `PortPoint[]`                    |
+| ais_df[mmsi, name, ship_type, lat, lon, sog]   | `ais_vessels[]`, `ais_count:int` | `AISVessel[]`, `ais_count`       |
+| —                                              | `port_name:str`                  | `port_name`                      |
+
+#### wrap_esg_v2 → esg-scorecard.tsx
+| 后端 (esg_adapter)                                                           | data 字段                              | 前端 interface                       |
+|-----------------------------------------------------------------------------|----------------------------------------|--------------------------------------|
+| get_esg_score → {esg_score,e/s/g_score,grade,as_of,source,ticker,company}    | 同名顶层扁平 + `primary{}`             | 顶层扁平 + `primary: ESGSourceRow`  |
+| get_esg_score + get_cdp_response 合并                                         | `sources[]` (esgbook + cdp 行)         | `ESGSourceRow[]`                     |
+| get_climate_disclosure → {scope1/2/3_latest, tags{}}                          | `climate_disclosures[].tag/label/date` | `ClimateDisclosure[]`                |
+| get_cdp_response → {climate_score, disclosures[]}                             | 并入 `sources[]` + `climate_disclosures[]` | 同上                             |
+
+#### wrap_hiring_v2 → hiring-signal.tsx
+| 后端 (jobs_adapter)                                                             | data 字段                                          | 前端 interface                                  |
+|--------------------------------------------------------------------------------|---------------------------------------------------|-------------------------------------------------|
+| search_jobs/get_company_postings DF[title,company,location,tags,url,created_at,source] | `items[]`, `total_postings:int`, `company:str` | `JobItem[]`, `total_postings`, `company` |
+| 派生: tags 逗号拆分 Top6 计数                                                   | `skill_distribution[]`                            | `SkillDist[]`                                   |
+| trend_df[month,count] 或从 created_at 派生                                      | `monthly_trend[]`                                 | `MonthlyTrend[]`                                |
+| 阈值法: yoy>30→high / >10→medium / else low                                     | `expansion_level`, `yoy_change`                   | `"low"\|"medium"\|"high"`, `number`             |
+
+#### wrap_corporate_network_v2 → corporate-network.tsx
+| 后端 (corporate_adapter)                                                                          | data 字段                                                                                         | 前端 interface                    |
+|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|-----------------------------------|
+| get_company_details → {name,jurisdiction_code,incorporation_date,current_status,company_number,opencorporates_url} | `company_name`, `jurisdiction_code`, `incorporation_date`, `current_status`, `opencorporates_url` | 顶层扁平                          |
+| network.company_id 或 `{jc}/{cn}` 拼接                                                             | `company_id`                                                                                      | `company_id`                      |
+| get_company_network → {parents[], children[], officers[]}                                          | `parents[]`, `children[]`, `officers[]`                                                           | `RelatedEntity[]`, `Officer[]`    |
+
+#### wrap_alt_data_v2 → alt-data-panel.tsx
+| 入参 (任一子集, wrap_v2 或 raw dict)  | data 字段           | 前端 Tab        |
+|--------------------------------------|--------------------|-----------------|
+| shipping                             | `data.shipping`    | 航运 & 大宗     |
+| esg                                  | `data.esg`         | ESG 评级        |
+| hiring                               | `data.hiring`      | 招聘扩张        |
+| corporate                            | `data.corporate`   | 企业关联        |
+
+聚合时若入参为 `wrap_*_v2()` 完整返回 (含 `type/data`) 自动提取 `data`; 直接传 raw dict 亦可, 缺失子域对应 Tab 前端置灰。
+
+### 测试矩阵 (18 cases, 全 mock-only, 无网络)
+| 测试类                             | case 数 | 覆盖路径                                       |
+|-----------------------------------|---------|-----------------------------------------------|
+| `TestWrapShipping`                | 4       | happy / 部分 df 缺 / 全空 / list[dict] 输入    |
+| `TestWrapEsg`                     | 3       | 多源(scores+cdp+disclosures) / 最小 / 全 None  |
+| `TestWrapHiring`                  | 4       | 含 trend / 派生 trend / 空 / yoy_change 计算   |
+| `TestWrapCorporateNetwork`        | 3       | 完整 / 仅 details / 全空                       |
+| `TestWrapAltData`                 | 4       | 4 子域齐 / 部分子集 / raw dict 识别 / 全空     |
+| **合计**                          | **18**  | 全 PASS (0.61s)                                |
+
+### 验证命令
+```bash
+python -m pytest tests/core/test_artifact_wrapper_p3.py -v
+# =============== 18 passed, 894 warnings in 0.61s ===============
+```
+
+### Commit 追溯
+- `feat(core): artifact_wrapper新增5 P3类型(shipping/esg/hiring/corporate/alt_data) [NEW-FILE:#20260415-35]` — 待提交
+- `docs(data): F2追溯 前后端字段契约表` — 待提交
+
+
