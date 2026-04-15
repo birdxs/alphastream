@@ -1483,3 +1483,46 @@ _无_。所有 🔴 为 0，Python 层无 AttributeError/TypeError/KeyError 等�
 **Commit**:
 - `feat(agent): 4投资者人格+决策/风险/策略层接入Registry [NEW-FILE:#20260415-29]`
 - `docs(data): E3生产级Agent-Registry集成追溯`
+
+---
+
+## E4 前端Artifact另类数据对接 [2026-04-15 12:56 +08:00]
+
+**背景**: P3后端5个另类数据adapter(shipping/satellite/corporate/jobs/esg)已落盘, 本任务交付前端可视化Artifact, 融入既有Dark Glassmorphism设计语言 (blur40/saturate180/gradient-border).
+
+### 交付清单
+
+| 组件 | 文件 | 设计要点 | 后端契约 |
+|---|---|---|---|
+| 主面板 | `alt-data-panel.tsx` [NEW-FILE:#20260415-30] | 4 Tab 聚合 + 毛玻璃标签栏 + 空态置灰 | data.{shipping,esg,hiring,corporate} |
+| 航运&大宗 | `shipping-chart.tsx` [NEW-FILE:#20260415-31] | BDI lightweight-charts v5 折线 + Recharts柱状 + 顶部3卡片 | shipping_adapter.get_bdi_index/get_port_throughput/get_ais_vessels |
+| ESG 评级 | `esg-scorecard.tsx` [NEW-FILE:#20260415-32] | E/S/G雷达 + 综合评分头部 + 多源对比表 + SEC披露tag | esg_adapter.get_esg_score (esgbook/cdp/cufe/bcorp) + get_climate_disclosure |
+| 招聘扩张 | `hiring-signal.tsx` [NEW-FILE:#20260415-33] | 月度趋势折线 + 技能饼图 + 扩张预警 (high/medium/low) | jobs_adapter.get_company_postings + 客户端月度聚合派生 |
+| 企业关联 | `corporate-network.tsx` [NEW-FILE:#20260415-34] | 中心公司渐变卡 + 父/子/董事会列表 + 司法管辖区Emoji国旗 | corporate_adapter.get_company_network {parents/children/officers} |
+
+### 集成改动
+- `lib/types/index.ts`: `ArtifactType` 联合类型追加 5 枚举 `alt_data/shipping/esg/hiring/corporate_network`
+- `components/chat/artifact-renderer.tsx`: 5 个 `dynamic(...)` lazy-load 入口 + loading skeleton + `switch/case` 路由 + `getArtifactIcon` map 追加 5 项
+- `components/chat/message-bubble.tsx`: `artifactMeta` Record 同步 5 新枚举 (Layers/Ship/Leaf/Briefcase/Network 图标 + 对应色调)
+- `components/artifacts/README.md`: 文件列表 + 功能描述全量更新
+
+### 设计决策
+1. **Tab 主面板 vs 独立Artifact 并存**: `alt_data` 走聚合Tab体验 (一次查询多维度), 同时保留 4 个独立 `shipping/esg/hiring/corporate_network` 类型, 支持后端按需只吐单维度
+2. **DEMO_DATA 内嵌**: 每个组件定义 `DEMO_DATA` 常量, 在 `data` 为空/不完整时自动兜底 (单独渲染预览可见 + 后端降级空DF时仍有骨架)
+3. **lightweight-charts v5 API**: BDI 折线使用 `chart.addSeries(LineSeries, {...})` 新签名 (与既有 candlestick-chart.tsx 一致)
+4. **司法管辖区国旗**: `JURISDICTION_LABELS` 静态映射 14 个常见辖区代码 → 中文短名 + Unicode Emoji 国旗, 未命中回退 🏳 + 大写代码
+5. **暗色调色板**: 统一复用既有 token `#3737CC / #6B5EE4 / #46BEA3 / #F59E0B / #FF8767 / #8888A0`, 零新增色值
+
+### 验证
+- `npx tsc --noEmit`: 本任务 5 新组件 + 3 集成点全部通过, 仅剩 1 处与本任务无关的 `use-chat-stream.ts:183` 预存 bug
+- 未启动 dev server (按要求), DEMO_DATA 保证独立渲染预览可行
+- 依赖复用现有 `recharts` + `lightweight-charts@5.1.0` + `lucide-react`, 零新增 npm 依赖
+
+### 后续集成路径 (后端配合)
+1. **Agent 输出 Artifact**: 14-Agent 中负责另类数据的 Agent (ESG/供应链分析) 产出 SSE Artifact 时 `artifact_type` 设为 `alt_data` 或单维 `shipping/esg/hiring/corporate_network`
+2. **`artifact_wrapper.py`**: 为 5 类型提供结构化包装方法, 将 adapter 返回的 DataFrame 序列化为前端契约字段 (如 bdi_series/port_throughput/ais_count)
+3. **降级策略**: 后端 adapter 返回空 DataFrame 时, wrapper 吐空 dict, 前端自动走 DEMO_DATA 骨架, 不白屏
+
+### Commit
+- `feat(fe): 5个P3另类数据Artifact组件(航运/ESG/招聘/产业链/综合) [NEW-FILE:#20260415-30,31,32,33,34]`
+- `docs(data): E4前端Artifact追溯`
