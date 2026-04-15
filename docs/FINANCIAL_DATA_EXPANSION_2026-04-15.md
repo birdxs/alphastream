@@ -1151,3 +1151,61 @@ pytest tests/agents/test_registry_integration.py -v
 ```
 
 **Commit 标签**: `feat(agent): 14-Agent接入AdapterRegistry多源降级 [NEW-FILE:#20260415-22]`
+
+---
+
+## D3 ESG公开源 [2026-04-15 12:16 +08:00]
+
+**目标**: 接入 ESG 评分/气候披露/CDP/B Corp 公开数据，纯开源免费无 API Key，付费源一律剔除。
+
+**新增文件**:
+- `app/adapters/esg_adapter.py` **[NEW-FILE:#20260415-27]**
+- `tests/adapters/test_esg_adapter.py` **[NEW-FILE:#20260415-27]** (28 测试用例全过)
+
+**已改文件** (仅改不增):
+- `app/adapters/__init__.py` — 导出 `ESGAdapter`
+- `app/adapters/adapter_registry.py` — 注册 domain `esg_rating`
+- `app/adapters/README.md` — 铭牌登记
+
+**核心能力**:
+| 方法 | 数据源 | 返回 |
+|---|---|---|
+| `get_esg_score(ticker, source="esgbook")` | ESG Book / CDP / CUFE / B Corp 四源软降级链 | `{source, ticker, company, esg_score, e/s/g_score, grade, as_of, raw}` |
+| `get_climate_disclosure(cik)` | **复用 A4 `EDGARAdapter.get_concept()`**，抓 us-gaap/srt 气候 tag (Scope1/2/3/ClimateRelatedRisksAndOpportunities/CarbonOffsets/ClimateRelatedDisclosure) | `{cik, tags, scope1/2/3_latest, source}` |
+| `get_cdp_response(company, year=2025)` | CDP Disclosure Insight Action 公开库 | `{company, year, climate/water/forests_score, disclosures}` |
+| `search_b_corps(industry, country, company)` | B Corporations Directory | DataFrame(company_name, industry, country, overall_b_impact_score, certification_status, date_certified, url) |
+
+**软降级**: 首选源空 payload/404/429/异常 → 自动遍历其它 3 源；全失败返回保底空结构，不抛异常。
+**跨源可比**: CDP 字母评级 (A/A-/B/…/F) 通过 `_letter_to_score` 映射 0-100 统一口径。
+
+### 联网调研证据 (检索时间 2026-04-15 12:16 +08:00, ≥4 权威源)
+
+| # | 来源 | URL / 版本 | 发布/更新 | 采用判定 |
+|---|---|---|---|---|
+| 1 | ESG Book 开放数据 | https://www.esgbook.com/data-solutions/ | 2025 | **采用** 公开 scores JSON 端点，0 Key |
+| 2 | SEC Climate Disclosure Final Rule | https://www.sec.gov/rules/2024/33-11275.pdf | 2024-03 | **采用** XBRL 纳入 EDGAR，复用 A4 零成本 |
+| 3 | CDP Disclosure Insight Action | https://www.cdp.net/en/responses | 2025 | **采用** 全球最大企业气候披露库，公开免费 |
+| 4 | B Corporations Directory | https://www.bcorporation.net/en-us/find-a-b-corp/ | 2025 | **采用** 7000+ 认证公司 JSON 目录 |
+| 5 | 中财大 CUFE 绿金指数 (辅证) | http://igf.cufe.edu.cn/ | 2025 | **采用** 中国绿色金融学术指数，A 股 ESG 补充 |
+| 6 | 上交所 ESG 公开信息 | http://www.sse.com.cn/ | 2025 | 列为参考，未直接调用（无统一 API） |
+
+### 付费 / 商业 Key 源剔除清单
+
+| 源 | 剔除理由 |
+|---|---|
+| MSCI ESG Ratings (批量) | 商用 API 付费；单票 web 查询无批量接口 |
+| Refinitiv ESG | 商业订阅 |
+| Sustainalytics | 商业订阅 |
+| Wind ESG | 商业订阅 + 中国大陆账户限定 |
+| Bloomberg ESG | 终端付费 |
+
+### 验证闭环
+
+```
+pytest tests/adapters/test_esg_adapter.py -x -q
+# 28 passed, 682 warnings in 1.28s
+```
+
+覆盖：HTTP 层软降级（404/429/异常重试）、4 源多路径与 fallback 链、SEC 气候 EDGAR 复用路径（含懒加载失败、concept 异常、多 tag 聚合与最新值提取）、CDP 空响应、B Corp 空库与 503、辅助函数边界、健康检查 3 态、`get_financial_data` 整合。
+
+**Commit 标签**: `feat(adapter): ESG公开(SEC气候+CDP+B Corp+中财大) [NEW-FILE:#20260415-27]`
