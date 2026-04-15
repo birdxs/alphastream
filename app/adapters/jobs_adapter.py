@@ -227,6 +227,15 @@ class JobsAdapter(BaseAdapter):
             return self._search_lagou(query or "", limit)
         return pd.DataFrame()
 
+    # Registry 别名 (I1): domain=hiring_signal → method=get_hiring_trend
+    def get_hiring_trend(self, query: Optional[str] = None, company: Optional[str] = None,
+                         code: Optional[str] = None, **kwargs) -> pd.DataFrame:
+        """Registry契约别名 — query/company/code 任意一个均作为公司名传入 get_company_postings。"""
+        q = query or company or code or kwargs.get("symbol") or ""
+        if not q:
+            return pd.DataFrame()
+        return self.get_company_postings(company=str(q))
+
     def get_company_postings(self, company: str) -> pd.DataFrame:
         """某公司招聘帖子 (扩张信号估算)
 

@@ -209,6 +209,55 @@ class OpenCLIBridge(BaseAdapter):
             timeout=30,
         )
 
+    # -------------------- Registry 别名 (I1) --------------------
+    # domain=sentiment_social → method=get_social_sentiment
+    def get_social_sentiment(self, code: Optional[str] = None, limit: int = 30,
+                              **kwargs) -> List[Dict]:
+        """Registry契约别名 — 聚合雪球讨论 + 东财股吧 + 热榜信号。
+
+        Args:
+            code: 6位A股代码 (或带交易所前缀雪球码); 无则只回热榜
+            limit: 每源上限
+        Returns:
+            List[Dict]: [{source, ...}] 扁平合并；异常降级 []
+        """
+        out: List[Dict] = []
+        try:
+            if code:
+                c = str(code).strip()
+                # 雪球: 需要交易所前缀
+                if c.isdigit() and len(c) == 6:
+                    sxq = ("SH" if c.startswith("6") else "SZ") + c
+                else:
+                    sxq = c
+                try:
+                    for it in self.get_xueqiu_discuss(symbol=sxq, limit=limit) or []:
+                        if isinstance(it, dict):
+                            it.setdefault("source", "xueqiu")
+                            out.append(it)
+                except Exception:
+                    pass
+                if c.isdigit() and len(c) == 6:
+                    try:
+                        for it in self.get_eastmoney_guba(code=c, pages=1) or []:
+                            if isinstance(it, dict):
+                                it.setdefault("source", "eastmoney_guba")
+                                out.append(it)
+                    except Exception:
+                        pass
+            # 无论是否有code，都附带一份东财热榜前若干条作为全局情绪基线
+            try:
+                for it in (self.get_eastmoney_hot_rank() or [])[: max(5, int(limit // 3))]:
+                    if isinstance(it, dict):
+                        it.setdefault("source", "eastmoney_hot")
+                        out.append(it)
+            except Exception:
+                pass
+            return out
+        except Exception as e:
+            logger.warning("[OpenCLI] get_social_sentiment 失败 code=%s: %s", code, e)
+            return []
+
     # -------------------- BaseAdapter抽象方法占位 --------------------
     # OpenCLI 主职责是爬取/热榜，K线/财务/指数成分非其能力范围，
     # 统一返回空对象以满足抽象接口契约，供 fallback_manager 跳过。

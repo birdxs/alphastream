@@ -154,6 +154,15 @@ class ESGAdapter(BaseAdapter):
 
     # ============================ 核心方法 ============================
 
+    # Registry 别名 (I1): domain=esg_rating → method=get_esg_rating
+    def get_esg_rating(self, code: Optional[str] = None, ticker: Optional[str] = None,
+                       source: str = "esgbook", **kwargs) -> dict:
+        """Registry契约别名 — 等价 get_esg_score; 兼容 code/ticker 两种入参键。"""
+        sym = ticker or code or kwargs.get("symbol")
+        if not sym:
+            return self._empty_score_result(source, "")
+        return self.get_esg_score(ticker=str(sym), source=source)
+
     def get_esg_score(self, ticker: str, source: str = "esgbook") -> dict:
         """统一入口：拉取单只股票 ESG 评分。
 

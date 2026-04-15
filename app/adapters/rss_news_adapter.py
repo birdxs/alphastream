@@ -273,3 +273,37 @@ class RSSNewsAdapter(BaseAdapter):
 
         mask = df.apply(_hit, axis=1)
         return df[mask].reset_index(drop=True)
+
+    # ============================ Registry 别名 (I1) ============================
+    # domain="news" → agent 调用统一 method "get_latest_news"
+    # 签名对齐 app/agents/*.py _registry_fetch('news','get_latest_news', code=..., days=..., limit=...)
+    def get_latest_news(
+        self,
+        code: Optional[str] = None,
+        days: int = 7,
+        limit: int = 20,
+        sources: Optional[List[str]] = None,
+        **kwargs,
+    ) -> List[Dict]:
+        """统一新闻入口 — Registry domain=news.get_latest_news 契约。
+
+        Args:
+            code: 个股代码 (可选) — 有则做关键词过滤
+            days: 时间窗 (目前仅作为提示, RSS源已是近期)
+            limit: 返回上限
+            sources: 限定源; None=全部
+        Returns:
+            List[Dict] (records格式); 空降级 []
+        """
+        try:
+            if code:
+                df = self.search_news(keyword=str(code), sources=sources, limit_per_source=limit)
+            else:
+                df = self.get_all_feeds(sources=sources, limit_per_source=limit)
+            if df is None or df.empty:
+                return []
+            df = df.head(int(max(1, limit)))
+            return df.to_dict(orient="records")
+        except Exception as e:
+            logger.warning("[RSSNews] get_latest_news 失败 code=%s: %s", code, e)
+            return []
