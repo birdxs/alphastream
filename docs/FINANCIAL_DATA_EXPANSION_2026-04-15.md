@@ -3969,3 +3969,99 @@ React StrictMode updater 必须是纯函数，任何对 `useRef.current` / 外�
 
 ### 教训
 前端 sidebar 之类"旁挂"列表组件必须通过全局 store 的显式信号订阅刷新，不能依赖 mount-only effect；只要主流程修改了后端可见的数据，就必须同步递增 refresh 信号，否则 UI 与实际状态永远漂移。
+
+---
+
+## Q4 Agent+A2A审查 [21:21]
+
+**时间**: 2026-04-15 21:21 +08:00
+**审查对象**: 14 AI agents + LangGraph A2A 协作
+**执行证据**: `/tmp/backend.log` L71-L223 (688111 depth=3, 21:06:03→21:10:25, 耗时 262s)
+**详细报告**: `logs/agent_audit_2026-04-15.md`
+
+### 执行矩阵 (depth触发表)
+
+| Agent | d=1 | d=2 | d=3 | d=4 | d=5 | d=3 实测 |
+|---|:-:|:-:|:-:|:-:|:-:|---|
+| technical          | ✓ | ✓ | ✓ | ✓ | ✓ | OK |
+| fundamental        | ✗ | ✓ | ✓ | ✓ | ✓ | OK (并行) |
+| capital_flow       | ✗ | ✓ | ✓ | ✓ | ✓ | OK (并行) |
+| sentiment          | ✗ | ✗ | ✓ | ✓ | ✓ | OK (registry降级) |
+| bull_researcher    | ✗ | ✗ | ✗ | ✓ | ✓ | — |
+| bear_researcher    | ✗ | ✗ | ✗ | ✓ | ✓ | — |
+| risk_manager       | ✗ | ✗ | ✗ | ✗ | ✓ | — |
+| investors(×4)      | ✗ | ✗ | ✗ | ✗ | ✓ | — |
+| decision_maker     | ✓ | ✓ | ✓ | ✓ | ✓ | OK |
+| reflection         | ✓ | ✓ | ✓ | ✓ | ✓ | OK |
+
+14 agent 全部可达, 无孤儿 (StrategyEvolver/HITL 为正交切面).
+
+### A2A 协作点
+
+| 协作点 | 机制 | EventBus | 状态 |
+|---|---|---|---|
+| tech→(fund∥cap) fan-out | LangGraph reducer | ✓ | OK |
+| (fund+cap)→sentiment fan-in | LangGraph join | ✓ | OK |
+| bull∥bear 并行辩论 (d≥4) | fan-out + state share | ✓ | **伪辩论 P1** |
+| bull/bear→risk(d5)/decision(d4) fan-in | LangGraph join | ✓ | OK |
+| risk→investor_coordinator (d5) | 串行 + AI综合研判 | 主节点✓/子人格✗ | **子可观测性缺 P3** |
+| decision 综合全分析 + registry 聚合 | 读 state + AdapterRegistry | ✓ | OK (3域降级) |
+| reflection→跨会话 feedback | 写 reflection.json + strategy_evolver 注入 system | 无 step.done | OK (跨会话非同轮) |
+
+### 关键发现 (问题清单)
+
+- **P0**: 无
+- **P1 伪辩论**: bull/bear 并行 fan-out, bear 的 prompt 引用 `state['bull_case']`, 并行启动时为 `None` → bear 退化为"独立看空", 未构成反驳
+- **P2 事件常量闲置**: `EVENT_APPROVAL_NEEDED` / `EVENT_RISK_ALERT` 在 event_bus.py L113-114 定义但全代码库无 publish 调用 → Comdr 前端看不到 HITL / 风险告警
+- **P3 投资者人格不可观测**: investor_coordinator for 循环调 4 人格, 子 agent 未经 `_wrap_with_events` 包装, d=5 时终端静默 30-60s
+- **P4 registry 多域降级**: 实测 news/sentiment_social/shipping/corporate/hiring/esg 全 domain tried=[...] 失败, 主决策仍产出 (空上下文降级符合设计)
+- **P5 debate_summary 悬空**: state 字段定义但无 agent 写入
+
+### 本轮动作
+
+- 仅产出审计报告 (非 P0)
+- P1/P2/P3 列入下阶段 backlog
+- **本轮无代码改动**, 仅文档
+
+---
+
+## Q3 Dashboard契约审计 [21:21]
+
+- 时间基准: 2026-04-15 21:21 +08:00
+- 范围: `frontend/src/app/dashboard/page.tsx` 全部卡片
+- 方法: 静态审查 + curl 127.0.0.1:8888 实测
+- 完整审计报告: `logs/contract_audit_2026-04-15.md` (本地留证)
+
+### 审计表
+
+| # | 卡片 | API | 前端期望 | 后端实际 | 状态 |
+|---|------|-----|---------|---------|------|
+| 1 | 市场概览 | `/api/market_indices` | `{indices:[...]}` | `{indices:[...]}` | ✅ OK |
+| 2 | AI 入口 | 纯前端 | - | - | ✅ OK |
+| 3 | 今日关注 | watchlist-store | - | - | ✅ OK |
+| 4A | 自选股名称 | `/api/stock_name` | `{stock_name}` | `{stock_code, stock_name}` | ✅ OK |
+| 4B | 自选股价格 | `/api/stock_data?period=1m` | `{data:{close[], change_pct[]}}` **列存储** | `{data:[{close, ...}]}` **行存储** | ❌ **P0 修复** |
+| 5A | 新闻判空 | `/api/latest_news` | `{success, news}` | `{success, news}` | ✅ OK |
+| 5B | 新闻 title | `item.title` | 多数为空串, 实际在 `content` | - | ❌ **P0 修复** |
+| 5C | 新闻时间 | `item.publish_time` | 字段不存在, 实际 `datetime` | - | ❌ **P0 修复** |
+| 6A | 持仓名称 | `useStockNames` | `{stock_name}` | `{stock_name}` | ✅ OK |
+| 6B | 持仓价格 | `useStockPrices` | 行存储 | 行存储 | ✅ OK |
+
+### 已修 P0 清单
+
+1. **自选股价格** — `fetchWatchQuotes` 列存储解构 → 行存储末两行 diff 计算 `change_pct`。`dashboard/page.tsx:175-210`
+2. **新闻 title 空** — 渲染处改 `item.title?.trim() || item.content?.slice(0, 60)`。`dashboard/page.tsx:~641`
+3. **新闻时间字段** — NewsItem 类型补 `datetime?`, 渲染 `item.datetime || item.publish_time`。`dashboard/page.tsx:47, ~651`
+
+### P1 / P2 遗留 TODO (不修)
+
+- **P1-a** 后端 `/api/latest_news` 若 `title` 空, 应从 content 首句回填 — 上游治理。
+- **P1-b** `fetchWatchQuotes` 与 `useStockPrices` 逻辑重叠, 建议后续 DEDUP。
+- **P2-a** `/api/stock_data` 响应不含 `stock_name`, 前端兜底分支为死代码。
+- **P2-b** `/api/latest_news` 字段杂乱(date/time/datetime/fetch_time), 建议统一 ISO8601。
+- **P2-c** 新闻 item 无 `source` 字段, 前端 `item.source && ...` 永远 false。
+
+### 验证
+
+- `npx tsc --noEmit` 通过 (0 错误)
+- 四个端点 curl 采样记录于 `logs/contract_audit_2026-04-15.md` §1
