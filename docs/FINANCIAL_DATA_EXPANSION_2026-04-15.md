@@ -4065,3 +4065,77 @@ React StrictMode updater 必须是纯函数，任何对 `useRef.current` / 外�
 
 - `npx tsc --noEmit` 通过 (0 错误)
 - 四个端点 curl 采样记录于 `logs/contract_audit_2026-04-15.md` §1
+
+---
+
+## R2 bull/bear串行辩论 + debate_summary [21:40]
+
+**任务**: Q4审计发现 P1+P5 修复 — bull/bear并行导致 bear 读不到 bull_case 退化为独立看空; debate_summary 字段无 agent 写入。
+
+### 改动点
+
+1. **`app/agents/coordinator.py`**
+   - 新增内联 `_summarize_debate(state)` helper(不新建agent文件, 走 `_wrap_with_events` 发射事件)
+   - 图编排 `research_depth>=4` 分支: **并行 → 串行**
+
+2. **`app/agents/bear_researcher.py`**
+   - prompt 增加**反驳式 rebuttal_section**: 当 `state['bull_case']` 存在时, 强制逐条反驳多方最强论点
+   - 维度列表首项由"核心风险"改为"对多方观点的针对性反驳"
+
+3. **`app/agents/decision_maker.py`**
+   - reports 构建中新增 `【辩论综合】{state['debate_summary'][:500]}` 注入决策 prompt
+
+4. **`tests/agents/test_debate_summary.py`** [NEW-FILE:#20260415-R2]
+   - 4 cases: 双方置信度强弱 / 空输入 / 串行图 edges 断言
+   - 本地运行: **4 passed in 0.20s**
+
+### Graph before/after 对比
+
+**Before (并行 fan-out, depth>=4)**:
+```
+sentiment ──┬──> bull ──┐
+            └──> bear ──┴──> decision
+```
+问题: bear 启动时 `state['bull_case']=None`, 退化为独立看空。
+
+**After (串行 + debate_summary, depth>=4)**:
+```
+sentiment ──> bull ──> bear ──> debate_summary ──> decision (depth=4)
+                                              ──> risk ──> ... (depth>=5)
+```
+
+### Bear 新 prompt 反驳示例 (rebuttal_section 注入)
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【必读·多方观点原文】(你必须针对以下具体论点逐条反驳)
+<state['bull_case'] 前1200字>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**反驳要求** (极重要):
+- 你不是独立看空, 而是在与上述多方辩论
+- 必须先识别多方的 3 个最强论点, 然后逐条给出反驳证据
+- 反驳格式示例: "多方称XX利好, 但忽视了YY事实/数据, 因此该论点不成立"
+- 禁止无视多方论点另起炉灶; 禁止笼统反对不给具体证据
+```
+
+### debate_summary 字段示例 (合成后)
+
+```
+【多方主论点】核心买入逻辑: A公司Q3营收增速40%。看多置信度: 高, 理由充分。
+【空方主论点】应收账款增速异常。看空置信度: 中, 证据有限。
+【多方置信度】高
+【空方置信度】中
+【综合研判】多方论据更充分, 综合倾向看多
+```
+
+### 验证
+
+- `pytest tests/agents/test_debate_summary.py -v` → **4 passed**
+- Python 语法检查: coordinator/bear_researcher/decision_maker 全通过
+- 不启服务, 仅单元层验证
+
+### Commit
+- `feat(agent): R2 bull/bear串行辩论 + debate_summary moderator节点`
+- `feat(agent): bear_researcher 引用bull_case反驳式prompt`
+- `docs(data): R2追溯 [NEW-FILE:#20260415-R2]`
