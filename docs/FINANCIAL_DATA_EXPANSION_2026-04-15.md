@@ -1950,3 +1950,41 @@ python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_e
 ### 未触碰 (本 G2 作战范围外)
 - adapter 内部降级逻辑保持不变 (空 DF 本就是契约, registry 判定空为无效是合理的)
 - 其他 P3 端点 (esg/satellite) 保持原有行为
+
+---
+
+## 🏁 Phase-4 (F+G) 总验收 (2026-04-15 13:55 +08:00)
+
+### F+G批 (依赖+契约+冗余收敛+端到端)
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| F1 | Ashare/openbb/opencli补装+smoke v2 | `1e3cd59`+`6a32091`+`30f77a8` | pytest 340 PASS |
+| F2 | 5 wrap_*_v2 对齐前端DEMO_DATA | `3952c3d`+`1c5d8f5` | 18 PASS |
+| F3 | 10 Flask P3 REST API端点 | `c1425d7`+`2c650c9` | 20 PASS |
+| F4 | [DEDUP]收敛v2唯一实现, 删93行 | `56e24a8`+`23349ac` | 38 PASS |
+| G1 | 端到端全方针验证(真后端curl) | `75c6441` | 378 PASS, 10端点5🟢5🔴 |
+| G2 | 批修5 bug→软降级契约 | `c638bb2`+`5c18e71`+`048eb27` | 384 PASS, 10/10 🟢 |
+
+### 最终战果
+- **pytest 384 PASS / 0 FAIL / 0 ERROR**
+- **10/10 P3 API端点 HTTP 200** (真后端curl验证)
+- **3 现有核心端点** 全绿无回归
+- **[DEDUP]** 冗余彻底清理 v2单一实现
+- **软降级契约** 升级: 空数据 200+success:true+空artifact (前端友好)
+
+### 累计总战果 (P0+P1+P2+Phase-2+Phase-3+Phase-4)
+- **21 Python adapter + 1 Registry + 3 JS爬虫 + 5 前端Artifact**
+- **10 P3 API端点 Flask暴露**
+- **16 业务域 Registry** / **12 Agent接入**
+- **55+ commits** 入main
+- **384 pytest PASS + 242真跑**
+
+### 前后端数据对齐确认 ✅
+- 10 P3端点 × 5 前端Artifact组件 字段契约一一对齐 (v2为唯一实现)
+- E4 TSX interface = F2 wrap_v2输出 = G2 API响应
+- 软降级契约统一, 真网络失败前端展示空态而非崩溃
+
+### 遗留非阻塞 (Comdr可选后续)
+- FRED_API_KEY / OPENCORPORATES_API_KEY 手动申请 (免费)
+- Yahoo/Binance地区限流 (非代码问题)
+- Ashare/OpenBB 运行时上游限流
