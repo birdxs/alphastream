@@ -321,3 +321,107 @@ ccxt.binance().fetch_ohlcv('BTC/USDT', '1d')
 
 **Commit Hash**：见 git log（commit1: 代码落盘；commit2: 本追溯文档）
 
+---
+
+### A3 yfinance [2026-04-15]
+
+**时间基准**：2026-04-15 11:30 +08:00（Asia/Singapore）
+
+**权威源交叉验证（≥3独立源）**：
+
+| # | 来源 | URL | 版本/参考 | 检索时间 | 采纳结论 |
+|---|---|---|---|---|---|
+| 1 | yfinance 主仓 README | https://github.com/ranaroussi/yfinance | main (Apache-2.0) | 2026-04-15 11:30 +08:00 | 采纳 `yf.Ticker(symbol)` 入口；`history(period, interval, start, end, auto_adjust)` 为K线标准签名 |
+| 2 | yfinance API 文档 | https://ranaroussi.github.io/yfinance/ | v0.2+ | 2026-04-15 11:30 +08:00 | 采纳 `Ticker.info` / `income_stmt` / `balance_sheet` / `cashflow` / `options` / `option_chain(date)` 属性与方法 |
+| 3 | PyPI yfinance 发布页 | https://pypi.org/project/yfinance/ | 2026-04 最新 | 2026-04-15 11:30 +08:00 | 确认 Apache-2.0 许可，依赖 pandas/requests/beautifulsoup4，无需 API Key |
+| 4 | Yahoo Finance 符号规则 | https://help.yahoo.com/kb/finance-for-web/SLN2310.html | 现行 | 2026-04-15 11:30 +08:00 | 采纳后缀规则：`.SS`(沪) `.SZ`(深) `.HK`(港，4位补零) `.T`(日) `.L`(伦) 美股/ETF 原样 |
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/yfinance_adapter.py` | 新建 | [NEW-FILE:#20260415-05] |
+| `tests/adapters/test_yfinance_adapter.py` | 新建 | 测试 |
+| `app/adapters/README.md` | 修改 | 文件清单追加 |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 修改 | 本章节追加 |
+
+**关键设计决策**：
+
+1. **软依赖**：`try: import yfinance` 失败时 `_YF_AVAILABLE=False`，所有方法降级返回空结构 + `log.warning`，不阻断主流程（对齐 §七 回滚策略）
+2. **符号归一化**：`normalize_symbol(code, market)` 统一入口；`auto` 模式依字符特征推断（6位全数→A股；≤5位数→港股；其他→美股）；已含后缀原样透传
+3. **契约对齐**：继承 `BaseAdapter`，`get_stock_history` 兼容 A股6位代码 + `20240101/2024-01-01` 两种日期格式；`get_index_stocks` 显式不支持（由 akshare/baostock 承担）
+4. **财务三表**：`income_stmt/balance_sheet/cashflow` 分子表 try/except，单表失败不拖累其他表
+5. **期权链**：`expiry=None` 自动取最近一期；非法 expiry 自动降级到首个可用日期
+6. **Amount字段**：yfinance 原始无成交额，用 `close*volume` 近似以兼容 A股DataFrame schema
+
+**测试覆盖**：
+- `TestNormalizeSymbol` — 7个case覆盖沪/深/港(auto+显式)/美/日/已后缀/空
+- `TestGetKline` — 正常/未安装降级/非法period降级
+- `TestMisc` — info/financials三表/options_chain/options未安装/health_check
+
+**Commit Hash**：见 git log（commit1: 代码落盘；commit2: 本追溯文档）
+
+
+---
+
+### A4 SEC EDGAR [2026-04-15]
+
+**任务**：P0-A4 — SEC EDGAR 官方 XBRL 适配器（美股10-K/10-Q/13F 标准财报）
+**时间基准**：2026-04-15 11:30 +08:00 (Asia/Singapore)
+**执行者**：agent team (A4) / 验收：🌿 香草少校
+
+**联网调研（≥3 权威源交叉验证）**：
+
+| # | 来源 | URL | 版本/日期 | 采纳 |
+|---|------|-----|---------|------|
+| 1 | SEC EDGAR 官方 API 文档 | https://www.sec.gov/edgar/sec-api-documentation | 官方现行 | 端点结构 / UA 规范 |
+| 2 | SEC Fair Access Policy | https://www.sec.gov/os/accessing-edgar-data | 官方现行 | 10 req/s 硬上限 |
+| 3 | company_tickers.json 规范 | https://www.sec.gov/files/company_tickers.json | 实时 | ticker→CIK 映射结构 |
+| 4 | data.sec.gov XBRL endpoints | `/submissions/CIK{cik10}.json`, `/api/xbrl/companyfacts/CIK{cik10}.json`, `/api/xbrl/companyconcept/CIK{cik10}/{taxonomy}/{tag}.json` | 官方 | 核心端点 |
+
+**关键约束（均已在代码中强制）**：
+
+1. **User-Agent 必填**，格式 `CompanyName ContactEmail`；缺失/格式不合规 → SEC 返回 403。代码中从 env `SEC_EDGAR_UA` 读，默认兜底 `"StockAnalSys research@example.com"`。
+2. **Rate Limit ≤ 10 req/s**：`_throttle()` 用线程锁 + 最小间隔 `0.11s`；`429` 触发 2s 退避。
+3. **CIK padding**：所有 `CIK{n}` 路径均以 `_pad_cik()` 左填零到 10 位（`320193 → 0000320193`）。
+
+**落盘文件清单**：
+
+| 路径 | 类型 | 标签 |
+|---|---|---|
+| `app/adapters/edgar_adapter.py` | 新建 | [NEW-FILE:#20260415-06] |
+| `tests/adapters/test_edgar_adapter.py` | 新建 | — (测试文件) |
+| `docs/FINANCIAL_DATA_EXPANSION_2026-04-15.md` | 修改 | 本章节追加 |
+
+**对外接口**：
+
+- `EDGARAdapter(user_agent=None, timeout=20)` — 强制 UA（`SEC_EDGAR_UA` env 可覆盖）
+- `get_ticker_cik_map(force_refresh=False) -> dict` — 24h TTL 内存缓存
+- `get_cik(ticker) -> str` — ticker → 10 位 padded CIK
+- `get_submissions(cik) -> dict` — 公司申报历史
+- `get_company_facts(cik) -> dict` — 全 XBRL facts
+- `get_concept(cik, tag, taxonomy="us-gaap") -> dict` — 单指标时间序列
+- `get_revenue_series(ticker) -> pd.DataFrame` — 便捷封装，`Revenues` → `RevenueFromContractWithCustomerExcludingAssessedTax` → `SalesRevenueNet` 三级回落
+- `health_check()` / `name="sec_edgar"` — 接入 `fallback_manager`
+
+**三重验证**：
+
+- 单元：`pytest tests/adapters/test_edgar_adapter.py -v` → **18 passed**
+  - CIK padding × 3：short / padded / CIK前缀
+  - UA × 3：默认 / env / 参数显式
+  - 限流 × 2：最小间隔 / 429 退避
+  - 端点 × 6：ticker_map 缓存 / get_cik / submissions URL / facts URL / concept URL / revenue_series（含 fallback tag）
+  - Base 接口兼容 × 4
+- 集成：`fallback_manager` 可按 `health_check()` 判活（代码路径与既有 `opencli_bridge` 对齐）
+- 端到端：**不发真实网络请求**（作战指令要求），mock 验证 URL 精确到字符级
+
+**Git 提交**：
+- commit1: `feat(adapter): SEC EDGAR官方XBRL财报(10/s限流+UA规范) [NEW-FILE:#20260415-06]`
+- commit2: `docs(data): P0-A4追溯`
+
+**关键设计决策**：
+
+1. **限流在适配器内部**：不依赖外部 middleware，保证任何调用路径（Agent/CLI/测试）都遵守 10 req/s
+2. **UA 三级覆盖**：构造参数 > env `SEC_EDGAR_UA` > 默认兜底；并做 `' ' in ua and '@' in ua` 格式预警
+3. **revenue tag 回落**：美股 XBRL 不同公司使用的营收 tag 不一致（老 `Revenues` vs ASC 606 后 `RevenueFromContractWithCustomerExcludingAssessedTax`），三级回落保证覆盖率
+4. **抽象方法占位**：EDGAR 不提供 K 线/行情/指数成分，`get_stock_history` 等返回空对象，供 `fallback_manager` 跳过而非抛错
