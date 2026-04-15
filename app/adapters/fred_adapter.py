@@ -20,7 +20,7 @@ Pos: app/adapters层，宏观数据源(St. Louis Fed 80万+序列)；供宏观Ag
 """
 import os
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -208,6 +208,37 @@ class FREDAdapter(BaseAdapter):
         out: Dict[str, pd.DataFrame] = {}
         for key, sid in self.COMMON_INDICATORS.items():
             out[key] = self.get_series(sid)
+        return out
+
+    def get_macro_indicators(
+        self,
+        indicators: Optional[List[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> Dict[str, pd.DataFrame]:
+        """J1 [NEW-FILE:#20260415-43] 宏观指标 alias — agent 统一入口。
+
+        Args:
+            indicators: FRED series_id 列表或 COMMON_INDICATORS 的中文key；
+                        None→ 返回全部 COMMON_INDICATORS
+            start/end:  日期范围
+
+        Returns:
+            Dict[key, DataFrame(date,value,series_id)]；
+            某个指标失败不影响其他；全失败返回空 dict。
+        """
+        if self._client is None:
+            return {}
+        if not indicators:
+            # 不带参 → 复用 get_common_indicators 语义
+            return self.get_common_indicators()
+        out: Dict[str, pd.DataFrame] = {}
+        for ind in indicators:
+            # 支持中文key → series_id 映射
+            sid = self.COMMON_INDICATORS.get(ind, ind)
+            df = self.get_series(sid, start=start, end=end)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                out[ind] = df
         return out
 
     # ====================== BaseAdapter 抽象方法占位 ======================

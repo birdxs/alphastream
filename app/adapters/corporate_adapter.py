@@ -181,6 +181,20 @@ class CorporateAdapter(BaseAdapter):
             })
         return pd.DataFrame(rows)
 
+    def search_entity(
+        self,
+        query: str,
+        jurisdiction: Optional[str] = None,
+        per_page: int = 30,
+    ) -> pd.DataFrame:
+        """J1 [NEW-FILE:#20260415-43] 公司实体搜索 alias — 转发 search_company。
+
+        agent 端统一以 search_entity 语义命名，内部走 OpenCorporates /companies/search。
+        """
+        return self.search_company(
+            name=query, jurisdiction=jurisdiction, per_page=per_page
+        )
+
     def get_company_details(self, company_id: str) -> dict:
         """公司详情
 

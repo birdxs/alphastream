@@ -167,6 +167,34 @@ class EasyquotationAdapter(BaseAdapter):
             result = {k: v for k, v in result.items() if str(k) in codes_set}
         return result
 
+    # ---------- J1 alias: 个股资金流 ----------
+    def get_individual_fund_flow(self, code: str) -> pd.DataFrame:
+        """J1 [NEW-FILE:#20260415-43] 个股资金流 alias。
+
+        easyquotation 无原生资金流接口；此处从 get_realtime 重组
+        关键字段 (price/now/volume/amount/change) 为单行 DataFrame，
+        保证 registry 能取到非空结果。
+        """
+        if not _EQ_AVAILABLE or self._client is None:
+            return pd.DataFrame()
+        try:
+            data = self.get_realtime([str(code)])
+            if not isinstance(data, dict) or str(code) not in data:
+                return pd.DataFrame()
+            row = data[str(code)]
+            if not isinstance(row, dict) or not row:
+                return pd.DataFrame()
+            # 统一列名：code + 主要字段
+            flat = {"code": str(code)}
+            for k in ("name", "now", "price", "open", "close", "high", "low",
+                      "volume", "amount", "turnover"):
+                if k in row:
+                    flat[k] = row[k]
+            return pd.DataFrame([flat])
+        except Exception as e:
+            logger.warning(f"[EasyquotationAdapter] get_individual_fund_flow({code}) 失败: {type(e).__name__}: {e}")
+            return pd.DataFrame()
+
     # ---------- BaseAdapter 抽象方法实现 ----------
 
     def get_stock_history(self, code: str, start_date: str, end_date: str,

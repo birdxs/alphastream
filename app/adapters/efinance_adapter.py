@@ -244,6 +244,37 @@ class EfinanceAdapter(BaseAdapter):
             logger.warning(f"efinance实时行情失败: {type(e).__name__}: {e}")
             return pd.DataFrame()
 
+    # ---------- J1 alias: 个股资金流 ----------
+    def get_individual_fund_flow(self, code: str) -> pd.DataFrame:
+        """J1 [NEW-FILE:#20260415-43] 个股资金流 alias。
+
+        策略:
+          1) efinance 优先使用 stock.get_today_bill(code) (官方个股分时资金接口)
+          2) 失败则从实时行情重组主要字段(price/change/amount)供降级
+
+        Returns:
+            pd.DataFrame — 资金流数据或实时快照降级DF。
+        """
+        if not _EF_AVAILABLE:
+            return pd.DataFrame()
+        # 1) 官方真实接口
+        try:
+            get_bill = getattr(ef.stock, "get_today_bill", None)
+            if callable(get_bill):
+                df = get_bill(str(code))
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    return df
+        except Exception as e:
+            logger.info(f"[EfinanceAdapter] get_today_bill({code}) 不可用: {type(e).__name__}: {e}")
+        # 2) 实时快照降级
+        try:
+            df = self.get_realtime_quotes(codes=[code])
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                return df
+        except Exception as e:
+            logger.warning(f"[EfinanceAdapter] get_individual_fund_flow 降级失败: {type(e).__name__}: {e}")
+        return pd.DataFrame()
+
     # ---------- 工具方法 ----------
 
     @staticmethod

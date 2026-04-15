@@ -1,15 +1,15 @@
 # Adapter 真网络冒烟报告
 
-- 发起：2026-04-15 13:11:42 +08:00
-- 完成：2026-04-15 13:13:15 +08:00
+- 发起：2026-04-15 14:19:29 +08:00
+- 完成：2026-04-15 14:20:28 +08:00
 - 被测数量：22
 
 ## 汇总统计
 
 | 状态 | 数量 | 说明 |
 |------|------|------|
-| 🟢 PASS | 11 | 真拉到数据 (rows ≥ 1) |
-| 🟡 DEGRADED | 10 | 调用成功但返回空 (软降级) |
+| 🟢 PASS | 10 | 真拉到数据 (rows ≥ 1) |
+| 🟡 DEGRADED | 11 | 调用成功但返回空 (软降级) |
 | 🔴 FAIL | 0 | 抛异常 |
 | ⚫ SKIPPED | 1 | 超时 / 依赖缺失 / 无 Key |
 
@@ -30,7 +30,7 @@
 | 11 | CoinGeckoAdapter | `get_price([bitcoin])` | 🟢 PASS | rows=1 |  |
 | 12 | OpenCLIBridge | `get_eastmoney_hot_rank` | 🟡 DEGRADED | empty (rows=0) |  |
 | 13 | EasyquotationAdapter | `get_realtime([sh600519])` | 🟢 PASS | rows=1 |  |
-| 14 | AshareAdapter | `get_price(sh600519,1d,5)` | 🟢 PASS | rows=5 |  |
+| 14 | AshareAdapter | `get_price(sh600519,1d,5)` | 🟡 DEGRADED | empty (rows=0) |  |
 | 15 | RSSNewsAdapter | `get_feed(sina_finance,limit=5)` | 🟡 DEGRADED | empty (rows=0) |  |
 | 16 | CorporateAdapter | `search_company(Apple)` | 🟡 DEGRADED | empty (rows=0) |  |
 | 17 | JobsAdapter | `search_jobs(python,limit=5)` | 🟢 PASS | rows=5 |  |

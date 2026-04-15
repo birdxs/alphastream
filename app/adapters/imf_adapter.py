@@ -197,6 +197,42 @@ class IMFAdapter(BaseAdapter):
         url = f"{self.BASE_URL}/DataStructure/{dataset_id}"
         return self._get_json(url) or {}
 
+    # IMF IFS 常用指标
+    COMMON_INDICATORS: Dict[str, str] = {
+        "CPI": "PCPI_IX",
+        "PolicyRate": "FPOLM_PA",
+        "ExchangeRate": "ENDA_XDC_USD_RATE",
+        "CurrentAccount": "BCA_BP6_USD",
+    }
+
+    def get_macro_indicators(
+        self,
+        indicators: Optional[List[str]] = None,
+        country: str = "US",
+        freq: str = "A",
+    ) -> Dict[str, pd.DataFrame]:
+        """J1 [NEW-FILE:#20260415-43] 全球宏观指标 alias — IMF IFS 降级源。
+
+        Args:
+            indicators: COMMON_INDICATORS key 或 IFS 指标代码列表；None→ 全部
+            country: ISO2 国家码
+            freq: 频率 A/Q/M
+
+        Returns:
+            Dict[key, DataFrame]；失败的 key 跳过。
+        """
+        keys = indicators or list(self.COMMON_INDICATORS.keys())
+        out: Dict[str, pd.DataFrame] = {}
+        for k in keys:
+            code = self.COMMON_INDICATORS.get(k, k)
+            try:
+                df = self.get_ifs(code, country, freq=freq)
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    out[k] = df
+            except Exception as e:
+                logger.warning(f"[IMFAdapter] get_macro_indicators({k}) 失败: {type(e).__name__}: {e}")
+        return out
+
     # ------------------------- Base 抽象方法 -------------------------
 
     def get_stock_history(

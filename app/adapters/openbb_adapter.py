@@ -203,6 +203,34 @@ class OpenBBAdapter(BaseAdapter):
             logger.warning(f"openbb get_economy_indicator失败(indicator={indicator}): {type(e).__name__}: {e}")
             return pd.DataFrame()
 
+    def get_macro_indicators(
+        self,
+        indicators: Optional[List[str]] = None,
+        provider: str = "fred",
+    ) -> Dict[str, pd.DataFrame]:
+        """J1 [NEW-FILE:#20260415-43] 宏观指标 alias — agent 统一入口。
+
+        循环调用 get_economy_indicator 对 indicators 逐个拉取。
+
+        Args:
+            indicators: 指标列表 (gdp/cpi/unemployment 或 FRED series_id)；
+                        None→ 默认 ["gdp","cpi","unemployment"]
+            provider: 下游provider (fred/oecd)
+
+        Returns:
+            Dict[indicator, DataFrame]；失败跳过，全失败返回空 dict。
+        """
+        keys = indicators or ["gdp", "cpi", "unemployment"]
+        out: Dict[str, pd.DataFrame] = {}
+        for k in keys:
+            try:
+                df = self.get_economy_indicator(k, provider=provider)
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    out[k] = df
+            except Exception as e:
+                logger.warning(f"[OpenBBAdapter] get_macro_indicators({k}) 失败: {type(e).__name__}: {e}")
+        return out
+
     # ==================== BaseAdapter契约 ====================
     def get_stock_history(self, code: str, start_date: str, end_date: str,
                           adjust: str = "qfq") -> pd.DataFrame:

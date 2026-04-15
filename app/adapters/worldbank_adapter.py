@@ -206,6 +206,46 @@ class WorldBankAdapter(BaseAdapter):
         ).reset_index(drop=True)
         return df
 
+    # 常用全球宏观指标（WorldBank 代码）
+    COMMON_INDICATORS: Dict[str, str] = {
+        "GDP": "NY.GDP.MKTP.CD",
+        "GDPGrowth": "NY.GDP.MKTP.KD.ZG",
+        "CPI": "FP.CPI.TOTL.ZG",
+        "Unemployment": "SL.UEM.TOTL.ZS",
+        "Population": "SP.POP.TOTL",
+        "FDI": "BX.KLT.DINV.CD.WD",
+    }
+
+    def get_macro_indicators(
+        self,
+        indicators: Optional[List[str]] = None,
+        country: str = "WLD",
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+    ) -> Dict[str, pd.DataFrame]:
+        """J1 [NEW-FILE:#20260415-43] 全球宏观指标 alias — agent 统一入口。
+
+        Args:
+            indicators: 支持 COMMON_INDICATORS 键名或 WorldBank 原生代码列表；
+                        None→ 返回全部 COMMON_INDICATORS
+            country: ISO2/ISO3 国家码，默认 "WLD"(世界)
+            start/end: 起止年份
+
+        Returns:
+            Dict[key, DataFrame]；失败的 key 跳过；全失败返回空 dict。
+        """
+        keys = indicators or list(self.COMMON_INDICATORS.keys())
+        out: Dict[str, pd.DataFrame] = {}
+        for k in keys:
+            code = self.COMMON_INDICATORS.get(k, k)
+            try:
+                df = self.get_indicator(country, code, start=start, end=end)
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    out[k] = df
+            except Exception as e:
+                logger.warning(f"[WorldBankAdapter] get_macro_indicators({k}) 失败: {type(e).__name__}: {e}")
+        return out
+
     # ------------------------- Base 抽象方法 -------------------------
 
     def get_stock_history(

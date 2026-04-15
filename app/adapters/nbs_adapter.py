@@ -155,6 +155,38 @@ class NBSAdapter(BaseAdapter):
             df["freq"] = "monthly"
         return df
 
+    def get_macro_indicators(
+        self, indicators: Optional[List[str]] = None
+    ) -> Dict[str, pd.DataFrame]:
+        """J1 [NEW-FILE:#20260415-43] 中国宏观指标 alias — agent 统一入口。
+
+        Args:
+            indicators: 可选列表，支持 "GDP"/"CPI"/"PMI"/"IndustrialOutput"；
+                        None→ 返回全部四项。
+
+        Returns:
+            Dict[key, DataFrame]；失败的 key 跳过，全失败返回空 dict。
+        """
+        mapping = {
+            "GDP": self.get_gdp,
+            "CPI": self.get_cpi,
+            "PMI": self.get_pmi,
+            "IndustrialOutput": self.get_industrial_output,
+        }
+        keys = indicators or list(mapping.keys())
+        out: Dict[str, pd.DataFrame] = {}
+        for k in keys:
+            fn = mapping.get(k)
+            if fn is None:
+                continue
+            try:
+                df = fn()
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    out[k] = df
+            except Exception as e:
+                logger.warning(f"[NBSAdapter] get_macro_indicators({k}) 失败: {type(e).__name__}: {e}")
+        return out
+
     # ---------- BaseAdapter 抽象方法 (宏观源不提供个股) ----------
 
     def get_stock_history(self, code, start_date, end_date, adjust="qfq") -> pd.DataFrame:

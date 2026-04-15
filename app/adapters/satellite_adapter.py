@@ -122,6 +122,20 @@ class SatelliteAdapter(BaseAdapter):
             logger.warning(f"CMR collections 解析异常: {type(ex).__name__}: {ex}")
             return []
 
+    # ---------- J1 alias ----------
+    def search_collections(self, keyword: str,
+                           bbox: Optional[Tuple[float, float, float, float]] = None,
+                           start: Optional[str] = None,
+                           end: Optional[str] = None,
+                           page_size: int = 20) -> List[Dict]:
+        """J1 [NEW-FILE:#20260415-43] 对地观测集合搜索 alias — 转发 search_datasets。
+
+        agent 端统一以 search_collections 命名 (与 NASA CMR /collections.json 端点语义一致)。
+        """
+        return self.search_datasets(
+            keyword=keyword, bbox=bbox, start=start, end=end, page_size=page_size
+        )
+
     # ==================== 单集合元数据 ====================
 
     def get_collection_metadata(self, collection_id: str) -> Dict:

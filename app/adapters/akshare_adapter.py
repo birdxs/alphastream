@@ -257,6 +257,22 @@ class AkshareAdapter(BaseAdapter):
             logger.warning(f"获取资金流向失败(code={code}): {type(e).__name__}: {e}")
         return {}
 
+    def get_individual_fund_flow(self, code: str) -> pd.DataFrame:
+        """J1 [NEW-FILE:#20260415-43] 个股资金流 alias — 转发真实接口。
+
+        使用 akshare.stock_individual_fund_flow 返回原始 DataFrame
+        (不转 dict, 保持 registry 统一返回类型)。
+        """
+        try:
+            import akshare as ak
+            market = "sh" if str(code).startswith('6') else "sz"
+            df = ak.stock_individual_fund_flow(stock=str(code), market=market)
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            logger.warning(f"[AkshareAdapter] get_individual_fund_flow({code}) 失败: {type(e).__name__}: {e}")
+        return pd.DataFrame()
+
     def get_north_flow(self) -> pd.DataFrame:
         """获取北向资金"""
         try:
