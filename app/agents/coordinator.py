@@ -28,6 +28,14 @@ def _wrap_with_events(agent_fn, agent_name):
                     'progress': state.get('progress', 0)
                 }
             })
+            # [UI-Q3 2026-04-15] 推一条 reasoning 事件让终端看起来更生动
+            event_bus.publish('reasoning', {
+                'event_type': 'reasoning',
+                'data': {
+                    'agent': agent_name,
+                    'content': f'{agent_name}开始分析 {state.get("stock_code", "")}'
+                }
+            })
         except Exception:
             pass
 
