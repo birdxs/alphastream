@@ -3801,3 +3801,56 @@ app/agents/coordinator.py::_wrap_with_events            │
 - 不重启服务 (Comdr 在测), 仅 code change + 文档追溯
 - 前端 store / api client 零改动 (前端早已就位, 只等 backend 发事件)
 
+
+---
+
+## UI-Q4 终端打字机+token流 [2026-04-15 20:55 +08:00]
+
+### 背景
+Comdr反馈: UI-Q3 事件粒度仍"一次性炸出整段", 需要**真实时打字机**逐字流入, 并升级为"所见即所得 透明agent 毫无保留显示"。
+
+### A — 前端打字机动画 [完成]
+- `frontend/src/components/agent/agent-side-panel.tsx` 新增 `useTypewriter` hook, 对 `info/child/warn` kind 逐字显示, 速度 ~35ms/char (~28 chars/sec)。
+- 性能护栏: 仅最近3条活跃行做动画, 更早的行直接完成态显示; 百条历史不卡顿。
+- 长文本(>3行或>300字符) 默认折叠, 带"展开N行"按钮。
+
+### B — Backend LLM token 真·逐token publish [完成]
+- `app/core/ai_client.py`:
+  - `chat_with_tools_stream` 已有 token 事件 → 补充同时 `publish(EVENT_TOKEN_GENERATED, ...)` 到 event_bus (带 agent/round)。
+  - `chat_with_tools` (之前非stream) 重写内部为 `stream=True`, 每 chunk delta.content publish 一次 EVENT_TOKEN_GENERATED, 真实时token流。
+  - 新增 `_publish_llm_request(agent_name, model, messages)` 在每轮发LLM前 publish 完整 prompt (作为 reasoning 事件)。
+- `app/agents/{technical,fundamental,capital_flow,risk}_analyst.py`: 全部传入 `agent_name='xxx'` 让token带agent标识。
+- 零截断策略: tool_call_start.arguments_raw / tool_call_result.result_summary / reasoning.content 默认完整输出, 仅 >10KB 才截到10KB并标 `...(truncated, total=NKB)`。
+
+### C — 前端流式reasoning累积 [完成]
+- `frontend/src/lib/stores/agent-store.ts` 新增 `appendReasoningToken(agent, token, finalize?)`:
+  - 若最后一条是同agent的streaming reasoning → 追加token到detail
+  - 否则新建一条 reasoning 事件 meta.streaming=true
+  - finalize=true 标记完成(streaming=false), 下次不再追加
+- `frontend/src/lib/hooks/use-chat-stream.ts` onToken handler: 若 `data.agent` 存在 → 走 `appendReasoningToken`, 不进chat正文。
+- `frontend/src/lib/types/index.ts` onToken data 类型加 optional `agent` / `round` 字段。
+- `frontend/src/lib/api/client.ts` 新增 `llm_request` case → 转发到 onReasoning。
+
+### D — 基础设施 [完成]
+- `app/core/event_bus.py` SSE bridge queue maxsize: 1000 → 10000, 支持每秒10-50次token事件累计数千event不丢失。
+
+### 终端效果示例
+```
+[20:55:12] ▶ 技术分析师 → 启动分析 688111
+[20:55:13]   · 💭 [LLM_REQ] model=gpt-4o messages=[{"role":"system","content":"你是技术分析师..."},{"role":"user","content":"分析688111..."}]
+[20:55:14]   · 💭 技术分析师正在分析 688111 的K线结构▊          ← 正在token流
+[20:55:15]   ├─ ⚙ get_technical_indicators({"stock_code":"688111","period":"daily"})
+[20:55:16]   └─ ✓ 2.1s · {"ma5":45.2,"ma10":44.8,"rsi":62.3,...  [展开42行]
+[20:55:18]   · 💭 从数据看,MA5上穿MA10形成金叉, RSI=62未到超买区▊  ← token持续流
+[20:55:22] ▶ 技术分析师 完成
+```
+
+### SSE Bridge Queue 容量评估
+- 当前 maxsize=10000 (从1000升级)。
+- 最坏情况: 10 agents × 3 rounds × ~2000 token = 60,000 token 事件 → 仍会溢出。
+- 后续若监控到 `SSE桥接队列已满` warning, 需改为"按消费速度back-pressure"或token采样(每N个合并一次)。当前观察即可。
+
+### 结束条件
+- tsc: 通过 (无错误)
+- Python ast: 通过
+- 未启服务: Comdr 自测验证
