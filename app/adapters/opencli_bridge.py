@@ -149,6 +149,66 @@ class OpenCLIBridge(BaseAdapter):
         """同花顺热股榜"""
         return _cached_hot_rank("ths/hot-rank", _ttl_bucket())
 
+    # -------------------- P2-B1 自建社交/舆情适配器 --------------------
+    # 对应 clis/xueqiu/discuss.js / clis/eastmoney/guba.js / clis/cls/telegraph.js
+    # 权威源 (2026-04-15 12:30 +08:00)：
+    #   https://github.com/jackwener/OpenCLI/pull/1025 (hot-rank 模板)
+    #   https://xueqiu.com/S/{symbol}/TIMELINE
+    #   https://guba.eastmoney.com/list,{code}.html
+    #   https://www.cls.cn/telegraph
+    def get_xueqiu_discuss(self, symbol: str, limit: int = 30) -> List[Dict]:
+        """雪球个股讨论流
+
+        Args:
+            symbol: 雪球股票代码，含交易所前缀 (如 ``SZ000001`` / ``SH600519``)
+            limit: 返回条数上限，默认30
+
+        Returns:
+            list[dict]：[{user,time,content,likes,comments,reposts}]；异常降级 []
+        """
+        if not symbol:
+            logger.warning("[OpenCLI] xueqiu/discuss symbol必填")
+            return []
+        return self.opencli_call(
+            "xueqiu/discuss",
+            args=[f"--symbol={symbol}", f"--limit={int(limit)}"],
+            timeout=45,
+        )
+
+    def get_eastmoney_guba(self, code: str, pages: int = 1) -> List[Dict]:
+        """东方财富股吧帖子列表
+
+        Args:
+            code: 6位A股代码
+            pages: 抓取页数，默认1（每页约80条）
+
+        Returns:
+            list[dict]：[{rank,title,author,time,reads,replies,url}]；异常降级 []
+        """
+        if not code or not code.isdigit() or len(code) != 6:
+            logger.warning("[OpenCLI] eastmoney/guba code必须为6位数字 got=%s", code)
+            return []
+        return self.opencli_call(
+            "eastmoney/guba",
+            args=[f"--code={code}", f"--pages={max(1, int(pages))}"],
+            timeout=60,
+        )
+
+    def get_cls_telegraph(self, limit: int = 50) -> List[Dict]:
+        """财联社电报实时流
+
+        Args:
+            limit: 返回条数上限，默认50
+
+        Returns:
+            list[dict]：[{time,title,content,tags,isImportant}]；异常降级 []
+        """
+        return self.opencli_call(
+            "cls/telegraph",
+            args=[f"--limit={int(limit)}"],
+            timeout=30,
+        )
+
     # -------------------- BaseAdapter抽象方法占位 --------------------
     # OpenCLI 主职责是爬取/热榜，K线/财务/指数成分非其能力范围，
     # 统一返回空对象以满足抽象接口契约，供 fallback_manager 跳过。
