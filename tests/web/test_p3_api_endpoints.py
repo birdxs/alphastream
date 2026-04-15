@@ -85,10 +85,13 @@ def test_shipping_bdi_out_of_range(client):
 
 
 def test_shipping_bdi_upstream_error(client):
+    """[G2 B1] upstream 失败走软降级: 200 + 空 artifact (替代原 500)"""
     with _patch_call(side_effect=Exception("upstream dead")):
         r = client.get("/api/shipping/bdi?days=30")
-    assert r.status_code == 500
-    assert "upstream dead" in r.get_json()["error"]
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["success"] is True
+    assert data["artifact"]["data"]["bdi_series"] == []
 
 
 def test_shipping_port_happy(client):
@@ -253,3 +256,77 @@ def test_alt_data_all_fail(client):
 def test_alt_data_invalid_ticker(client):
     r = client.get("/api/alt_data/" + "X" * 30)
     assert r.status_code == 400
+
+
+# ======================================================
+# G2 批修 5 bug 回归测试 [2026-04-15 13:45 +08:00]
+# ======================================================
+def test_g2_b1_shipping_bdi_soft_degrade(client):
+    """[G2 B1] BDI upstream 空DF/异常 → 200 + 空 bdi_series (软降级)"""
+    with _patch_call(side_effect=Exception("全部数据源降级失败 (tried=['shipping'])")):
+        r = client.get("/api/shipping/bdi?days=7")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["success"] is True
+    assert data["artifact"]["data"]["bdi_series"] == []
+    assert data["artifact"]["artifact_type"] == "shipping_bdi"
+
+
+def test_g2_b2_shipping_port_soft_degrade(client):
+    """[G2 B2] Port upstream 异常 → 200 + 空 port_throughput"""
+    with _patch_call(side_effect=Exception("upstream dead")):
+        r = client.get("/api/shipping/port/shanghai?period=monthly")
+    assert r.status_code == 200
+    assert r.get_json()["artifact"]["data"]["port_throughput"] == []
+
+
+def test_g2_b3_corporate_search_dataframe_contract(client):
+    """[G2 B3] search_company 返回 DataFrame, 端点正确转 list[dict]"""
+    df = pd.DataFrame([
+        {"name": "Apple Inc", "company_number": "C0806592", "jurisdiction_code": "us_ca"},
+        {"name": "Apple Bank", "company_number": "X1", "jurisdiction_code": "us_ny"},
+    ])
+    with _patch_call(return_value=df):
+        r = client.get("/api/corporate/search?q=Apple")
+    assert r.status_code == 200
+    data = r.get_json()["artifact"]["data"]
+    assert data["count"] == 2
+    assert data["items"][0]["name"] == "Apple Inc"
+
+
+def test_g2_b3_corporate_search_soft_degrade(client):
+    """[G2 B3] 上游异常(如签名/限流) → 200 + 空 items, 不再 500"""
+    with _patch_call(side_effect=Exception("upstream dead")):
+        r = client.get("/api/corporate/search?q=NotFound")
+    assert r.status_code == 200
+    data = r.get_json()["artifact"]["data"]
+    assert data["count"] == 0
+    assert data["items"] == []
+
+
+def test_g2_b4_corporate_network_path_converter(client):
+    """[G2 B4] company_id 含斜杠 (us_ca/ID) 必须可路由, 无论是否 URL-encode"""
+    with _patch_call(return_value={
+        "company_id": "us_ca/SAMPLEID",
+        "parents": [], "children": [], "officers": [],
+    }):
+        # 含编码斜杠
+        r1 = client.get("/api/corporate/us_ca%2FSAMPLEID/network")
+        # 也支持直接斜杠 (path converter 特性)
+        r2 = client.get("/api/corporate/us_ca/SAMPLEID/network")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.get_json()["artifact"]["metadata"]["company_id"] in (
+        "us_ca/SAMPLEID",
+    )
+
+
+def test_g2_b5_jobs_company_soft_degrade(client):
+    """[G2 B5] jobs/company upstream 失败 → 200 + 空 postings (非 500)"""
+    with _patch_call(side_effect=Exception("全部数据源降级失败 (tried=['jobs_adapter'])")):
+        r = client.get("/api/jobs/company/Microsoft")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["success"] is True
+    assert data["artifact"]["data"]["total_postings"] == 0
+    assert data["artifact"]["data"]["items"] == []
