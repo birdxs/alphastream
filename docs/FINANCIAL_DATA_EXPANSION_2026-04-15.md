@@ -3203,3 +3203,53 @@ python3 -c "import yaml; [yaml.safe_load(open(f)) for f in ['.github/workflows/c
 ### 回滚
 
 删除对应 yml 即可；既有 `docker-image.yml` 未动，旧流水线保持。
+
+---
+
+## M1 端到端 scenario 真验证 [2026-04-15 15:05~15:10 +08:00]
+
+**目的**: 验证 L1 (commit 0fc4f26) Stock详情页"另类数据"Tab 的真实点击端到端链路。
+
+### 启动状态
+
+- 后端 `python3 run.py` pid=3815 → 监听 :8888 ✓
+- 前端 `npm run dev` (Next turbopack) pid=4050 → Ready @ :3000 ✓
+- `/api/stock_name?stock_code=600519` → `{"stock_name":"贵州茅台"}` ✓
+- `/stock/600519` 页面 HTTP 200 (43461B, 含"另类数据"Tab 标签) ✓
+
+### 验证方式
+
+Playwright CLI 已装 (1.59.1) 但 `@playwright/test` 包未安装 → 真浏览器点击跳过；脚本已落盘
+`frontend/tests/e2e/m1_alt_data.spec.ts`（含 A股+美股两用例, 监听 `page.waitForResponse(/api/alt_data)`，
+断言 artifact 结构 + 全页截图）。改用 **curl + 后端日志审查**降级验证 Registry 路由与 adapter 实际响应。
+
+### 真实调用结果
+
+| Ticker | HTTP | success | artifact.type | data keys | 结论 |
+|--------|------|---------|---------------|-----------|------|
+| 600519 | 502 | false | — | — | 4 adapter 全降级, error="所有另类数据源均失败" |
+| AAPL   | 200 | true  | alt_data      | ["esg"]   | 仅 esg，但 esg_score/grade 均为 null (esgbook 404 空壳) |
+
+### Registry 调用证据 (from `/tmp/backend_m1.log`)
+
+真实路由到 4 adapter，全部因外部源不可用降级：
+
+- shipping: `investing.com/indices/baltic-dry` HTTP 403 反爬
+- esg: esgbook/cdp 404 · 中财大 ConnectionError · bcorporation JSONDecodeError
+- jobs(hiring): tried=['jobs_adapter'] 全部降级失败
+- corporate(opencorporates): HTTP 401 匿名模式被拒
+
+### 发现问题
+
+1. **P0**: A股 `/api/alt_data` 在真网络下 100% 502，M1 对用户实际不可用
+2. **P0**: 502 响应体 details.shipping/esg 为空字符串 → Registry 错误收集 bug
+3. **P1**: AAPL `artifact.stock_code=None`（应为 "AAPL"），前端用 stock_code 做 key 会报错
+4. **P1**: AAPL 成功路径只回 esg，其余 3 domain 静默丢失未进 details
+5. **P2**: Playwright 真点击流水线缺 `@playwright/test` 包，CI 需 `npm i -D @playwright/test && npx playwright install chromium`
+
+### 下一步建议
+
+- 提 P0 单: 为 shipping 接入备用源 (如 Baltic Exchange 官方 CSV), esg 切换至 ESGBook 付费或 MSCI demo key
+- 修 Registry: 失败 adapter 的异常 message 必须全部进 `details[domain]`，禁止空字符串
+- 修 artifact 契约: stock_code 字段必须与入参一致
+- 补 CI: 在 `.github/workflows/frontend-e2e.yml` 里装 playwright 并跑 `m1_alt_data.spec.ts`
