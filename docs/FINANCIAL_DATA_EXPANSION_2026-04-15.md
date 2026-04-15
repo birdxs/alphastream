@@ -1854,3 +1854,51 @@ python3 -m pytest tests/core/test_artifact_wrapper_p3.py tests/web/test_p3_api_e
 ### Commit 追溯
 - `refactor(core): 收敛artifact_wrapper P3冗余 [DEDUP] — v2为唯一实现, F3版6函数删除`
 - `docs(data): F4前后端契约最终对齐`
+
+---
+
+## G1 端到端最终验证 [2026-04-15 13:28 +08:00]
+
+### Pytest 回归
+- **378 passed / 0 failed / 0 errors / 12 warnings** (7.18s, 均第三方 Deprecation)
+
+### 10 P3 端点真跑状态表
+
+| 端点 | HTTP | 结论 |
+|------|------|------|
+| /api/shipping/bdi?days=5 | 500 | 🔴 adapter 空错误 |
+| /api/shipping/port/shanghai?period=monthly | 500 | 🔴 数据源降级失败 |
+| /api/esg/AAPL | 200 | 🟢 esgbook 骨架完整 |
+| /api/esg/climate/0000320193 | 200 | 🟢 骨架 OK |
+| /api/corporate/search?q=Apple | 500 | 🔴 **adapter.search_company() 签名错位 (query/name)** |
+| /api/corporate/{id}/network | 404 | 🔴 Flask 解码 %2F 路由不匹配 |
+| /api/jobs/search?q=python | 200 | 🟢 返回 5 条招聘 |
+| /api/jobs/company/Microsoft | 500 | 🔴 jobs_adapter 按公司查询未实现 |
+| /api/satellite/search?q=MODIS | 200 | 🟢 NASA CMR MYD11A1 |
+| /api/alt_data/AAPL | 200 | 🟢 聚合 OK (esg+jobs+satellite) |
+
+**汇总**: 🟢 5 / 🔴 5
+
+### 3 回归端点状态
+| 端点 | HTTP | 结论 |
+|------|------|------|
+| /api/stock_name?stock_code=600519 | 200 | 🟢 贵州茅台 |
+| /api/stock_profile?stock_code=600519 | 200 | 🟢 PE/PB/ROE 完整 |
+| /api/stock_data?stock_code=600519 | 200 | 🟢 100KB K线+MA |
+
+### 关键 Bug 清单
+- **B3 (P0)**: `CorporateAdapter.search_company()` 接收 `query=` 但签名不接受, 一行修复
+- B1/B2 (P1): shipping adapter 空错误吞 + 无 fallback
+- B4 (P1): corporate network 路由需 `<path:id>` converter
+- B5 (P2): jobs_adapter 未实现 get_company_postings
+
+### AI SSE 冒烟
+- GET /api/ai/chat 返回 405 (端点仅 POST, 正确契约), SSE 未深测, 留 G2
+
+### 结论: 前后端数据是否对齐
+🟢 **核心链路对齐**: stock_name 字段全部回填成功 (AAPL, python, MODIS 等), 统一骨架 `{success, artifact:{type,title,stock_name,data}}` 落实到位.
+🟡 **5 个新端点尚需修复**: 均为适配层签名/降级/路由问题, 非架构缺陷, G2 可批量处理.
+🟢 **零回归**: pytest 378 全绿 + 3 核心端点全 200.
+
+### 详细报告
+`logs/e2e_validation_2026-04-15.md`
