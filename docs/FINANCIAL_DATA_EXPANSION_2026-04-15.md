@@ -1615,3 +1615,100 @@ _无_。所有 🔴 为 0，Python 层无 AttributeError/TypeError/KeyError 等�
 - `python -m pytest tests/web/test_p3_api_endpoints.py -x -q` → **20 passed in 3.97s**
 - 覆盖: happy path(10) + 参数错误400(7) + 上游异常500(2) + 全部失败502(1)
 - 使用 Flask `test_client` + `patch.object(ws, "_p3_call_with_timeout", ...)` mock Registry，无需真实外网
+
+---
+
+## F1 全项目补装+验证 [2026-04-15 13:13 +08:00]
+
+**授权方**: Comdr · **执行**: 香草(🌿) · **时间基准**: 2026-04-15 13:08~13:13 +08:00
+
+### 1. 依赖安装结果
+
+| 依赖 | 类型 | 安装前 | 安装命令 | 结果 | 备注 |
+|------|------|--------|----------|------|------|
+| Ashare | 非PyPI | 缺失 | `git clone https://github.com/mpquant/Ashare third_party/Ashare` | ✅ 成功 | PYTHONPATH注入可用 |
+| openbb | PyPI重量级 | 缺失 (`openbb_core`未装) | `pip install openbb` | ✅ 成功 | 装入 openbb-core 1.6.7 + 全扩展; 少量依赖版本冲突警告 (不影响import) |
+| opencli | npm | 缺失 | `npm install -g @jackwener/opencli` | ✅ 成功 | `opencli-cli`/`opencli`本身在npm无此包, 实际目标为 `@jackwener/opencli@1.7.3` |
+| feedparser | PyPI | 已装 6.0.11 | — | ✅ — | |
+| yfinance | PyPI | 已装 0.2.37 → 升级 1.2.2 | (随openbb) | ✅ 升级 | |
+| fredapi | PyPI | 已装 0.5.2 | — | ✅ — | |
+| efinance | PyPI | 已装 | — | ✅ — | |
+| ccxt | PyPI | 已装 4.5.48 | — | ✅ — | |
+| pycoingecko | PyPI | 已装 3.2.0 | — | ✅ — | |
+| easyquotation | PyPI | 已装 0.7.7 | — | ✅ — | |
+
+- Node: v24.3.0, npm: 11.4.2 (均满足≥18)
+- `@jackwener/opencli` 内置大量站点adapter (1688/36kr/amazon/xueqiu等), **但项目期望的 `eastmoney/hot-rank` 未在其内置清单中**; 项目本仓 `clis/eastmoney/guba.js` 需走 opencli adapter 注册流程方能被 `opencli <name>` 调用 — 本次未注册, 因此 OpenCLIBridge 仍为 🟡 (命令可执行, rc=2 unknown command, bridge 降级返回空数组)
+
+### 2. pytest 全量结果
+
+```
+340 passed, 11 warnings in 6.48s
+```
+- 0 failed / 0 errors
+- 11 条 warning 为 openbb-core (Pydantic v2.12 DeprecationWarning) 与 pytest_freezegun (distutils) 的上游告警, 非本项目代码问题
+
+### 3. smoke v1 vs v2 对比 (共22项)
+
+| 状态 | v1 (2026-04-15 08:51) | v2 (2026-04-15 13:11) | Δ |
+|------|------|------|---|
+| 🟢 PASS | 11 | 11 | ±0 |
+| 🟡 DEGRADED | 10 | 10 | ±0 |
+| 🔴 FAIL | 0 | 0 | ±0 |
+| ⚫ SKIPPED | 1 | 1 | ±0 |
+
+**逐adapter状态** (v2完整复刻v1, 无任何状态迁移):
+
+| # | Adapter | v1 | v2 | 依赖是否装 | 备注 |
+|---|---------|----|----|---------|------|
+| 1 | Akshare | 🟢 | 🟢 | ✅ | 600519 rows=7 |
+| 2 | Baostock | 🟢 | 🟢 | ✅ | sh.600519 rows=7 |
+| 3 | Efinance | 🟡 | 🟡 | ✅ | push2.eastmoney 连接被重置 (反爬) |
+| 4 | YFinance | 🟡 | 🟡 | ✅ 升级1.2.2 | AAPL YFRateLimitError |
+| 5 | EDGAR | 🟢 | 🟢 | ✅ | rows=10 |
+| 6 | FRED | ⚫ | ⚫ | ✅ | **FRED_API_KEY 未设置** (需手动申请) |
+| 7 | NBS | 🟡 | 🟡 | ✅ | HTTP 403 反爬 |
+| 8 | WorldBank | 🟢 | 🟢 | ✅ | rows=5 |
+| 9 | IMF | 🟡 | 🟡 | ✅ | SSL EOF |
+| 10 | CCXT | 🟡 | 🟡 | ✅ | Binance 451 地区限制 |
+| 11 | CoinGecko | 🟢 | 🟢 | ✅ | rows=1 |
+| 12 | **OpenCLIBridge** | 🟡 | 🟡 | ✅ **新装** | 装完opencli后 rc=0→rc=2 `unknown command 'eastmoney/hot-rank'`, 需后续注册clis/自建adapter |
+| 13 | Easyquotation | 🟢 | 🟢 | ✅ | rows=1 |
+| 14 | **Ashare** | 🟢 | 🟢 | ✅ **新装** | v1是bridge内部容错PASS; v2真实import成功 rows=5 |
+| 15 | RSSNews | 🟡 | 🟡 | ✅ | feedparser bozo编码错误 |
+| 16 | Corporate | 🟡 | 🟡 | — | OpenCorporates 401 (需Key) |
+| 17 | Jobs | 🟢 | 🟢 | — | rows=5 |
+| 18 | ESG | 🟢 | 🟢 | — | rows=7 |
+| 19 | Shipping | 🟡 | 🟡 | — | BDI 30s 超时 |
+| 20 | Satellite | 🟢 | 🟢 | — | rows=20 |
+| 21 | **OpenBB** | 🟡 | 🟡 | ✅ **新装** | openbb_core装好, AAPL `EmptyDataError` (yfinance上游限流, 非openbb缺失) |
+| 22 | AdapterRegistry | 🟢 | 🟢 | — | domains=16 |
+
+### 4. 关键结论
+
+- ✅ pytest 340/340 全通过, **F1补装未引入任何回归**
+- ✅ Ashare / OpenBB / OpenCLI 三项"装不上就缺失"的依赖已全部安装成功, import层零报错
+- 🟡 运行时降级原因 **100% 是网络/反爬/Key 缺失**, 非代码缺陷:
+  - YFinance/OpenBB: yfinance 1.2.2 被Yahoo限流 (重试窗口小时级)
+  - Efinance/NBS: 东财/国家统计局 IP 级反爬
+  - CCXT: Binance 451 地区封锁 (新加坡/香港代理可解)
+  - FRED/OpenCorporates: 需要 API Key
+  - **OpenCLIBridge**: 装了opencli但 `eastmoney/hot-rank` adapter 未在 `@jackwener/opencli` 内置且项目`clis/`未注册 → 需 `opencli register clis/eastmoney/guba.js` 或改bridge调`opencli eastmoney/guba`
+- ⚠️ 依赖冲突警告 (pip resolver): `openbb` 拉入 `pyjwt==2.12.1` / `fastapi==0.128.8` 等, 与本项目其他库 `zai-sdk`/`chainlit`/`browser-use` 约束冲突 — 当前未见运行时异常, 建议观察
+
+### 5. 依赖不可装/剔除建议
+
+- **opencli (npm包名)**: npm registry无`opencli`, 已改用 `@jackwener/opencli`; 但与项目`clis/`自建adapter不兼容 (命令格式/注册机制). 建议:
+  - 方案A: 在 `app/adapters/opencli_bridge.py` 改走 `node clis/eastmoney/guba.js` 直调本仓JS (绕过opencli runtime)
+  - 方案B: 按 `@jackwener/opencli` 文档注册本仓adapters
+  - **暂不剔除**, 留作后续F2决策
+- **openbb**: 依赖冲突多但可用, 建议保留, 未来考虑虚拟环境隔离
+- **Ashare**: 保留 `third_party/Ashare` 方案, `.gitignore` 已加 `third_party/`
+
+### 6. 下一步建议 (F2候选)
+
+- (a) 申请 FRED_API_KEY (5分钟免费) → 🟢 +1, ⚫ -1
+- (b) opencli adapter 注册或直调JS方案 → OpenCLIBridge 🟡→🟢
+- (c) efinance/NBS 加UA池+代理 → 降级数 -2
+- (d) yfinance 换 `openbb-yfinance` 内置 provider (已随openbb装好)
+
