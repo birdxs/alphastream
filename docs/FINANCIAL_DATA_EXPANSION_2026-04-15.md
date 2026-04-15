@@ -2426,3 +2426,35 @@ hiring_signal.get_hiring_trend hasattr hits: ['jobs_adapter']
 - `fix(registry): I1 Registry domain map — news/sentiment/esg/hiring 4域tried=[]修复`
 - `test(registry): I1 domain map覆盖性测试 [NEW-FILE:#20260415-40]`
 - `docs(data): I1追溯 — H2遗留修复证据链`
+
+---
+
+## 🏁 Phase-6 (I批) 总验收 (2026-04-15 14:20 +08:00)
+
+| Agent | 交付 | Commits | 测试 |
+|---|---|---|---|
+| I1 Registry契约 | 4 adapter alias解tried=[]+16域守卫 | `487ad1c`+`de94cb3`+`1ebc44f` | **57 PASS** |
+| I2 Agent bug | StrategyEvolver JSON容错+capital_flow美股guard | `f2eea16`+`fdf2123` | 12/12 PASS |
+| I3 运维手册 | `docs/OPERATIONS.md` 216行8章+README索引 | `b7bb9b3`+`faa1a08` | — |
+
+### I批关键收益
+- **Registry契约完全闭环** — H2遗留4 domain tried=[] 根因定位为Agent↔Adapter方法名错位, 加alias薄包装0改动Agent层解决
+- **Agent层健壮性升级** — 美股/港股场景防御, LLM输出JSON容错3级降级
+- **运维入门文档就位** — 新人<30分钟可启项目
+
+### 累计总战果 (P0→Phase-6, 一日6 Phase闭环)
+- **21 Python adapter + 1 Registry + 3 JS + 5 Artifact + 10 P3 API + 运维手册**
+- **16 业务域 / 12 Agent接入 / 17 搜索引擎 / 75+ commits**
+- **460+ pytest PASS** (329 adapter + 38 web/core + 7 proxy + 57 registry domain + 12 agent regression + 18 investors)
+- **真端到端全绿**: 10/10 P3 API 200 · 3 Agent SSE 200 · next build · Registry tried非空
+
+### 遗留 (非阻塞, 可选后续)
+- I1标记: 11 非I1 domain method对齐 (macro_*/a_stock_realtime/earth_observation等) — Registry层warn, agent层降级正常工作
+- Key申请: FRED/OpenCorporates (Comdr手动)
+- 代理配置: 如境内部署需 `export HTTP_PROXY=...`
+
+### 数据层v2全链路最终达成 ✅
+```
+adapter(21) × domain(16) × method(alias对齐) × Agent(12接入) 
+    × API(10 P3) × Artifact(5 TSX) × Proxy(境内外分层) × 手册(OPS.md)
+```
