@@ -16,6 +16,11 @@ from .yfinance_adapter import YFinanceAdapter
 from .ashare_adapter import AshareAdapter
 from .easyquotation_adapter import EasyquotationAdapter
 from .openbb_adapter import OpenBBAdapter
+from .esg_adapter import ESGAdapter
+from .shipping_adapter import ShippingAdapter
+from .satellite_adapter import SatelliteAdapter
+from .corporate_adapter import CorporateAdapter
+from .jobs_adapter import JobsAdapter
 from .adapter_registry import AdapterRegistry
 
 __all__ = ['BaseAdapter', 'AkshareAdapter', 'BaostockAdapter', 'OpenCLIBridge',
@@ -23,4 +28,6 @@ __all__ = ['BaseAdapter', 'AkshareAdapter', 'BaostockAdapter', 'OpenCLIBridge',
            'CoinGeckoAdapter', 'WorldBankAdapter', 'IMFAdapter',
            'RSSNewsAdapter', 'EfinanceAdapter', 'YFinanceAdapter',
            'AshareAdapter', 'EasyquotationAdapter', 'OpenBBAdapter',
+           'ESGAdapter', 'ShippingAdapter', 'SatelliteAdapter',
+           'CorporateAdapter', 'JobsAdapter',
            'AdapterRegistry']

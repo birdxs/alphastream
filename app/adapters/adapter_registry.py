@@ -24,6 +24,11 @@ Domain映射（覆盖 P0/P1/P2）：
   news                 : OpenCLI → Akshare
   sentiment_social     : OpenCLI
   xbrl_financials      : EDGAR → YFinance → OpenBB
+  esg_rating           : ESG (ESG Book/CDP/B Corp/CUFE + SEC气候复用EDGAR) [P3-D3]
+  commodity_shipping   : Shipping (BDI/港口吞吐/AIS AISHub+交通运输部) [P3-D1 2026-04-15]
+  earth_observation    : Satellite (NASA CMR对地观测collections+granules)  [P3-D1 2026-04-15]
+  corporate_entity     : OpenCorporates v0.4 (search/details/network) [P3-D2 2026-04-15]
+  hiring_signal        : Jobs (Arbeitnow + 拉勾降级) [P3-D2 2026-04-15]
 """
 import logging
 import threading
@@ -66,6 +71,11 @@ class AdapterRegistry:
         "news":              ["RSSNewsAdapter", "OpenCLIBridge", "AkshareAdapter"],
         "sentiment_social":  ["OpenCLIBridge"],
         "xbrl_financials":   ["EDGARAdapter", "YFinanceAdapter", "OpenBBAdapter"],
+        "esg_rating":        ["ESGAdapter"],
+        "commodity_shipping": ["ShippingAdapter"],
+        "earth_observation":  ["SatelliteAdapter"],
+        "corporate_entity":   ["CorporateAdapter"],
+        "hiring_signal":      ["JobsAdapter"],
     }
 
     def __init__(self, max_retries: int = 2, retry_delay: float = 0.5):
@@ -105,6 +115,11 @@ class AdapterRegistry:
             ("AshareAdapter",        "ashare_adapter"),
             ("EasyquotationAdapter", "easyquotation_adapter"),
             ("RSSNewsAdapter",       "rss_news_adapter"),
+            ("ESGAdapter",           "esg_adapter"),
+            ("ShippingAdapter",      "shipping_adapter"),
+            ("SatelliteAdapter",     "satellite_adapter"),
+            ("CorporateAdapter",     "corporate_adapter"),
+            ("JobsAdapter",          "jobs_adapter"),
         ]:
             try:
                 mod = importlib.import_module(f".{mod_name}", package="app.adapters")
