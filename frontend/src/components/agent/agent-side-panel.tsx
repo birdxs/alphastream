@@ -36,18 +36,43 @@ function eventToLine(ev: AgentEvent): TerminalLine {
       return { ...common, kind: "done", text: `${ev.agent || "Agent"} completed · ${ev.title}` };
     case "agent_progress":
       return { ...common, kind: "info", text: ev.title };
-    case "tool_call_start":
-      return { ...common, kind: "child", text: `fetching (${ev.title})` };
+    case "tool_call_start": {
+      // meta: { tool_name, arguments }
+      const m = (ev.meta || {}) as { tool_name?: string; arguments?: unknown };
+      const name = m.tool_name || ev.title.replace(/^调用工具\s*/, "");
+      let argsStr = "";
+      try {
+        const raw = m.arguments;
+        if (raw && typeof raw === "object") {
+          const vals = Object.values(raw as Record<string, unknown>)
+            .filter((v) => v != null)
+            .map((v) => String(v))
+            .join(",");
+          argsStr = vals.length > 40 ? vals.slice(0, 40) + "…" : vals;
+        } else if (typeof raw === "string") {
+          argsStr = raw.length > 40 ? raw.slice(0, 40) + "…" : raw;
+        }
+      } catch { /* ignore */ }
+      return { ...common, kind: "child", text: `⚙ ${name}(${argsStr})` };
+    }
     case "tool_call_result": {
       const failed = /fail|error|降级|未|timeout/i.test(ev.detail || "");
+      const m = (ev.meta || {}) as { duration_ms?: number };
+      const dur = m.duration_ms != null ? `${(m.duration_ms / 1000).toFixed(1)}s` : "";
+      const summary = ev.detail ? ev.detail.slice(0, 60) : "";
       return {
         ...common,
-        kind: failed ? "warn" : "child",
-        text: `${ev.title}${failed ? " failed, degraded" : " ok"}`,
+        kind: failed ? "warn" : "done",
+        text: failed
+          ? `✖ ${ev.title} — ${summary}`
+          : `✓ ${dur}${summary ? " · " + summary : ""}`,
       };
     }
-    case "reasoning":
-      return { ...common, kind: "info", text: ev.title };
+    case "reasoning": {
+      const detail = ev.detail || ev.title;
+      const text = detail.length > 80 ? detail.slice(0, 80) + "…" : detail;
+      return { ...common, kind: "info", text: `💭 ${text}` };
+    }
     default:
       return { ...common, kind: "info", text: ev.title };
   }
@@ -92,14 +117,22 @@ function TerminalRow({ line, isLast }: { line: TerminalLine; isLast: boolean }) 
 }
 
 export function AgentSidePanel() {
+  const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [now, setNow] = useState<number>(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
   const [cleared, setCleared] = useState(false);
   const events = useAgentStore((s) => s.events);
   const isAnalyzing = useAgentStore((s) => s.isAnalyzing);
   const agentProgresses = useAgentStore((s) => s.agentProgresses);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const startRef = useRef<number>(Date.now());
+  const startRef = useRef<number>(0);
+
+  // 仅客户端挂载后初始化时间, 根治SSR水化不匹配
+  useEffect(() => {
+    startRef.current = Date.now();
+    setNow(Date.now());
+    setMounted(true);
+  }, []);
 
   // 初始折叠状态
   useEffect(() => {
@@ -107,11 +140,12 @@ export function AgentSidePanel() {
     if (saved === "true") setCollapsed(true);
   }, []);
 
-  // 时钟
+  // 时钟 (仅mounted后启动)
   useEffect(() => {
+    if (!mounted) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [mounted]);
 
   // 事件变化自动滚到底
   useEffect(() => {
@@ -144,7 +178,7 @@ export function AgentSidePanel() {
     return [head, ...body];
   }, [events, isAnalyzing, agentProgresses.length, cleared]);
 
-  const uptime = Math.floor((now - startRef.current) / 1000);
+  const uptime = now == null ? 0 : Math.floor((now - startRef.current) / 1000);
   const uptimeStr = uptime >= 60 ? `${Math.floor(uptime / 60)}m${uptime % 60}s` : `${uptime}s`;
 
   /* 导出日志 */
@@ -160,6 +194,13 @@ export function AgentSidePanel() {
     a.click();
     URL.revokeObjectURL(url);
   }, [lines]);
+
+  // SSR/未挂载时仅输出占位骨架, 避免任何时间戳hydration不匹配
+  if (!mounted) {
+    return (
+      <div className="hidden md:flex w-72 xl:w-96 shrink-0 border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150" />
+    );
+  }
 
   if (collapsed) {
     return (
@@ -198,8 +239,8 @@ export function AgentSidePanel() {
             ⎔ AGENT STREAM · stock-analysis · zsh
           </span>
         </div>
-        <span className="text-[10px] tabular-nums text-foreground/45">
-          {fmtTs(now)}
+        <span className="text-[10px] tabular-nums text-foreground/45" suppressHydrationWarning>
+          {now == null ? '--:--:--' : fmtTs(now)}
         </span>
       </div>
 
