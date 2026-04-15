@@ -1209,3 +1209,93 @@ pytest tests/adapters/test_esg_adapter.py -x -q
 覆盖：HTTP 层软降级（404/429/异常重试）、4 源多路径与 fallback 链、SEC 气候 EDGAR 复用路径（含懒加载失败、concept 异常、多 tag 聚合与最新值提取）、CDP 空响应、B Corp 空库与 503、辅助函数边界、健康检查 3 态、`get_financial_data` 整合。
 
 **Commit 标签**: `feat(adapter): ESG公开(SEC气候+CDP+B Corp+中财大) [NEW-FILE:#20260415-27]`
+
+---
+
+### D2 产业链+招聘 [2026-04-15]
+
+**交付物**：
+- `app/adapters/corporate_adapter.py` [NEW-FILE:#20260415-25]：`CorporateAdapter(BaseAdapter)` — OpenCorporates v0.4 REST；`search_company(name, jurisdiction, per_page)` / `get_company_details(company_id)` / `get_company_network(company_id)`（parents/children/officers 扁平结构）；API Key 三级：参数 > `OPENCORPORATES_API_KEY` > 匿名；≥0.5s 最小间隔 + 401/403/429 软降级；`health_check` 探活。
+- `app/adapters/jobs_adapter.py` [NEW-FILE:#20260415-26]：`JobsAdapter(BaseAdapter)` — Arbeitnow（免费无Key）主路径 + 拉勾 UA 伪装降级；`search_jobs(query, source, limit)` / `get_company_postings(company)`；未知 source 自动回落 arbeitnow；反爬失败全部静默返空 DataFrame。
+- `tests/adapters/test_corporate_adapter.py` × 21 用例，`tests/adapters/test_jobs_adapter.py` × 18 用例 —— **39 passed, 0 failed, 0 errors**（纯 mock，零真实请求）。
+- `AdapterRegistry.DEFAULT_DOMAIN_MAP` 新增 `corporate_entity: [CorporateAdapter]`、`hiring_signal: [JobsAdapter]`，`register_adapters` 模块索引同步扩充两项。
+- `app/adapters/__init__.py` 导出；`app/adapters/README.md` 文件清单新增两行。
+
+**联网调研权威源（≥4）** — 检索时间 2026-04-15 12:16 +08:00（Asia/Singapore）：
+1. OpenCorporates 官方 API Reference — https://api.opencorporates.com/documentation/API-Reference（v0.4 端点 companies/search 与 companies/{jurisdiction}/{number}；免费匿名 500 calls/month）
+2. OpenCorporates Data Coverage — https://opencorporates.com/info/our-data（140+ 司法辖区，2 亿+ 公司，交叉验证数据规模）
+3. 国家企业信用信息公示系统 — https://www.gsxt.gov.cn/（中国大陆工商主数据源，公开查询无开放 API，作为 jurisdiction=cn 交叉源）
+4. Arbeitnow Job Board API — https://www.arbeitnow.com/api/job-board-api（免费开源，JSON Feed，GitHub Jobs 2021-04 关停后的替代主源）
+5. GitHub Jobs 关停公告 — https://docs.github.com/changelog/2021-04-19-deprecation-notice-github-jobs-site（剔除依据）
+6. EU e-Justice Business Registers — https://e-justice.europa.eu/content_business_registers-104-en.do（欧盟 27 国工商注册，作为 OpenCorporates 欧盟数据交叉源）
+7. 拉勾网公开搜索 — https://www.lagou.com/（反爬严，采用 UA 伪装 + 软降级，作为中文区招聘兜底）
+
+**关键设计决策**：
+1. **API Key 三级回退**：参数 > env > 匿名，避免硬编码且与 EDGAR/FRED 风格一致。
+2. **股权网络扁平化**：`get_company_network` 返回 `{parents/children/officers}` 字典数组，便于前端图谱渲染；OpenCorporates 免费层 `subsidiaries/controlling_entity` 空时返回空列表，不抛异常。
+3. **Arbeitnow 无 `q` 参数**：服务端不支持关键词，客户端对 `title+description+tags` 做 substring 过滤，`limit` 在过滤后截断。
+4. **拉勾反爬降级**：UA+Referer+X-Requested-With 仅为公开端点兼容所需，被 WAF 拦截返空 DataFrame，绝不抛异常向上污染。
+5. **付费 / 强反爬源剔除**：LinkedIn 公开页面、BOSS 直聘、Crunchbase 付费 API 明确记录为"非 P0"，避免无声付费。
+
+**三重验证**：
+- 单元：`pytest tests/adapters/test_corporate_adapter.py tests/adapters/test_jobs_adapter.py -v` → **39 passed** in 1.00s（零真实网络请求）。
+- 集成：`from app.adapters import CorporateAdapter, JobsAdapter, AdapterRegistry` 导入通过；`AdapterRegistry.DEFAULT_DOMAIN_MAP` 含 `corporate_entity` 与 `hiring_signal` 两域。
+- 端到端：按作战指令 "不 pip 不发真实请求，mock only" 约束，未触发真实 HTTP。
+
+
+---
+
+## P3 另类数据追溯
+
+### D1 航运+卫星 [2026-04-15 12:16 +08:00]
+
+**交付物**：
+- `app/adapters/shipping_adapter.py` [NEW-FILE:#20260415-23]
+- `app/adapters/satellite_adapter.py` [NEW-FILE:#20260415-24]
+- `tests/adapters/test_shipping_adapter.py` (13用例)
+- `tests/adapters/test_satellite_adapter.py` (14用例)
+- `adapter_registry` 新增 domain: `commodity_shipping` / `earth_observation`
+
+**权威源（≥4交叉验证, 纯开源免费优先）**：
+
+| # | 名称 | URL | 检索时间 (+08:00) | 采用 |
+|---|---|---|---|---|
+| 1 | Baltic Exchange BDI 指数 | https://www.balticexchange.com/ | 2026-04-15 12:16 | ✓ 间接通过TradingEconomics公开页 |
+| 2 | Freightos Baltic Index (FBX) | https://fbx.freightos.com/ | 2026-04-15 12:16 | ✓ 容器海运40ft日度 |
+| 3 | AISHub 开放AIS Feed | https://www.aishub.net/ | 2026-04-15 12:16 | ✓ 免费注册共享AIS换API username |
+| 4 | 中国交通运输部统计 | https://www.mot.gov.cn/tongjishuju/ | 2026-04-15 12:16 | ✓ 港口月度吞吐量权威 |
+| 5 | 上港集团投资者关系 | http://www.portshanghai.com.cn/ | 2026-04-15 12:16 | ✓ 主端点 |
+| 6 | 宁波港 | http://www.nbport.com.cn/ | 2026-04-15 12:16 | ✓ 备选 |
+| 7 | NASA CMR Common Metadata Repository | https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html | 2026-04-15 12:16 | ✓ 公开无Key主路径 |
+| 8 | NASA Earthdata Login (URS) | https://urs.earthdata.nasa.gov/ | 2026-04-15 12:16 | ✓ 下载粒度用Token |
+| 9 | Copernicus Sentinel Hub | https://www.sentinel-hub.com/explore/eobrowser/ | 2026-04-15 12:16 | △ 备选未实装 |
+| 10 | USGS Earth Explorer M2M | https://m2m.cr.usgs.gov/api/docs/json/ | 2026-04-15 12:16 | △ 备选未实装 |
+| 11 | AIS-catcher 开源参考 | https://github.com/jvde-github/AIS-catcher | 2026-04-15 12:16 | ✓ AIS字段规范对齐ITU-R M.1371 |
+| 12 | VesselFinder / MarineTraffic 公开页 | https://www.vesselfinder.com/ · https://www.marinetraffic.com/ | 2026-04-15 12:16 | △ 反爬严格仅备选 |
+
+**ShippingAdapter 能力**：
+- `get_bdi_index(days=30)` — 波罗的海干散货指数时序
+- `get_port_throughput(port, period)` — 上港/宁波/青岛/深圳港月度吞吐
+- `get_ais_vessels(bbox)` — AIS船舶位置快照（未配`AISHUB_USERNAME`环境变量降级空DF）
+- 纯 requests 无第三方依赖；1 QPS 限流；UA 伪装 Chrome；3次重试指数退避
+- 付费源剔除：Clarksons Research / Lloyd's List Intelligence / IHS Markit
+
+**SatelliteAdapter 能力**（骨架，聚焦搜索层，下载层预留）：
+- `search_datasets(keyword, bbox, start, end)` — CMR collections.json 搜索
+- `get_collection_metadata(collection_id)` — CMR collections.umm_json 完整元数据
+- `search_granules(collection_id, bbox, start, end)` — 粒度列表 + 下载URL (Earthdata Login Bearer Token)
+- UA 规范 `StockAnalSys/1.0 (research; cmr-client)`；2 QPS
+
+**三重验证**：
+- 单元：`pytest tests/adapters/test_shipping_adapter.py tests/adapters/test_satellite_adapter.py -v` → **27 passed**
+  - Shipping×13：name/抽象方法/BDI解析/全失败/截断/港口/未知港口/AIS无username/AIS解析/AIS错误/健康检查
+  - Satellite×14：name/抽象方法/search三路径/metadata四路径/granules两路径/健康检查两路径/EDL Token
+- 集成：`from app.adapters import ShippingAdapter, SatelliteAdapter` 导入通过，注册到 `AdapterRegistry` 两个新 domain
+- 端到端：**不发真实网络请求**（作战指令要求），全部 mock `_get_text/_get_json`
+
+**关键设计决策**：
+1. **AIS 软降级**：AISHub 要求注册 username，未配置环境变量时直接降空DF，绝不阻塞调用方
+2. **BDI 宽松解析**：HTML 页面结构易变，采用正则`\[ms_ts, value\]` 提取+`tail(days)`截断，失败降空
+3. **港口吞吐量公告解析**：`YYYY年M月 ... 吞吐量 ... 万TEU/万吨` 宽松正则，适配不同港集团页面风格
+4. **CMR 公开无 Key**：`search/collections.json` 官方明确 "public, no authentication required"；下载粒度才需 EDL Bearer Token，已预留 `edl_token` 构造参数
+5. **Registry 新 domain**：`commodity_shipping` / `earth_observation`，下游 agent 可 `reg.call_with_fallback("commodity_shipping","get_bdi_index",days=30)` 调用
