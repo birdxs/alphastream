@@ -118,6 +118,13 @@ export function useChatStream() {
       const handlers: SSEHandlers = {
         onToken: (data) => {
           const content = data.content;
+          // [UI-Q4] token 带 agent 字段 → 视为agent推理token, 追加到agent-store的流式reasoning行
+          //   (不进入 chat 正文 streamingContent)
+          if (data.agent) {
+            const finalize = data.finish_reason === 'stop';
+            agentStore.appendReasoningToken(data.agent, content, finalize);
+            return;
+          }
           fullContentBuffer += content;
           if (content.length <= 5) {
             // 短token直接追加

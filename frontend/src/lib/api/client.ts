@@ -20,9 +20,18 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 //   若用户显式设置 NEXT_PUBLIC_SSE_URL 才直连（生产 Nginx 反代场景）。
 // 关于 rewrites buffer：Next.js 16 dev rewrites 对 text/event-stream 响应会延迟首 chunk ~1s
 // 但最终可流，不会永远卡死；权衡之下"能到达后端"比"理论上最快 SSE"更重要。
-const SSE_BASE = process.env.NEXT_PUBLIC_SSE_URL
-  || process.env.NEXT_PUBLIC_API_URL
-  || '';
+// Dev 模式必须直连后端:8888 — Next 16 Turbopack dev rewrites 会完全 buffer
+// text/event-stream 响应直到上游 close, 导致前端 reader.read() 收不到任何 chunk。
+// 策略: 显式 env > 浏览器自动 (hostname+:8888) > SSR 空 (SSR 不会发 SSE)。
+const SSE_BASE = (() => {
+  if (process.env.NEXT_PUBLIC_SSE_URL) return process.env.NEXT_PUBLIC_SSE_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined' && window.location) {
+    const h = window.location.hostname;
+    return `${window.location.protocol}//${h}:8888`;
+  }
+  return '';
+})();
 
 // 兼容历史 API 返回字面 NaN/Infinity 的响应 (非标 JSON)。
 // 后端已修复为输出 null, 但旧 conversation 持久化数据可能仍含 NaN, 前端做双保险。
@@ -110,6 +119,7 @@ class ApiClient {
         // 内部派发：处理一个完整SSE事件块（多行）— 按事件而非按行处理，
         // 避免TCP chunk在event:/data:中间切断时丢失event前缀
         const dispatchBlock = (block: string) => {
+          console.log('[SSE-block]', block.slice(0, 200));
           let eventType = '';
           let dataStr = '';
           for (const rawLine of block.split('\n')) {
@@ -135,6 +145,7 @@ class ApiClient {
             effectiveType = d.event_type;
             payload = d.data ?? d;
           }
+          console.log('[SSE-dispatch]', effectiveType, Object.keys(payload as object || {}).slice(0, 5));
           try {
             switch (effectiveType) {
               case 'token': handlers.onToken?.(payload as Parameters<NonNullable<typeof handlers.onToken>>[0]); break;
@@ -143,6 +154,8 @@ class ApiClient {
               case 'artifact': handlers.onArtifact?.(payload as Parameters<NonNullable<typeof handlers.onArtifact>>[0]); break;
               case 'agent_progress': handlers.onAgentProgress?.(payload as Parameters<NonNullable<typeof handlers.onAgentProgress>>[0]); break;
               case 'reasoning': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;
+              // [UI-Q4] llm_request: 发LLM前的完整prompt/messages → 作为reasoning事件呈现
+              case 'llm_request': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;
               case 'error': handlers.onError?.(payload as Parameters<NonNullable<typeof handlers.onError>>[0]); break;
               case 'done':
                 doneEventSeen = true;

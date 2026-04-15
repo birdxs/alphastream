@@ -7,7 +7,8 @@
 
 // SSE事件处理器
 export interface SSEHandlers {
-  onToken?: (data: { content: string; finish_reason?: string | null }) => void;
+  // [UI-Q4] token事件可带 agent/round 标识 — agent 字段存在时视为"agent推理token", 追加到agent终端流
+  onToken?: (data: { content: string; finish_reason?: string | null; agent?: string; round?: number }) => void;
   onToolCallStart?: (data: ToolCallStart) => void;
   onToolCallResult?: (data: ToolCallResult) => void;
   onArtifact?: (data: Artifact) => void;

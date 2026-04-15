@@ -38,6 +38,13 @@ interface AgentState {
   addToolCall: (tc: ToolCallStart) => void;
   setToolCallResult: (id: string, result: ToolCallResult) => void;
   appendEvent: (ev: Omit<AgentEvent, 'id' | 'ts'> & { id?: string; ts?: number }) => void;
+  /**
+   * [UI-Q4] 流式 reasoning token 累积:
+   *  - 若最后一条事件是同agent的reasoning且仍标记streaming, 则把token追加到其detail,
+   *  - 否则新建一条 reasoning 事件, meta.streaming=true
+   *  - 若 finalize=true, 则标记最后一条 reasoning 为完成(streaming=false), 不再追加
+   */
+  appendReasoningToken: (agent: string | undefined, token: string, finalize?: boolean) => void;
   setOverallProgress: (p: number) => void;
   setAnalyzing: (analyzing: boolean) => void;
   reset: () => void;
@@ -89,6 +96,37 @@ export const useAgentStore = create<AgentState>((set) => ({
       const next = s.events.length >= MAX_EVENTS
         ? [...s.events.slice(s.events.length - MAX_EVENTS + 1), full]
         : [...s.events, full];
+      return { events: next };
+    }),
+  appendReasoningToken: (agent, token, finalize = false) =>
+    set((s) => {
+      const events = s.events;
+      const lastIdx = events.length - 1;
+      const last = lastIdx >= 0 ? events[lastIdx] : undefined;
+      const lastStreaming = !!(last?.meta && (last.meta as { streaming?: boolean }).streaming);
+      // 最后一条是同agent的流式reasoning → 追加
+      if (last && last.type === 'reasoning' && last.agent === agent && lastStreaming) {
+        const nextDetail = (last.detail || '') + token;
+        const nextMeta = { ...(last.meta || {}), streaming: !finalize };
+        const updated: AgentEvent = { ...last, detail: nextDetail, meta: nextMeta };
+        const nextEvents = [...events.slice(0, lastIdx), updated];
+        return { events: nextEvents };
+      }
+      // finalize 但最后一条不是 streaming reasoning → 忽略
+      if (finalize) return {};
+      // 否则新建一条流式 reasoning
+      const full: AgentEvent = {
+        id: nextId(),
+        ts: Date.now(),
+        type: 'reasoning',
+        agent,
+        title: `${agent || '推理'} 思考`,
+        detail: token,
+        meta: { streaming: true },
+      };
+      const next = events.length >= MAX_EVENTS
+        ? [...events.slice(events.length - MAX_EVENTS + 1), full]
+        : [...events, full];
       return { events: next };
     }),
   setOverallProgress: (p) => set({ overallProgress: p }),
