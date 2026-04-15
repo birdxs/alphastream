@@ -105,6 +105,9 @@ class RiskManagerAgent:
             result = _parse_ai_result(content)
             result['tool_calls'] = tool_log
 
+            # [R3 Q4 P2 2026-04-15] 根据风险等级发布 EVENT_RISK_ALERT 到前端终端
+            _publish_risk_alert(stock_code, result)
+
             return {
                 'risk_assessment': result,
                 'progress': 70.0,
@@ -125,6 +128,40 @@ class RiskManagerAgent:
                         {'agent': '风险管理官', 'status': 'failed', 'error': str(e)}
                     ]
                 }
+
+
+def _publish_risk_alert(stock_code: str, risk_result: Dict[str, Any]) -> None:
+    """[R3 Q4 P2] 风险等级达到中高/高时向 EventBus publish EVENT_RISK_ALERT。
+    前缀 [RISK_ALERT] 走 reasoning 通道, 让前端根据前缀渲染 warn/error kind。
+    """
+    try:
+        from app.core.event_bus import get_event_bus, EVENT_RISK_ALERT
+        risk_level = str(risk_result.get('risk_level', '') or '')
+        risk_score = risk_result.get('risk_score', 0)
+        # 判定严重程度
+        if any(k in risk_level for k in ('高风险', '中高风险')) or (isinstance(risk_score, (int, float)) and risk_score >= 60):
+            level = 'high' if ('高风险' in risk_level and '中高' not in risk_level) or (isinstance(risk_score, (int, float)) and risk_score >= 80) else 'medium'
+        elif any(k in risk_level for k in ('中等风险',)) or (isinstance(risk_score, (int, float)) and risk_score >= 40):
+            level = 'low'  # 中等仅提示, 不刷红
+        else:
+            return  # 低风险不发事件, 避免噪音
+
+        factors = risk_result.get('risk_factors') or []
+        factors_text = ('; '.join(factors[:3]) if isinstance(factors, list) else str(factors))[:180]
+        content = f'[RISK_ALERT] level={level} score={risk_score} {risk_level} — {factors_text}'
+        get_event_bus().publish(EVENT_RISK_ALERT, {
+            'event_type': 'reasoning',
+            'data': {
+                'agent': '风险管理师',
+                'content': content,
+                'level': level,
+                'stock_code': stock_code,
+                'risk_score': risk_score,
+                'risk_level': risk_level,
+            },
+        })
+    except Exception as e:
+        logger.debug(f"[RiskManager] publish risk alert 失败: {e}")
 
 
 def _build_system_prompt(state: Dict[str, Any]) -> str:
@@ -234,6 +271,10 @@ def _fallback_analyze(state: Dict[str, Any]) -> Dict[str, Any]:
     analyzer = StockAnalyzer()
     rm = RiskMonitor(analyzer)
     result = rm.analyze_stock_risk(stock_code, market_type)
+
+    # [R3 Q4 P2] fallback 模式下同样根据结果 publish alert
+    if isinstance(result, dict):
+        _publish_risk_alert(stock_code, result)
 
     return {
         'risk_assessment': result or {'error': '风险评估未返回结果'},

@@ -1,7 +1,9 @@
 """
 Input: Agent分析结果 + 人工审批决策
-Output: 审批后的最终决策
+Output: 审批后的最终决策 + EventBus approval_needed 事件流
 Pos: app/agents/hitl.py - Human-in-the-Loop 审批机制
+[R3 Q4 P2 2026-04-15 +08:00] 在 request_approval/submit_approval 时向 EventBus publish
+  EVENT_APPROVAL_NEEDED, 让前端终端看见 [APPROVAL] 前缀的 reasoning 行。
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -11,6 +13,31 @@ import time
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _publish_approval_event(action: str, task_id: str, decision: Dict[str, Any],
+                            risk_level: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    """[R3 Q4 P2] 向 EventBus 发布 approval 相关事件 (前缀 [APPROVAL] 走 reasoning 通道)。"""
+    try:
+        from app.core.event_bus import get_event_bus, EVENT_APPROVAL_NEEDED
+        decision_summary = str(decision.get('action') or decision.get('recommendation') or decision)[:120]
+        content = f'[APPROVAL] {action} task={task_id} risk={risk_level} — {decision_summary}'
+        payload = {
+            'event_type': 'reasoning',
+            'data': {
+                'agent': 'HITL审批官',
+                'content': content,
+                'approval_type': decision.get('approval_type', 'investment_decision'),
+                'task_id': task_id,
+                'risk_level': risk_level,
+                'options': ['approve', 'reject', 'modify'],
+            },
+        }
+        if extra:
+            payload['data'].update(extra)
+        get_event_bus().publish(EVENT_APPROVAL_NEEDED, payload)
+    except Exception as e:
+        logger.debug(f"[HITL] publish approval event 失败: {e}")
 
 
 class HumanApprovalManager:
@@ -29,13 +56,16 @@ class HumanApprovalManager:
         - 高风险(high): 等待人工审批（最多timeout秒）
         """
         if risk_level == 'low':
+            _publish_approval_event('auto_pass', task_id, decision, risk_level)
             return {**decision, 'approved': True, 'approval_type': 'auto_low_risk'}
 
         if risk_level == 'medium':
             logger.info(f"中风险决策自动通过(task={task_id}): {decision.get('action', 'N/A')}")
+            _publish_approval_event('auto_pass', task_id, decision, risk_level)
             return {**decision, 'approved': True, 'approval_type': 'auto_medium_risk'}
 
         # 高风险：等待人工审批
+        _publish_approval_event('pending', task_id, decision, risk_level)
         approval_request = {
             'task_id': task_id,
             'decision': decision,
@@ -79,6 +109,13 @@ class HumanApprovalManager:
             if task_id in self._pending_approvals:
                 self._pending_approvals[task_id]['status'] = 'approved' if approved else 'rejected'
                 self._pending_approvals[task_id]['human_feedback'] = feedback
+                decision = self._pending_approvals[task_id].get('decision', {})
+                risk_level = self._pending_approvals[task_id].get('risk_level', 'high')
+                _publish_approval_event(
+                    'approved' if approved else 'rejected',
+                    task_id, decision, risk_level,
+                    extra={'human_feedback': feedback[:200] if feedback else ''}
+                )
                 return True
         return False
 
