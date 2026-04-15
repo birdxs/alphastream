@@ -84,6 +84,9 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 )
 
 app = Flask(__name__)
+# [K3 2026-04-15 14:32 +08:00] 进程启动时间锚点 — 用于 /health uptime 计算
+START_TIME = time.time()
+APP_VERSION = "3.1.0"
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127.0.0.1:8888,http://localhost:3000,http://127.0.0.1:3000').split(',')
 CORS(app, resources={r"/api/*": {"origins": allowed_origins, "methods": ["GET", "POST"], "allow_headers": ["Content-Type", "X-API-Key"]}})
 analyzer = StockAnalyzer()
@@ -3547,6 +3550,129 @@ def api_alt_data(ticker: str):
     aggregated["confidence"] = 0.60
     aggregated["sources"] = [{"name": "聚合:航运+ESG+招聘+企业", "type": "另类数据"}]
     return _p3_ok(aggregated, partial_errors=errors if errors else None)
+
+
+# ============================================================
+# K3 健康检查 + 监控端点 [NEW-FILE:#20260415-49 2026-04-15 14:32 +08:00]
+# /health           基础存活 (docker HEALTHCHECK / nginx upstream)
+# /api/adapters/status  22 adapter 逐一 health_check (5s/每个)
+# /api/registry/stats   16 domain 注册映射 + 可用实例计数
+# ============================================================
+
+# 22 Adapter 清单 (与 adapter_registry.DEFAULT_DOMAIN_MAP 对齐)
+_ADAPTER_SPECS = [
+    ("AkshareAdapter",       "app.adapters.akshare_adapter"),
+    ("BaostockAdapter",      "app.adapters.baostock_adapter"),
+    ("EfinanceAdapter",      "app.adapters.efinance_adapter"),
+    ("YFinanceAdapter",      "app.adapters.yfinance_adapter"),
+    ("EDGARAdapter",         "app.adapters.edgar_adapter"),
+    ("NBSAdapter",           "app.adapters.nbs_adapter"),
+    ("FREDAdapter",          "app.adapters.fred_adapter"),
+    ("CCXTAdapter",          "app.adapters.ccxt_adapter"),
+    ("CoinGeckoAdapter",     "app.adapters.coingecko_adapter"),
+    ("WorldBankAdapter",     "app.adapters.worldbank_adapter"),
+    ("IMFAdapter",           "app.adapters.imf_adapter"),
+    ("OpenCLIBridge",        "app.adapters.opencli_bridge"),
+    ("OpenBBAdapter",        "app.adapters.openbb_adapter"),
+    ("AshareAdapter",        "app.adapters.ashare_adapter"),
+    ("EasyquotationAdapter", "app.adapters.easyquotation_adapter"),
+    ("RSSNewsAdapter",       "app.adapters.rss_news_adapter"),
+    ("ESGAdapter",           "app.adapters.esg_adapter"),
+    ("ShippingAdapter",      "app.adapters.shipping_adapter"),
+    ("SatelliteAdapter",     "app.adapters.satellite_adapter"),
+    ("CorporateAdapter",     "app.adapters.corporate_adapter"),
+    ("JobsAdapter",          "app.adapters.jobs_adapter"),
+]
+
+
+def _hc_one(cls_name: str, mod_path: str, timeout_s: float = 5.0) -> dict:
+    """单 adapter 健康检查. 永不抛, 返回 {ok,msg,latency_ms}."""
+    import importlib
+    import time as _tm
+    t0 = _tm.time()
+    try:
+        mod = importlib.import_module(mod_path)
+        cls = getattr(mod, cls_name, None)
+        if cls is None:
+            return {"ok": False, "msg": f"class {cls_name} not found", "latency_ms": 0}
+        inst = cls()
+        # health_check 可能自身很慢; 这里不强制线程超时 (test_client 友好),
+        # 交由 adapter 内部超时或由调用方整体超时控制
+        ok = False
+        try:
+            ok = bool(inst.health_check())
+            msg = "ok" if ok else "health_check returned False"
+        except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+        latency = int((_tm.time() - t0) * 1000)
+        return {"ok": ok, "msg": msg, "latency_ms": latency}
+    except Exception as e:
+        return {"ok": False, "msg": f"{type(e).__name__}: {e}",
+                "latency_ms": int((_tm.time() - t0) * 1000)}
+
+
+@app.route('/health', methods=['GET'])
+def health_basic():
+    """轻量存活探针 — 返回 200 + uptime + version. <100ms."""
+    return jsonify({
+        "status": "ok",
+        "uptime_s": round(time.time() - START_TIME, 3),
+        "version": APP_VERSION,
+        "ts": int(time.time()),
+    }), 200
+
+
+@app.route('/api/adapters/status', methods=['GET'])
+def adapters_status():
+    """遍历所有 adapter 调用 health_check, 返回逐个健康状态."""
+    results: dict = {}
+    total = len(_ADAPTER_SPECS)
+    ok_count = 0
+    for cls_name, mod_path in _ADAPTER_SPECS:
+        r = _hc_one(cls_name, mod_path, timeout_s=5.0)
+        results[cls_name] = r
+        if r.get("ok"):
+            ok_count += 1
+    return jsonify({
+        "status": "ok",
+        "total": total,
+        "healthy": ok_count,
+        "unhealthy": total - ok_count,
+        "adapters": results,
+        "ts": int(time.time()),
+    }), 200
+
+
+@app.route('/api/registry/stats', methods=['GET'])
+def registry_stats():
+    """AdapterRegistry 16 domain × adapter 注册表快照 (轻量, 只查字典)."""
+    try:
+        from app.adapters.adapter_registry import AdapterRegistry
+        reg = AdapterRegistry.default()
+        default_map = AdapterRegistry.DEFAULT_DOMAIN_MAP
+        domains_info = []
+        for dname, specs in default_map.items():
+            instances = reg.get_adapters(dname)
+            inst_names = [a.name for a in instances]
+            domains_info.append({
+                "name": dname,
+                "configured": specs,
+                "configured_count": len(specs),
+                "available": inst_names,
+                "available_count": len(inst_names),
+                "first_available": inst_names[0] if inst_names else None,
+            })
+        status_snapshot = reg.get_status()
+        return jsonify({
+            "status": "ok",
+            "domain_count": len(default_map),
+            "domains": domains_info,
+            "fail_count": status_snapshot.get("fail_count", {}),
+            "ts": int(time.time()),
+        }), 200
+    except Exception as e:
+        app.logger.error(f"/api/registry/stats 失败: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # 在应用启动时启动清理线程（保持原有代码不变）
