@@ -2250,3 +2250,23 @@ NO_PROXY=localhost,127.0.0.1,akshare.com,baostock.com,stats.gov.cn,sse.com.cn,sz
 
 ### v2方案全链路达成 ✅
 数据层(21 adapter) → Registry(16 domain) → Agent(12接入) → API(10 P3端点) → 前端(5 Artifact) → 代理(境内外分层) — **完全贯通**
+
+---
+
+## I3 运维手册落盘 [2026-04-15 14:15 +08:00]
+
+**交付**: `docs/OPERATIONS.md` (216行) [NEW-FILE:#20260415-42] — commit `b7bb9b3`
+
+**手册八大章节**:
+1. 快速启动 (后端8888 / 前端3000 / Docker)
+2. 环境配置 (必填Key + 5免费Key表 + HTTP/NO_PROXY分层)
+3. 数据层架构 (16 domain映射表 + call_with_fallback链路图)
+4. 10 P3 REST API 端点 + Artifact type
+5. 14-Agent全链路 (coordinator→analysts→4投资者人格→decision/reflection)
+6. 故障排查 (8类症状排查步骤: SSE超时/SKIPPED adapter/空DataFrame/400/代理/build/Redis/OPENAI)
+7. 测试矩阵 (391+ pytest 分层)
+8. 文档索引 (9篇关联)
+
+**同步更新**: `docs/README.md` 新增"运维入门"条目; `README.md` 文档区顶部追加 OPERATIONS.md 链接。
+
+**I3作用**: v2方案全链路闭环后的运维交接锚点, 未来人员30分钟上手。
