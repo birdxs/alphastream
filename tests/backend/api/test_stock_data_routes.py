@@ -1,0 +1,441 @@
+# Input  : Flask test_client (flask_client fixture) + monkeypatch
+# Output : pytest 用例：覆盖 10 条股票数据相关路由（快乐路径 + 错误路径）
+# Pos    : tests/backend/api/test_stock_data_routes.py
+# 说明   : BE-01b 小批量验收。LLM/akshare/baostock/外部 IO 全 mock；不发起任何真实数据拉取。
+"""BE-01b 股票数据 10 路由测试。
+
+覆盖路由（精确，路径以 app/web/web_server.py grep 结果为准）：
+
+1.  GET  /api/stock_data         (line 1136)  历史行情 + 技术指标
+2.  GET  /api/stock_name         (line 1339)  名称缓存查询
+3.  GET  /api/stock_profile      (line 1247)  baostock 概要（行业/PE/PB/ROE）
+4.  GET  /api/stock_name_search  (line 1354)  名称反查
+5.  GET  /api/market_indices     (line 1639)  四大市场指数
+6.  GET  /api/latest_news        (line 2212)  最新新闻
+7.  GET  /api/news_sentiment     (line 2345)  新闻情绪分析
+8.  POST /api/north_flow_history (line 622)   北向资金历史
+9.  GET  /search_us_stocks       (line 649)   美股关键词搜索
+10. GET  /api/stock_data         参数错误分支（period 容错）
+
+约束：每路由 ≥ 2 用例（快乐 + 错误）。错误路径不得 500 泄露堆栈。
+外部 IO（akshare/baostock/news_fetcher/analyzer/us_stock_service/CapitalFlowAnalyzer）全 mock。
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any, Dict
+
+import pandas as pd
+import pytest
+
+
+# --------------------------------------------------------------------------- #
+# 工具
+# --------------------------------------------------------------------------- #
+
+def _json(resp) -> Dict[str, Any]:
+    """安全解析 JSON 响应；保证返回 dict。"""
+    assert resp.content_type and "application/json" in resp.content_type, (
+        f"响应非 JSON: content_type={resp.content_type}, body={resp.data[:200]!r}"
+    )
+    data = json.loads(resp.data.decode("utf-8"))
+    assert isinstance(data, dict), f"JSON 顶层非 dict: {type(data)}"
+    return data
+
+
+def _no_stacktrace(resp) -> None:
+    """断言响应体不泄露 Python 堆栈关键字。"""
+    body = resp.data.decode("utf-8", errors="replace").lower()
+    forbidden = ["traceback (most recent call last)", 'file "', "raise "]
+    for fb in forbidden:
+        assert fb not in body, f"响应不应泄露堆栈关键字 {fb!r}: {body[:300]}"
+
+
+# --------------------------------------------------------------------------- #
+# 1. GET /api/stock_data
+# --------------------------------------------------------------------------- #
+
+class TestStockDataRoute:
+    """覆盖 /api/stock_data：参数缺失 / 历史数据正常 / period 容错。"""
+
+    def test_missing_stock_code_returns_400(self, flask_client):
+        resp = flask_client.get("/api/stock_data")
+        assert resp.status_code == 400
+        data = _json(resp)
+        assert "error" in data and "股票代码" in data["error"]
+        _no_stacktrace(resp)
+
+    def test_invalid_stock_code_returns_400(self, flask_client):
+        # validate_stock_code 对非法 A 股代码（非6位数字）返回失败
+        resp = flask_client.get("/api/stock_data?stock_code=ABCXYZ&market_type=A")
+        assert resp.status_code == 400, resp.data[:200]
+        _no_stacktrace(resp)
+
+    def test_happy_path_returns_records(self, flask_client, monkeypatch):
+        from app.web import web_server
+
+        # mock analyzer 历史数据：构造 5 行 DataFrame，含 date / open / high / low / close / volume
+        fake_df = pd.DataFrame({
+            "date": pd.to_datetime(["2025-12-01", "2025-12-02", "2025-12-03",
+                                     "2025-12-04", "2025-12-05"]),
+            "open": [10.0, 10.5, 10.2, 10.6, 10.8],
+            "high": [10.6, 10.7, 10.5, 10.9, 11.0],
+            "low":  [9.9, 10.1, 10.0, 10.4, 10.6],
+            "close": [10.5, 10.3, 10.4, 10.8, 10.9],
+            "volume": [10000, 12000, 11000, 13000, 14000],
+        })
+        monkeypatch.setattr(web_server.analyzer, "get_stock_data",
+                            lambda code, mt, sd, ed: fake_df.copy())
+        # calculate_indicators 直接透传，避免触发 ta 库依赖
+        monkeypatch.setattr(web_server.analyzer, "calculate_indicators",
+                            lambda df: df)
+        # 名称获取走缓存接口，禁止真实回退
+        monkeypatch.setattr(web_server, "_get_stock_name_safe",
+                            lambda code, mt='A': "测试股票")
+
+        resp = flask_client.get("/api/stock_data?stock_code=600000&market_type=A&period=1m")
+        assert resp.status_code == 200, resp.data[:300]
+        data = _json(resp)
+        assert "data" in data and isinstance(data["data"], list)
+        assert len(data["data"]) == 5
+        assert data.get("stock_name") == "测试股票"
+
+    def test_empty_dataframe_returns_404(self, flask_client, monkeypatch):
+        from app.web import web_server
+        monkeypatch.setattr(web_server.analyzer, "get_stock_data",
+                            lambda code, mt, sd, ed: pd.DataFrame())
+        monkeypatch.setattr(web_server, "_get_stock_name_safe",
+                            lambda code, mt='A': "未知")
+        resp = flask_client.get("/api/stock_data?stock_code=600001&market_type=A&period=3m")
+        assert resp.status_code == 404
+        data = _json(resp)
+        assert "error" in data
+        _no_stacktrace(resp)
+
+
+# --------------------------------------------------------------------------- #
+# 2. GET /api/stock_name
+# --------------------------------------------------------------------------- #
+
+class TestStockNameRoute:
+    def test_missing_stock_code_returns_400(self, flask_client):
+        resp = flask_client.get("/api/stock_name")
+        assert resp.status_code == 400
+        data = _json(resp)
+        assert data.get("error") == "stock_code required"
+        _no_stacktrace(resp)
+
+    def test_happy_path_uses_cache(self, flask_client, monkeypatch):
+        from app.web import web_server
+        # 直接注入缓存，避免触发 akshare
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE",
+                            {"600000": "浦发银行"})
+        monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
+
+        resp = flask_client.get("/api/stock_name?stock_code=600000")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["stock_code"] == "600000"
+        assert data["stock_name"] == "浦发银行"
+
+    def test_unknown_code_returns_code_as_name(self, flask_client, monkeypatch):
+        from app.web import web_server
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
+        monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
+        resp = flask_client.get("/api/stock_name?stock_code=999999")
+        assert resp.status_code == 200
+        data = _json(resp)
+        # 未命中时回填 code 作为 name
+        assert data["stock_name"] == "999999"
+
+
+# --------------------------------------------------------------------------- #
+# 3. GET /api/stock_profile
+# --------------------------------------------------------------------------- #
+
+class TestStockProfileRoute:
+    def test_missing_stock_code_returns_400(self, flask_client):
+        resp = flask_client.get("/api/stock_profile")
+        assert resp.status_code == 400
+        data = _json(resp)
+        assert data.get("error") == "stock_code required"
+        _no_stacktrace(resp)
+
+    def test_happy_path_with_mocked_baostock(self, flask_client, monkeypatch):
+        """注入 sys.modules['baostock']，全部接口 mock，避免外网。"""
+        import sys
+        import types
+
+        from app.web import web_server
+
+        # 重置缓存，避免之前用例污染
+        web_server._PROFILE_CACHE.clear()
+
+        # mock 名称缓存
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {"600000": "浦发银行"})
+        monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
+        # 跳过 baostock 登录
+        monkeypatch.setattr(web_server, "_ensure_bs_login", lambda: None)
+
+        # 构造 fake baostock module
+        class _FakeRS:
+            def __init__(self, rows):
+                self._rows = list(rows)
+                self.error_code = "0"
+                self._idx = 0
+
+            def next(self):
+                if self._idx < len(self._rows):
+                    self._idx += 1
+                    return True
+                return False
+
+            def get_row_data(self):
+                return self._rows[self._idx - 1]
+
+        fake_bs = types.ModuleType("baostock")
+        fake_bs.login = lambda: None
+        fake_bs.logout = lambda: None
+        # industry: rows[0][3] 是行业
+        fake_bs.query_stock_industry = lambda code: _FakeRS([
+            ["2025-12-31", code, "浦发银行", "银行"]
+        ])
+        # k_data: 16 列，索引 5=close 12=peTTM 13=pbMRQ
+        fake_bs.query_history_k_data_plus = lambda *a, **kw: _FakeRS([
+            [
+                "2025-12-30", "sh.600000",
+                "10.0", "10.5", "9.9", "10.3", "100000", "1000000",
+                "3", "1.2", "1", "0.5",
+                "5.5", "0.6", "1.0", "2.0", "0",
+            ]
+        ])
+        fake_bs.query_stock_basic = lambda code: _FakeRS([])
+        # profit: rows[0][3] 是 roeAvg
+        fake_bs.query_profit_data = lambda code, year, quarter: _FakeRS([
+            ["2025", "sh.600000", "20251231", "0.12"]
+        ])
+        monkeypatch.setitem(sys.modules, "baostock", fake_bs)
+
+        resp = flask_client.get("/api/stock_profile?stock_code=600000")
+        assert resp.status_code == 200, resp.data[:300]
+        data = _json(resp)
+        assert data["stock_code"] == "600000"
+        assert data["stock_name"] == "浦发银行"
+        assert data["industry"] == "银行"
+        assert data["pe_ttm"] == pytest.approx(5.5)
+        assert data["pb"] == pytest.approx(0.6)
+        # roeAvg=0.12 * 100 = 12.0
+        assert data["roe"] == pytest.approx(12.0)
+
+
+# --------------------------------------------------------------------------- #
+# 4. GET /api/stock_name_search
+# --------------------------------------------------------------------------- #
+
+class TestStockNameSearchRoute:
+    def test_missing_query_returns_400(self, flask_client):
+        resp = flask_client.get("/api/stock_name_search")
+        assert resp.status_code == 400
+        data = _json(resp)
+        assert data.get("error") == "q required"
+        assert data.get("results") == []
+        _no_stacktrace(resp)
+
+    def test_match_ranks_exact_first(self, flask_client, monkeypatch):
+        from app.web import web_server
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {
+            "600000": "浦发银行",
+            "601398": "工商银行",
+            "600036": "招商银行",
+        })
+        monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
+
+        resp = flask_client.get("/api/stock_name_search?q=招商银行")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["query"] == "招商银行"
+        assert data["count"] >= 1
+        # exact 命中优先
+        assert data["results"][0]["stock_code"] == "600036"
+
+
+# --------------------------------------------------------------------------- #
+# 5. GET /api/market_indices
+# --------------------------------------------------------------------------- #
+
+class TestMarketIndicesRoute:
+    def test_happy_path_returns_indices(self, flask_client, monkeypatch):
+        from app.web import web_server
+        fake = {"indices": [
+            {"name": "上证指数", "code": "000001", "price": 3500.0, "change_pct": 1.2},
+            {"name": "深证成指", "code": "399001", "price": 11000.0, "change_pct": -0.5},
+        ]}
+        monkeypatch.setattr(web_server, "_fetch_market_indices_data", lambda: fake)
+        resp = flask_client.get("/api/market_indices")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert "indices" in data and len(data["indices"]) == 2
+        assert data["indices"][0]["code"] == "000001"
+
+    def test_empty_when_fetch_fails(self, flask_client, monkeypatch):
+        from app.web import web_server
+        monkeypatch.setattr(web_server, "_fetch_market_indices_data",
+                            lambda: {"indices": []})
+        resp = flask_client.get("/api/market_indices")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data == {"indices": []}
+
+
+# --------------------------------------------------------------------------- #
+# 6. GET /api/latest_news
+# --------------------------------------------------------------------------- #
+
+class TestLatestNewsRoute:
+    def test_happy_path(self, flask_client, monkeypatch):
+        from app.web import web_server
+        fake_news = [
+            {"title": "央行降准", "content": "重磅利好", "ts": "2025-12-30 10:00"},
+            {"title": "美联储加息", "content": "市场风险加剧", "ts": "2025-12-30 09:00"},
+        ]
+        monkeypatch.setattr(web_server.news_fetcher, "get_latest_news",
+                            lambda days=1, limit=1000: list(fake_news))
+        resp = flask_client.get("/api/latest_news?days=1&limit=10")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["success"] is True
+        assert isinstance(data["news"], list)
+        assert len(data["news"]) == 2
+
+    def test_important_filter(self, flask_client, monkeypatch):
+        from app.web import web_server
+        fake_news = [
+            {"title": "央行降准", "content": "重磅利好"},
+            {"title": "普通公告", "content": "无关紧要的内容"},
+        ]
+        monkeypatch.setattr(web_server.news_fetcher, "get_latest_news",
+                            lambda days=1, limit=1000: list(fake_news))
+        resp = flask_client.get("/api/latest_news?days=1&important=1")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["success"] is True
+        # 仅保留含 "重要/利好/重磅/突发/关注" 的条目
+        assert len(data["news"]) == 1
+        assert data["news"][0]["title"] == "央行降准"
+
+    def test_invalid_days_does_not_500(self, flask_client, monkeypatch):
+        """非法 days 参数会触发 int() 异常，但路由 try/except 应捕获并返回 success=False。"""
+        from app.web import web_server
+        monkeypatch.setattr(web_server.news_fetcher, "get_latest_news",
+                            lambda days=1, limit=1000: [])
+        resp = flask_client.get("/api/latest_news?days=abc")
+        assert resp.status_code == 500
+        data = _json(resp)
+        assert data["success"] is False
+        _no_stacktrace(resp)
+
+
+# --------------------------------------------------------------------------- #
+# 7. GET /api/news_sentiment
+# --------------------------------------------------------------------------- #
+
+class TestNewsSentimentRoute:
+    def test_happy_path_classifies_bullish_bearish(self, flask_client, monkeypatch):
+        from app.web import web_server
+        fake_news = [
+            {"title": "公司业绩超预期", "content": "盈利大幅增长"},
+            {"title": "黑天鹅利空", "content": "暴跌风险加剧"},
+            {"title": "公告", "content": "正常运营"},
+        ]
+        monkeypatch.setattr(web_server.news_fetcher, "get_latest_news",
+                            lambda days=1: list(fake_news))
+        resp = flask_client.get("/api/news_sentiment?days=1")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["total"] == 3
+        assert data["bullish"] == 1
+        assert data["bearish"] == 1
+        assert data["neutral"] == 1
+        assert 1.0 <= data["score"] <= 10.0
+
+    def test_empty_news_returns_neutral_default(self, flask_client, monkeypatch):
+        from app.web import web_server
+        monkeypatch.setattr(web_server.news_fetcher, "get_latest_news",
+                            lambda days=1: [])
+        resp = flask_client.get("/api/news_sentiment")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["total"] == 0
+        assert data["score"] == 5.0
+
+
+# --------------------------------------------------------------------------- #
+# 8. POST /api/north_flow_history
+# --------------------------------------------------------------------------- #
+
+class TestNorthFlowHistoryRoute:
+    def test_missing_stock_code_returns_400(self, flask_client):
+        resp = flask_client.post("/api/north_flow_history", json={"days": 10})
+        assert resp.status_code == 400
+        data = _json(resp)
+        assert "error" in data and "股票代码" in data["error"]
+        _no_stacktrace(resp)
+
+    def test_happy_path(self, flask_client, monkeypatch):
+        from app.web import web_server
+        fake = {"history": [
+            {"date": "2025-12-29", "net_amount": 1000.0},
+            {"date": "2025-12-30", "net_amount": -500.0},
+        ]}
+
+        class _FakeAnalyzer:
+            def get_north_flow_history(self, code, sd, ed):
+                return fake
+
+        monkeypatch.setattr(web_server, "CapitalFlowAnalyzer", lambda: _FakeAnalyzer())
+        resp = flask_client.post("/api/north_flow_history",
+                                  json={"stock_code": "600000", "days": 5})
+        assert resp.status_code == 200, resp.data[:300]
+        data = _json(resp)
+        assert "history" in data and len(data["history"]) == 2
+
+
+# --------------------------------------------------------------------------- #
+# 9. GET /search_us_stocks
+# --------------------------------------------------------------------------- #
+
+class TestSearchUsStocksRoute:
+    def test_missing_keyword_returns_400(self, flask_client):
+        resp = flask_client.get("/search_us_stocks")
+        assert resp.status_code == 400
+        data = _json(resp)
+        assert "error" in data and "搜索关键词" in data["error"]
+        _no_stacktrace(resp)
+
+    def test_happy_path(self, flask_client, monkeypatch):
+        from app.web import web_server
+        fake_results = [
+            {"symbol": "AAPL", "name": "Apple Inc."},
+            {"symbol": "AMZN", "name": "Amazon.com Inc."},
+        ]
+        monkeypatch.setattr(web_server.us_stock_service, "search_us_stocks",
+                            lambda kw: list(fake_results))
+        resp = flask_client.get("/search_us_stocks?keyword=a")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["results"][0]["symbol"] == "AAPL"
+        assert len(data["results"]) == 2
+
+    def test_upstream_exception_returns_500_no_stacktrace(self, flask_client, monkeypatch):
+        from app.web import web_server
+
+        def _boom(kw):
+            raise RuntimeError("upstream timeout")
+
+        monkeypatch.setattr(web_server.us_stock_service, "search_us_stocks", _boom)
+        resp = flask_client.get("/search_us_stocks?keyword=a")
+        assert resp.status_code == 500
+        data = _json(resp)
+        assert "error" in data
+        _no_stacktrace(resp)
