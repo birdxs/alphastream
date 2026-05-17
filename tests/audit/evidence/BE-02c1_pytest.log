@@ -1,0 +1,60 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 24 items
+
+tests/backend/unit/test_agent_technical.py::test_technical_happy_path PASSED [  4%]
+tests/backend/unit/test_agent_technical.py::test_technical_fallback_when_data_source_fails PASSED [  8%]
+tests/backend/unit/test_agent_technical.py::test_technical_fallback_pure_path PASSED [ 12%]
+tests/backend/unit/test_agent_technical.py::test_technical_fallback_on_llm_error PASSED [ 16%]
+tests/backend/unit/test_agent_technical.py::test_technical_llm_returns_error_field PASSED [ 20%]
+tests/backend/unit/test_agent_technical.py::test_technical_fallback_does_not_publish_token_events PASSED [ 25%]
+tests/backend/unit/test_agent_fundamental.py::test_fundamental_happy_path PASSED [ 29%]
+tests/backend/unit/test_agent_fundamental.py::test_fundamental_fallback_when_adapter_fails PASSED [ 33%]
+tests/backend/unit/test_agent_fundamental.py::test_fundamental_fallback_clean_path PASSED [ 37%]
+tests/backend/unit/test_agent_fundamental.py::test_fundamental_fallback_on_llm_error PASSED [ 41%]
+tests/backend/unit/test_agent_fundamental.py::test_fundamental_llm_returns_error PASSED [ 45%]
+tests/backend/unit/test_agent_fundamental.py::test_fundamental_fallback_does_not_publish_token_events PASSED [ 50%]
+tests/backend/unit/test_agent_capital_flow.py::test_capital_flow_happy_path PASSED [ 54%]
+tests/backend/unit/test_agent_capital_flow.py::test_capital_flow_fallback_when_adapter_fails PASSED [ 58%]
+tests/backend/unit/test_agent_capital_flow.py::test_capital_flow_fallback_clean_path PASSED [ 62%]
+tests/backend/unit/test_agent_capital_flow.py::test_capital_flow_fallback_on_llm_error PASSED [ 66%]
+tests/backend/unit/test_agent_capital_flow.py::test_capital_flow_llm_returns_error PASSED [ 70%]
+tests/backend/unit/test_agent_capital_flow.py::test_capital_flow_fallback_no_token_events PASSED [ 75%]
+tests/backend/unit/test_agent_sentiment.py::test_sentiment_happy_path PASSED [ 79%]
+tests/backend/unit/test_agent_sentiment.py::test_sentiment_fallback_news_fetcher_fails PASSED [ 83%]
+tests/backend/unit/test_agent_sentiment.py::test_sentiment_empty_news_safe PASSED [ 87%]
+tests/backend/unit/test_agent_sentiment.py::test_sentiment_fallback_on_llm_error PASSED [ 91%]
+tests/backend/unit/test_agent_sentiment.py::test_sentiment_llm_error_field_keeps_report PASSED [ 95%]
+tests/backend/unit/test_agent_sentiment.py::test_sentiment_no_token_events_when_llm_unused PASSED [100%]
+
+============================= 24 passed in 13.38s ==============================
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collected 24 items
+
+tests/backend/unit/test_agent_technical.py ......                        [ 25%]
+tests/backend/unit/test_agent_fundamental.py ......                      [ 50%]
+tests/backend/unit/test_agent_capital_flow.py ......                     [ 75%]
+tests/backend/unit/test_agent_sentiment.py ......                        [100%]
+
+---------- coverage: platform darwin, python 3.12.2-final-0 ----------
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+app/agents/capital_flow_analyst.py     116     31     40     13    68%   19-24, 120, 126, 136-154, 174->178, 180->184, 184->189, 198, 233->236, 248, 252, 254-256, 262, 268
+app/agents/fundamental_analyst.py      103     27     32     10    70%   19-24, 125, 131, 141-159, 180, 182->186, 187->191, 201, 236->239, 251, 257
+app/agents/sentiment_analyst.py         95     19     38      9    76%   17-22, 47, 71->75, 73->75, 76->83, 79-80, 88-89, 105->108, 123-124, 154-155, 162, 170, 178-179
+app/agents/technical_analyst.py        115     33     28      9    68%   19-24, 124-125, 128, 133, 141, 147, 159-178, 201, 206, 220-221, 225, 245->248
+--------------------------------------------------------------------------------
+TOTAL                                  429    110    138     41    70%
+
+
+============================= 24 passed in 14.58s ==============================
