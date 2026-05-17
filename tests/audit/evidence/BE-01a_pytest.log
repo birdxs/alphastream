@@ -1,0 +1,76 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 18 items
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok PASSED [  5%]
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_wrong_method PASSED [ 11%]
+tests/backend/api/test_health_and_analysis_routes.py::TestHealthRoute::test_health_ok_schema PASSED [ 16%]
+tests/backend/api/test_health_and_analysis_routes.py::TestHealthRoute::test_health_wrong_method PASSED [ 22%]
+tests/backend/api/test_health_and_analysis_routes.py::TestApiHealthAbsent::test_api_health_returns_404 PASSED [ 27%]
+tests/backend/api/test_health_and_analysis_routes.py::TestApiHealthAbsent::test_api_health_post_also_404 PASSED [ 33%]
+tests/backend/api/test_health_and_analysis_routes.py::TestAdaptersStatusRoute::test_adapters_status_ok PASSED [ 38%]
+tests/backend/api/test_health_and_analysis_routes.py::TestAdaptersStatusRoute::test_adapters_status_wrong_method PASSED [ 44%]
+tests/backend/api/test_health_and_analysis_routes.py::TestRegistryStatsRoute::test_registry_stats_ok PASSED [ 50%]
+tests/backend/api/test_health_and_analysis_routes.py::TestRegistryStatsRoute::test_registry_stats_wrong_method PASSED [ 55%]
+tests/backend/api/test_health_and_analysis_routes.py::TestStartStockAnalysis::test_start_happy_path_returns_task_id PASSED [ 61%]
+tests/backend/api/test_health_and_analysis_routes.py::TestStartStockAnalysis::test_start_missing_body_returns_400 PASSED [ 66%]
+tests/backend/api/test_health_and_analysis_routes.py::TestStartStockAnalysis::test_start_missing_stock_code_returns_400 PASSED [ 72%]
+tests/backend/api/test_health_and_analysis_routes.py::TestStartStockAnalysis::test_start_invalid_stock_code_returns_400 PASSED [ 77%]
+tests/backend/api/test_health_and_analysis_routes.py::TestAnalysisStatus::test_status_unknown_task_returns_404 PASSED [ 83%]
+tests/backend/api/test_health_and_analysis_routes.py::TestAnalysisStatus::test_status_after_start_returns_schema PASSED [ 88%]
+tests/backend/api/test_health_and_analysis_routes.py::TestCancelAnalysis::test_cancel_unknown_task_returns_404 PASSED [ 94%]
+tests/backend/api/test_health_and_analysis_routes.py::TestCancelAnalysis::test_cancel_after_start_returns_message PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_health_and_analysis_routes.py::TestIndexRoute::test_index_returns_html_ok
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 18 passed, 11 warnings in 5.29s ========================
+you don't login.
