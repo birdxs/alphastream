@@ -1,0 +1,131 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 56 items
+
+tests/backend/unit/test_core_conversation.py::test_T001_singleton PASSED [  1%]
+tests/backend/unit/test_core_conversation.py::test_T002_create_conversation_persists PASSED [  3%]
+tests/backend/unit/test_core_conversation.py::test_T003_default_title PASSED [  5%]
+tests/backend/unit/test_core_conversation.py::test_T004_add_message_basic PASSED [  7%]
+tests/backend/unit/test_core_conversation.py::test_T005_auto_update_title_from_first_user_msg PASSED [  8%]
+tests/backend/unit/test_core_conversation.py::test_T006_add_message_with_artifacts_and_tool_calls PASSED [ 10%]
+tests/backend/unit/test_core_conversation.py::test_T007_H2_strict_truncate_at_50 PASSED [ 12%]
+tests/backend/unit/test_core_conversation.py::test_T008_add_message_to_missing_creates_new PASSED [ 14%]
+tests/backend/unit/test_core_conversation.py::test_T009_save_idempotent PASSED [ 16%]
+tests/backend/unit/test_core_conversation.py::test_T010_get_messages_for_ai_format PASSED [ 17%]
+tests/backend/unit/test_core_conversation.py::test_T011_get_messages_for_ai_with_summary PASSED [ 19%]
+tests/backend/unit/test_core_conversation.py::test_T012_get_message_count PASSED [ 21%]
+tests/backend/unit/test_core_conversation.py::test_T013_list_conversations_sorted_desc PASSED [ 23%]
+tests/backend/unit/test_core_conversation.py::test_T014_list_conversations_limit PASSED [ 25%]
+tests/backend/unit/test_core_conversation.py::test_T015_delete_conversation PASSED [ 26%]
+tests/backend/unit/test_core_conversation.py::test_T016_C3_delete_conv_does_not_clean_checkpoint XFAIL [ 28%]
+tests/backend/unit/test_core_conversation.py::test_T017_add_stock_code_dedup PASSED [ 30%]
+tests/backend/unit/test_core_conversation.py::test_T018_concurrent_add_message PASSED [ 32%]
+tests/backend/unit/test_core_conversation.py::test_T019_update_summary PASSED [ 33%]
+tests/backend/unit/test_core_conversation.py::test_T020_get_missing_returns_none PASSED [ 35%]
+tests/backend/unit/test_core_conversation.py::test_T021_threadpool_concurrent_add_message_json_integrity PASSED [ 37%]
+tests/backend/unit/test_core_conversation.py::test_T022_update_title_api_missing XFAIL [ 39%]
+tests/backend/unit/test_core_ai_client.py::test_T001_get_ai_client_with_key PASSED [ 41%]
+tests/backend/unit/test_core_ai_client.py::test_T002_get_ai_client_without_key PASSED [ 42%]
+tests/backend/unit/test_core_ai_client.py::test_T003_chat_completion_success PASSED [ 44%]
+tests/backend/unit/test_core_ai_client.py::test_T004_chat_completion_no_client PASSED [ 46%]
+tests/backend/unit/test_core_ai_client.py::test_T005_chat_completion_error_mapping PASSED [ 48%]
+tests/backend/unit/test_core_ai_client.py::test_T005b_chat_completion_unknown_error_fallback PASSED [ 50%]
+tests/backend/unit/test_core_ai_client.py::test_T006_chat_completion_tools_kwargs PASSED [ 51%]
+tests/backend/unit/test_core_ai_client.py::test_T007_chat_completion_stream PASSED [ 53%]
+tests/backend/unit/test_core_ai_client.py::test_T007b_chat_completion_stream_no_client PASSED [ 55%]
+tests/backend/unit/test_core_ai_client.py::test_T007c_chat_completion_stream_error PASSED [ 57%]
+tests/backend/unit/test_core_ai_client.py::test_T008_get_completion_content_variants PASSED [ 58%]
+tests/backend/unit/test_core_ai_client.py::test_T009_chat_with_tools_no_tool_call PASSED [ 60%]
+tests/backend/unit/test_core_ai_client.py::test_T010_chat_with_tools_one_round PASSED [ 62%]
+tests/backend/unit/test_core_ai_client.py::test_T011_chat_with_tools_no_client PASSED [ 64%]
+tests/backend/unit/test_core_ai_client.py::test_T012_chat_with_tools_stream_read_error PASSED [ 66%]
+tests/backend/unit/test_core_ai_client.py::test_T013_chat_with_tools_executor_exception PASSED [ 67%]
+tests/backend/unit/test_core_ai_client.py::test_T014_chat_with_tools_exceed_rounds PASSED [ 69%]
+tests/backend/unit/test_core_ai_client.py::test_T015_client_timeout_and_retries PASSED [ 71%]
+tests/backend/unit/test_core_ai_client.py::test_T016_chat_with_tools_stream_smoke PASSED [ 73%]
+tests/backend/unit/test_core_ai_client.py::test_T017_truncate_large PASSED [ 75%]
+tests/backend/unit/test_core_ai_client.py::test_T018_publish_helpers_swallow_errors PASSED [ 76%]
+tests/backend/unit/test_core_ai_client.py::test_T018b_publish_helpers_success_path PASSED [ 78%]
+tests/backend/unit/test_core_ai_client.py::test_T019_chat_with_tools_stream_returns_none PASSED [ 80%]
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor PASSED [ 82%]
+tests/backend/unit/test_core_ai_client.py::test_T021_stream_error_map[AuthenticationError-API\u5bc6\u94a5] PASSED [ 83%]
+tests/backend/unit/test_core_ai_client.py::test_T021_stream_error_map[BadRequestError-\u8bf7\u6c42\u53c2\u6570\u9519\u8bef] PASSED [ 85%]
+tests/backend/unit/test_core_ai_client.py::test_T021_stream_error_map[InternalServerError-\u670d\u52a1\u5185\u90e8\u9519\u8bef] PASSED [ 87%]
+tests/backend/unit/test_core_ai_client.py::test_T022_chat_with_tools_bad_json_args PASSED [ 89%]
+tests/backend/unit/test_core_ai_client.py::test_T023_chat_with_tools_stream_text_only PASSED [ 91%]
+tests/backend/unit/test_core_ai_client.py::test_T024_chat_with_tools_stream_one_round PASSED [ 92%]
+tests/backend/unit/test_core_ai_client.py::test_T025_chat_with_tools_stream_read_error PASSED [ 94%]
+tests/backend/unit/test_core_ai_client.py::test_T026_chat_with_tools_stream_exceed_rounds PASSED [ 96%]
+tests/backend/unit/test_core_ai_client.py::test_T027_chat_with_tools_stream_no_client PASSED [ 98%]
+tests/backend/unit/test_core_ai_client.py::test_T028_chat_with_tools_stream_bad_json_recover PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/unit/test_core_ai_client.py::test_T020_chat_with_tools_default_executor
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+XFAIL tests/backend/unit/test_core_conversation.py::test_T016_C3_delete_conv_does_not_clean_checkpoint - reason: [C3] delete_conversation 未同步清理 LangGraph checkpoint 文件
+XFAIL tests/backend/unit/test_core_conversation.py::test_T022_update_title_api_missing - reason: ConversationManager.update_title 未实现，需补齐公开 API
+================== 54 passed, 2 xfailed, 11 warnings in 4.28s ==================
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+---------- coverage: platform darwin, python 3.12.2-final-0 ----------
+Name                       Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------
+app/core/ai_client.py        296     39    112     20    85%   185, 194, 209-210, 215->217, 217->219, 219->213, 220->222, 222->213, 244-245, 283-284, 295-296, 319-320, 346, 419-420, 435-437, 446, 467-469, 475->481, 481->483, 483->473, 484->486, 486->473, 492->494, 540-545, 561-562, 573-574, 579-581, 603-604, 630-632, 636
+app/core/conversation.py     116     12     34      5    89%   77, 106->exit, 116, 133, 137-138, 143->141, 156-158, 167-168, 193-194
+----------------------------------------------------------------------
+TOTAL                        412     51    146     25    86%
+
+=========================== short test summary info ============================
+XFAIL tests/backend/unit/test_core_conversation.py::test_T016_C3_delete_conv_does_not_clean_checkpoint - reason: [C3] delete_conversation 未同步清理 LangGraph checkpoint 文件
+XFAIL tests/backend/unit/test_core_conversation.py::test_T022_update_title_api_missing - reason: ConversationManager.update_title 未实现，需补齐公开 API
+================= 54 passed, 2 xfailed, 11 warnings in 10.47s ==================
