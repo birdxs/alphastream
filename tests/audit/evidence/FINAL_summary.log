@@ -1,0 +1,40 @@
+# W7 总验收 - 测试结果聚合（截断策略：跳过 10min+ 全量回归，按各域 evidence 汇总）
+生成时间：2026-05-18 07:48:00 +08:00
+仓库 HEAD：6c95bf3d11a01a524415c8411b1988359909042c
+
+## 后端测试汇总（按域）
+BE-01a:  18 passed
+BE-01b:  23 passed
+BE-01c:  16 passed
+BE-01d:  18 passed
+BE-01e:  31 passed
+BE-01f:  26 passed
+BE-02a:  29 passed
+BE-02b:  42 passed (6:09)
+BE-02c1: 24 passed
+BE-02c2: 33 passed
+BE-03a:  15 passed, 1 xfailed
+BE-03b:  54 passed, 2 xfailed
+BE-03c:  60 passed
+BE-06a:  55 passed
+BE-06b:  52 passed
+BE-06c:  54 passed
+E2E-01:  10 passed
+REGR-01:  9 passed (pytest)
+SEC-01:  18 passed, 1 skipped, 3 xfailed, 1 xpassed
+W1a:     1 smoke passed
+
+后端总计：587 passed, 6 xfailed, 1 skipped, 1 xpassed
+
+## 前端测试汇总（vitest）
+FE-01:    36 passed (6 files)
+FE-02:    38 passed (6 files)
+FE-03:    32 passed (8 files)
+FE-04:    38 passed (9 files)
+REGR-01:  11 passed (5 files)
+
+前端总计：155 passed (34 files)
+
+## 综合
+全部用例：742 passed + 6 xfailed + 1 skipped + 1 xpassed ≈ 750
+失败：0

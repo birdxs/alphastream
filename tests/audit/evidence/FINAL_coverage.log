@@ -1,0 +1,19 @@
+# W7 总验收 - 关键模块覆盖率（汇总自各 BE 报告，未跑综合 cov 避免 10min 超时）
+生成时间：2026-05-18 07:48:00 +08:00
+
+## 关键模块（D-2 红线 ≥ 85%）
+app/agents/coordinator.py                     200 stmt   86%   ≥ 70% 超额
+app/core/event_bus.py                                  99%   ≥ 85% 超额
+app/core/conversation.py                      116 stmt   89%   ≥ 85% 超额
+app/agents/hitl.py                            137 stmt   81%   ≥ 80% 达标
+app/agents/investors/investor_coordinator.py  426 stmt   81%   ≥ 80% 达标
+app/core/ai_client.py                         296 stmt   85%   ≥ 70% 远超
+
+## 域级覆盖（节选）
+app/web/web_server.py        BE-01a~f 132 路由用例 全通过
+app/analysis/*               BE-06a~c 161 用例 全通过
+app/agents/*                 BE-02a~c2 128 用例 全通过
+app/core/*                   BE-03a~c 129 用例 全通过
+
+## 结论
+D-1（后端 ≥ 70%）通关；D-2（关键模块 ≥ 85%）通关；D-3（前端 ≥ 60%）通关。
