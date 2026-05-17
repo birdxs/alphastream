@@ -1,0 +1,20 @@
+[run]
+source = app
+omit =
+    tests/*
+    */__init__.py
+    app/tradingagents/*
+branch = True
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+fail_under = 0
+show_missing = True
+skip_covered = False
+
+[html]
+directory = tests/audit/evidence/coverage_html
