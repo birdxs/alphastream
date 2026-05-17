@@ -1,0 +1,87 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 23 items
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_no_auth_decorators_referenced PASSED [  4%]
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_api_routes_count_baseline PASSED [  8%]
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_should_require_auth_in_production XFAIL [ 13%]
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline PASSED [ 17%]
+tests/backend/api/test_security_auth_cors.py::TestSEC2CORSGuard::test_cors_config_has_no_debug_guard PASSED [ 21%]
+tests/backend/api/test_security_auth_cors.py::TestSEC2CORSGuard::test_cors_allows_lan_ip_origins PASSED [ 26%]
+tests/backend/api/test_security_auth_cors.py::TestSEC2CORSGuard::test_cors_evil_origin_should_be_rejected PASSED [ 30%]
+tests/backend/api/test_security_auth_cors.py::TestSEC2CORSGuard::test_cors_lan_ip_origin_allowed_baseline PASSED [ 34%]
+tests/backend/api/test_security_auth_cors.py::TestSEC2CORSGuard::test_cors_in_production_should_block_lan_ip XFAIL [ 39%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/health] PASSED [ 43%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/version] PASSED [ 47%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/dashboard_data] PASSED [ 52%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/index_stocks] PASSED [ 56%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/latest_news] PASSED [ 60%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/conversations] PASSED [ 65%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[POST-/api/north_flow_history] PASSED [ 69%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[POST-/api/save_portfolio] PASSED [ 73%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/nonexistent_route_zzz_42] PASSED [ 78%]
+tests/backend/api/test_security_auth_cors.py::TestErrorSanitization::test_response_body_no_sensitive_leak[GET-/api/conversations/__bogus__] PASSED [ 82%]
+tests/backend/api/test_security_auth_cors.py::TestSSECrossOrigin::test_sse_with_evil_origin_rejected XFAIL [ 86%]
+tests/backend/api/test_security_auth_cors.py::TestSSECrossOrigin::test_sse_endpoint_cors_header_does_not_echo_evil SKIPPED [ 91%]
+tests/backend/api/test_security_auth_cors.py::TestUploadLimits::test_upload_oversize_rejected PASSED [ 95%]
+tests/backend/api/test_security_auth_cors.py::TestUploadLimits::test_upload_non_image_rejected XPASS [100%]
+
+=============================== warnings summary ===============================
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_currently_unauthenticated_baseline
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/backend/api/test_security_auth_cors.py:373: 仓库中未发现明显的 SSE 端点路径
+XFAIL tests/backend/api/test_security_auth_cors.py::TestSEC1AuthMatrix::test_all_routes_should_require_auth_in_production - SEC-1：当前所有 /api/* 路由裸奔，未挂鉴权装饰器；等待鉴权方案落地（D-3 C 方案 PROD 强制）后转 PASS
+XFAIL tests/backend/api/test_security_auth_cors.py::TestSEC2CORSGuard::test_cors_in_production_should_block_lan_ip - SEC-2：生产模式下 LAN/恶意 origin 不应被放行；当前 CORS 配置无 if app.debug 守卫，落地 D-3 C 方案后转 PASS
+XFAIL tests/backend/api/test_security_auth_cors.py::TestSSECrossOrigin::test_sse_with_evil_origin_rejected - SSE 端点当前未对 Origin 头做强校验；CORS 预检通过即放行流
+XPASS tests/backend/api/test_security_auth_cors.py::TestUploadLimits::test_upload_non_image_rejected MIME 严格校验当前未实现
+======= 18 passed, 1 skipped, 3 xfailed, 1 xpassed, 11 warnings in 7.40s =======
+you don't login.
