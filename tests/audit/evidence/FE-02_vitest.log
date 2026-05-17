@@ -1,0 +1,186 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/panda/Downloads/StockAnal_Sys/frontend
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > 派发 event:token + data:{...} 到 onToken
+[SSE] POST http://localhost:8888/api/ai/chat attempt 1 body: { msg: 'hi' }
+[SSE] response status 200 ok: true hasBody: true
+[SSE-block] event: token
+data: {"content":"hi"}
+[SSE-dispatch] token
+
+stderr | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > 派发 event:token + data:{...} 到 onToken
+[SSE] stream closed without done event
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > done 事件触发 onDone
+[SSE] POST http://localhost:8888/api/x attempt 1 body: {}
+[SSE] response status 200 ok: true hasBody: true
+[SSE-block] event: done
+data: {"ok":true}
+[SSE-dispatch] done
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > 缓冲区 1MB 上限：超大 chunk 触发 console.warn 并 flush
+[SSE] POST http://localhost:8888/api/x attempt 1 body: {}
+[SSE] response status 200 ok: true hasBody: true
+[SSE-block] event: done
+data: {}
+[SSE-dispatch] done
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > HTTP 500 重连：第一次返回 500 → 等待 → 第二次返回 200 SSE 完整数据
+[SSE] POST http://localhost:8888/api/x attempt 1 body: {}
+[SSE] response status 500 ok: false hasBody: false
+[SSE] POST http://localhost:8888/api/x attempt 2 body: {}
+[SSE] response status 200 ok: true hasBody: true
+[SSE-block] event: done
+data: {}
+[SSE-dispatch] done
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > fetch reject 3 次：最终抛错（MAX_RETRIES=2 共尝试 3 次）
+[SSE] POST http://localhost:8888/api/x attempt 1 body: {}
+[SSE] POST http://localhost:8888/api/x attempt 2 body: {}
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > fetch reject 3 次：最终抛错（MAX_RETRIES=2 共尝试 3 次）
+[SSE] POST http://localhost:8888/api/x attempt 3 body: {}
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > AbortError 直接抛出，不进行重试
+[SSE] POST http://localhost:8888/api/x attempt 1 body: {}
+
+stdout | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > info 事件携带 event_type 字段：派发到内部事件类型 (token)
+[SSE] POST http://localhost:8888/api/x attempt 1 body: {}
+[SSE] response status 200 ok: true hasBody: true
+[SSE-block] event: info
+data: {"event_type":"token","data":{"content":"yo"}}
+[SSE-dispatch] token
+
+stderr | ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > info 事件携带 event_type 字段：派发到内部事件类型 (token)
+[SSE] stream closed without done event
+
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.get/post — extractErrorMessage 分支 > HTTP 200 + 合法 JSON：返回 parsed
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.get/post — extractErrorMessage 分支 > HTTP 500 + 文本响应（非 JSON）：抛 ApiError，message=原文
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.get/post — extractErrorMessage 分支 > HTTP 504 + JSON 含 error 字段：提取 error 作为 message
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.get/post — extractErrorMessage 分支 > HTTP 503 + 空响应体：兜底为 'HTTP 503'
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.get/post — extractErrorMessage 分支 > safeJSONParse：NaN/Infinity 被替换为 null（不含 -Infinity 形式）
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > 派发 event:token + data:{...} 到 onToken
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > done 事件触发 onDone
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > 缓冲区 1MB 上限：超大 chunk 触发 console.warn 并 flush
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > HTTP 500 重连：第一次返回 500 → 等待 → 第二次返回 200 SSE 完整数据
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > fetch reject 3 次：最终抛错（MAX_RETRIES=2 共尝试 3 次）
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > AbortError 直接抛出，不进行重试
+ ✓ ../tests/frontend/api/client.test.ts > apiClient.streamPost — SSE 解析 > info 事件携带 event_type 字段：派发到内部事件类型 (token)
+ ✓ ../tests/frontend/hooks/use-stock-names.test.ts > useStockNames > 空数组直接返回空 map
+ ✓ ../tests/frontend/hooks/use-alt-data.test.ts > useAltData > ticker 为空时不发请求，loading=false
+stdout | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 发送普通消息：走 /api/ai/chat，token 事件被 appendStreamContent，done 转为 assistant 消息
+[chat-stream] sendMessage {
+  endpoint: '/api/ai/chat',
+  isAnalyze: false,
+  resolvedCode: '',
+  _hasAnalyzeVerb: false,
+  msgLen: 5
+}
+
+ ✓ ../tests/frontend/hooks/use-stock-prices.test.ts > useStockPrices > 空数组直接返回空 map，不发请求
+ ✓ ../tests/frontend/hooks/use-count-up.test.ts > useCountUp > enabled=false 时直接返回目标值
+ ✓ ../tests/frontend/hooks/use-count-up.test.ts > useCountUp > 起始为 0，最终收敛到目标
+ ✓ ../tests/frontend/hooks/use-count-up.test.ts > useCountUp > decimals 控制小数位
+ ✓ ../tests/frontend/hooks/use-count-up.test.ts > useCountUp > 负数显示带前导减号
+ ✓ ../tests/frontend/hooks/use-count-up.test.ts > useCountUp > 卸载时调用 cancelAnimationFrame 清理
+stdout | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 含 6 位代码 + 分析动词 → 走 /api/ai/agent-analyze
+[chat-stream] sendMessage {
+  endpoint: '/api/ai/agent-analyze',
+  isAnalyze: true,
+  resolvedCode: '600519',
+  _hasAnalyzeVerb: true,
+  msgLen: 11
+}
+
+ ✓ ../tests/frontend/hooks/use-stock-names.test.ts > useStockNames > 单股：通过 stock_data 兜底获取名称
+stdout | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 股票名预解析：无代码+分析动词 → fetch /api/stock_name_search → 拿到 code 走 agent-analyze
+[chat-stream] sendMessage {
+  endpoint: '/api/ai/chat',
+  isAnalyze: false,
+  resolvedCode: '',
+  _hasAnalyzeVerb: true,
+  msgLen: 6
+}
+
+stderr | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 股票名预解析：无代码+分析动词 → fetch /api/stock_name_search → 拿到 code 走 agent-analyze
+Chat stream error: AssertionError: expected '/api/ai/chat' to be '/api/ai/agent-analyze' // Object.is equality
+    at Object.<anonymous> (/Users/panda/Downloads/StockAnal_Sys/tests/frontend/hooks/use-chat-stream.test.ts:113:26)
+    at Object.mockCall (file:///Users/panda/Downloads/StockAnal_Sys/frontend/node_modules/@vitest/spy/dist/index.js:61:17)
+    at Object.spy [as streamPost] (file:///Users/panda/Downloads/StockAnal_Sys/frontend/node_modules/tinyspy/dist/index.js:45:80)
+    at Object.sendMessage (/Users/panda/Downloads/StockAnal_Sys/frontend/src/lib/hooks/use-chat-stream.ts:376:25)
+    at /Users/panda/Downloads/StockAnal_Sys/tests/frontend/hooks/use-chat-stream.test.ts:121:7 {
+  actual: '/api/ai/chat',
+  expected: '/api/ai/agent-analyze',
+  showDiff: true,
+  operator: 'strictEqual'
+}
+
+stdout | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > onError handler：在 chat-store 写入 ⚠️ 错误消息并关闭 streaming
+[chat-stream] sendMessage {
+  endpoint: '/api/ai/chat',
+  isAnalyze: false,
+  resolvedCode: '',
+  _hasAnalyzeVerb: false,
+  msgLen: 5
+}
+
+stderr | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > onError handler：在 chat-store 写入 ⚠️ 错误消息并关闭 streaming
+Stream error: 后端炸了 { message: '后端炸了' }
+
+stdout | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > streamPost reject 非 AbortError：streaming 被清理 + console.error
+[chat-stream] sendMessage {
+  endpoint: '/api/ai/chat',
+  isAnalyze: false,
+  resolvedCode: '',
+  _hasAnalyzeVerb: false,
+  msgLen: 2
+}
+
+ ✓ ../tests/frontend/hooks/use-alt-data.test.ts > useAltData > 快乐路径：拉取成功，data 填充，loading 切换
+stdout | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > stopGeneration：触发 abort，AbortError 路径写入 [已停止] 尾标
+[chat-stream] sendMessage {
+  endpoint: '/api/ai/chat',
+  isAnalyze: false,
+  resolvedCode: '',
+  _hasAnalyzeVerb: false,
+  msgLen: 3
+}
+
+stderr | ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > stopGeneration：触发 abort，AbortError 路径写入 [已停止] 尾标
+You called act(async () => ...) without await. This could lead to unexpected testing behaviour, interleaving multiple act calls and mixing their scopes. You should - await act(async () => ...);
+
+ ✓ ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 发送普通消息：走 /api/ai/chat，token 事件被 appendStreamContent，done 转为 assistant 消息
+ ✓ ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 含 6 位代码 + 分析动词 → 走 /api/ai/agent-analyze
+ ✓ ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > 股票名预解析：无代码+分析动词 → fetch /api/stock_name_search → 拿到 code 走 agent-analyze
+ ✓ ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > onError handler：在 chat-store 写入 ⚠️ 错误消息并关闭 streaming
+ ✓ ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > streamPost reject 非 AbortError：streaming 被清理 + console.error
+ ✓ ../tests/frontend/hooks/use-chat-stream.test.ts > useChatStream.sendMessage > stopGeneration：触发 abort，AbortError 路径写入 [已停止] 尾标
+ ✓ ../tests/frontend/hooks/use-stock-prices.test.ts > useStockPrices > 快乐路径：单股取末行 close 和涨跌幅
+ ✓ ../tests/frontend/hooks/use-stock-names.test.ts > useStockNames > 批量：并发请求两只票
+ ✓ ../tests/frontend/hooks/use-alt-data.test.ts > useAltData > success=false 时记录 error 文案
+ ✓ ../tests/frontend/hooks/use-stock-prices.test.ts > useStockPrices > 并发请求：两只票同时下发
+ ✓ ../tests/frontend/hooks/use-stock-names.test.ts > useStockNames > 缓存命中：第二次渲染同代码不再请求
+ ✓ ../tests/frontend/hooks/use-alt-data.test.ts > useAltData > HTTP 500 抛错被捕获
+ ✓ ../tests/frontend/hooks/use-stock-names.test.ts > useStockNames > 两端都失败时：不写入 names 映射（保持空对象）
+ ✓ ../tests/frontend/hooks/use-stock-prices.test.ts > useStockPrices > 空 data：不写入映射
+ ✓ ../tests/frontend/hooks/use-stock-prices.test.ts > useStockPrices > apiClient.get reject：吞错不抛
+stderr | ../tests/frontend/hooks/use-alt-data.test.ts > useAltData > reload 重新触发请求
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ ../tests/frontend/hooks/use-alt-data.test.ts > useAltData > reload 重新触发请求
+
+ Test Files  6 passed (6)
+      Tests  38 passed (38)
+   Start at  21:23:56
+   Duration  1.20s (transform 144ms, setup 533ms, collect 700ms, tests 792ms, environment 2.66s, prepare 292ms)
+
