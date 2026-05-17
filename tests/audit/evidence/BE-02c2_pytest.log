@@ -1,0 +1,73 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 33 items
+
+tests/backend/unit/test_agent_bull.py::test_bull_happy_path PASSED       [  3%]
+tests/backend/unit/test_agent_bull.py::test_bull_llm_error_fallback PASSED [  6%]
+tests/backend/unit/test_agent_bull.py::test_bull_no_ai_client_fallback PASSED [  9%]
+tests/backend/unit/test_agent_bull.py::test_bull_context_injects_upstream_reports PASSED [ 12%]
+tests/backend/unit/test_agent_bear.py::test_bear_happy_path PASSED       [ 15%]
+tests/backend/unit/test_agent_bear.py::test_bear_llm_error_fallback PASSED [ 18%]
+tests/backend/unit/test_agent_bear.py::test_bear_no_ai_client_fallback PASSED [ 21%]
+tests/backend/unit/test_agent_bear.py::test_bear_rebuttal_prompt_when_bull_case_present PASSED [ 24%]
+tests/backend/unit/test_agent_bear.py::test_bear_no_bull_case_no_rebuttal_section PASSED [ 27%]
+tests/backend/unit/test_agent_risk.py::test_risk_happy_path PASSED       [ 30%]
+tests/backend/unit/test_agent_risk.py::test_risk_high_publishes_alert PASSED [ 33%]
+tests/backend/unit/test_agent_risk.py::test_risk_medium_high_publishes_medium_alert PASSED [ 36%]
+tests/backend/unit/test_agent_risk.py::test_risk_low_no_alert PASSED     [ 39%]
+tests/backend/unit/test_agent_risk.py::test_risk_llm_error_fallback PASSED [ 42%]
+tests/backend/unit/test_agent_risk.py::test_risk_schema_completeness PASSED [ 45%]
+tests/backend/unit/test_agent_risk.py::test_publish_risk_alert_isolated PASSED [ 48%]
+tests/backend/unit/test_agent_decision.py::test_decision_happy_path PASSED [ 51%]
+tests/backend/unit/test_agent_decision.py::test_decision_high_risk_triggers_hitl PASSED [ 54%]
+tests/backend/unit/test_agent_decision.py::test_decision_llm_error_fallback PASSED [ 57%]
+tests/backend/unit/test_agent_decision.py::test_decision_no_ai_client_fallback PASSED [ 60%]
+tests/backend/unit/test_agent_decision.py::test_decision_non_json_response_fallback PASSED [ 63%]
+tests/backend/unit/test_agent_reflection.py::test_reflection_happy_and_persist PASSED [ 66%]
+tests/backend/unit/test_agent_reflection.py::test_reflection_llm_error_still_persists PASSED [ 69%]
+tests/backend/unit/test_agent_reflection.py::test_reflection_no_ai_client_skipped PASSED [ 72%]
+tests/backend/unit/test_agent_reflection.py::test_reflection_appends_multiple PASSED [ 75%]
+tests/backend/unit/test_agent_reflection.py::test_get_past_reflections_reads PASSED [ 78%]
+tests/backend/unit/test_agent_evolver.py::test_evolver_happy_persist PASSED [ 81%]
+tests/backend/unit/test_agent_evolver.py::test_evolver_llm_error_returns_current PASSED [ 84%]
+tests/backend/unit/test_agent_evolver.py::test_evolver_no_signals_early_return PASSED [ 87%]
+tests/backend/unit/test_agent_evolver.py::test_evolver_no_ai_client_early_return PASSED [ 90%]
+tests/backend/unit/test_agent_evolver.py::test_evolver_non_json_safe_parse_keeps_current PASSED [ 93%]
+tests/backend/unit/test_agent_evolver.py::test_evolver_safe_parse_handles_fence PASSED [ 96%]
+tests/backend/unit/test_agent_evolver.py::test_get_active_strategy_returns_default PASSED [100%]
+
+============================== 33 passed in 0.40s ==============================
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collected 33 items
+
+tests/backend/unit/test_agent_bull.py ....                               [ 12%]
+tests/backend/unit/test_agent_bear.py .....                              [ 27%]
+tests/backend/unit/test_agent_risk.py .......                            [ 48%]
+tests/backend/unit/test_agent_decision.py .....                          [ 63%]
+tests/backend/unit/test_agent_reflection.py .....                        [ 78%]
+tests/backend/unit/test_agent_evolver.py .......                         [100%]
+
+---------- coverage: platform darwin, python 3.12.2-final-0 ----------
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+app/agents/bear_researcher.py       71     10     30      9    81%   50-51, 94->97, 122-123, 133-136, 148->151, 151->154, 154->157, 157->161, 170, 173, 175, 178->177
+app/agents/bull_researcher.py       62     10     24      9    78%   46-47, 72->75, 101-102, 112-115, 127->130, 130->133, 133->136, 136->139, 145, 149, 153->152, 156
+app/agents/decision_maker.py        81     13     32     14    76%   33-37, 40, 43, 60->62, 62->64, 64->66, 66->68, 68->70, 70->73, 73->75, 75->79, 82-84, 94->99, 96-97, 159
+app/agents/reflection.py            84     27     26      5    62%   25, 40, 44-46, 96, 98-99, 123-125, 130-145, 163, 166-167
+app/agents/risk_manager.py         136     33     36     13    71%   34, 37, 58, 119-125, 163-164, 181->185, 186->190, 191->195, 195->200, 202->209, 205-207, 215, 224, 235-254, 276->279
+app/agents/strategy_evolver.py     144     41     46     10    66%   29, 35->38, 38->40, 51, 58-62, 81, 84, 101, 116->114, 132-134, 174-176, 180-200, 221-224, 232-233, 242-244
+----------------------------------------------------------------------------
+TOTAL                              578    134    194     60    71%
+
+
+============================== 33 passed in 0.55s ==============================
