@@ -41,4 +41,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    fs: {
+      // 允许访问父级 tests/ 目录（W1a 落盘的 tests/frontend/** 测试位于仓库根下）
+      allow: [path.resolve(__dirname, ".."), path.resolve(__dirname, ".")],
+    },
+  },
 });

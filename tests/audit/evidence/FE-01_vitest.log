@@ -1,0 +1,46 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /Users/panda/Downloads/StockAnal_Sys/frontend
+
+ ✓ ../tests/frontend/stores/settings-store.test.ts > useSettingsStore > 初始 state shape 正确（depth=3 / memory=true）
+ ✓ ../tests/frontend/stores/settings-store.test.ts > useSettingsStore > setResearchDepth 设置研究深度
+ ✓ ../tests/frontend/stores/settings-store.test.ts > useSettingsStore > setEnableMemory 切换语义记忆开关
+ ✓ ../tests/frontend/stores/settings-store.test.ts > useSettingsStore > 边界：depth 设置为 0 或负值仍按入参写入（无内置校验）
+ ✓ ../tests/frontend/stores/settings-store.test.ts > useSettingsStore > localStorage 持久化：settings-storage 含最新值
+ ✓ ../tests/frontend/stores/portfolio-store.test.ts > usePortfolioStore > 初始 state shape 正确（holdings=[]）
+ ✓ ../tests/frontend/stores/portfolio-store.test.ts > usePortfolioStore > addHolding 追加新持仓
+ ✓ ../tests/frontend/stores/portfolio-store.test.ts > usePortfolioStore > 边界：重复添加相同 code 不创建副本
+ ✓ ../tests/frontend/stores/portfolio-store.test.ts > usePortfolioStore > updateHolding 仅更新匹配项的指定字段
+ ✓ ../tests/frontend/stores/portfolio-store.test.ts > usePortfolioStore > updateHolding 对不存在 code 不抛错且不影响其他项
+ ✓ ../tests/frontend/stores/portfolio-store.test.ts > usePortfolioStore > removeHolding 删除匹配项
+ ✓ ../tests/frontend/stores/theme-store.test.ts > useThemeStore > 初始 state shape 正确（默认 dark + cn）
+ ✓ ../tests/frontend/stores/theme-store.test.ts > useThemeStore > toggleTheme 在 dark/light 间切换
+ ✓ ../tests/frontend/stores/theme-store.test.ts > useThemeStore > toggleColorScheme 在 cn/us 间切换
+ ✓ ../tests/frontend/stores/theme-store.test.ts > useThemeStore > localStorage 持久化：toggle 后 localStorage 中 theme-storage 包含新值
+ ✓ ../tests/frontend/stores/theme-store.test.ts > useThemeStore > 边界：连续 toggle 偶数次应回到原值
+ ✓ ../tests/frontend/stores/watchlist-store.test.ts > useWatchlistStore > 初始 state shape 正确（items=[]）
+ ✓ ../tests/frontend/stores/watchlist-store.test.ts > useWatchlistStore > addItem 添加新条目（含 code/name/addedAt）
+ ✓ ../tests/frontend/stores/watchlist-store.test.ts > useWatchlistStore > addItem 不传 name 时 name 回退为 code
+ ✓ ../tests/frontend/stores/watchlist-store.test.ts > useWatchlistStore > 边界：重复添加相同 code 不应创建副本
+ ✓ ../tests/frontend/stores/watchlist-store.test.ts > useWatchlistStore > removeItem 移除指定 code，其他不受影响
+ ✓ ../tests/frontend/stores/watchlist-store.test.ts > useWatchlistStore > hasItem 查询命中/未命中
+ ✓ ../tests/frontend/stores/chat-store.test.ts > useChatStore > 初始 state shape 正确
+ ✓ ../tests/frontend/stores/chat-store.test.ts > useChatStore > addMessage 追加消息 / setStreaming 切换流式状态
+ ✓ ../tests/frontend/stores/chat-store.test.ts > useChatStore > appendStreamContent 累积 + resetStreamContent 清空（边界：空字符串）
+ ✓ ../tests/frontend/stores/chat-store.test.ts > useChatStore > addArtifact 添加 + clearArtifacts 清空
+ ✓ ../tests/frontend/stores/chat-store.test.ts > useChatStore > bumpConversationsRefresh 自增 + updateConversationTitle 仅更新匹配项
+ ✓ ../tests/frontend/stores/chat-store.test.ts > useChatStore > setActiveConversation 设置和清空
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > 初始 state shape 正确
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > setAnalyzing / setOverallProgress 工作正常
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > setAgentProgress 新增和更新已存在 agent
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > addToolCall + setToolCallResult 正确关联
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > appendEvent 添加 600 条事件 → MAX_EVENTS 滑动窗口生效（events.length === 500）[P0-1]
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > addToolCall 添加 600 次 → 同样应用 MAX_EVENTS 滑动窗口（toolCalls.length === 500）
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > reset 清空所有 state
+ ✓ ../tests/frontend/stores/agent-store.test.ts > useAgentStore > appendReasoningToken 流式追加 + finalize 行为
+
+ Test Files  6 passed (6)
+      Tests  36 passed (36)
+   Start at  21:01:20
+   Duration  853ms (transform 130ms, setup 438ms, collect 197ms, tests 20ms, environment 2.68s, prepare 413ms)
+
