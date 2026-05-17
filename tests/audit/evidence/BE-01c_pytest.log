@@ -1,0 +1,74 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 16 items
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path PASSED [  6%]
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_invalid_stock_code PASSED [ 12%]
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_missing_stock_code PASSED [ 18%]
+tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisStatus::test_status_happy_path_existing_task PASSED [ 25%]
+tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisStatus::test_status_not_found PASSED [ 31%]
+tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisResult::test_result_route_does_not_exist PASSED [ 37%]
+tests/backend/api/test_agent_async_routes.py::TestAgentSubmitApproval::test_submit_approval_approved_path PASSED [ 43%]
+tests/backend/api/test_agent_async_routes.py::TestAgentSubmitApproval::test_submit_approval_rejected_path PASSED [ 50%]
+tests/backend/api/test_agent_async_routes.py::TestAgentSubmitApproval::test_submit_approval_missing_task_id PASSED [ 56%]
+tests/backend/api/test_agent_async_routes.py::TestAgentSubmitApproval::test_submit_approval_unknown_task PASSED [ 62%]
+tests/backend/api/test_agent_async_routes.py::TestAgentPendingApprovals::test_pending_approvals_happy_path PASSED [ 68%]
+tests/backend/api/test_agent_async_routes.py::TestAgentPendingApprovals::test_pending_approvals_empty_or_error_safe PASSED [ 75%]
+tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisHistory::test_history_happy_path_includes_completed PASSED [ 81%]
+tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisHistory::test_history_error_path_on_internal_failure PASSED [ 87%]
+tests/backend/api/test_agent_async_routes.py::TestAgentMemoryReflectionsAbsent::test_agent_memory_route_absent PASSED [ 93%]
+tests/backend/api/test_agent_async_routes.py::TestAgentMemoryReflectionsAbsent::test_agent_reflections_route_absent PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_agent_async_routes.py::TestStartAgentAnalysis::test_start_agent_analysis_happy_path
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 16 passed, 11 warnings in 5.04s ========================
+you don't login.
