@@ -1,0 +1,89 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 31 items
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id PASSED [  3%]
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_missing_etf_code_returns_400 PASSED [  6%]
+tests/backend/api/test_business_analysis_routes.py::TestEtfAnalysisStatus::test_unknown_task_returns_404 PASSED [  9%]
+tests/backend/api/test_business_analysis_routes.py::TestEtfAnalysisStatus::test_status_after_start_returns_schema PASSED [ 12%]
+tests/backend/api/test_business_analysis_routes.py::TestFundamentalAnalysis::test_happy_forwards_stock_code PASSED [ 16%]
+tests/backend/api/test_business_analysis_routes.py::TestFundamentalAnalysis::test_missing_stock_code_returns_400 PASSED [ 19%]
+tests/backend/api/test_business_analysis_routes.py::TestFundamentalAnalysis::test_invalid_stock_code_returns_400 PASSED [ 22%]
+tests/backend/api/test_business_analysis_routes.py::TestCapitalFlow::test_happy_forwards_params PASSED [ 25%]
+tests/backend/api/test_business_analysis_routes.py::TestCapitalFlow::test_missing_stock_code_returns_400 PASSED [ 29%]
+tests/backend/api/test_business_analysis_routes.py::TestCapitalFlow::test_invalid_stock_code_with_market_returns_400 PASSED [ 32%]
+tests/backend/api/test_business_analysis_routes.py::TestScenarioPredict::test_happy_forwards_days PASSED [ 35%]
+tests/backend/api/test_business_analysis_routes.py::TestScenarioPredict::test_default_days_60 PASSED [ 38%]
+tests/backend/api/test_business_analysis_routes.py::TestScenarioPredict::test_missing_stock_code_returns_400 PASSED [ 41%]
+tests/backend/api/test_business_analysis_routes.py::TestScenarioPredict::test_invalid_stock_code_returns_400 PASSED [ 45%]
+tests/backend/api/test_business_analysis_routes.py::TestQa::test_happy_forwards_params PASSED [ 48%]
+tests/backend/api/test_business_analysis_routes.py::TestQa::test_missing_question_returns_400 PASSED [ 51%]
+tests/backend/api/test_business_analysis_routes.py::TestQa::test_missing_stock_code_returns_400 PASSED [ 54%]
+tests/backend/api/test_business_analysis_routes.py::TestRiskAnalysis::test_happy_forwards_params PASSED [ 58%]
+tests/backend/api/test_business_analysis_routes.py::TestRiskAnalysis::test_missing_stock_code_returns_400 PASSED [ 61%]
+tests/backend/api/test_business_analysis_routes.py::TestRiskAnalysis::test_invalid_stock_code_returns_400 PASSED [ 64%]
+tests/backend/api/test_business_analysis_routes.py::TestPortfolioRisk::test_happy_forwards_portfolio PASSED [ 67%]
+tests/backend/api/test_business_analysis_routes.py::TestPortfolioRisk::test_empty_portfolio_returns_400 PASSED [ 70%]
+tests/backend/api/test_business_analysis_routes.py::TestPortfolioRisk::test_missing_portfolio_returns_400 PASSED [ 74%]
+tests/backend/api/test_business_analysis_routes.py::TestIndexAnalysis::test_happy_forwards_limit PASSED [ 77%]
+tests/backend/api/test_business_analysis_routes.py::TestIndexAnalysis::test_missing_index_code_returns_400 PASSED [ 80%]
+tests/backend/api/test_business_analysis_routes.py::TestIndexAnalysis::test_invalid_limit_returns_500_or_400 PASSED [ 83%]
+tests/backend/api/test_business_analysis_routes.py::TestIndustryAnalysis::test_happy_forwards_params PASSED [ 87%]
+tests/backend/api/test_business_analysis_routes.py::TestIndustryAnalysis::test_missing_industry_returns_400 PASSED [ 90%]
+tests/backend/api/test_business_analysis_routes.py::TestIndustryCompare::test_happy_default_limit PASSED [ 93%]
+tests/backend/api/test_business_analysis_routes.py::TestIndustryCompare::test_happy_with_limit PASSED [ 96%]
+tests/backend/api/test_business_analysis_routes.py::TestIndustryCompare::test_invalid_limit_returns_500_or_400 PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/api/test_business_analysis_routes.py::TestStartEtfAnalysis::test_happy_returns_task_id
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 31 passed, 11 warnings in 5.03s ========================
+you don't login.
