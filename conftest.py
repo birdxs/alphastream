@@ -189,25 +189,31 @@ def mock_ai_client(monkeypatch) -> Dict[str, MagicMock]:
 
 @pytest.fixture
 def mock_event_bus(monkeypatch):
-    """截获 app.core.event_bus.event_bus.publish，记录所有事件。
+    """截获所有 EventBus.publish 调用，无论是 EventBus().publish()、
+    get_event_bus().publish() 还是任何持有实例的调用方。
+
+    修复说明（D04 / BE-01c）：
+      旧实现引用 eb_mod.event_bus 模块级常量，该常量不存在（EventBus 是
+      单例但无模块级别名），导致 AttributeError。新实现直接 patch 类方法
+      EventBus.publish，覆盖所有实例调用路径。
 
     返回对象提供：
         .events  -> List[Tuple[event_name, data]]
         .filter(name) -> 过滤后的数据列表
+        .names() -> 已发布事件名列表
         .clear()
     """
-    import app.core.event_bus as eb_mod
+    from app.core.event_bus import EventBus
 
-    bus = eb_mod.event_bus
     records: List[tuple] = []
-    original_publish = bus.publish
+    original_publish = EventBus.publish
 
-    def _spy_publish(event_name, data=None):
+    def _capture(self, event_name: str, data: Any = None) -> None:
         records.append((event_name, data))
         # 保留原行为以便已订阅的回调仍能跑
-        return original_publish(event_name, data)
+        return original_publish(self, event_name, data)
 
-    monkeypatch.setattr(bus, "publish", _spy_publish)
+    monkeypatch.setattr(EventBus, "publish", _capture)
 
     class _Recorder:
         @property
@@ -223,7 +229,7 @@ def mock_event_bus(monkeypatch):
         def clear(self):
             records.clear()
 
-    return _Recorder()
+    yield _Recorder()
 
 
 # --------------------------------------------------------------------------- #
