@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`REGR-01 StockPage 渲染快照 > DOM 快照 1`] = `null`;

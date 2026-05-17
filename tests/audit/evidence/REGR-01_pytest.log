@@ -1,0 +1,67 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 9 items
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries PASSED [ 11%]
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_constant_is_one_hour PASSED [ 22%]
+tests/backend/integration/test_workspace_regression.py::TestCleanOldTasks::test_completed_task_evicted_after_30_min PASSED [ 33%]
+tests/backend/integration/test_workspace_regression.py::TestCleanOldTasks::test_running_task_evicted_after_2h_hardcap PASSED [ 44%]
+tests/backend/integration/test_workspace_regression.py::TestFallbackWrapWithEvents::test_fallback_publishes_started_and_completed PASSED [ 55%]
+tests/backend/integration/test_workspace_regression.py::TestFallbackWrapWithEvents::test_fallback_swallows_bus_failure PASSED [ 66%]
+tests/backend/integration/test_workspace_regression.py::TestCoordinatorCheckpointerSingleton::test_get_checkpointer_returns_same_instance_or_none PASSED [ 77%]
+tests/backend/integration/test_workspace_regression.py::TestCoordinatorCheckpointerSingleton::test_fallback_to_none_when_sqlite_unavailable PASSED [ 88%]
+tests/backend/integration/test_workspace_regression.py::TestEventBusIntegration::test_publish_and_subscribe_roundtrip PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/backend/integration/test_workspace_regression.py::TestProfileCacheTTL::test_ttl_evicts_stale_entries
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 9 passed, 11 warnings in 4.33s ========================
+you don't login.
