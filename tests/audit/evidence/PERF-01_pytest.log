@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 11 items
+
+tests/e2e/perf/test_performance_baseline.py::TestP01_SSEBridgeTTL::test_p01_bridge_ttl_clean_after_30min PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP01_SSEBridgeTTL::test_p01_memory_growth_under_50mb 
+[P01-mem] 1800 事件后内存增长 = 0.010MB (阈值 50MB)
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP02_ConcurrentIsolation::test_p02_10_concurrent_no_cross_contamination 
+[P02-iso] 10 并发 × 50 事件 = 500 总事件, 零交叉污染
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP03_LLMRetry::test_p03_llm_retry_3_attempts_then_success 
+[P03-retry] 调用次数 = 3 (阈值 ≤ 3), 最终成功 = True
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP03_LLMRetry::test_p03_llm_all_fail_raises PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP04_LongStreamBackend::test_p04_600_tokens_stable_memory 
+[P04-stream] 600 事件无丢失, 内存增长 = 0.027MB (阈值 20MB)
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP05_TasksCleanupRegression::test_p05_tasks_cleanup_contract 
+[P05-cleanup] 清理前 10, 清理后 5 (引用 REGR-01)
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP06_ConvTruncateRegression::test_p06_conversation_50_limit_contract 
+[P06-trunc] 80 条注入, 截断后保留 50 (引用 BE-03b)
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP07_CheckpointDB::test_p07_sqlite_100_invokes_size_and_vacuum 
+[P07-sqlite] 100 invoke 后 = 0.453MB, vacuum 后 = 0.234MB (阈值 100MB)
+PASSED
+tests/e2e/perf/test_performance_baseline.py::TestP08_BackpressureRegression::test_p08_slow_consumer_backpressure_known_gap XFAIL
+tests/e2e/perf/test_performance_baseline.py::TestP08_BackpressureRegression::test_p08_queue_full_does_not_crash 
+[P08-stable] 12000 publish 全部不崩溃, 队列稳定在 10000 (引用 BE-03a)
+PASSED
+
+=========================== short test summary info ============================
+XFAIL tests/e2e/perf/test_performance_baseline.py::TestP08_BackpressureRegression::test_p08_slow_consumer_backpressure_known_gap - 背压策略缺失: 5000+ 堆积时仅 warning, 无主动 drop_oldest, 已 BE-03a 暴露
+======================== 10 passed, 1 xfailed in 0.22s =========================
