@@ -1,0 +1,68 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-7.3.1, pluggy-1.6.0 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/panda/Downloads/StockAnal_Sys
+configfile: pytest.ini
+plugins: freezegun-0.4.2, langsmith-0.4.37, cov-4.1.0, asyncio-0.21.1, anyio-4.13.0
+asyncio: mode=Mode.STRICT
+collecting ... collected 10 items
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey PASSED [ 10%]
+tests/e2e/journeys/test_p0_journeys.py::test_j3_hitl_approval_loop PASSED [ 20%]
+tests/e2e/journeys/test_p0_journeys.py::test_j5_multi_market_routing[000001-A] PASSED [ 30%]
+tests/e2e/journeys/test_p0_journeys.py::test_j5_multi_market_routing[00700-HK] PASSED [ 40%]
+tests/e2e/journeys/test_p0_journeys.py::test_j5_multi_market_routing[AAPL-US] PASSED [ 50%]
+tests/e2e/journeys/test_p0_journeys.py::test_j10_conversation_list_and_resume PASSED [ 60%]
+tests/e2e/journeys/test_p0_journeys.py::test_j11_artifact_passthrough PASSED [ 70%]
+tests/e2e/journeys/test_p0_journeys.py::test_j13_llm_failure_fallback PASSED [ 80%]
+tests/e2e/journeys/test_p0_journeys.py::test_j14_checkpoint_replay_same_conversation PASSED [ 90%]
+tests/e2e/journeys/test_p0_journeys.py::test_j15_error_sanitization PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/provider/utils/client.py:65: DeprecationWarning: Inheritance class ClientSession from ClientSession is discouraged
+    class ClientSession(aiohttp.ClientSession):
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/system_settings.py:77: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")  # type: ignore
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/equity_historical.py:83: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_eps_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/forward_sales_estimates.py:52: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_intrinio/models/options_chains.py:118: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/crypto_historical.py:51: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/currency_historical.py:50: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/equity_historical.py:59: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_polygon/models/index_historical.py:49: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+tests/e2e/journeys/test_p0_journeys.py::test_j1_full_stock_analysis_journey
+  /opt/anaconda3/lib/python3.12/site-packages/openbb_core/app/model/credentials.py:197: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    if key not in self.model_fields:
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 10 passed, 11 warnings in 4.92s ========================
+you don't login.
