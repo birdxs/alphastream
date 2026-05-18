@@ -1076,19 +1076,29 @@ _CACHE_LOCK = threading.Lock()
 
 
 def _load_stock_name_cache():
-    """首次调用时加载全量A股代码->名称映射（~5000条）到进程级缓存"""
+    """首次调用时加载全量A股代码->名称映射（~5000条）到进程级缓存
+    [REAL-01 2026-05-18] 上游 bse.cn 经常被代理 RST 阻塞 30s+，加 5s 硬超时 + 永久标记，避免反复重试拖垮 stock_quote_batch
+    """
     global _CACHE_LOADED
     if _CACHE_LOADED:
         return
     with _CACHE_LOCK:
         if _CACHE_LOADED:
             return
+        # 永久置真：即使本次失败，下次也不再重试（进程内 1 次成本封顶），由 _get_stock_name_safe 兜底降级到 stock_code
+        _CACHE_LOADED = True
         try:
             import akshare as ak
-            df = ak.stock_info_a_code_name()
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
+            with ThreadPoolExecutor(max_workers=1) as _ex:
+                fut = _ex.submit(ak.stock_info_a_code_name)
+                try:
+                    df = fut.result(timeout=5)
+                except _FTimeout:
+                    app.logger.warning("加载A股名称缓存超时(>5s)，本进程不再重试")
+                    return
             for _, row in df.iterrows():
                 _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
-            _CACHE_LOADED = True
             app.logger.info(f"A股名称缓存加载完成，共 {len(_STOCK_NAME_CACHE)} 条")
         except Exception as e:
             app.logger.warning(f"加载A股名称缓存失败: {str(e)}")
@@ -1113,9 +1123,19 @@ def _get_stock_name_safe(stock_code, market_type='A'):
             pass
         return stock_code
 
-    # 1. 先试主路径
+    # 1. 先试主路径 [REAL-01 2026-05-18] 加 3s 硬超时 + shutdown(wait=False)，
+    # 避免 with __exit__ 等阻塞 future 真完成（上游 ProxyError 可阻塞 30s+）
     try:
-        info = analyzer.get_stock_info(stock_code)
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
+        _ex = ThreadPoolExecutor(max_workers=1)
+        try:
+            fut = _ex.submit(analyzer.get_stock_info, stock_code)
+            try:
+                info = fut.result(timeout=3)
+            except _FTimeout:
+                info = None
+        finally:
+            _ex.shutdown(wait=False)
         if isinstance(info, dict):
             name = info.get('股票名称') or info.get('name')
             if name and name != '未知' and name != stock_code:
@@ -3923,19 +3943,30 @@ def stock_quote_batch():
 
     results = []
     errors = []
-    with ThreadPoolExecutor(max_workers=min(8, len(codes))) as ex:
+    # [REAL-01 2026-05-18] 用 try/except 包裹 as_completed，超时立即返回已完成部分，
+    # 并 shutdown(wait=False) 不阻塞响应；避免 with 块 __exit__ 等到全部线程结束(60s+)
+    ex = ThreadPoolExecutor(max_workers=min(8, len(codes)))
+    try:
         future_map = {ex.submit(_fetch_one, c): c for c in codes}
-        for fut in as_completed(future_map, timeout=20):
-            try:
-                r = fut.result(timeout=8)
-                if 'error' in r:
-                    errors.append({'code': r.get('code'), 'msg': r['error']})
-                else:
-                    results.append(r)
-            except _FTimeout:
-                errors.append({'code': future_map[fut], 'msg': 'timeout'})
-            except Exception as e:
-                errors.append({'code': future_map[fut], 'msg': str(e)})
+        try:
+            for fut in as_completed(future_map, timeout=20):
+                try:
+                    r = fut.result(timeout=1)
+                    if 'error' in r:
+                        errors.append({'code': r.get('code'), 'msg': r['error']})
+                    else:
+                        results.append(r)
+                except _FTimeout:
+                    errors.append({'code': future_map[fut], 'msg': 'timeout'})
+                except Exception as e:
+                    errors.append({'code': future_map[fut], 'msg': str(e)})
+        except _FTimeout:
+            # as_completed 整体超时，把剩余未完成 future 标记 timeout
+            for fut, code in future_map.items():
+                if not fut.done():
+                    errors.append({'code': code, 'msg': 'overall-timeout'})
+    finally:
+        ex.shutdown(wait=False)
 
     return custom_jsonify({
         'results': results,

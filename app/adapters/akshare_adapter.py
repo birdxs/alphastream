@@ -38,6 +38,35 @@ class AkshareAdapter(BaseAdapter):
         prefix = 'sh' if code.startswith('6') else 'sz'
         return f"{prefix}{code}"
 
+    def _format_code_for_sina(self, code: str) -> str:
+        """转换股票代码为新浪格式：000001 -> sz000001, 600519 -> sh600519, 北交所 -> bj"""
+        code = code.replace('.SH', '').replace('.SZ', '').replace('.BJ', '')\
+                   .replace('sh', '').replace('sz', '').replace('bj', '')
+        if code.startswith(('6', '9')):
+            prefix = 'sh'
+        elif code.startswith(('0', '3')):
+            prefix = 'sz'
+        else:
+            prefix = 'bj'
+        return f"{prefix}{code}"
+
+    @staticmethod
+    def _normalize_sina_daily(df: pd.DataFrame) -> pd.DataFrame:
+        """归一化新浪 stock_zh_a_daily 返回的列名 -> 与东财对齐
+        新浪列：date open high low close volume amount outstanding_share turnover
+        东财列（经 FIELD_MAPPING 后）：date open close high low volume amount
+        新浪已是英文，只需保证 amount/turnover_rate 存在即可。
+        """
+        if df is None or df.empty:
+            return df
+        # 新浪日 K 已英文化，core 字段 date/open/close/high/low/volume/amount 命中
+        # 若缺 amount，用 close*volume 估算（避免下游 KeyError）
+        if 'amount' not in df.columns:
+            if 'close' in df.columns and 'volume' in df.columns:
+                df = df.copy()
+                df['amount'] = df['close'] * df['volume']
+        return df
+
     def get_stock_history(self, code: str, start_date: str, end_date: str,
                           adjust: str = "qfq") -> pd.DataFrame:
         """获取股票历史K线 - 东财挂了自动切腾讯"""
@@ -62,7 +91,19 @@ class AkshareAdapter(BaseAdapter):
         except Exception as e:
             logger.warning(f"akshare东财接口失败(symbol={code}): {type(e).__name__}: {e}")
 
-        # 东财挂了，切腾讯
+        # 东财挂了，优先切新浪 daily（2026-05-18 实测：东财被服务端 RST，新浪 daily 1.1s 稳定）
+        try:
+            sina_code = self._format_code_for_sina(code)
+            df = ak.stock_zh_a_daily(symbol=sina_code, start_date=start_date,
+                                     end_date=end_date, adjust=adjust)
+            if df is not None and not df.empty:
+                df = self._normalize_sina_daily(df)
+                logger.info(f"akshare新浪 daily 成功兜底(symbol={sina_code}, rows={len(df)})")
+                return df
+        except Exception as e:
+            logger.warning(f"akshare新浪 daily 失败(symbol={code}): {type(e).__name__}: {e}")
+
+        # 新浪也挂了，最后兜底腾讯
         try:
             tx_code = self._format_code_for_tx(code)
             df = ak.stock_zh_a_hist_tx(symbol=tx_code, start_date=start_date,
