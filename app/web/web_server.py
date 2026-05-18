@@ -1189,7 +1189,8 @@ def get_stock_data():
         try:
             with ThreadPoolExecutor(max_workers=1) as _ex:
                 fut = _ex.submit(analyzer.get_stock_data, stock_code, market_type, start_date, end_date)
-                df = fut.result(timeout=50)  # 2026-05-18 二次拉富足：与下游 per_call=45 联动，留 5s buffer
+                _stock_data_timeout = float(os.getenv('STOCK_DATA_THREAD_TIMEOUT', '50'))
+                df = fut.result(timeout=_stock_data_timeout)  # 由 STOCK_DATA_THREAD_TIMEOUT 驱动，与下游 per_call=45 联动，留 5s buffer
         except _FTimeout:
             app.logger.warning(f"analyzer.get_stock_data 超时(30s)：{stock_code}")
             return custom_jsonify({'error': '数据源超时', 'stock_code': stock_code}), 504
@@ -2967,8 +2968,8 @@ def ai_chat_stream():
         """SSE事件生成器"""
         import json as _json
 
-        # AI对话总超时（FIX-E1：默认 900s=15min，可经环境变量 AI_CHAT_TIMEOUT 配置）
-        AI_CHAT_TIMEOUT = int(os.getenv('AI_CHAT_TIMEOUT', '900'))
+        # AI对话总超时（默认 1800s=30min，可经环境变量 AI_CHAT_TIMEOUT 配置）
+        AI_CHAT_TIMEOUT = int(os.getenv('AI_CHAT_TIMEOUT', '1800'))
         chat_start_time = time.time()
 
         def check_timeout():
@@ -3759,7 +3760,8 @@ def api_alt_data(ticker: str):
     _results = {"shipping": None, "esg": None, "hiring": None, "corporate": None}
     for key, domain, method, kw in _subtasks:
         try:
-            _results[key] = _p3_call_with_timeout(domain, method, timeout=45, **kw)  # 2026-05-18 拉富足：alt_data 4 域（shipping/ESG/hiring/corporate）外部 API 慢，原 15s 易超时
+            _alt_data_timeout = float(os.getenv('ALT_DATA_SUBTASK_TIMEOUT', '45'))
+            _results[key] = _p3_call_with_timeout(domain, method, timeout=_alt_data_timeout, **kw)  # 由 ALT_DATA_SUBTASK_TIMEOUT 驱动
         except Exception as e:
             errors[key] = _fmt_err(e)
             app.logger.info(f"[alt_data] {key}({domain}.{method}) 失败: {errors[key]}")
@@ -4006,13 +4008,15 @@ def adapters_status():
     total = len(_ADAPTER_SPECS)
     results: dict = {}
 
-    # 并行执行所有 adapter 健康检查，整体超时 10s
+    _overall_timeout = float(os.getenv('ADAPTERS_STATUS_OVERALL_TIMEOUT', '10'))
+    _per_call_timeout = float(os.getenv('ADAPTERS_STATUS_PER_CALL_TIMEOUT', '5'))
+    # 并行执行所有 adapter 健康检查，整体超时由 ADAPTERS_STATUS_OVERALL_TIMEOUT 驱动
     with ThreadPoolExecutor(max_workers=min(total, 16)) as pool:
         future_map = {
-            pool.submit(_hc_one, cls_name, mod_path, 5.0): cls_name
+            pool.submit(_hc_one, cls_name, mod_path, _per_call_timeout): cls_name
             for cls_name, mod_path in _ADAPTER_SPECS
         }
-        for fut in as_completed(future_map, timeout=10):
+        for fut in as_completed(future_map, timeout=_overall_timeout):
             cls_name = future_map[fut]
             try:
                 results[cls_name] = fut.result(timeout=0)  # result 已就绪，立即取

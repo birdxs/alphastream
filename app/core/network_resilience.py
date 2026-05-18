@@ -14,6 +14,7 @@ import functools
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -134,8 +135,8 @@ def resilient_call(
     max_attempts: int = 3,
     base_wait: float = 1.0,
     max_wait: float = 8.0,
-    per_call_timeout: float = 30.0,  # 2026-05-18 拉富足：影响所有 adapter，原 8s 对外部 API 过紧；显式覆盖处仍按调用方传值
-    cache_ttl: int = 300,
+    per_call_timeout: float = float(os.getenv('NETWORK_RESILIENCE_DEFAULT_TIMEOUT', '30')),  # 由 NETWORK_RESILIENCE_DEFAULT_TIMEOUT 驱动
+    cache_ttl: int = int(os.getenv('NETWORK_RESILIENCE_CACHE_TTL', '600')),  # 由 NETWORK_RESILIENCE_CACHE_TTL 驱动
     use_stale_on_failure: bool = True,
     cache_key: Optional[str] = None,
 ) -> Any:

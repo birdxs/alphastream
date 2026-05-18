@@ -548,8 +548,15 @@ def run_agent_analysis(
         except Exception as e:
             logger.warning(f"[FIX-6] tracker 注入失败: {e}")
 
+    _agent_graph_timeout = float(os.getenv('AGENT_GRAPH_TIMEOUT', '1800'))
     try:
-        result = graph.invoke(initial_state, config=invoke_config)
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+        with ThreadPoolExecutor(max_workers=1) as _pool:
+            _fut = _pool.submit(graph.invoke, initial_state, invoke_config)
+            try:
+                result = _fut.result(timeout=_agent_graph_timeout)
+            except _FutTimeout:
+                raise TimeoutError(f"Agent graph 超时（限制 {_agent_graph_timeout}s，stock={stock_code}）")
         logger.info(f"Agent分析完成: {stock_code} (thread_id={thread_id})")
 
         # 保存到Agent记忆 + 发布完成事件

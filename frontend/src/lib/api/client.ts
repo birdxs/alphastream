@@ -11,6 +11,9 @@ import type { SSEHandlers } from '@/lib/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
+// 前端 fetch 默认超时（由 NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS 驱动，默认 60s）
+const API_DEFAULT_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS) || 60000;
+
 // SSE 后端 URL 策略（2026-04-15 UI-Q2 修复）
 // 问题：原策略直连 http://localhost:8888，但从局域网 IP(如 192.168.43.125:3000)访问前端时
 //   a) `window.location.hostname === 'localhost'` 为 false → SSE_BASE='' 走相对 URL
@@ -74,20 +77,33 @@ class ApiClient {
       const sp = new URLSearchParams(params);
       url += `?${sp.toString()}`;
     }
-    const res = await fetch(url);
-    if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
-    return safeJSONParse<T>(await res.text());
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), API_DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
+      return safeJSONParse<T>(await res.text());
+    } finally {
+      clearTimeout(tid);
+    }
   }
 
   // 通用POST请求
   async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
-    return safeJSONParse<T>(await res.text());
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), API_DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
+      return safeJSONParse<T>(await res.text());
+    } finally {
+      clearTimeout(tid);
+    }
   }
 
   // SSE流式请求（支持自动重连，最多重试2次）
@@ -133,7 +149,10 @@ class ApiClient {
 
         // FIX-E1+E3: SSE idle timeout — 仅监控"连续无 chunk"时长，不限制总时长
         // 后端每 15s 会发心跳 `: heartbeat ...\n\n`，正常应远低于 idleMs
-        const idleMs = Number(process.env.NEXT_PUBLIC_STREAM_IDLE_TIMEOUT_MS || 90000);
+        // 优先读 NEXT_PUBLIC_SSE_HEARTBEAT_TIMEOUT_MS，兜底 NEXT_PUBLIC_STREAM_IDLE_TIMEOUT_MS
+        const idleMs = Number(process.env.NEXT_PUBLIC_SSE_HEARTBEAT_TIMEOUT_MS)
+          || Number(process.env.NEXT_PUBLIC_STREAM_IDLE_TIMEOUT_MS)
+          || 120000;
         let lastChunkAt = Date.now();
         let idleAborted = false;
         const idleTimer = setInterval(() => {

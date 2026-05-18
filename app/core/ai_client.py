@@ -35,10 +35,12 @@ def get_ai_client():
         logger.warning("OPENAI_API_KEY 未配置，AI功能将不可用")
         return None
 
+    _ai_http_timeout = float(os.getenv('AI_HTTP_TIMEOUT', '600'))
+    _ai_http_connect = float(os.getenv('AI_HTTP_CONNECT_TIMEOUT', '15'))
     client = OpenAI(
         api_key=api_key,
         base_url=base_url,
-        timeout=httpx.Timeout(600.0, connect=15.0),  # 2026-05-18 拉富足：LLM reasoning 模型 >180s 常见，OpenAI/Anthropic SDK 默认即 600s
+        timeout=httpx.Timeout(_ai_http_timeout, connect=_ai_http_connect),  # 2026-05-18 拉富足：由 AI_HTTP_TIMEOUT/AI_HTTP_CONNECT_TIMEOUT 驱动
         max_retries=2,
     )
     return client
