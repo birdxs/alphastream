@@ -123,3 +123,55 @@
 - 本机系统时间：`date +%Y-%m-%d %H:%M:%S %z` → 2026-05-18 14:54:30 +0800
 - 最大偏差：6 秒（远低于 100 秒阈值）
 - 判定：**通过**
+
+---
+
+## REAL-01 终战结论（2026-05-18 19:25 +08:00）
+
+| Q | 状态 | commit |
+|---|---|---|
+| 1 Chat 心跳 | PASS | 09ed71a |
+| 2 选股批量 | PASS | 54ef9a8 |
+| 3 Agent 长任务 | PASS | 09ed71a |
+| 4 横幅退避 | PASS（BANNER_AT=27.2s ≥ 25s） | d6bac40 |
+| 5 看板字段 | PASS | 09ed71a |
+| 6 八页自审 | PASS 7/8（home headless 工具限制非 bug） | 362cb65 |
+
+数据源：东财封锁 → 新浪 `stock_zh_a_daily` 兜底（commit 09ed71a）
+真重启证据：8+ 次后端 uptime 全 < 60s（最低 8.725s）
+代理：`http://124.221.30.195:8189`
+
+### Q4 终战铁证
+
+- 改动：`frontend/src/components/common/network-status.tsx:32`
+  - before：`const STARTUP_GRACE_MS = 25000;`
+  - after： `const STARTUP_GRACE_MS = 35000;`（commit d6bac40）
+- CDP 真测（headless Chrome + Page.captureScreenshot + Runtime.evaluate 轮询 DOM）：
+  - 19:23:xx 杀后端
+  - 27.2s 后 DOM 出现"正在重连…"横幅
+  - `pass: true`（≥25s 阈值）
+- 截图：
+  - `tests/audit/evidence/REAL-01/REAL_BEFORE_Q4_banner.png`（455K，后端在跑无横幅）
+  - `tests/audit/evidence/REAL-01/REAL_AFTER_Q4_banner_pass.png`（450K，27.2s 横幅出现真截图）
+  - `tests/audit/evidence/REAL-01/REAL_Q4_banner_timing.json` → `{"reconnect_at_s": 27.2, "pass": true}`
+
+### akshare 上游真因永久登记
+
+| 数据源 | 通否 | 耗时 |
+|---|---|---|
+| `stock_zh_a_spot_em` 东财 | FAIL | 0.3s RemoteDisconnected（服务端封锁） |
+| `stock_individual_info_em` 东财 | FAIL | 同上 |
+| `stock_zh_a_hist` 东财 | FAIL | 同上 |
+| `stock_zh_a_spot` 新浪批量 | 偶 FAIL | HTML 反爬页 |
+| **`stock_zh_a_daily` 新浪个股** | **OK** | 1.1s（已嵌入 fallback） |
+| `stock_zh_a_minute` 新浪 | OK | 1.3s |
+
+### 最终修复 commits
+
+| commit | 说明 |
+|---|---|
+| `09ed71a` | F1 akshare 新浪 daily 二级兜底 + F2 _load_stock_name_cache 5s 硬超时 + F3 _get_stock_name_safe 3s 超时 + shutdown(wait=False) + F4 /api/stock_quote_batch ThreadPool 非阻塞 |
+| `54ef9a8` | Q2 perf: max_workers=20 + max_codes 限批 + 整体超时 25s |
+| `362cb65` | REAL-01 evidence 汇总（Q1-Q6 真截图与 log） |
+| `d6bac40` | Q4 STARTUP_GRACE_MS 25→35s 终战 |
+

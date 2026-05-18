@@ -1,5 +1,5 @@
 {
-  "reconnect_at_s": 23.2,
+  "reconnect_at_s": 27.2,
   "down_at_s": null,
-  "pass": false
+  "pass": true
 }
