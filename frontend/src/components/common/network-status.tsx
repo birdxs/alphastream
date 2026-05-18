@@ -6,15 +6,18 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * FIX-E4: 网络状态指示器
- * - 启动后给后端 8s 静默宽限期，不立刻弹横幅
+ * FIX-E4 / REAL-01 Q4: 网络状态指示器（强化版退避）
+ * - mount 后 25s 启动静默期：期间所有失败都不弹横幅（覆盖后端冷启）
  * - 连续 3 次失败才显示"正在重连"，10+ 次显示"后端服务不可达"
- * - 指数退避: 2s -> 4s -> 8s -> 16s -> 30s 封顶
- * - 探测超时 8s（替代旧的 5s）
+ * - 指数退避: 1s -> 2s -> 4s -> 8s -> 16s 封顶
+ * - 探测超时 8s
+ * - 状态恢复时清空 failuresRef
  */
 export function NetworkStatus() {
   const [status, setStatus] = useState<'ok' | 'reconnecting' | 'down'>('ok');
   const failuresRef = useRef(0);
+  const consecutiveFailuresRef = useRef(0);
+  const startupAtRef = useRef(Date.now());
   const recoveryToastUntilRef = useRef(0);
   const [showRecovery, setShowRecovery] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -24,17 +27,23 @@ export function NetworkStatus() {
 
     const RECONNECT_THRESHOLD = 3;
     const DOWN_THRESHOLD = 10;
-    const BACKOFF = [2000, 4000, 8000, 16000, 30000];
-    const STARTUP_GRACE_MS = 8000;
+    // 指数退避（首次失败到下次重试 1s，逐级翻倍封顶 16s）
+    const BACKOFF = [1000, 2000, 4000, 8000, 16000];
+    const STARTUP_GRACE_MS = 25000; // mount 后 25s 内即便累计失败也不显示
+    const PROBE_TIMEOUT_MS = 8000;
 
+    startupAtRef.current = Date.now();
     let cancelled = false;
+
+    const inStartupGrace = () => Date.now() - startupAtRef.current < STARTUP_GRACE_MS;
 
     const handleOnline = () => {
       failuresRef.current = 0;
+      consecutiveFailuresRef.current = 0;
       setStatus('ok');
     };
     const handleOffline = () => {
-      // 浏览器明确 offline，直接显示 down
+      // 浏览器明确 offline 才直接显示 down
       setStatus('down');
     };
     window.addEventListener('online', handleOnline);
@@ -48,12 +57,13 @@ export function NetworkStatus() {
           method: 'GET',
           credentials: 'omit',
           cache: 'no-store',
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
         });
         if (cancelled) return;
         if (res.ok) {
-          const prevFailures = failuresRef.current;
+          const prevFailures = consecutiveFailuresRef.current;
           failuresRef.current = 0;
+          consecutiveFailuresRef.current = 0;
           if (prevFailures >= RECONNECT_THRESHOLD) {
             // 从可见的失败态恢复 → 弹 3s "已恢复" 提示
             recoveryToastUntilRef.current = Date.now() + 3000;
@@ -63,34 +73,42 @@ export function NetworkStatus() {
           setStatus('ok');
         } else {
           failuresRef.current += 1;
+          consecutiveFailuresRef.current += 1;
           updateStatus();
         }
       } catch {
         if (cancelled) return;
         failuresRef.current += 1;
+        consecutiveFailuresRef.current += 1;
         updateStatus();
       } finally {
         if (!cancelled) {
-          const idx = Math.min(failuresRef.current, BACKOFF.length - 1);
-          const delay = failuresRef.current === 0 ? 30000 : BACKOFF[Math.max(0, idx - 1)];
+          const f = consecutiveFailuresRef.current;
+          // 健康时下次 30s 再探；失败时按指数退避
+          const delay = f === 0 ? 30000 : BACKOFF[Math.min(f - 1, BACKOFF.length - 1)];
           timerRef.current = setTimeout(checkApi, delay);
         }
       }
     };
 
     const updateStatus = () => {
-      const f = failuresRef.current;
+      // 启动宽限期内一律保持 ok
+      if (inStartupGrace()) {
+        setStatus('ok');
+        return;
+      }
+      const f = consecutiveFailuresRef.current;
       if (f >= DOWN_THRESHOLD) {
         setStatus('down');
       } else if (f >= RECONNECT_THRESHOLD) {
         setStatus('reconnecting');
       } else {
-        setStatus('ok'); // 仍在静默宽限内
+        setStatus('ok');
       }
     };
 
-    // 启动后给后端 8s 静默宽限再首次探测
-    timerRef.current = setTimeout(checkApi, STARTUP_GRACE_MS);
+    // 启动后给后端 1s 后开始第一次探测（在 25s 启动宽限期内即便失败也不显示）
+    timerRef.current = setTimeout(checkApi, 1000);
 
     return () => {
       cancelled = true;

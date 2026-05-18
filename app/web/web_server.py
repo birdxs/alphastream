@@ -2999,24 +2999,77 @@ def ai_chat_stream():
             # 收集完整回复
             full_content = ""
 
+            # [REAL-01 Q1/Q3] 心跳改造：阻塞调用移到后台线程 + 主生成器轮询事件队列
+            # 1) chat_with_tools_stream 是同步阻塞的；2) event_callback 在 worker 线程触发时把 token 入队；
+            # 3) 主线程每秒检查队列拿 token 立即 yield 给前端；4) 每 15s 无 token 则 yield `: heartbeat`
+            #    防止 Cloudflare / Nginx / 浏览器 idle 切连。
+            import threading as _threading
+            import queue as _queue
+            HEARTBEAT_INTERVAL = int(os.getenv('AI_CHAT_HEARTBEAT_INTERVAL', '15'))
+            event_queue: _queue.Queue = _queue.Queue()
+
             def event_callback(event_type, data):
+                """worker 线程回调：把 token 推入主线程队列"""
                 nonlocal full_content
                 if event_type == 'token' and data.get('content'):
                     full_content += data['content']
+                    # 立即把增量内容入队，主线程 yield 给客户端
+                    event_queue.put(('token_delta', data['content']))
 
             # 执行流式AI对话（带工具调用，模型不支持时降级）
             check_timeout()
             content, tools_log, error = None, [], None
-            try:
-                content, tools_log, error = chat_with_tools_stream(
-                    client, messages, OPENAI_TOOLS_SCHEMA,
-                    tool_executor=artifact_tool_executor,
-                    max_tool_rounds=3,
-                    event_callback=event_callback
-                )
-            except Exception as tool_err:
+
+            worker_result = {'content': None, 'tools_log': [], 'error': None, 'exc': None}
+
+            def _chat_worker():
+                """后台线程执行真正的阻塞 LLM 调用"""
+                try:
+                    c, t, e = chat_with_tools_stream(
+                        client, messages, OPENAI_TOOLS_SCHEMA,
+                        tool_executor=artifact_tool_executor,
+                        max_tool_rounds=3,
+                        event_callback=event_callback
+                    )
+                    worker_result['content'] = c
+                    worker_result['tools_log'] = t
+                    worker_result['error'] = e
+                except Exception as ex:
+                    worker_result['exc'] = ex
+                finally:
+                    event_queue.put(('worker_done', None))
+
+            worker_th = _threading.Thread(target=_chat_worker, daemon=True)
+            worker_th.start()
+
+            last_event_ts = time.time()
+            worker_done = False
+            while not worker_done:
+                check_timeout()
+                try:
+                    kind, payload = event_queue.get(timeout=1.0)
+                except _queue.Empty:
+                    # 队列空：判断是否需要发心跳
+                    if time.time() - last_event_ts >= HEARTBEAT_INTERVAL:
+                        yield f": heartbeat {int(time.time())}\n\n"
+                        last_event_ts = time.time()
+                    continue
+
+                if kind == 'token_delta':
+                    # 实时推送增量 token 给前端
+                    yield emit('token', {'content': payload, 'finish_reason': None})
+                    last_event_ts = time.time()
+                elif kind == 'worker_done':
+                    worker_done = True
+
+            if worker_result['exc'] is not None:
+                tool_err = worker_result['exc']
                 app.logger.warning(f"带工具的流式调用失败，降级为普通对话: {tool_err}")
                 error = None  # 清除错误，尝试降级
+            else:
+                content = worker_result['content']
+                tools_log = worker_result['tools_log']
+                error = worker_result['error']
 
             # 工具调用失败时降级为不带tools的普通对话
             if error and ('400' in str(error) or 'tool' in str(error).lower()):
@@ -3028,11 +3081,19 @@ def ai_chat_stream():
                 if stream_err:
                     yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
                     return
-                # 收集流式响应
+                # 收集流式响应 - 同样带心跳
                 collected = ""
+                last_event_ts = time.time()
                 for chunk in stream:
+                    check_timeout()
                     if chunk.choices and chunk.choices[0].delta.content:
-                        collected += chunk.choices[0].delta.content
+                        delta = chunk.choices[0].delta.content
+                        collected += delta
+                        yield emit('token', {'content': delta, 'finish_reason': None})
+                        last_event_ts = time.time()
+                    elif time.time() - last_event_ts >= HEARTBEAT_INTERVAL:
+                        yield f": heartbeat {int(time.time())}\n\n"
+                        last_event_ts = time.time()
                 content = collected
                 error = None
                 tools_log = []
@@ -3043,9 +3104,10 @@ def ai_chat_stream():
 
             final_content = content or full_content
 
-            # 推送AI文本回复
-            if final_content:
-                yield emit('token', {'content': final_content, 'finish_reason': 'stop'})
+            # [REAL-01 Q1/Q3] 增量 token 已在 worker 循环中实时 yield 给前端；
+            # 这里仅在 full_content 为空（例如普通对话降级路径已经在自己的循环里推过）时不再重复推送。
+            # 只发一个 finish_reason=stop 的空 token 表示结束。
+            yield emit('token', {'content': '', 'finish_reason': 'stop'})
 
             # 推送所有artifact
             for artifact in artifacts_collected:
