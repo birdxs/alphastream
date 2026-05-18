@@ -1,79 +1,137 @@
-// Input: 浏览器online/offline事件 + API心跳检测
+// Input: 浏览器 navigator.onLine 状态 + 定期探测 /api/conversations
 // Output: 网络断开或API不可达时显示顶部警告条
-// Pos: layout.tsx中Navbar下方，全局网络状态提示
-// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+// Pos: 全局布局组件，layout.tsx 渲染顶部
+'use client';
 
-"use client";
-import { useState, useEffect, useRef } from "react";
-import { WifiOff, ServerOff } from "lucide-react";
-import { useToast } from "./toast-provider";
+import { useEffect, useRef, useState } from 'react';
 
+/**
+ * FIX-E4: 网络状态指示器
+ * - 启动后给后端 8s 静默宽限期，不立刻弹横幅
+ * - 连续 3 次失败才显示"正在重连"，10+ 次显示"后端服务不可达"
+ * - 指数退避: 2s -> 4s -> 8s -> 16s -> 30s 封顶
+ * - 探测超时 8s（替代旧的 5s）
+ */
 export function NetworkStatus() {
-  const [online, setOnline] = useState(true);
-  const [apiReachable, setApiReachable] = useState(true);
-  const wasOfflineRef = useRef(false);
-  const wasApiUnreachableRef = useRef(false);
-  const { toast } = useToast();
+  const [status, setStatus] = useState<'ok' | 'reconnecting' | 'down'>('ok');
+  const failuresRef = useRef(0);
+  const recoveryToastUntilRef = useRef(0);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const RECONNECT_THRESHOLD = 3;
+    const DOWN_THRESHOLD = 10;
+    const BACKOFF = [2000, 4000, 8000, 16000, 30000];
+    const STARTUP_GRACE_MS = 8000;
+
+    let cancelled = false;
+
     const handleOnline = () => {
-      setOnline(true);
-      if (wasOfflineRef.current) {
-        toast("网络连接已恢复", "success");
-        wasOfflineRef.current = false;
-      }
+      failuresRef.current = 0;
+      setStatus('ok');
     };
     const handleOffline = () => {
-      setOnline(false);
-      wasOfflineRef.current = true;
+      // 浏览器明确 offline，直接显示 down
+      setStatus('down');
     };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-    setOnline(navigator.onLine);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, [toast]);
-
-  // API心跳检测，每30秒一次
-  useEffect(() => {
     const checkApi = async () => {
       try {
-        await fetch('/api/conversations', { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-        if (wasApiUnreachableRef.current) {
-          toast("后端服务已恢复连接", "success");
-          wasApiUnreachableRef.current = false;
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+        const url = `${baseUrl}/health`;
+        const res = await fetch(url, {
+          method: 'GET',
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(8000),
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const prevFailures = failuresRef.current;
+          failuresRef.current = 0;
+          if (prevFailures >= RECONNECT_THRESHOLD) {
+            // 从可见的失败态恢复 → 弹 3s "已恢复" 提示
+            recoveryToastUntilRef.current = Date.now() + 3000;
+            setShowRecovery(true);
+            setTimeout(() => setShowRecovery(false), 3000);
+          }
+          setStatus('ok');
+        } else {
+          failuresRef.current += 1;
+          updateStatus();
         }
-        setApiReachable(true);
       } catch {
-        if (navigator.onLine) {
-          wasApiUnreachableRef.current = true;
-          setApiReachable(false);
+        if (cancelled) return;
+        failuresRef.current += 1;
+        updateStatus();
+      } finally {
+        if (!cancelled) {
+          const idx = Math.min(failuresRef.current, BACKOFF.length - 1);
+          const delay = failuresRef.current === 0 ? 30000 : BACKOFF[Math.max(0, idx - 1)];
+          timerRef.current = setTimeout(checkApi, delay);
         }
       }
     };
-    checkApi();
-    const heartbeat = setInterval(checkApi, 30000);
-    return () => clearInterval(heartbeat);
-  }, [toast]);
 
-  if (online && apiReachable) return null;
+    const updateStatus = () => {
+      const f = failuresRef.current;
+      if (f >= DOWN_THRESHOLD) {
+        setStatus('down');
+      } else if (f >= RECONNECT_THRESHOLD) {
+        setStatus('reconnecting');
+      } else {
+        setStatus('ok'); // 仍在静默宽限内
+      }
+    };
+
+    // 启动后给后端 8s 静默宽限再首次探测
+    timerRef.current = setTimeout(checkApi, STARTUP_GRACE_MS);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  if (status === 'ok') {
+    if (showRecovery) {
+      return (
+        <div
+          className="fixed top-0 left-0 right-0 bg-emerald-600 text-white text-center py-1.5 text-sm z-50 shadow-md transition"
+          role="status"
+          aria-live="polite"
+        >
+          <span>网络已恢复</span>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  // 浏览器明确 offline → 离线文案；否则按 down/reconnecting 区分
+  const offlineHint = typeof navigator !== 'undefined' && !navigator.onLine;
+  const text =
+    status === 'down'
+      ? offlineHint
+        ? '网络已断开（离线），请检查网络连接'
+        : '后端服务不可达，请检查后端是否启动'
+      : '后端响应缓慢，正在重连…';
+  const bg = status === 'down' ? 'bg-red-600' : 'bg-amber-500';
 
   return (
-    <div className="fixed top-14 left-0 right-0 bg-[var(--brand-primary,#3737CC)]/90 text-white/90 text-xs text-center py-1.5 z-50 flex items-center justify-center gap-2 animate-fade-in backdrop-blur-sm border-b border-[var(--glass-border)]">
-      {!online ? (
-        <>
-          <WifiOff className="h-3.5 w-3.5" />
-          <span>网络连接已断开，部分功能可能不可用</span>
-        </>
-      ) : (
-        <>
-          <ServerOff className="h-3.5 w-3.5" />
-          <span>后端服务不可达，正在重试连接...</span>
-        </>
-      )}
+    <div
+      className={`fixed top-0 left-0 right-0 ${bg} text-white text-center py-1.5 text-sm z-50 shadow-md`}
+      role="alert"
+      aria-live="assertive"
+    >
+      <span>{text}</span>
     </div>
   );
 }

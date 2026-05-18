@@ -61,6 +61,36 @@ describe('NetworkStatus 组件', () => {
     expect(typeof called).toBe('boolean');
   });
 
+  it('FIX-E4: 启动期前 8s 不发探测、不弹横幅（静默宽限）', async () => {
+    vi.useFakeTimers();
+    const { container } = render(<NetworkStatus />);
+
+    // 启动后 2s 不应该已经调用 fetch
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(container.textContent || '').not.toMatch(/不可达|重连|重试/);
+  });
+
+  it('FIX-E4: 连续 1-2 次失败仍不弹横幅，3 次后才提示', async () => {
+    vi.useFakeTimers();
+    fetchSpy.mockReset();
+    fetchSpy.mockRejectedValue(new Error('boom'));
+
+    render(<NetworkStatus />);
+    // 过 8s 静默期，触发首次失败
+    await act(async () => {
+      vi.advanceTimersByTime(8500);
+    });
+    // 第二次失败（2s 后退避）
+    await act(async () => {
+      vi.advanceTimersByTime(2500);
+    });
+    // 1-2 次失败状态仍为 ok，不应渲染红/橙横幅
+    expect(screen.queryByText(/不可达|重连/)).toBeNull();
+  });
+
   it('online 事件恢复 → 状态切回', async () => {
     render(<NetworkStatus />);
 
