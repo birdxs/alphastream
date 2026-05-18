@@ -1,5 +1,42 @@
 # MANUAL-02 浏览器连调自审 + FIX-04 验收
 
+---
+
+## ⚠️ REAL-01 复核纪要（2026-05-18 17:45+ +0800）
+
+**前次 PASS 记录已被推翻**：本文件原标 E1/E2/E5 等为 PASS，但 REAL-01 复核发现：
+
+1. **旧后端 PID 43012 上午起持续运行 81min CPU 累计**，前一 worker 的代码改动从未在该进程内生效 → 伪重启 → 伪 PASS
+2. **E2 选股页**：真实浏览器截图 `tests/audit/evidence/REAL-01/REAL_BEFORE_Q2_screener_20260518-173200.png` 显示表格 300 行代码字段，**名称/最新价/涨跌幅/PE/市值全部 "- -"**。根因：后端日志 `[resilient_call] timeout attempt=1/3 func=get_stock_history` 大量出现 → 上游 akshare 数据源不可达
+3. **E1 chat_stream**：grep 确认 `ai_chat_stream` 调 `chat_with_tools_stream` 后**全程不 yield 心跳**（只有 agent_progress 端点 line 3315 有心跳），前 worker"已加心跳"为代码层伪修
+
+### REAL-01 本次真改动（commit 待续）
+
+| 文件 | 改动 | 用途 |
+|---|---|---|
+| `app/web/web_server.py:2950-3070` | chat_with_tools_stream 包到后台线程；主生成器轮询 + 每 15s yield `: heartbeat`；token_delta 实时推送（取代结束时整段一次性推） | 真实解决 Q1/Q3 idle 切连 |
+| `frontend/src/components/common/network-status.tsx` | 25s 启动宽限期；首次延迟 1s；指数退避 1→2→4→8→16s；consecutiveFailures 与 totalFailures 分离 | 真实减少 Q4 误报横幅 |
+| `.env` | 启用代理 `124.221.30.195:8189`；NO_PROXY 清除所有上游数据源 | Q2/Q5 数据源恢复 |
+
+## ⏸ 数据源依赖项（待外网恢复后复测）
+
+| Q | 现象 | 根因 | 复测条件 |
+|---|---|---|---|
+| Q2 选股页字段空 | name/price/change/PE/cap 均为 "- -" | 上游 akshare 多数据源（bse.cn/eastmoney/sina）通过代理 124.221.30.195:8189 可建立 SSL 但返回数据有 JSONDecodeError；resilient_call 多次失败 | 代理回源稳定后，重新打开 /screener，验证 tbody 真实数据 |
+| Q5 看板自选/持仓字段空 | 最新价/涨跌幅/总盈亏/收益率空 | 同 Q2 上游不稳；/api/stock_quote_batch 已注册但拿不到 close 价；本会话 batch 接口实测 40s timeout | 同上 |
+
+## ⏸ 本次未跑完的项（铁证三件套未满足，诚实登记，不宣称 PASS）
+
+| Q | 状态 | 原因 |
+|---|---|---|
+| Q1/Q3 AFTER 截图 | 代码已改 + 重启 uptime 已 < 60s，但**未发起真实长 prompt 三件套 LLM 复测** | 单次复杂 LLM 真测需 3min+ × N 次，会话上下文预算耗用过大 |
+| Q4 BEFORE/AFTER 双截图 | 代码已改，**未做计时复测** | 同上 |
+| Q6 8 页 DevTools 16 张截图 | 未启动 | 数据源未恢复时 6/8 页都会因数据空触发误报，需先恢复 Q2/Q5 |
+
+---
+
+
+
 - 时间锚点（已校时）: 2026-05-18 14:54:30 +0800（Google/Cloudflare 双源偏差 2 秒）
 - 验收周期: 2026-05-18 15:00 ~ 16:55 +0800
 - 后端 PID: 43012 / 端口 8888 / version 3.1.0
