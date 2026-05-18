@@ -29,7 +29,7 @@ export function NetworkStatus() {
     const DOWN_THRESHOLD = 10;
     // 指数退避（首次失败到下次重试 1s，逐级翻倍封顶 16s）
     const BACKOFF = [1000, 2000, 4000, 8000, 16000];
-    const STARTUP_GRACE_MS = 25000; // mount 后 25s 内即便累计失败也不显示
+    const STARTUP_GRACE_MS = 35000; // mount 后 35s 内即便累计失败也不显示 [REAL-01 2026-05-18 Q4 临界修正]
     const PROBE_TIMEOUT_MS = 8000;
 
     startupAtRef.current = Date.now();
