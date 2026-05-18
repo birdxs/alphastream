@@ -3907,8 +3907,15 @@ def stock_quote_batch():
     codes = [c.strip() for c in codes_raw.split(',') if c.strip()]
     if not codes:
         return custom_jsonify({'error': 'codes 解析为空'}), 400
-    if len(codes) > 50:
-        return custom_jsonify({'error': 'codes 最多 50 个'}), 400
+    # [REAL-01 2026-05-18] 提升上限到 100；支持 max_codes 客户端限批
+    try:
+        max_codes = int(request.args.get('max_codes', '100'))
+    except ValueError:
+        max_codes = 100
+    if max_codes > 0 and len(codes) > max_codes:
+        codes = codes[:max_codes]
+    if len(codes) > 100:
+        return custom_jsonify({'error': 'codes 最多 100 个'}), 400
 
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout, as_completed
     end_date = datetime.now().strftime('%Y%m%d')
@@ -3945,11 +3952,12 @@ def stock_quote_batch():
     errors = []
     # [REAL-01 2026-05-18] 用 try/except 包裹 as_completed，超时立即返回已完成部分，
     # 并 shutdown(wait=False) 不阻塞响应；避免 with 块 __exit__ 等到全部线程结束(60s+)
-    ex = ThreadPoolExecutor(max_workers=min(8, len(codes)))
+    # [REAL-01 2026-05-18] 并发上限 20（原 8），整体 25s 超时（原 20s）
+    ex = ThreadPoolExecutor(max_workers=min(20, len(codes)))
     try:
         future_map = {ex.submit(_fetch_one, c): c for c in codes}
         try:
-            for fut in as_completed(future_map, timeout=20):
+            for fut in as_completed(future_map, timeout=25):
                 try:
                     r = fut.result(timeout=1)
                     if 'error' in r:
