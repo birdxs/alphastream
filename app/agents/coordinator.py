@@ -1,16 +1,114 @@
 """
-Input: 用户请求(stock_code, market_type, research_depth, selected_analysts)
-Output: 完整的StockAnalysisState(含所有分析结果和最终决策) + EventBus事件流
-Pos: app/agents/coordinator.py - Agent系统的核心编排器，基于LangGraph动态编排（并行fan-out/fan-in + 条件路由）+ EventBus事件发布
+Input: 用户请求(stock_code, market_type, research_depth, selected_analysts, conversation_id)
+Output: 完整的StockAnalysisState(含所有分析结果和最终决策) + EventBus事件流 + SqliteSaver checkpoint
+Pos: app/agents/coordinator.py - Agent系统的核心编排器，基于LangGraph动态编排（并行fan-out/fan-in + 条件路由）+ EventBus事件发布 + 官方Checkpointer持久化
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+
+[2026-04-17] 接入LangGraph官方SqliteSaver checkpointer:
+  - 位置: data/langgraph_checkpoint.db (与conversation JSON并存, 独立schema)
+  - thread_id = conversation_id, 使agent执行状态与对话线程绑定
+  - 支持 get_state/get_state_history/replay/fork (LangGraph 1.1 官方能力)
+  - 一个进程一个全局saver实例, 线程安全 (sqlite3 connection per-thread)
 """
 import logging
+import os
+import threading
 from typing import Dict, Any, List, Optional
 from langgraph.graph import StateGraph, END
 from app.agents.state import StockAnalysisState
 
 logger = logging.getLogger(__name__)
+
+
+def _to_native(obj):
+    """[FIX-2 2026-05-18] 递归归一化 numpy/pandas 类型为 Python 原生类型。
+
+    LangGraph checkpoint 使用 ormsgpack 序列化 state，遇到 numpy.float64 /
+    numpy.integer / numpy.ndarray 会抛 "Type is not msgpack serializable" 错误。
+    在 agent 节点返回前过一遍此函数，确保 state 可被持久化。
+
+    支持类型：
+      - numpy.floating  -> float
+      - numpy.integer   -> int
+      - numpy.bool_     -> bool
+      - numpy.ndarray   -> list (递归)
+      - pandas Series   -> list (递归)
+      - pandas Timestamp -> ISO 字符串
+      - dict / list / tuple / set -> 递归处理元素
+      - 其他原生类型保持不变
+    """
+    # numpy 类型 (注意: np.float64 是 float 子类, np.int64 是 int 子类,
+    # 必须在 isinstance(obj,(int,float,bool)) 快速路径之前先识别)
+    try:
+        import numpy as np
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return [_to_native(x) for x in obj.tolist()]
+    except ImportError:
+        pass
+    # 快速路径: Python 原生类型直接返回
+    if obj is None or isinstance(obj, (str, bool, int, float)):
+        return obj
+    # pandas 类型
+    try:
+        import pandas as pd
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        if isinstance(obj, pd.Series):
+            return [_to_native(x) for x in obj.tolist()]
+    except ImportError:
+        pass
+    # 容器递归
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_native(x) for x in obj]
+    if isinstance(obj, set):
+        return [_to_native(x) for x in obj]
+    # 兜底: hasattr __float__ 当作数字处理
+    if hasattr(obj, '__float__') and not isinstance(obj, (str, bytes)):
+        try:
+            return float(obj)
+        except (TypeError, ValueError):
+            pass
+    return obj
+
+# 进程级单例 checkpointer — 同 DB 文件被所有 thread 共享，check_same_thread=False
+_checkpointer_instance = None
+_checkpointer_lock = threading.Lock()
+
+
+def get_checkpointer():
+    """获取进程级 SqliteSaver 单例。
+
+    失败时(sqlite模块不可用/磁盘只读)返回None，build_analysis_graph会降级为无checkpoint模式。
+    返回的对象包装了底层sqlite连接，check_same_thread=False 允许跨线程使用。
+    """
+    global _checkpointer_instance
+    if _checkpointer_instance is not None:
+        return _checkpointer_instance
+    with _checkpointer_lock:
+        if _checkpointer_instance is not None:
+            return _checkpointer_instance
+        try:
+            import sqlite3
+            from langgraph.checkpoint.sqlite import SqliteSaver
+            db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')
+            os.makedirs(db_dir, exist_ok=True)
+            db_path = os.path.join(db_dir, 'langgraph_checkpoint.db')
+            conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
+            _checkpointer_instance = SqliteSaver(conn)
+            logger.info(f"LangGraph Checkpointer 已初始化: {db_path}")
+        except Exception as e:
+            logger.warning(f"LangGraph Checkpointer 初始化失败, 降级为无持久化模式: {type(e).__name__}: {e}")
+            _checkpointer_instance = None
+        return _checkpointer_instance
 
 
 def _wrap_with_events(agent_fn, agent_name):
@@ -40,6 +138,10 @@ def _wrap_with_events(agent_fn, agent_name):
             pass
 
         result = agent_fn(state)
+
+        # [FIX-2 2026-05-18] 归一化 numpy/pandas 类型，防止 ormsgpack 序列化失败
+        if isinstance(result, dict):
+            result = _to_native(result)
 
         try:
             from app.core.event_bus import get_event_bus, EVENT_AGENT_COMPLETED
@@ -293,6 +395,10 @@ def build_analysis_graph(
     except ImportError:
         graph.add_edge("decision", END)
 
+    # 编译图 — 注入checkpointer以支持replay/fork/HITL；失败时降级为无持久化
+    ckpt = get_checkpointer()
+    if ckpt is not None:
+        return graph.compile(checkpointer=ckpt)
     return graph.compile()
 
 
@@ -301,7 +407,8 @@ def run_agent_analysis(
     market_type: str = 'A',
     research_depth: int = 3,
     selected_analysts: Optional[List[str]] = None,
-    progress_callback=None
+    progress_callback=None,
+    conversation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     执行Agent分析的主入口。
@@ -360,9 +467,15 @@ def run_agent_analysis(
     except Exception:
         pass
 
+    # LangGraph checkpointer 要求 thread_id 唯一，用 conversation_id 关联对话线程；
+    # 未提供时用 stock_code+时间戳兜底，仍能持久化但无法 replay 同一对话
+    import time as _time
+    thread_id = conversation_id or f"analysis_{stock_code}_{int(_time.time())}"
+    invoke_config = {"configurable": {"thread_id": thread_id}}
+
     try:
-        result = graph.invoke(initial_state)
-        logger.info(f"Agent分析完成: {stock_code}")
+        result = graph.invoke(initial_state, config=invoke_config)
+        logger.info(f"Agent分析完成: {stock_code} (thread_id={thread_id})")
 
         # 保存到Agent记忆 + 发布完成事件
         try:

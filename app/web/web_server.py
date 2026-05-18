@@ -8,6 +8,7 @@
 
 import numpy as np
 import pandas as pd
+import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from app.analysis.stock_analyzer import StockAnalyzer
 from app.analysis.us_stock_service import USStockService
@@ -46,8 +47,8 @@ import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../tradingagents')))
 
 
-# 加载环境变量
-load_dotenv()
+# 加载环境变量（override=True 让 .env 成为单一真相源，覆盖 shell 注入的同名变量）
+load_dotenv(override=True)
 
 
 def validate_stock_code(stock_code, market_type='A'):
@@ -88,7 +89,11 @@ app = Flask(__name__)
 START_TIME = time.time()
 APP_VERSION = "3.1.0"
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127.0.0.1:8888,http://localhost:3000,http://127.0.0.1:3000').split(',')
-CORS(app, resources={r"/api/*": {"origins": allowed_origins, "methods": ["GET", "POST"], "allow_headers": ["Content-Type", "X-API-Key"]}})
+# Dev兜底: 允许常见局域网IP(192.168.x/10.x)+任意:3000/8888端口, 便于Comdr从多主机访问
+_DEV_ORIGIN_PATTERNS = [
+    re.compile(r'^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):(3000|8888)$'),
+]
+CORS(app, resources={r"/api/*": {"origins": allowed_origins + _DEV_ORIGIN_PATTERNS, "methods": ["GET", "POST"], "allow_headers": ["Content-Type", "X-API-Key"]}})
 analyzer = StockAnalyzer()
 us_stock_service = USStockService()
 
@@ -1321,7 +1326,12 @@ def api_stock_profile():
             app.logger.warning(f"baostock profit失败({stock_code}): {e}")
       except Exception as e:
         app.logger.error(f"baostock 查询失败: {e}")
-    _PROFILE_CACHE[stock_code] = (_time.time(), profile)
+    # 淘汰过期条目，防止无限增长
+    now = _time.time()
+    stale_keys = [k for k, (ts, _) in _PROFILE_CACHE.items() if now - ts > _PROFILE_TTL]
+    for k in stale_keys:
+        del _PROFILE_CACHE[k]
+    _PROFILE_CACHE[stock_code] = (now, profile)
     return custom_jsonify(profile)
 
 
@@ -1764,8 +1774,26 @@ def clean_old_tasks():
         # 删除旧任务
         for task_id in to_delete:
             del scan_tasks[task_id]
+        deleted_count = len(to_delete)
 
-        return len(to_delete)
+        # 同步清理 tasks 字典中的过期条目
+        for task_type in tasks:
+            store = tasks[task_type]
+            expired = []
+            for tid, t in store.items():
+                try:
+                    t_updated = datetime.strptime(t.get('updated_at', ''), '%Y-%m-%d %H:%M:%S')
+                    if ((t.get('status') in [TASK_COMPLETED, TASK_FAILED] and
+                         (now - t_updated).total_seconds() > 1800) or
+                            (now - t_updated).total_seconds() > 7200):
+                        expired.append(tid)
+                except Exception:
+                    expired.append(tid)
+            for tid in expired:
+                del store[tid]
+            deleted_count += len(expired)
+
+        return deleted_count
 
 
 # 修改 run_task_cleaner 函数，使其每 5 分钟运行一次并在 16:30 左右清理所有缓存
@@ -3094,6 +3122,79 @@ def delete_conversation(conversation_id):
     return jsonify({'error': '删除失败'}), 404
 
 
+# ============================================================
+# A2A Protocol v1.0 预留端点 [2026-04-17]
+# 参考: https://a2a-protocol.org/latest/specification/ (v1.0.0, 2026-03-12)
+# 现状: 仅暴露 AgentCard 供外部发现本项目的 agent 能力; Task/Message RPC 暂未实施
+# 路线: 如需支持跨框架调用, 实施 JSON-RPC SendMessage/GetTask/CancelTask (见 TODO)
+# ============================================================
+
+def _build_agent_card():
+    """返回符合 A2A Protocol v1.0 规范的 AgentCard JSON。
+    字段参考: https://a2a-protocol.org/latest/specification/#agentcard
+    注意: 当前为 stub, skills 暴露读性能力, Task RPC 尚未实现。
+    """
+    base_url = request.host_url.rstrip('/') if request else ''
+    return {
+        "name": "StockAnal Multi-Agent Analyst",
+        "description": "14个专业Agent协同分析A股/港股/美股的投研系统: 技术/基本面/资金流/情绪/多空辩论/风险/决策/投资者人格",
+        "url": f"{base_url}/a2a/v1",
+        "version": "0.1.0-stub",
+        "provider": {
+            "organization": "StockAnal_Sys",
+            "url": base_url or "https://github.com/",
+        },
+        "capabilities": {
+            "streaming": True,
+            "pushNotifications": False,
+            "extendedAgentCard": False,
+        },
+        "defaultInputModes": ["text/plain", "application/json"],
+        "defaultOutputModes": ["application/json", "text/event-stream"],
+        "skills": [
+            {
+                "id": "stock-deep-analysis",
+                "name": "股票深度分析",
+                "description": "对给定股票代码执行多Agent协同分析, 返回投资决策/多空观点/风险评估",
+                "tags": ["finance", "stock", "analysis"],
+                "examples": ["分析 600519 贵州茅台", "research_depth=5 对 AAPL 做完整分析"],
+            },
+        ],
+        "_stub": True,
+        "_stub_note": "A2A Task/Message RPC尚未实施; 如需发起远程调用, 使用 /api/ai/agent-analyze (内部SSE)",
+    }
+
+
+@app.route('/.well-known/agent-card.json', methods=['GET'])
+def a2a_agent_card():
+    """A2A v1.0 标准发现端点 (RFC 8615 well-known)。"""
+    return jsonify(_build_agent_card())
+
+
+@app.route('/.well-known/agent.json', methods=['GET'])
+def a2a_agent_card_legacy():
+    """A2A v0.2 兼容路径 (v0.3 起改为 agent-card.json, 此处提供向后兼容)。"""
+    return jsonify(_build_agent_card())
+
+
+@app.route('/a2a/v1', methods=['POST'])
+def a2a_json_rpc():
+    """A2A JSON-RPC 2.0 绑定端点 — 预留未实施。"""
+    return jsonify({
+        "jsonrpc": "2.0",
+        "error": {
+            "code": -32601,
+            "message": "Method not implemented: A2A Task/Message RPC尚未实施",
+            "data": {
+                "stub": True,
+                "supported_discovery": "/.well-known/agent-card.json",
+                "internal_alternative": "/api/ai/agent-analyze (SSE)",
+            },
+        },
+        "id": (request.get_json(silent=True) or {}).get('id'),
+    }), 501
+
+
 @app.route('/api/ai/agent-analyze', methods=['POST'])
 def ai_agent_analyze_stream():
     """Agent深度分析SSE端点 — 流式推送Agent执行过程"""
@@ -3102,12 +3203,17 @@ def ai_agent_analyze_stream():
     import queue
     import threading
 
+    from app.core.conversation import get_conversation_manager
+
     data = request.get_json(silent=True)
     if not data or not isinstance(data, dict):
         return jsonify({'error': '请求体必须为有效的JSON格式'}), 400
     stock_code = data.get('stock_code', '')
     market_type = data.get('market_type', 'A')
     research_depth = data.get('research_depth', 3)
+    conversation_id = data.get('conversation_id', '')
+    # 前端 use-chat-stream 发 user_message 字段；保留 message 兜底
+    user_message = (data.get('user_message') or data.get('message') or '').strip()
 
     if not stock_code:
         return jsonify({'error': '请提供股票代码'}), 400
@@ -3117,6 +3223,16 @@ def ai_agent_analyze_stream():
     if not is_valid:
         return jsonify({'error': validated_code}), 400
     stock_code = validated_code
+
+    # 保存用户消息到 conversation，使后续 turn 能在 /api/ai/chat 加载历史
+    conv_mgr = get_conversation_manager()
+    if not conversation_id:
+        conversation_id = conv_mgr.create_conversation(
+            (user_message or f'分析 {stock_code}')[:20]
+        )
+    if user_message:
+        conv_mgr.add_message(conversation_id, 'user', user_message)
+    conv_mgr.add_stock_code(conversation_id, stock_code)
 
     def generate():
         import json as _json
@@ -3138,7 +3254,8 @@ def ai_agent_analyze_stream():
                 result_holder[0] = run_agent_analysis(
                     stock_code=stock_code,
                     market_type=market_type,
-                    research_depth=research_depth
+                    research_depth=research_depth,
+                    conversation_id=conversation_id,
                 )
             except Exception as e:
                 error_holder[0] = str(e)
@@ -3191,8 +3308,31 @@ def ai_agent_analyze_stream():
                         'title': f'{stock_code} 大师视角',
                         'data': investor_opinions
                     })
+                # 保存 assistant 摘要到 conversation，供后续多轮对话加载上下文
+                try:
+                    fd = final_decision or {}
+                    summary_parts = [f"[Agent深度分析-{stock_code}]"]
+                    if fd.get('action'):
+                        summary_parts.append(f"操作建议: {fd['action']}")
+                    if fd.get('confidence') is not None:
+                        summary_parts.append(f"置信度: {fd['confidence']}")
+                    if fd.get('reasoning'):
+                        summary_parts.append(f"理由: {str(fd['reasoning'])[:800]}")
+                    if fd.get('bull_case'):
+                        summary_parts.append(f"看多观点: {str(fd['bull_case'])[:400]}")
+                    if fd.get('bear_case'):
+                        summary_parts.append(f"看空观点: {str(fd['bear_case'])[:400]}")
+                    summary_text = "\n".join(summary_parts)
+                    conv_mgr.add_message(
+                        conversation_id, 'assistant', summary_text,
+                        artifacts=[{'artifact_type': 'decision_card', 'data': fd}]
+                    )
+                except Exception as _e:
+                    app.logger.warning(f"agent-analyze 保存assistant消息失败: {_e}")
+
                 yield emit('done', {
                     'stock_code': stock_code,
+                    'conversation_id': conversation_id,
                     'execution_log': result.get('execution_log', []),
                     'follow_up_questions': [
                         f"对{stock_code}的技术面做更深入分析",

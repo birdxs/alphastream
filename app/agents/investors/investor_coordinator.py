@@ -15,6 +15,46 @@ from collections import Counter
 logger = logging.getLogger(__name__)
 
 
+def _fallback_wrap_with_events(agent_fn, agent_name):
+    """兜底事件包装器：coordinator 导入失败时使用，保证前端终端可见投资者 agent 进度。"""
+    def wrapped(state):
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_AGENT_STARTED, EVENT_AGENT_COMPLETED
+            bus = get_event_bus()
+            bus.publish(EVENT_AGENT_STARTED, {
+                'event_type': 'agent_progress',
+                'data': {'agent_name': agent_name, 'status': 'started',
+                         'stock_code': state.get('stock_code', ''), 'progress': state.get('progress', 0)},
+            })
+            bus.publish('reasoning', {
+                'event_type': 'reasoning',
+                'data': {'agent': agent_name, 'content': f'{agent_name}开始分析 {state.get("stock_code", "")}'},
+            })
+        except Exception:
+            pass
+        result = agent_fn(state)
+        # [FIX-2 2026-05-18] 归一化 numpy/pandas 类型，防止 ormsgpack 序列化失败
+        try:
+            from app.agents.coordinator import _to_native
+            if isinstance(result, dict):
+                result = _to_native(result)
+        except Exception:
+            pass
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_AGENT_COMPLETED
+            bus = get_event_bus()
+            bus.publish(EVENT_AGENT_COMPLETED, {
+                'event_type': 'agent_progress',
+                'data': {'agent_name': agent_name, 'status': 'completed',
+                         'stock_code': state.get('stock_code', ''),
+                         'progress': result.get('progress', state.get('progress', 0))},
+            })
+        except Exception:
+            pass
+        return result
+    return wrapped
+
+
 class InvestorCoordinator:
     """投资者人格协调器
 
@@ -52,16 +92,14 @@ class InvestorCoordinator:
         # 让前端终端看到每个投资者 agent 的 started/completed 事件 (d=5深度时避免 30-60s 静默)
         try:
             from app.agents.coordinator import _wrap_with_events as _wrap
-        except Exception:
-            _wrap = None
+        except Exception as _ie:
+            logger.warning(f"[投资者协调器] coordinator._wrap_with_events 导入失败({_ie})，使用内联兜底")
+            _wrap = _fallback_wrap_with_events
 
         for key, agent_cls in agents:
             try:
                 logger.info(f"[投资者协调器] 调用 {agent_cls.name}...")
-                if _wrap is not None:
-                    result = _wrap(agent_cls.analyze, agent_cls.name)(state)
-                else:
-                    result = agent_cls.analyze(state)
+                result = _wrap(agent_cls.analyze, agent_cls.name)(state)
                 investor_key = f'investor_{key}'
 
                 if investor_key in result:

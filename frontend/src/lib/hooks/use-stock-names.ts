@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api/client";
+import { inferMarketType } from "@/lib/utils/stock-code";
 
 // 模块级跨组件名称缓存 — 避免同一代码多次请求
 const nameCache: Record<string, string> = {};
@@ -30,7 +31,7 @@ async function fetchName(code: string): Promise<string | undefined> {
 
   try {
     const r = await apiClient.get<{ stock_name?: string }>("/api/stock_data", {
-      stock_code: code, market_type: "A", period: "1y",
+      stock_code: code, market_type: inferMarketType(code), period: "1y",
     });
     if (r.stock_name && r.stock_name !== code) {
       nameCache[code] = r.stock_name;

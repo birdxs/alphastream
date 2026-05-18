@@ -36,8 +36,8 @@ class StockAnalyzer:
         # 设置日志
         self.logger = logging.getLogger(__name__)
 
-        # 加载环境变量
-        load_dotenv()
+        # 加载环境变量（override=True 让 .env 成为单一真相源）
+        load_dotenv(override=True)
 
         # 设置 OpenAI API (原 Gemini API)
         self.openai_api_key = os.getenv('OPENAI_API_KEY')

@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api/client";
+import { inferMarketType } from "@/lib/utils/stock-code";
 
 interface PriceInfo {
   price: number;
@@ -19,7 +20,7 @@ async function fetchPrice(code: string): Promise<PriceInfo | undefined> {
   if (priceCache[code]) return priceCache[code];
   try {
     const r = await apiClient.get<{ data?: KlineRow[] }>("/api/stock_data", {
-      stock_code: code, market_type: "A", period: "1y",
+      stock_code: code, market_type: inferMarketType(code), period: "1y",
     });
     const rows = r.data || [];
     if (rows.length < 1) return undefined;

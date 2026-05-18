@@ -14,6 +14,7 @@ import { GlassCard } from "@/components/common/glass-card";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { apiClient } from "@/lib/api/client";
 import { useAltData } from "@/lib/hooks/use-alt-data";
+import { inferMarketType } from "@/lib/utils/stock-code";
 
 /* ---------- 动态加载 Artifact 组件 ---------- */
 const CandlestickChartArtifact = dynamic(
@@ -159,7 +160,7 @@ export default function StockDetailPage({
     try {
       const res = await apiClient.get<{ data: Record<string, unknown>[]; stock_name?: string }>(
         "/api/stock_data",
-        { stock_code: code, market_type: "A", period: "1y" }
+        { stock_code: code, market_type: inferMarketType(code), period: "1y" }
       );
       const rows = res.data || [];
       setKlineData(rows);
@@ -240,29 +241,32 @@ export default function StockDetailPage({
     }
   }, [code, capitalData]);
 
-  // 新闻（通过AI分析接口获取——暂用enhanced_analysis，或可直接调analyze）
+  // 新闻：拉最近3天全网新闻，前端按股票代码/名称过滤
   const fetchNews = useCallback(async () => {
     if (newsData) return;
     setLoadingTab((p) => ({ ...p, news: true }));
     setErrorTab((p) => ({ ...p, news: null }));
     try {
-      // 使用enhanced_analysis获取新闻，如果后端没有专门的新闻API
-      const res = await apiClient.post<Record<string, unknown>>(
-        "/api/enhanced_analysis",
-        {
-          stock_code: code,
-          analysis_type: "news",
-        }
+      const res = await apiClient.get<{ data?: Array<Record<string, unknown>> }>(
+        "/api/latest_news",
+        { days: "3", limit: "500" }
       );
-      setNewsData(res);
-    } catch {
-      // 新闻API可能不存在，设置空列表作为降级
-      setNewsData({ items: [] });
-      setErrorTab((p) => ({ ...p, news: "暂无新闻数据" }));
+      const all = Array.isArray(res.data) ? res.data : [];
+      const needle = [code, stockName].filter(Boolean);
+      const items = all.filter((n) => {
+        const hay = `${n.title || ""} ${n.content || ""}`;
+        return needle.some((k) => k && hay.includes(k as string));
+      });
+      setNewsData({ items });
+    } catch (e) {
+      setErrorTab((p) => ({
+        ...p,
+        news: e instanceof Error ? e.message : "获取新闻失败",
+      }));
     } finally {
       setLoadingTab((p) => ({ ...p, news: false }));
     }
-  }, [code, newsData]);
+  }, [code, newsData, stockName]);
 
   // 风险
   const fetchRisk = useCallback(async () => {
@@ -272,7 +276,7 @@ export default function StockDetailPage({
     try {
       const res = await apiClient.post<Record<string, unknown>>(
         "/api/risk_analysis",
-        { stock_code: code, market_type: "A" }
+        { stock_code: code, market_type: inferMarketType(code) }
       );
       setRiskData(res);
     } catch (e) {
@@ -285,11 +289,19 @@ export default function StockDetailPage({
     }
   }, [code, riskData]);
 
-  /* 初始加载K线 + 并行获取股票名称（基本面接口稳定返回 stock_name） */
+  /* 初始加载K线 + 独立拉取股票名称（走轻量 /api/stock_name，不依赖K线/基本面的可用性） */
   useEffect(() => {
     fetchKline();
-    // 后台静默拉取基本面以提取 stock_name（不阻塞K线渲染）
-    fetchFundamental();
+    // 独立拉名称：任一数据源超时也不影响头部显示中文名
+    (async () => {
+      try {
+        const r = await apiClient.get<{ stock_name?: string }>(
+          "/api/stock_name",
+          { stock_code: code }
+        );
+        if (r.stock_name && r.stock_name !== code) setStockName(r.stock_name);
+      } catch {}
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 

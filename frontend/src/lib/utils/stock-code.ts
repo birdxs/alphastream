@@ -17,6 +17,22 @@ export function inferMarket(code: string): 'sh' | 'sz' | 'unknown' {
   return 'unknown';
 }
 
+/**
+ * [FIX-3 2026-05-18] 推断后端 market_type 字段值
+ *   - 1-5 位字母  -> US (AAPL, TSLA, F, NVDA)
+ *   - 4-5 位数字 -> HK (0700, 00700, 09988)
+ *   - 6 位数字   -> A  (000001, 600519)
+ *   - 其他       -> A  (兜底)
+ * 与后端 app/web/web_server.py validate_stock_code 的正则保持一致。
+ */
+export function inferMarketType(code: string): 'A' | 'HK' | 'US' {
+  const c = (code || '').trim();
+  if (/^[A-Za-z]{1,5}$/.test(c)) return 'US';
+  if (/^[0-9]{4,5}$/.test(c)) return 'HK';
+  if (/^[0-9]{6}$/.test(c)) return 'A';
+  return 'A';
+}
+
 /** 从文本中提取股票代码 */
 export function extractStockCodes(text: string): string[] {
   const matches = text.match(/\b\d{6}\b/g);

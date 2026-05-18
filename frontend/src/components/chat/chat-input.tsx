@@ -9,6 +9,7 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { useToast } from "@/components/common/toast-provider";
 import { CommandPalette } from "./command-palette";
 import { Send, Paperclip, Mic, X, Loader2 } from "lucide-react";
+import { inferMarketType } from "@/lib/utils/stock-code";
 
 // ── 附件类型 ──
 interface AttachedFile {
@@ -139,14 +140,15 @@ export function ChatInput({ onSend, onStop }: Props) {
     });
   }, []);
 
-  // 清理 objectURL
+  // 清理 objectURL — 用ref追踪最新attachments，unmount时revoke所有
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
   useEffect(() => {
     return () => {
-      attachments.forEach((a) => {
+      attachmentsRef.current.forEach((a) => {
         if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
       });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── 语音识别 ──
@@ -239,7 +241,7 @@ export function ChatInput({ onSend, onStop }: Props) {
       const fileInfo = uploadedFiles.map((f) => `[图片: ${f.filename}]`).join(" ");
       finalMsg = `${msg}\n${fileInfo}`;
     }
-    onSend(finalMsg, { stock_code: code, market_type: "A" });
+    onSend(finalMsg, { stock_code: code, market_type: code ? inferMarketType(code) : "A" });
     // 发送消息后自动聚焦
     setTimeout(() => textareaRef.current?.focus(), 50);
   };
