@@ -26,7 +26,7 @@ from flask_caching import Cache
 import threading
 import sys
 from flask_swagger_ui import get_swaggerui_blueprint
-from app.core.database import get_session, StockInfo, AnalysisResult, Portfolio, USE_DATABASE
+from app.core.database import get_session, init_db, StockInfo, AnalysisResult, Portfolio, USE_DATABASE
 from dotenv import load_dotenv
 from app.analysis.industry_analyzer import IndustryAnalyzer
 from app.analysis.fundamental_analyzer import FundamentalAnalyzer
@@ -1189,7 +1189,7 @@ def get_stock_data():
         try:
             with ThreadPoolExecutor(max_workers=1) as _ex:
                 fut = _ex.submit(analyzer.get_stock_data, stock_code, market_type, start_date, end_date)
-                df = fut.result(timeout=30)  # 2026-05-18 调优：与下游 per_call_timeout=25 联动，留 5s 处理预算
+                df = fut.result(timeout=50)  # 2026-05-18 二次拉富足：与下游 per_call=45 联动，留 5s buffer
         except _FTimeout:
             app.logger.warning(f"analyzer.get_stock_data 超时(30s)：{stock_code}")
             return custom_jsonify({'error': '数据源超时', 'stock_code': stock_code}), 504
@@ -3482,7 +3482,7 @@ def ai_agent_analyze_stream():
 # 调用链: Flask route -> AdapterRegistry.call_with_fallback(domain, method) -> artifact_wrapper.wrap_*
 # 超时保护(20s), 参数校验400, 上游异常500, 错误响应 {success:false, error:...}
 # ============================================================
-def _p3_call_with_timeout(domain: str, method: str, timeout: int = 20, **kwargs):
+def _p3_call_with_timeout(domain: str, method: str, timeout: int = 60, **kwargs):  # 2026-05-18 拉富足：P3 报告生成多步调用（技术分析+AI+数据源），原 20s 不足
     """统一封装 Registry 调用 + 超时保护。抛异常则向上传播。"""
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
     from app.adapters.adapter_registry import AdapterRegistry
@@ -3759,7 +3759,7 @@ def api_alt_data(ticker: str):
     _results = {"shipping": None, "esg": None, "hiring": None, "corporate": None}
     for key, domain, method, kw in _subtasks:
         try:
-            _results[key] = _p3_call_with_timeout(domain, method, timeout=15, **kw)
+            _results[key] = _p3_call_with_timeout(domain, method, timeout=45, **kw)  # 2026-05-18 拉富足：alt_data 4 域（shipping/ESG/hiring/corporate）外部 API 慢，原 15s 易超时
         except Exception as e:
             errors[key] = _fmt_err(e)
             app.logger.info(f"[alt_data] {key}({domain}.{method}) 失败: {errors[key]}")
@@ -3996,15 +3996,37 @@ def health_basic():
 
 @app.route('/api/adapters/status', methods=['GET'])
 def adapters_status():
-    """遍历所有 adapter 调用 health_check, 返回逐个健康状态."""
-    results: dict = {}
+    """遍历所有 adapter 调用 health_check, 返回逐个健康状态.
+    2026-05-18 B1 修复：原串行循环最多 22×5s=110s 导致端点 HANG；
+    改为 ThreadPoolExecutor 并行，每个 future 独立 timeout=5s，整体 10s 内必返回。
+    超时的 adapter 标记 degraded，不阻塞整体响应。
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
+
     total = len(_ADAPTER_SPECS)
-    ok_count = 0
-    for cls_name, mod_path in _ADAPTER_SPECS:
-        r = _hc_one(cls_name, mod_path, timeout_s=5.0)
-        results[cls_name] = r
-        if r.get("ok"):
-            ok_count += 1
+    results: dict = {}
+
+    # 并行执行所有 adapter 健康检查，整体超时 10s
+    with ThreadPoolExecutor(max_workers=min(total, 16)) as pool:
+        future_map = {
+            pool.submit(_hc_one, cls_name, mod_path, 5.0): cls_name
+            for cls_name, mod_path in _ADAPTER_SPECS
+        }
+        for fut in as_completed(future_map, timeout=10):
+            cls_name = future_map[fut]
+            try:
+                results[cls_name] = fut.result(timeout=0)  # result 已就绪，立即取
+            except _FutTimeout:
+                results[cls_name] = {"ok": False, "latency_ms": None, "error": "timeout", "status": "degraded"}
+            except Exception as exc:
+                results[cls_name] = {"ok": False, "latency_ms": None, "error": str(exc), "status": "degraded"}
+
+    # as_completed 超过 10s 后未完成的 future 不会出现在结果中，补上 degraded
+    for cls_name, _ in _ADAPTER_SPECS:
+        if cls_name not in results:
+            results[cls_name] = {"ok": False, "latency_ms": None, "error": "overall_timeout", "status": "degraded"}
+
+    ok_count = sum(1 for r in results.values() if r.get("ok"))
     return jsonify({
         "status": "ok",
         "total": total,

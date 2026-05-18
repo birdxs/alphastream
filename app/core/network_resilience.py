@@ -134,7 +134,7 @@ def resilient_call(
     max_attempts: int = 3,
     base_wait: float = 1.0,
     max_wait: float = 8.0,
-    per_call_timeout: float = 8.0,
+    per_call_timeout: float = 30.0,  # 2026-05-18 拉富足：影响所有 adapter，原 8s 对外部 API 过紧；显式覆盖处仍按调用方传值
     cache_ttl: int = 300,
     use_stale_on_failure: bool = True,
     cache_key: Optional[str] = None,

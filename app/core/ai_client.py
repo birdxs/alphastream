@@ -38,7 +38,7 @@ def get_ai_client():
     client = OpenAI(
         api_key=api_key,
         base_url=base_url,
-        timeout=httpx.Timeout(180.0, connect=10.0),
+        timeout=httpx.Timeout(600.0, connect=15.0),  # 2026-05-18 拉富足：LLM reasoning 模型 >180s 常见，OpenAI/Anthropic SDK 默认即 600s
         max_retries=2,
     )
     return client

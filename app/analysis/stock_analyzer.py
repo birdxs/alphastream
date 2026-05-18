@@ -1596,8 +1596,7 @@ class StockAnalyzer:
                 'recommendation': {'action': '分析出错，无法提供建议'},
                 'ai_analysis': f"分析过程中出错: {str(e)}"
             }
-
-            return error_report
+            # 2026-05-18 清理 F821 dead reference: error_report 未定义，上方 return dict 已覆盖
 
     # 添加一个辅助方法确保报告结构完整
     def _validate_and_fix_report(self, report):

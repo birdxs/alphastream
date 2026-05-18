@@ -172,19 +172,19 @@ def get_kline(stock_code: str, market: str = 'A',
             dp = DataProvider()
             raw = resilient_call(
                 dp.get_stock_history, (stock_code, start_date, end_date),
-                per_call_timeout=25.0, cache_ttl=600,  # 2026-05-18 调优：三源串行需 >20s（东财慢+新浪兜底 1.1s），原 10s 会丢弃已成功数据
+                per_call_timeout=45.0, cache_ttl=600,  # 2026-05-18 二次拉富足：3 源串行兜底 + KeyError/ProxyError 重试链需 >40s
             )
             return _normalize_kline_df(raw)
         elif market == 'HK':
             raw = resilient_call(
                 _fetch_hk_kline_raw, (stock_code, start_date, end_date),
-                per_call_timeout=10.0, cache_ttl=600,
+                per_call_timeout=30.0, cache_ttl=600,  # 2026-05-18 T7 拉富足：HK K 线外部 API，原 10s 对慢网络过紧
             )
             return _normalize_kline_df(raw)
         elif market == 'US':
             raw = resilient_call(
                 _fetch_us_kline_raw, (stock_code, start_date, end_date),
-                per_call_timeout=12.0, cache_ttl=600,
+                per_call_timeout=30.0, cache_ttl=600,  # 2026-05-18 T7 拉富足：US K 线外部 API，原 12s 对慢网络过紧
             )
             return _normalize_kline_df(raw)
         else:
@@ -220,12 +220,12 @@ def get_quote(stock_code: str, market: str = 'A') -> Dict[str, Any]:
         elif market == 'HK':
             return resilient_call(
                 _fetch_hk_spot_raw, (stock_code,),
-                per_call_timeout=8.0, cache_ttl=60,
+                per_call_timeout=30.0, cache_ttl=60,  # 2026-05-18 T7 拉富足：HK spot 外部 API，原 8s 过紧
             )
         elif market == 'US':
             return resilient_call(
                 _fetch_us_spot_raw, (stock_code,),
-                per_call_timeout=10.0, cache_ttl=60,
+                per_call_timeout=30.0, cache_ttl=60,  # 2026-05-18 T7 拉富足：US spot 外部 API，原 10s 过紧
             )
         else:
             raise UnsupportedMarketError(f"不支持的市场: {market}")
