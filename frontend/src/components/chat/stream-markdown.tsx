@@ -4,11 +4,14 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useMemo, useRef, useEffect, useState, useCallback } from "react";
+import { Fragment, useMemo, useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { Copy, Check } from "lucide-react";
+// [FIX-9 2026-05-18] mimo/DeepSeek tool_call 文本流模板化渲染
+import { parseMessageWithToolCalls, hasToolCallMarkup } from "@/lib/parsers/tool-call-parser";
+import { ToolCallCard } from "@/components/chat/tool-call-card";
 
 interface Props {
   content: string;
@@ -140,20 +143,46 @@ function StreamingWrapper({ content }: { content: string }) {
 }
 
 export function StreamMarkdown({ content, isStreaming }: Props) {
+  // [FIX-9] 含 <tool_call> 标记走分段渲染，否则保持原 Markdown 路径（零回归）
+  const hasTool = hasToolCallMarkup(content);
+
   const memoizedContent = useMemo(() => (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
       {content}
     </ReactMarkdown>
   ), [content]);
 
+  // 分段渲染: 文本段走 Markdown, tool_call 段走卡片组件
+  const segmentedContent = useMemo(() => {
+    if (!hasTool) return null;
+    const segs = parseMessageWithToolCalls(content);
+    return (
+      <>
+        {segs.map((s, i) =>
+          s.type === "tool_call" ? (
+            <ToolCallCard key={`tc-${i}`} segment={s} />
+          ) : (
+            <Fragment key={`tx-${i}`}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {s.value}
+              </ReactMarkdown>
+            </Fragment>
+          )
+        )}
+      </>
+    );
+  }, [content, hasTool]);
+
   return (
     <div className="prose prose-sm dark:prose-invert max-w-none">
-      {isStreaming ? (
+      {hasTool ? (
+        segmentedContent
+      ) : isStreaming ? (
         <StreamingWrapper content={content} />
       ) : (
         memoizedContent
       )}
-      {isStreaming && (
+      {isStreaming && !hasTool && (
         <span className="typing-cursor" />
       )}
     </div>

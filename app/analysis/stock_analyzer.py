@@ -81,19 +81,12 @@ class StockAnalyzer:
 
         try:
             df = None
-            if market_type == 'A':
-                # 使用DataProvider获取数据（自动故障转移）
-                df = self.data_provider.get_stock_history(stock_code, start_date, end_date)
-            elif market_type == 'HK':
-                # 港股暂时保留akshare直接调用（DataProvider暂不支持）
-                import akshare as ak
-                df = ak.stock_hk_daily(symbol=stock_code, adjust="qfq")
-            elif market_type == 'US':
-                # 美股暂时保留akshare直接调用
-                import akshare as ak
-                df = ak.stock_us_hist(symbol=stock_code, start_date=start_date, end_date=end_date, adjust="qfq")
-            else:
-                raise ValueError(f"不支持的市场类型: {market_type}")
+            # [FIX-7 + FIX-8 2026-05-18] 统一走 market_data_adapter (含韧性 + HK/US 支持)
+            from app.adapters.market_data_adapter import get_kline as _ma_get_kline, UnsupportedMarketError
+            try:
+                df = _ma_get_kline(stock_code, market_type, start_date, end_date)
+            except UnsupportedMarketError as _ume:
+                raise ValueError(f"不支持的市场类型: {market_type}") from _ume
 
             if df is None or df.empty:
                 raise ValueError("数据源返回了空的DataFrame")
