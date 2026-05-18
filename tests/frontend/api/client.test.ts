@@ -177,4 +177,21 @@ describe("apiClient.streamPost — SSE 解析", () => {
     await apiClient.streamPost("/api/x", {}, { onToken });
     expect(onToken).toHaveBeenCalledWith(expect.objectContaining({ content: "yo" }));
   });
+
+  it("FIX-E1: SSE 注释心跳行被静默忽略，不触发 onError", async () => {
+    // 后端可能发: heartbeat ...\n\n（: 开头的 SSE 注释行）
+    const block =
+      ": heartbeat 1700000001\n\n" +
+      "event: info\ndata: {\"event_type\":\"token\",\"data\":{\"content\":\"x\"}}\n\n" +
+      ": heartbeat 1700000016\n\n" +
+      "event: done\ndata: {}\n\n";
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(makeStreamResponse([block]));
+    const onToken = vi.fn();
+    const onError = vi.fn();
+    const onDone = vi.fn();
+    await apiClient.streamPost("/api/x", {}, { onToken, onError, onDone });
+    expect(onToken).toHaveBeenCalledWith(expect.objectContaining({ content: "x" }));
+    expect(onError).not.toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalled();
+  });
 });

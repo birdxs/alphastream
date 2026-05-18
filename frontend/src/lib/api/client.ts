@@ -37,6 +37,21 @@ const SSE_BASE = (() => {
 // 后端已修复为输出 null, 但旧 conversation 持久化数据可能仍含 NaN, 前端做双保险。
 // 注意: 只替换"裸露"的 NaN/Infinity (不在字符串引号内的), 使用简单正则 \bNaN\b 已足够覆盖,
 // 误伤字符串内 "NaN" 文字的概率极低 (字符串内会带引号, \b 匹配不到字母边界之外的引号模式)。
+// 后端错误响应统一形如 {"error": "...", "stock_code": "..."}，提取 error 字段作为 message；
+// 解析失败则回退为状态码描述（HTTP 504 等），避免把原始 JSON 字符串直接显示给用户。
+async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const txt = await res.text();
+    try {
+      const j = JSON.parse(txt);
+      if (j && typeof j === 'object' && typeof j.error === 'string') return j.error;
+    } catch {}
+    return txt || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
 function safeJSONParse<T>(text: string): T {
   const sanitized = text
     .replace(/\bNaN\b/g, 'null')
@@ -60,7 +75,7 @@ class ApiClient {
       url += `?${sp.toString()}`;
     }
     const res = await fetch(url);
-    if (!res.ok) throw new ApiError(res.status, await res.text());
+    if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
     return safeJSONParse<T>(await res.text());
   }
 
@@ -71,7 +86,7 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new ApiError(res.status, await res.text());
+    if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
     return safeJSONParse<T>(await res.text());
   }
 
@@ -116,10 +131,24 @@ class ApiClient {
         let buffer = '';
         let doneEventSeen = false;
 
+        // FIX-E1+E3: SSE idle timeout — 仅监控"连续无 chunk"时长，不限制总时长
+        // 后端每 15s 会发心跳 `: heartbeat ...\n\n`，正常应远低于 idleMs
+        const idleMs = Number(process.env.NEXT_PUBLIC_STREAM_IDLE_TIMEOUT_MS || 90000);
+        let lastChunkAt = Date.now();
+        let idleAborted = false;
+        const idleTimer = setInterval(() => {
+          if (Date.now() - lastChunkAt > idleMs) {
+            idleAborted = true;
+            try { reader.cancel(); } catch {}
+            clearInterval(idleTimer);
+          }
+        }, Math.min(5000, Math.floor(idleMs / 4)));
+
         // 内部派发：处理一个完整SSE事件块（多行）— 按事件而非按行处理，
         // 避免TCP chunk在event:/data:中间切断时丢失event前缀
+        const isDev = process.env.NODE_ENV !== 'production';
         const dispatchBlock = (block: string) => {
-          console.log('[SSE-block]', block.slice(0, 200));
+          if (isDev) console.log('[SSE-block]', block.slice(0, 200));
           let eventType = '';
           let dataStr = '';
           for (const rawLine of block.split('\n')) {
@@ -145,7 +174,7 @@ class ApiClient {
             effectiveType = d.event_type;
             payload = d.data ?? d;
           }
-          console.log('[SSE-dispatch]', effectiveType, Object.keys(payload as object || {}).slice(0, 5));
+          if (isDev) console.log('[SSE-dispatch]', effectiveType);
           try {
             switch (effectiveType) {
               case 'token': handlers.onToken?.(payload as Parameters<NonNullable<typeof handlers.onToken>>[0]); break;
@@ -175,7 +204,12 @@ class ApiClient {
             if (buffer.trim()) dispatchBlock(buffer);
             break;
           }
+          lastChunkAt = Date.now();
           buffer += decoder.decode(value, { stream: true });
+          if (buffer.length > 1_048_576) {
+            console.warn('[SSE] buffer exceeded 1MB, flushing');
+            buffer = '';
+          }
           // SSE 事件以空行（\n\n 或 \r\n\r\n）分隔
           let sepIdx: number;
           while ((sepIdx = buffer.search(/\r?\n\r?\n/)) !== -1) {
@@ -186,9 +220,13 @@ class ApiClient {
           }
         }
         } finally {
-          // 无论 done 事件是否触发、handler 是否抛错，都强制通知上层清理 loading 状态
+          clearInterval(idleTimer);
+          try { reader.cancel(); } catch {}
           try { handlers.onClose?.(); } catch (e) { console.warn('[SSE] onClose error', e); }
-          if (!doneEventSeen) {
+          if (idleAborted) {
+            handlers.onError?.({ code: 'IDLE_TIMEOUT', message: `连续 ${Math.round(idleMs/1000)}s 无数据，连接已断开` });
+          }
+          if (!doneEventSeen && !idleAborted) {
             console.warn('[SSE] stream closed without done event');
           }
         }

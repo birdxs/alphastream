@@ -2947,8 +2947,8 @@ def ai_chat_stream():
         """SSE事件生成器"""
         import json as _json
 
-        # AI对话总超时（120秒）
-        AI_CHAT_TIMEOUT = 120
+        # AI对话总超时（FIX-E1：默认 900s=15min，可经环境变量 AI_CHAT_TIMEOUT 配置）
+        AI_CHAT_TIMEOUT = int(os.getenv('AI_CHAT_TIMEOUT', '900'))
         chat_start_time = time.time()
 
         def check_timeout():
@@ -3300,15 +3300,23 @@ def ai_agent_analyze_stream():
 
         try:
             # 从桥接队列读取事件并推送
+            # FIX-E1+E3: 短超时循环 + SSE 注释心跳，避免中间代理切断；总时长 AGENT_TASK_MAX_DURATION_S（默认 2h）才视为真超时
+            HEARTBEAT_INTERVAL = int(os.getenv('SSE_HEARTBEAT_INTERVAL_S', '15'))
+            MAX_TOTAL = int(os.getenv('AGENT_TASK_MAX_DURATION_S', '7200'))
+            start_ts = time.time()
             while True:
                 try:
-                    event = bridge_queue.get(timeout=300)
+                    event = bridge_queue.get(timeout=HEARTBEAT_INTERVAL)
                     if event is None:
                         break
                     yield emit(event.get('event_type', 'info'), event.get('data', {}))
                 except queue.Empty:
-                    yield emit('error', {'code': 'TIMEOUT', 'message': '分析超时'})
-                    break
+                    # SSE 注释行心跳（: 开头被客户端忽略），保活连接
+                    yield f": heartbeat {int(time.time())}\n\n"
+                    if time.time() - start_ts > MAX_TOTAL:
+                        yield emit('error', {'code': 'TIMEOUT', 'message': f'分析超时（已超过{MAX_TOTAL}秒）'})
+                        break
+                    continue
 
             # 发送最终结果
             if error_holder[0]:
@@ -3797,6 +3805,81 @@ def _hc_one(cls_name: str, mod_path: str, timeout_s: float = 5.0) -> dict:
     except Exception as e:
         return {"ok": False, "msg": f"{type(e).__name__}: {e}",
                 "latency_ms": int((_tm.time() - t0) * 1000)}
+
+
+@app.route('/api/stock_quote_batch', methods=['GET'])
+@cache.cached(timeout=60, query_string=True)
+def stock_quote_batch():
+    """
+    FIX-E5: 批量轻量行情接口
+    Input: codes=600519,000001,...  market_type=A|HK|US
+    Output: {results: [{code, name, latest_price, change_pct, change}], errors: [{code, msg}], ts}
+    思路: 复用 analyzer.get_stock_data 取最近 7 天 K 线, 用末两行 close 计算 change_pct;
+          单只硬超时 8s; 批量并发上限 8; 总响应应 <5s.
+    """
+    codes_raw = request.args.get('codes', '').strip()
+    market_type = request.args.get('market_type', 'A')
+    if not codes_raw:
+        return custom_jsonify({'error': '请提供 codes 参数 (逗号分隔)'}), 400
+
+    codes = [c.strip() for c in codes_raw.split(',') if c.strip()]
+    if not codes:
+        return custom_jsonify({'error': 'codes 解析为空'}), 400
+    if len(codes) > 50:
+        return custom_jsonify({'error': 'codes 最多 50 个'}), 400
+
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout, as_completed
+    end_date = datetime.now().strftime('%Y%m%d')
+    start_date = (datetime.now() - timedelta(days=14)).strftime('%Y%m%d')
+
+    def _fetch_one(code):
+        try:
+            valid, normalized = validate_stock_code(code, market_type)
+            if not valid:
+                return {'code': code, 'error': str(normalized)}
+            df = analyzer.get_stock_data(normalized, market_type, start_date, end_date)
+            if df is None or getattr(df, 'empty', True):
+                return {'code': normalized, 'error': 'no data'}
+            # 取末两根 close
+            closes = df['close'].dropna().tolist() if 'close' in df.columns else []
+            if not closes:
+                return {'code': normalized, 'error': 'no close'}
+            latest = float(closes[-1])
+            prev = float(closes[-2]) if len(closes) > 1 else latest
+            change = latest - prev
+            change_pct = (change / prev * 100.0) if prev else 0.0
+            name = _get_stock_name_safe(normalized, market_type)
+            return {
+                'code': normalized,
+                'name': name,
+                'latest_price': round(latest, 4),
+                'change': round(change, 4),
+                'change_pct': round(change_pct, 4),
+            }
+        except Exception as e:
+            return {'code': code, 'error': f'{type(e).__name__}: {e}'}
+
+    results = []
+    errors = []
+    with ThreadPoolExecutor(max_workers=min(8, len(codes))) as ex:
+        future_map = {ex.submit(_fetch_one, c): c for c in codes}
+        for fut in as_completed(future_map, timeout=20):
+            try:
+                r = fut.result(timeout=8)
+                if 'error' in r:
+                    errors.append({'code': r.get('code'), 'msg': r['error']})
+                else:
+                    results.append(r)
+            except _FTimeout:
+                errors.append({'code': future_map[fut], 'msg': 'timeout'})
+            except Exception as e:
+                errors.append({'code': future_map[fut], 'msg': str(e)})
+
+    return custom_jsonify({
+        'results': results,
+        'errors': errors,
+        'ts': int(time.time()),
+    }), 200
 
 
 @app.route('/health', methods=['GET'])
