@@ -10,6 +10,7 @@ import os
 import json
 import time
 import logging
+from typing import Any, Dict, Optional
 from openai import OpenAI
 import httpx
 
@@ -169,12 +170,18 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
     tool_calls_log = []
     model = get_ai_model()
 
+    # [FIX-5 2026-05-18] 引入 provider adapter 处理 reasoning_content 多轮兼容
+    from app.core.llm_providers import get_adapter
+    adapter = get_adapter(model)
+
     for round_idx in range(max_tool_rounds):
         # [UI-Q4 2026-04-15 +08:00] 真·stream=True 逐token publish EVENT_TOKEN_GENERATED
         #   替代原 chat_completion 的一次性返回, 让Comdr看到"所见即所得"逐字流
-        _publish_llm_request(agent_name, model, messages)
+        # [FIX-5] 通过 adapter 清洗 history 中违规的 reasoning_content
+        request_messages, _extra_kwargs = adapter.normalize_request(messages)
+        _publish_llm_request(agent_name, model, request_messages)
         stream, error = chat_completion_stream(
-            client, messages,
+            client, request_messages,
             temperature=temperature,
             max_tokens=max_tokens,
             tools=tools_schema,
@@ -187,30 +194,51 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
             return None, tool_calls_log, "AI返回空流"
 
         full_content = ""
+        full_reasoning = ""  # [FIX-5] 累积 reasoning_content 流，多轮 tool_call 时需回传
+        last_usage: Optional[Dict[str, Any]] = None
         pending_tool_calls = {}  # {index: {id,name,arguments}}
         try:
             for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                # 文本 token → 逐token publish
-                if delta.content:
-                    full_content += delta.content
+                # [FIX-5] 用 adapter 统一解码 thinking/content/tool_calls/usage
+                thinking_delta, content_delta, tool_call_deltas, usage = adapter.parse_stream_chunk(chunk)
+                if usage:
+                    last_usage = usage
+
+                # 思考流 → publish thinking event（前端折叠灰色显示）
+                if thinking_delta:
+                    full_reasoning += thinking_delta
                     try:
                         from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
                         get_event_bus().publish(EVENT_TOKEN_GENERATED, {
-                            'event_type': 'token',
+                            'event_type': 'thinking',
                             'data': {
-                                'content': delta.content,
+                                'content': thinking_delta,
                                 'agent': agent_name or '',
                                 'round': round_idx,
                             }
                         })
                     except Exception:
                         pass
+
+                # 文本 token → 逐token publish
+                if content_delta:
+                    full_content += content_delta
+                    try:
+                        from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                        get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                            'event_type': 'token',
+                            'data': {
+                                'content': content_delta,
+                                'agent': agent_name or '',
+                                'round': round_idx,
+                            }
+                        })
+                    except Exception:
+                        pass
+
                 # 工具调用 delta 累积
-                if delta.tool_calls:
-                    for tc_delta in delta.tool_calls:
+                if tool_call_deltas:
+                    for tc_delta in tool_call_deltas:
                         idx = tc_delta.index
                         if idx not in pending_tool_calls:
                             pending_tool_calls[idx] = {'id': tc_delta.id or '', 'name': '', 'arguments': ''}
@@ -221,6 +249,22 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
                                 pending_tool_calls[idx]['name'] = tc_delta.function.name
                             if tc_delta.function.arguments:
                                 pending_tool_calls[idx]['arguments'] += tc_delta.function.arguments
+
+            # [FIX-5] 流结束后发布 usage 事件（DeepSeek V4 prefix cache 计费观测）
+            if last_usage:
+                try:
+                    from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                    get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                        'event_type': 'usage',
+                        'data': {
+                            'usage': last_usage,
+                            'agent': agent_name or '',
+                            'round': round_idx,
+                            'model': model,
+                        }
+                    })
+                except Exception:
+                    pass
         except Exception as e:
             error_type = type(e).__name__
             friendly_msg = ERROR_MESSAGES.get(error_type, f'AI流式读取出错: {str(e)}')
@@ -255,11 +299,14 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
                 "type": "function",
                 "function": {"name": tc_info['name'], "arguments": tc_info['arguments']}
             })
-        messages.append({
-            "role": "assistant",
-            "content": full_content or None,
-            "tool_calls": tool_calls_for_message
-        })
+        # [FIX-5] 用 adapter 组装 assistant message。
+        # DeepSeek V4 / MiMo 在多轮含 tool_calls 时必须写回 reasoning_content，否则下一轮 400。
+        assistant_msg = adapter.assemble_assistant_message(
+            content=full_content,
+            reasoning_content=full_reasoning,
+            tool_calls=tool_calls_for_message,
+        )
+        messages.append(assistant_msg)
 
         # 执行每个工具调用 (tc 已是 dict 结构)
         for tc in tool_calls_for_message:
@@ -421,10 +468,17 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
 
     tool_calls_log = []
 
+    # [FIX-5 2026-05-18] 引入 provider adapter 处理 reasoning_content 多轮兼容
+    from app.core.llm_providers import get_adapter
+    model = get_ai_model()
+    adapter = get_adapter(model)
+
     for round_idx in range(max_tool_rounds):
+        # [FIX-5] 通过 adapter 清洗 history 中违规的 reasoning_content
+        request_messages, _extra_kwargs = adapter.normalize_request(messages)
         # 流式调用AI（带工具定义）
         stream, error = chat_completion_stream(
-            client, messages,
+            client, request_messages,
             temperature=temperature,
             max_tokens=max_tokens,
             tools=tools_schema,
@@ -438,20 +492,40 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
 
         # 遍历stream chunk，累积内容和tool_calls
         full_content = ""
+        full_reasoning = ""  # [FIX-5] 累积 reasoning_content 流
+        last_usage = None
         pending_tool_calls = {}  # {index: {id, name, arguments}}
 
         try:
             for chunk in stream:
-                if not chunk.choices:
-                    continue
+                # [FIX-5] 用 adapter 统一解码 thinking/content/tool_calls/usage
+                thinking_delta, content_delta, tool_call_deltas, usage = adapter.parse_stream_chunk(chunk)
+                if usage:
+                    last_usage = usage
 
-                delta = chunk.choices[0].delta
+                # 思考流: 发布 thinking 事件供前端折叠灰色显示
+                if thinking_delta:
+                    full_reasoning += thinking_delta
+                    if event_callback:
+                        event_callback('thinking', {'content': thinking_delta})
+                    try:
+                        from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                        get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                            'event_type': 'thinking',
+                            'data': {
+                                'content': thinking_delta,
+                                'agent': agent_name or '',
+                                'round': round_idx,
+                            }
+                        })
+                    except Exception:
+                        pass
 
                 # 处理文本内容
-                if delta.content:
-                    full_content += delta.content
+                if content_delta:
+                    full_content += content_delta
                     if event_callback:
-                        event_callback('token', {'content': delta.content})
+                        event_callback('token', {'content': content_delta})
                     # [UI-Q4 2026-04-15 +08:00] token-level publish 到 event_bus,
                     #   让 agent-analyze SSE bridge 能真实时转发到前端打字机终端
                     try:
@@ -459,7 +533,7 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                         get_event_bus().publish(EVENT_TOKEN_GENERATED, {
                             'event_type': 'token',
                             'data': {
-                                'content': delta.content,
+                                'content': content_delta,
                                 'agent': agent_name or '',
                                 'round': round_idx,
                             }
@@ -469,8 +543,8 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                         pass
 
                 # 处理工具调用（流式中分chunk传递，需要累积）
-                if delta.tool_calls:
-                    for tc_delta in delta.tool_calls:
+                if tool_call_deltas:
+                    for tc_delta in tool_call_deltas:
                         idx = tc_delta.index
                         if idx not in pending_tool_calls:
                             pending_tool_calls[idx] = {
@@ -485,6 +559,22 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                                 pending_tool_calls[idx]['name'] = tc_delta.function.name
                             if tc_delta.function.arguments:
                                 pending_tool_calls[idx]['arguments'] += tc_delta.function.arguments
+
+            # [FIX-5] 流结束发布 usage 事件 (DeepSeek V4 prefix cache 观测)
+            if last_usage:
+                try:
+                    from app.core.event_bus import get_event_bus, EVENT_TOKEN_GENERATED
+                    get_event_bus().publish(EVENT_TOKEN_GENERATED, {
+                        'event_type': 'usage',
+                        'data': {
+                            'usage': last_usage,
+                            'agent': agent_name or '',
+                            'round': round_idx,
+                            'model': model,
+                        }
+                    })
+                except Exception:
+                    pass
         except Exception as e:
             error_type = type(e).__name__
             friendly_msg = ERROR_MESSAGES.get(error_type, f'AI流式读取出错: {str(e)}')
@@ -515,11 +605,13 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
                 }
             })
 
-        assistant_msg = {
-            "role": "assistant",
-            "content": full_content or None,
-            "tool_calls": tool_calls_for_message
-        }
+        # [FIX-5] 用 adapter 组装 assistant message
+        # DeepSeek V4 / MiMo 在多轮含 tool_calls 时必须写回 reasoning_content
+        assistant_msg = adapter.assemble_assistant_message(
+            content=full_content,
+            reasoning_content=full_reasoning,
+            tool_calls=tool_calls_for_message,
+        )
         messages.append(assistant_msg)
 
         # 执行每个工具调用

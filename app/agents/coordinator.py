@@ -21,6 +21,57 @@ from app.agents.state import StockAnalysisState
 logger = logging.getLogger(__name__)
 
 
+# [FIX-6 2026-05-18 +08:00] Agent 进度跟踪器
+# 解决 task.progress 卡 5% 问题：每个 LangGraph 节点完成时按 (completed/total) 推进
+class _ProgressTracker:
+    """线程安全的进度跟踪器。
+
+    一个 Agent 编排周期内的多线程共享一个 tracker。节点完成时调用 advance(),
+    通过 EventBus 把当前进度回写到 task。"""
+
+    def __init__(self, task_id: str, total_nodes: int, start: int = 5, end: int = 95):
+        self.task_id = task_id
+        self.total_nodes = max(1, total_nodes)
+        self.start = start
+        self.end = end
+        self.completed = 0
+        self._lock = threading.Lock()
+
+    def advance(self, agent_name: str, current_step: str = '') -> int:
+        with self._lock:
+            self.completed += 1
+            span = self.end - self.start
+            progress = int(self.start + (self.completed / self.total_nodes) * span)
+            progress = min(self.end, max(self.start, progress))
+        # 通过 EventBus 发布 progress 更新
+        try:
+            from app.core.event_bus import get_event_bus
+            get_event_bus().publish('task.progress_advance', {
+                'task_id': self.task_id,
+                'progress': progress,
+                'completed': self.completed,
+                'total': self.total_nodes,
+                'agent_name': agent_name,
+                'current_step': current_step or f'{agent_name} 完成',
+            })
+        except Exception as e:
+            logger.debug(f'progress publish failed: {e}')
+        return progress
+
+
+# 线程局部跟踪器（一个 agent_run 调用一个 tracker）
+_tracker_local = threading.local()
+
+
+def set_progress_tracker(tracker: Optional[_ProgressTracker]) -> None:
+    """在 Agent 编排开始前设置当前线程的进度跟踪器。"""
+    _tracker_local.tracker = tracker
+
+
+def get_progress_tracker() -> Optional[_ProgressTracker]:
+    return getattr(_tracker_local, 'tracker', None)
+
+
 def _to_native(obj):
     """[FIX-2 2026-05-18] 递归归一化 numpy/pandas 类型为 Python 原生类型。
 
@@ -146,7 +197,16 @@ def _wrap_with_events(agent_fn, agent_name):
         try:
             from app.core.event_bus import get_event_bus, EVENT_AGENT_COMPLETED
             event_bus = get_event_bus()
-            progress = result.get('progress', state.get('progress', 0))
+            # [FIX-6] 节点完成时按完成度推进 task.progress
+            tracker = get_progress_tracker()
+            if tracker is not None:
+                node_progress = tracker.advance(agent_name)
+                # 同步把推进后的 progress 写回 state, 让前端 SSE 能立刻看到
+                if isinstance(result, dict):
+                    result['progress'] = node_progress
+                progress = node_progress
+            else:
+                progress = result.get('progress', state.get('progress', 0))
             event_bus.publish(EVENT_AGENT_COMPLETED, {
                 'event_type': 'agent_progress',
                 'data': {
@@ -409,6 +469,7 @@ def run_agent_analysis(
     selected_analysts: Optional[List[str]] = None,
     progress_callback=None,
     conversation_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     执行Agent分析的主入口。
@@ -473,6 +534,20 @@ def run_agent_analysis(
     thread_id = conversation_id or f"analysis_{stock_code}_{int(_time.time())}"
     invoke_config = {"configurable": {"thread_id": thread_id}}
 
+    # [FIX-6 2026-05-18] 注入进度跟踪器，让每个 LangGraph 节点完成时刷新 task.progress
+    tracker = None
+    if task_id:
+        try:
+            # 估算 wrap 过的 agent 节点数(只计入业务 agent，不计路由记录节点)
+            all_nodes = list(getattr(getattr(graph, 'nodes', None), 'keys', lambda: [])() or [])
+            biz_nodes = [n for n in all_nodes if not str(n).startswith('_route_')]
+            total = len(biz_nodes) or 1
+            tracker = _ProgressTracker(task_id=task_id, total_nodes=total)
+            set_progress_tracker(tracker)
+            logger.info(f"[FIX-6] Agent progress tracker 已注册 task_id={task_id} total_nodes={total}")
+        except Exception as e:
+            logger.warning(f"[FIX-6] tracker 注入失败: {e}")
+
     try:
         result = graph.invoke(initial_state, config=invoke_config)
         logger.info(f"Agent分析完成: {stock_code} (thread_id={thread_id})")
@@ -500,9 +575,19 @@ def run_agent_analysis(
         except Exception:
             pass
 
+        # [FIX-6] 成功路径清除 tracker
+        try:
+            set_progress_tracker(None)
+        except Exception:
+            pass
         return result
     except Exception as e:
         logger.error(f"Agent分析失败: {e}")
+        # [FIX-6] 失败路径清除 tracker
+        try:
+            set_progress_tracker(None)
+        except Exception:
+            pass
         return {
             **initial_state,
             'errors': initial_state['errors'] + [str(e)],

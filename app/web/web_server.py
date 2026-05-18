@@ -2538,12 +2538,44 @@ def start_agent_analysis():
 
                     update_task_status('agent_analysis', task_id, TASK_RUNNING, progress=5, result={'current_step': '正在初始化多Agent分析系统...'})
 
-                    result_state = agent_run(
-                        stock_code=stock_code,
-                        market_type=market_type,
-                        research_depth=research_depth,
-                        selected_analysts=selected_analysts
-                    )
+                    # [FIX-6 2026-05-18] 订阅 task.progress_advance 事件，让 LangGraph 节点完成时回写 task.progress
+                    from app.core.event_bus import get_event_bus as _get_bus
+                    _bus = _get_bus()
+
+                    def _on_progress_advance(payload):
+                        try:
+                            if not isinstance(payload, dict):
+                                return
+                            if payload.get('task_id') != task_id:
+                                return
+                            update_task_status(
+                                'agent_analysis', task_id, TASK_RUNNING,
+                                progress=payload.get('progress', 5),
+                                result={
+                                    'current_step': payload.get('current_step') or f"{payload.get('agent_name','')} 完成",
+                                    'completed_nodes': payload.get('completed'),
+                                    'total_nodes': payload.get('total'),
+                                }
+                            )
+                        except Exception as _e:
+                            app.logger.debug(f"progress_advance listener err: {_e}")
+
+                    _bus.subscribe('task.progress_advance', _on_progress_advance)
+
+                    try:
+                        result_state = agent_run(
+                            stock_code=stock_code,
+                            market_type=market_type,
+                            research_depth=research_depth,
+                            selected_analysts=selected_analysts,
+                            task_id=task_id,
+                        )
+                    finally:
+                        # 解订阅，防止跨任务串流
+                        try:
+                            _bus.unsubscribe('task.progress_advance', _on_progress_advance)
+                        except Exception:
+                            pass
 
                     # 获取公司名称
                     try:
