@@ -1,72 +1,131 @@
-// Input: 股票代码数组
-// Output: {code: {price, change_pct}}映射，从后端/api/stock_data获取最新收盘价与涨跌幅
-// Pos: 持仓/自选/对比共用，实时补全价格数据
-// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+// Input: 股票代码列表 + market_type
+// Output: Record<code, { price, change_pct, change, name? }>
+// Pos: 自选股 / 持仓概览 / 看板 / 选股结果 → 批量轻量 quote 数据源
+//
+// FIX-E5: 旧实现对每只股票串行调 /api/stock_data?period=1y（取整年K线再算 change_pct），
+// 在自选股 10+ 只时极慢，导致看板长时间空白。改为单次批量调用 /api/stock_quote_batch。
+// 保持返回签名为 Record<code, {price, change_pct, ...}>，消费者无需改动。
+'use client';
 
-import { useEffect, useState } from "react";
-import { apiClient } from "@/lib/api/client";
-import { inferMarketType } from "@/lib/utils/stock-code";
+import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/api/client';
 
-interface PriceInfo {
+export type StockPrice = {
   price: number;
   change_pct: number;
-}
+  change?: number;
+  name?: string;
+};
 
-const priceCache: Record<string, PriceInfo> = {};
+type BatchResp = {
+  results: Array<{
+    code: string;
+    name?: string;
+    latest_price: number;
+    change_pct: number;
+    change: number;
+  }>;
+  errors?: Array<{ code: string; msg: string }>;
+  ts?: number;
+};
 
-interface KlineRow { close?: number; open?: number; [k: string]: unknown }
+// 老接口的回退响应形态（单只 /api/stock_data?period=1y → { data: [{open,close},...] }）
+type LegacyResp = {
+  data?: Array<{ open: number; close: number }>;
+};
 
-async function fetchPrice(code: string): Promise<PriceInfo | undefined> {
-  if (priceCache[code]) return priceCache[code];
-  try {
-    const r = await apiClient.get<{ data?: KlineRow[] }>("/api/stock_data", {
-      stock_code: code, market_type: inferMarketType(code), period: "1y",
-    });
-    const rows = r.data || [];
-    if (rows.length < 1) return undefined;
-    const last = rows[rows.length - 1];
-    const prev = rows.length > 1 ? rows[rows.length - 2] : last;
-    const close = typeof last.close === "number" ? last.close : undefined;
-    const prevClose = typeof prev.close === "number" ? prev.close : close;
-    if (close === undefined || prevClose === undefined) return undefined;
-    const pct = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
-    const info = { price: close, change_pct: pct };
-    priceCache[code] = info;
-    return info;
-  } catch {
-    return undefined;
-  }
-}
-
-export function useStockPrices(codes: string[]): Record<string, PriceInfo> {
-  const [prices, setPrices] = useState<Record<string, PriceInfo>>(() => ({ ...priceCache }));
+export function useStockPrices(
+  codes: string[],
+  marketType: string = 'A',
+  refreshIntervalMs: number = 60000,
+): Record<string, StockPrice> {
+  const [prices, setPrices] = useState<Record<string, StockPrice>>({});
+  const codesKey = codes.slice().sort().join(',');
 
   useEffect(() => {
-    const missing = codes.filter((c) => !priceCache[c]);
-    if (missing.length === 0) {
-      const cached: Record<string, PriceInfo> = {};
-      codes.forEach((c) => { if (priceCache[c]) cached[c] = priceCache[c]; });
-      if (Object.keys(cached).some((k) => prices[k] !== cached[k])) {
-        setPrices((prev) => ({ ...prev, ...cached }));
-      }
+    if (!codesKey) {
+      setPrices({});
       return;
     }
     let cancelled = false;
-    (async () => {
-      const CONCURRENCY = 5;
-      const acc: Record<string, PriceInfo> = {};
-      for (let i = 0; i < missing.length; i += CONCURRENCY) {
-        const batch = missing.slice(i, i + CONCURRENCY);
-        const resolved = await Promise.all(batch.map(fetchPrice));
-        batch.forEach((code, idx) => {
-          if (resolved[idx]) acc[code] = resolved[idx] as PriceInfo;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const run = async () => {
+      try {
+        const resp = await apiClient.get<BatchResp | LegacyResp>('/api/stock_quote_batch', {
+          codes: codesKey,
+          market_type: marketType,
         });
         if (cancelled) return;
-        if (Object.keys(acc).length > 0) setPrices((prev) => ({ ...prev, ...acc }));
+        const map: Record<string, StockPrice> = {};
+
+        // 新接口（批量）
+        if (resp && Array.isArray((resp as BatchResp).results)) {
+          for (const r of (resp as BatchResp).results) {
+            map[r.code] = {
+              price: r.latest_price,
+              change_pct: r.change_pct,
+              change: r.change,
+              name: r.name,
+            };
+          }
+        }
+        // 老接口/单只回退：data 数组
+        else if (resp && Array.isArray((resp as LegacyResp).data) && (resp as LegacyResp).data!.length > 0) {
+          const data = (resp as LegacyResp).data!;
+          const last = data[data.length - 1];
+          const prev = data.length > 1 ? data[data.length - 2] : last;
+          const price = last.close;
+          const change_pct = prev.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
+          const code = codesKey.split(',')[0];
+          map[code] = { price, change_pct };
+        }
+
+        setPrices(map);
+      } catch {
+        // 网络/批量失败 → 兜底逐只调 /api/stock_data?period=1y
+        if (cancelled) return;
+        try {
+          const codesList = codesKey.split(',');
+          const results = await Promise.allSettled(
+            codesList.map((code) =>
+              apiClient.get<LegacyResp>('/api/stock_data', {
+                stock_code: code,
+                market_type: marketType,
+                period: '1y',
+              }),
+            ),
+          );
+          if (cancelled) return;
+          const map: Record<string, StockPrice> = {};
+          results.forEach((r, idx) => {
+            if (r.status !== 'fulfilled') return;
+            const code = codesList[idx];
+            const data = r.value?.data ?? [];
+            if (!data.length) return;
+            const last = data[data.length - 1];
+            const prev = data.length > 1 ? data[data.length - 2] : last;
+            const price = last.close;
+            const change_pct = prev.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
+            map[code] = { price, change_pct };
+          });
+          setPrices(map);
+        } catch {
+          // 全失败保持空 map
+        }
+      } finally {
+        if (!cancelled && refreshIntervalMs > 0) {
+          timer = setTimeout(run, refreshIntervalMs);
+        }
       }
-    })();
-    return () => { cancelled = true; };
-  }, [codes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [codesKey, marketType, refreshIntervalMs]);
 
   return prices;
 }
