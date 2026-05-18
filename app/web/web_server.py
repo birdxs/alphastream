@@ -1182,16 +1182,16 @@ def get_stock_data():
         else:
             start_date = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
 
-        # 获取股票历史数据（15秒硬超时，避免akshare外网卡死占满werkzeug线程池）
+        # 获取股票历史数据（30秒硬超时，避免akshare外网卡死占满werkzeug线程池）
         app.logger.info(
             f"获取股票 {stock_code} 的历史数据，市场: {market_type}, 起始日期: {start_date}, 结束日期: {end_date}")
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
         try:
             with ThreadPoolExecutor(max_workers=1) as _ex:
                 fut = _ex.submit(analyzer.get_stock_data, stock_code, market_type, start_date, end_date)
-                df = fut.result(timeout=15)
+                df = fut.result(timeout=30)  # 2026-05-18 调优：与下游 per_call_timeout=25 联动，留 5s 处理预算
         except _FTimeout:
-            app.logger.warning(f"analyzer.get_stock_data 超时(15s)：{stock_code}")
+            app.logger.warning(f"analyzer.get_stock_data 超时(30s)：{stock_code}")
             return custom_jsonify({'error': '数据源超时', 'stock_code': stock_code}), 504
 
         # 检查数据是否为空

@@ -78,7 +78,34 @@ class AkshareAdapter(BaseAdapter):
             logger.error(f"无效的股票代码: {code}")
             return pd.DataFrame()
 
-        # 尝试东财接口
+        # 2026-05-18 调优：调用顺序改为新浪第一 → 腾讯第二 → 东财第三（兜底）
+        # 依据：akshare GitHub issues #7274/#6987/#6954，东财 JSONDecodeError 频发；
+        # 新浪 daily 实测 1.1s 稳定，优先使用；腾讯作第二道保险；东财降为最终兜底。
+
+        # 第一位：新浪 daily（最快最稳定）
+        try:
+            sina_code = self._format_code_for_sina(code)
+            df = ak.stock_zh_a_daily(symbol=sina_code, start_date=start_date,
+                                     end_date=end_date, adjust=adjust)
+            if df is not None and not df.empty:
+                df = self._normalize_sina_daily(df)
+                logger.info(f"akshare新浪 daily 成功(symbol={sina_code}, rows={len(df)})")
+                return df
+        except Exception as e:
+            logger.warning(f"akshare新浪 daily 失败(symbol={code}): {type(e).__name__}: {e}")
+
+        # 第二位：腾讯接口
+        try:
+            tx_code = self._format_code_for_tx(code)
+            df = ak.stock_zh_a_hist_tx(symbol=tx_code, start_date=start_date,
+                                       end_date=end_date, adjust=adjust)
+            if df is not None and not df.empty:
+                logger.info(f"akshare腾讯接口成功兜底(symbol={tx_code}, rows={len(df)})")
+                return df
+        except Exception as e:
+            logger.warning(f"akshare腾讯接口失败(symbol={code}): {type(e).__name__}: {e}")
+
+        # 第三位（最终兜底）：东财接口
         try:
             df = ak.stock_zh_a_hist(symbol=code, start_date=start_date,
                                     end_date=end_date, adjust=adjust)
@@ -87,32 +114,12 @@ class AkshareAdapter(BaseAdapter):
                 mapping = {k: v for k, v in self.FIELD_MAPPING['stock_zh_a_hist'].items() if k in df.columns}
                 if mapping:
                     df = df.rename(columns=mapping)
+                logger.info(f"akshare东财接口最终兜底成功(symbol={code}, rows={len(df)})")
                 return df
         except Exception as e:
             logger.warning(f"akshare东财接口失败(symbol={code}): {type(e).__name__}: {e}")
 
-        # 东财挂了，优先切新浪 daily（2026-05-18 实测：东财被服务端 RST，新浪 daily 1.1s 稳定）
-        try:
-            sina_code = self._format_code_for_sina(code)
-            df = ak.stock_zh_a_daily(symbol=sina_code, start_date=start_date,
-                                     end_date=end_date, adjust=adjust)
-            if df is not None and not df.empty:
-                df = self._normalize_sina_daily(df)
-                logger.info(f"akshare新浪 daily 成功兜底(symbol={sina_code}, rows={len(df)})")
-                return df
-        except Exception as e:
-            logger.warning(f"akshare新浪 daily 失败(symbol={code}): {type(e).__name__}: {e}")
-
-        # 新浪也挂了，最后兜底腾讯
-        try:
-            tx_code = self._format_code_for_tx(code)
-            df = ak.stock_zh_a_hist_tx(symbol=tx_code, start_date=start_date,
-                                       end_date=end_date, adjust=adjust)
-            if df is not None and not df.empty:
-                return df
-        except Exception as e:
-            logger.warning(f"akshare腾讯接口失败(symbol={code}): {type(e).__name__}: {e}")
-
+        # 2026-05-18 兜底：未知 symbol 或格式异常时返回空 DF，由上层 web_server.py:1198 走 404 友好路径
         return pd.DataFrame()
 
     def get_index_stocks(self, index_code: str) -> List[str]:

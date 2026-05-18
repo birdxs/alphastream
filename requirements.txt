@@ -2,7 +2,7 @@
 numpy>=1.24.0
 pandas>=2.3.0  # Upgraded for TradingAgents
 scipy>=1.13.0,<1.14.0
-akshare>=1.16.98  # Upgraded for TradingAgents
+akshare>=1.18.62  # 2026-05-18: 修雪球 stock_individual_spot_xq KeyError + 东财 JSONDecodeError
 tqdm>=4.67.1  # Upgraded for TradingAgents
 openai>=1.0.0,<2.0.0 # Upgraded for TradingAgents (Major change, requires code update)
 requests>=2.32.4 # Upgraded for TradingAgents

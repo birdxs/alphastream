@@ -172,7 +172,7 @@ def get_kline(stock_code: str, market: str = 'A',
             dp = DataProvider()
             raw = resilient_call(
                 dp.get_stock_history, (stock_code, start_date, end_date),
-                per_call_timeout=10.0, cache_ttl=600,
+                per_call_timeout=25.0, cache_ttl=600,  # 2026-05-18 调优：三源串行需 >20s（东财慢+新浪兜底 1.1s），原 10s 会丢弃已成功数据
             )
             return _normalize_kline_df(raw)
         elif market == 'HK':
@@ -191,6 +191,9 @@ def get_kline(stock_code: str, market: str = 'A',
             raise UnsupportedMarketError(f"不支持的市场: {market}")
     except (DataSourceTimeoutError, DataSourceUnavailableError) as e:
         logger.warning(f"get_kline 数据源失败 {stock_code}/{market}: {e}")
+        return pd.DataFrame()
+    except Exception as e:  # 2026-05-18 兜底：catch 任意上游异常（KeyError/ProxyError/etc），返回空 DF 由 web_server 走 404
+        logger.warning(f"market_data_adapter.get_kline 上游异常: {type(e).__name__}: {e}")
         return pd.DataFrame()
 
 

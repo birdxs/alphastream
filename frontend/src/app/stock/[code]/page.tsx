@@ -12,7 +12,7 @@ import dynamic from "next/dynamic";
 import { ArrowLeft, Star, StarOff, Bot, Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/common/glass-card";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, ApiError } from "@/lib/api/client";
 import { useAltData } from "@/lib/hooks/use-alt-data";
 import { inferMarketType } from "@/lib/utils/stock-code";
 
@@ -186,10 +186,16 @@ export default function StockDetailPage({
         }
       }
     } catch (e) {
-      setErrorTab((p) => ({
-        ...p,
-        kline: e instanceof Error ? e.message : "获取K线数据失败",
-      }));
+      // 2026-05-18 扩展：4xx/5xx 均视为"暂无数据"，避免后端 500 触发通用错误页
+      if (e instanceof ApiError && e.status >= 400) {
+        setKlineData([]);              // 空数组视为"无K线"，触发空态渲染
+        setErrorTab((p) => ({ ...p, kline: null }));
+      } else {
+        setErrorTab((p) => ({
+          ...p,
+          kline: e instanceof Error ? e.message : "获取K线数据失败",
+        }));
+      }
     } finally {
       setLoadingTab((p) => ({ ...p, kline: false }));
     }
@@ -384,15 +390,20 @@ export default function StockDetailPage({
 
     switch (tab) {
       case "kline":
-        return klineData ? (
+        if (klineData === null) return null;
+        if (klineData.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-20 gap-2">
+              <span className="text-muted-foreground dark:text-white/60 text-sm">该股票在选定周期内暂无 K 线数据</span>
+              <span className="text-xs text-muted-foreground dark:text-white/40">代码：{code}（可能停牌/未上市/周期外）</span>
+            </div>
+          );
+        }
+        return (
           <CandlestickChartArtifact
-            data={{
-              stock_code: code,
-              stock_name: stockName,
-              ohlcv: klineData,
-            }}
+            data={{ stock_code: code, stock_name: stockName, ohlcv: klineData }}
           />
-        ) : null;
+        );
       case "fundamental":
         return fundamentalData ? (
           <FundamentalScorecardArtifact data={fundamentalData} />
@@ -479,7 +490,7 @@ export default function StockDetailPage({
             </div>
 
             {/* 价格 */}
-            {latestPrice !== null && (
+            {latestPrice !== null ? (
               <div className="flex items-baseline gap-2 ml-2">
                 <span className={`text-xl font-bold tabular-nums ${priceColor}`}>
                   ¥{latestPrice.toFixed(2)}
@@ -498,7 +509,11 @@ export default function StockDetailPage({
                   </span>
                 )}
               </div>
-            )}
+            ) : klineData?.length === 0 ? (
+              <div className="flex items-baseline gap-2 ml-2">
+                <span className="text-sm text-muted-foreground dark:text-white/40">— 暂无报价</span>
+              </div>
+            ) : null}
           </div>
 
           {/* 右：操作按钮 */}
