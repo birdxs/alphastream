@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api/client";
 import { useStockNames } from "@/lib/hooks/use-stock-names";
+import { useStockPrices } from "@/lib/hooks/use-stock-prices";
 import { GlassCard } from "@/components/common/glass-card";
 import {
   Filter,
@@ -172,15 +173,46 @@ export default function ScreenerPage() {
   useEffect(() => {
     document.title = "选股器 - AI金融分析";
   }, []);
+  // FIX-E2: 挂载时自动加载默认板块（HS300）首屏数据，避免空白
   const [results, setResults] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
-  // 批量补全名称（后端/api/board_stocks仅返回代码）
+  // 批量补全名称 + 价格/涨跌幅（后端 /api/board_stocks 仅返回代码）
   const resultCodes = useMemo(() => results.slice(0, 20).map(s => s.code), [results]);
   const resolvedNames = useStockNames(resultCodes);
+  const resolvedPrices = useStockPrices(resultCodes);
+  const [profiles, setProfiles] = useState<Record<string, { pe?: number | null; market_cap?: number | null; roe?: number | null }>>({});
+
+  // 批量拉取 PE/市值/ROE：遍历 resultCodes 调 /api/stock_profile（限流5并发）
+  useEffect(() => {
+    if (resultCodes.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const missing = resultCodes.filter(c => !profiles[c]);
+      const CONCURRENCY = 5;
+      for (let i = 0; i < missing.length; i += CONCURRENCY) {
+        const batch = missing.slice(i, i + CONCURRENCY);
+        const rs = await Promise.all(batch.map(async (code) => {
+          try {
+            const p = await apiClient.get<{ pe_ttm?: number | null; market_cap?: number | null; roe?: number | null }>(
+              "/api/stock_profile", { stock_code: code }
+            );
+            return [code, { pe: p.pe_ttm ?? null, market_cap: p.market_cap ?? null, roe: p.roe ?? null }] as const;
+          } catch { return [code, { pe: null, market_cap: null, roe: null }] as const; }
+        }));
+        if (cancelled) return;
+        setProfiles(prev => {
+          const next = { ...prev };
+          rs.forEach(([k, v]) => { next[k] = v; });
+          return next;
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [resultCodes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateFilter = useCallback((key: keyof FilterState, val: string) => {
     setFilters((prev) => ({ ...prev, [key]: val }));
@@ -241,6 +273,12 @@ export default function ScreenerPage() {
       setLoading(false);
     }
   }, [filters]);
+
+  // FIX-E2: 挂载后用默认板块首屏加载一次
+  useEffect(() => {
+    handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-full p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
@@ -445,21 +483,26 @@ export default function ScreenerPage() {
                 </tr>
               </thead>
               <tbody>
-                {results.map((stock) => (
+                {results.map((stock) => {
+                  const price = resolvedPrices[stock.code]?.price ?? stock.price;
+                  const changePct = resolvedPrices[stock.code]?.change_pct ?? stock.change_pct;
+                  const pe = profiles[stock.code]?.pe ?? stock.pe;
+                  const marketCap = profiles[stock.code]?.market_cap ?? stock.market_cap;
+                  return (
                   <tr
                     key={stock.code}
                     className="border-b border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04] transition-colors"
                   >
                     <td className="px-3 py-2.5 font-mono text-xs">{stock.code}</td>
                     <td className="px-3 py-2.5">{resolvedNames[stock.code] && resolvedNames[stock.code] !== stock.code ? resolvedNames[stock.code] : (stock.name !== stock.code ? stock.name : "--")}</td>
-                    <td className="px-3 py-2.5 text-right font-mono">{formatNumber(stock.price)}</td>
-                    <td className={`px-3 py-2.5 text-right font-mono ${changeColor(stock.change_pct)}`}>
-                      {stock.change_pct !== null
-                        ? `${stock.change_pct > 0 ? "+" : ""}${stock.change_pct.toFixed(2)}%`
+                    <td className="px-3 py-2.5 text-right font-mono">{formatNumber(price)}</td>
+                    <td className={`px-3 py-2.5 text-right font-mono ${changeColor(changePct)}`}>
+                      {changePct !== null && changePct !== undefined
+                        ? `${changePct > 0 ? "+" : ""}${changePct.toFixed(2)}%`
                         : "--"}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono">{formatNumber(stock.pe)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono">{formatMarketCap(stock.market_cap)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">{formatNumber(pe)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">{formatMarketCap(marketCap)}</td>
                     <td className="px-3 py-2.5 text-center">
                       <Link
                         href={`/stock/${stock.code}`}
@@ -470,7 +513,8 @@ export default function ScreenerPage() {
                       </Link>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
