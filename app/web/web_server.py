@@ -4375,6 +4375,22 @@ def _preload_profiles():
 
 threading.Thread(target=_preload_profiles, daemon=True).start()
 
+# M1/M2 启动预热：提前拉取市场指数写入缓存，消除首次请求等待
+def _preload_market_indices():
+    if os.getenv("DISABLE_NETWORK") == "1":
+        return
+    time.sleep(2)  # 等服务端口绑定完成
+    try:
+        data = _fetch_market_indices_data()
+        if data.get('indices'):
+            app.logger.info(f"指数预热完成: source={data.get('source')} count={len(data['indices'])}")
+        else:
+            app.logger.warning("指数预热返回空数据")
+    except Exception as e:
+        app.logger.warning(f"指数预热异常: {e}")
+
+threading.Thread(target=_preload_market_indices, daemon=True).start()
+
 if __name__ == '__main__':
     # 强制禁用Flask的调试模式，以确保日志配置生效
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", "8888")), debug=False)
