@@ -5,6 +5,7 @@
  * Note: GET/POST 均走 safeJSONParse, 兼容非标 JSON (NaN/Infinity -> null)
  * Note: streamPost 直连后端 SSE_BASE (绕过Next dev rewrites流式buffer问题)
  * Note: POST 请求自动附加 X-CSRFToken（从 /api/csrf_token 获取，sessionStorage 缓存）
+ * Note: extractData() 兼容新外壳 {success,data} 与旧外壳 (S2-A2 Hunt5-M1 2026-05-20)
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
@@ -315,3 +316,22 @@ class ApiError extends Error {
 
 export const apiClient = new ApiClient();
 export { ApiError };
+
+// ── S2-A2 兼容层（Hunt5-M1 2026-05-20）────────────────────────────────────
+// 新端点返回 {success: true, data: ...}，旧端点直接返回 {...数据}
+// 调用者可选用 extractData() 做统一解包，不使用时旧代码不受影响
+/**
+ * 兼容新旧两种后端响应 schema：
+ * - 新外壳：{success: true, data: T}  → 返回 data
+ * - 旧外壳：直接是数据对象            → 原样返回
+ * - 新外壳错误：{success: false, ...} → 返回 null
+ */
+export function extractData<T>(resp: unknown): T | null {
+  if (resp && typeof resp === 'object') {
+    const r = resp as Record<string, unknown>;
+    if ('success' in r) {
+      return r['success'] === true ? (r['data'] as T ?? null) : null;
+    }
+  }
+  return resp as T;
+}

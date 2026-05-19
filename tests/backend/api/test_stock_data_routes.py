@@ -73,7 +73,11 @@ class TestStockDataRoute:
         resp = flask_client.get("/api/stock_data")
         assert resp.status_code == 400
         data = _json(resp)
-        assert _has_error(data) and "股票代码" in _get_error_msg(data)
+        # S2-A1: 空 stock_code → INVALID_INPUT，消息含 "stock_code" 或 "股票代码" 或 "必填"
+        assert _has_error(data)
+        msg = _get_error_msg(data)
+        assert "stock_code" in msg or "股票代码" in msg or "必填" in msg, \
+            f"期望含 stock_code 字段提示，实际: {msg}"
         _no_stacktrace(resp)
 
     def test_invalid_stock_code_returns_400(self, flask_client):
@@ -335,12 +339,13 @@ class TestLatestNewsRoute:
         assert data["news"][0]["title"] == "央行降准"
 
     def test_invalid_days_does_not_500(self, flask_client, monkeypatch):
-        """非法 days 参数会触发 int() 异常，但路由 try/except 应捕获并返回 success=False。"""
+        """S2-A1：非法 days 参数由 validate_int_range 捕获，返回 400 INVALID_INPUT（不再 500）。"""
         from app.web import web_server
         monkeypatch.setattr(web_server.news_fetcher, "get_latest_news",
                             lambda days=1, limit=1000: [])
         resp = flask_client.get("/api/latest_news?days=abc")
-        assert resp.status_code == 500
+        # S2-A1 改进：非整数 days → 400 而非 500
+        assert resp.status_code == 400
         data = _json(resp)
         assert data["success"] is False
         _no_stacktrace(resp)

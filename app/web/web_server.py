@@ -25,6 +25,8 @@ from flask_cors import CORS
 from pathlib import Path
 import time
 from flask_caching import Cache
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import threading
 import sys
 from flask_swagger_ui import get_swaggerui_blueprint
@@ -203,6 +205,19 @@ if os.getenv('USE_REDIS_CACHE', 'False').lower() == 'true' and os.getenv('REDIS_
 
 cache = Cache(config=cache_config)
 cache.init_app(app)
+
+# ============ 限流（S2-A4 Hunt1-Major 2026-05-20） ============
+# Input: X-API-Key header 或 remote IP
+# Output: 超出限额时返回 429 RATE_LIMITED；否则透传
+# Pos: 全局 default 600/min + 关键端点单独限流
+_RATE_LIMIT_ENABLED = os.getenv('RATE_LIMIT_ENABLED', 'true').lower() not in ('false', '0', 'no')
+limiter = Limiter(
+    key_func=lambda: request.headers.get('X-API-Key', get_remote_address()),
+    default_limits=[os.getenv('RATE_LIMIT_DEFAULT', '600 per minute')] if _RATE_LIMIT_ENABLED else [],
+    storage_uri='memory://',
+    enabled=_RATE_LIMIT_ENABLED,
+)
+limiter.init_app(app)
 
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
@@ -1129,6 +1144,108 @@ def enhanced_analysis():
         return api_error('INTERNAL', '增强分析执行失败，请稍后重试', details=str(e))
 
 
+# ============ 输入校验工具（S2-A1 Hunt3-Major/Hunt5-M5 2026-05-20） ============
+# Input: 原始 request 参数字符串
+# Output: 清洗后的合法值，非法时抛出 ValidationError
+# Pos: 所有接收外部参数的 API 端点入口，防止 SQL 拖垮 / DOS
+
+_STOCK_CODE_RE_STRICT = re.compile(r'^(sh|sz|bj|hk|us)?\.?\d{4,6}$', re.IGNORECASE)
+_DATE_RE = re.compile(r'^\d{8}$')  # YYYYMMDD
+
+
+class ValidationError(Exception):
+    """输入校验失败；由 handle_validation_error 统一转为 400 INVALID_INPUT"""
+    pass
+
+
+def validate_stock_code_strict(code: str) -> str:
+    """严格校验 stock_code：长度 ≤20、符合 A/HK/US 格式
+    与旧 validate_stock_code() 共存；旧函数不破坏，不改名"""
+    if not code or not isinstance(code, str):
+        raise ValidationError('stock_code 必填')
+    code = code.strip()
+    if len(code) > 20:
+        raise ValidationError('stock_code 长度超限（>20字符）')
+    if not _STOCK_CODE_RE_STRICT.match(code):
+        raise ValidationError(f'stock_code 格式不合法: {code}')
+    return code
+
+
+def validate_date_param(s, field: str = 'date'):
+    """校验 YYYYMMDD 格式，None → None"""
+    if s is None or s == '':
+        return None
+    if not _DATE_RE.match(str(s)):
+        raise ValidationError(f'{field} 格式必须为 YYYYMMDD，实际: {s}')
+    return str(s)
+
+
+def validate_int_range(v, field: str, min_v: int = 1, max_v: int = 1000, default=None):
+    """将 v 转为整数并钳制在 [min_v, max_v]；v 为空时返回 default"""
+    if v is None or v == '':
+        return default
+    try:
+        iv = int(v)
+    except (ValueError, TypeError):
+        raise ValidationError(f'{field} 必须是整数，实际: {v}')
+    if not (min_v <= iv <= max_v):
+        raise ValidationError(f'{field} 必须在 [{min_v}, {max_v}] 范围内，实际: {iv}')
+    return iv
+
+
+def validate_kline_period(p, default: str = 'daily') -> str:
+    """校验 K 线 period 参数"""
+    allowed = {'daily', 'weekly', 'monthly', 'min5', 'min15', 'min30', 'min60',
+               '1y', '3m', '6m', '5y', '1m', '10日排行', '10日', 'monthly'}
+    if p is None or p == '':
+        return default
+    if p not in allowed:
+        raise ValidationError(f'period 必须是合法值之一，实际: {p}')
+    return p
+
+
+# ============ 统一成功响应外壳（S2-A2 Hunt5-M1 2026-05-20） ============
+# Input: 任意 data / meta
+# Output: JSON {success:true, data:...}
+# Pos: 新增或改造端点的成功路径，旧接口保持原 jsonify schema
+
+def api_ok(data=None, meta: dict = None, **kwargs):
+    """统一成功响应外壳；前端 client.ts 通过 success 字段识别新外壳"""
+    resp = {'success': True, 'data': data}
+    if meta:
+        resp['meta'] = meta
+    resp.update(kwargs)
+    return jsonify(resp)
+
+
+# ============ 缓存 Header 装饰器（S2-A3 Hunt5-M6 2026-05-20） ============
+# Input: seconds 缓存秒数, public 是否公共缓存
+# Output: 为 Response 附加 Cache-Control header
+# Pos: 套用到行情/日线/公司信息等端点
+
+def with_cache(seconds: int, public: bool = True):
+    """为端点添加 Cache-Control header
+    实时类 5s / 半实时 60s / 历史 3600s"""
+    from functools import wraps
+
+    def deco(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            resp = f(*args, **kwargs)
+            # 兼容 (response, status) 二元组
+            if isinstance(resp, tuple):
+                resp_obj = resp[0]
+            else:
+                resp_obj = resp
+            cc = 'public' if public else 'private'
+            # 仅当 resp_obj 是 Response 时附加 header
+            if hasattr(resp_obj, 'headers'):
+                resp_obj.headers['Cache-Control'] = f'{cc}, max-age={seconds}'
+            return resp
+        return wrapped
+    return deco
+
+
 # ============ 统一错误响应外壳（S1-C1 Hunt3-Critical 2026-05-20） ============
 # Input: error_code 字符串, 用户友好 message, 可选 details（仅 debug 暴露）
 # Output: JSON {success:false, error_code, message} + HTTP status
@@ -1186,6 +1303,18 @@ def server_error(error):
     if request.path.startswith('/api/'):
         return api_error('INTERNAL', '服务器内部错误，请稍后重试')
     return render_template('error.html', error_code=500, message="服务器内部错误"), 500
+
+
+@app.errorhandler(ValidationError)
+def handle_validation_error(e):
+    """S2-A1：输入校验失败 → 400 INVALID_INPUT"""
+    return api_error('INVALID_INPUT', str(e))
+
+
+@app.errorhandler(429)
+def handle_rate_limit(e):
+    """S2-A4：超过限流阈值 → 429 RATE_LIMITED"""
+    return api_error('RATE_LIMITED', '请求过于频繁，请稍后重试', status=429)
 
 
 # ============ A股名称缓存（ak.stock_info_a_code_name fallback） ============
@@ -1277,16 +1406,25 @@ def _get_stock_name_safe(stock_code, market_type='A'):
 
 # Update the get_stock_data function in web_server.py to handle date formatting properly
 @app.route('/api/stock_data', methods=['GET'])
+@with_cache(60)  # S2-A3: 半实时 1分钟缓存
+@limiter.limit('200 per minute')  # S2-A4
 @cache.cached(timeout=300, query_string=True)
 def get_stock_data():
+    # Input: stock_code/period/start_date/end_date/market_type query params
+    # Output: JSON OHLCV 历史数据
+    # Pos: K线页面核心数据端点，已套 S2-A1 校验
+    # S2-A1: validate 在 try 外，ValidationError 直达全局 errorhandler → 400 INVALID_INPUT
+    raw_code = request.args.get('stock_code', '')
+    stock_code_checked = validate_stock_code_strict(raw_code)
+    validate_date_param(request.args.get('start_date'), 'start_date')
+    validate_date_param(request.args.get('end_date'), 'end_date')
+    validate_kline_period(request.args.get('period', '1y'))
     try:
-        stock_code = request.args.get('stock_code')
+        stock_code = stock_code_checked
         market_type = request.args.get('market_type', 'A')
-        period = request.args.get('period', '1y')  # 默认1年
+        period = request.args.get('period', '1y')
 
-        if not stock_code:
-            return custom_jsonify({'error': '请提供股票代码'}), 400
-
+        # 兼容旧 validate_stock_code 的市场类型精确校验（新 validate_stock_code_strict 已初步过滤）
         valid, result = validate_stock_code(stock_code, market_type)
         if not valid:
             return jsonify({'error': result}), 400
@@ -1416,8 +1554,9 @@ def _bs_logout_on_exit():
     except: pass
 
 @app.route('/api/stock_profile', methods=['GET'])
+@with_cache(60)  # S2-A3: 半实时 1分钟缓存
 def api_stock_profile():
-    # Input: stock_code query param
+    # Input: stock_code query param (S2-A1 校验)
     # Output: JSON profile (industry/pe_ttm/pb/roe) or 503 on timeout
     # Pos: baostock I/O 重路径，外层 ThreadPoolExecutor 兜底确保 ≤25s 必返回
     import baostock as bs
@@ -1425,9 +1564,7 @@ def api_stock_profile():
     import time as _time
     from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TPETimeout
 
-    stock_code = request.args.get('stock_code', '')
-    if not stock_code:
-        return custom_jsonify({'error': 'stock_code required'}), 400
+    stock_code = validate_stock_code_strict(request.args.get('stock_code', ''))  # S2-A1
 
     # 命中短缓存（主线程快速返回，不进入任何 I/O）
     now = _time.time()
@@ -2062,11 +2199,12 @@ def _fetch_market_indices_data():
 
 
 @app.route('/api/market_indices', methods=['GET'])
+@with_cache(5)  # S2-A3: 实时类 5秒短缓存
 def get_market_indices():
     """获取主要市场指数实时行情（上证/深证/创业板/沪深300）
     Input: 无
     Output: JSON {'indices': [...], 'source': str}
-    Pos: 首页/Dashboard 实时指数端点，三级兜底链
+    Pos: 首页/Dashboard 实时指数端点，三级兜底链，S2-A3 5s 缓存 header
     B23: 添加快速超时路径（FAST_TIMEOUT_MS env）——缓存为空时先返回 degraded，
     避免 Playwright / 浏览器首屏在 loading 状态卡住
     """
@@ -2674,9 +2812,13 @@ def get_history_analysis():
 # 添加到web_server.py文件中
 @app.route('/api/latest_news', methods=['GET'])
 def get_latest_news():
+    # Input: days/limit/important/type query params (S2-A1 校验)
+    # Output: JSON news list
+    # Pos: 新闻页核心端点
+    # S2-A1: validate 在 try 外，ValidationError 直达全局 errorhandler
+    days = validate_int_range(request.args.get('days'), 'days', 1, 30, default=1)
+    limit = validate_int_range(request.args.get('limit'), 'limit', 1, 500, default=500)
     try:
-        days = int(request.args.get('days', 1))  # 默认获取1天的新闻
-        limit = min(max(int(request.args.get('limit', 1000)), 1), 500)  # 限制范围1-500
         only_important = request.args.get('important', '0') == '1'  # 是否只看重要新闻
         news_type = request.args.get('type', 'all')  # 新闻类型，可选值: all, hotspot
 
@@ -2807,10 +2949,14 @@ def get_latest_news():
 
 @app.route('/api/news_sentiment', methods=['GET'])
 def get_news_sentiment():
-    """获取新闻情绪分析统计"""
+    """获取新闻情绪分析统计
+    Input: days query param (S2-A1 校验，1-30)
+    Output: JSON {total/bullish/bearish/neutral/score}
+    Pos: 新闻情绪统计端点
+    """
+    # S2-A1: validate 在 try 外
+    days = validate_int_range(request.args.get('days'), 'days', 1, 30, default=1)
     try:
-        days = request.args.get('days', 1, type=int)
-
         news_list = news_fetcher.get_latest_news(days=days)
         if not news_list:
             return jsonify({'total': 0, 'bullish': 0, 'bearish': 0, 'neutral': 0, 'score': 5.0})
@@ -3437,8 +3583,13 @@ def upload_image():
 # ===== AI对话 & Agent分析 SSE流式端点 =====
 
 @app.route('/api/ai/chat', methods=['POST'])
+@limiter.limit(os.getenv('RATE_LIMIT_LLM', '20 per minute'))  # S2-A4: LLM 限流
 def ai_chat_stream():
-    """AI对话流式端点 — SSE输出Token+工具调用+Agent状态+Artifact"""
+    """AI对话流式端点 — SSE输出Token+工具调用+Agent状态+Artifact
+    Input: JSON body {message, conversation_id}
+    Output: SSE stream
+    Pos: LLM 调用入口，已套 20 req/min 限流防止 API KEY 超支
+    """
     from flask import Response, stream_with_context
     import queue
     from app.core.ai_client import get_ai_client, chat_with_tools_stream
@@ -3723,9 +3874,13 @@ def _generate_follow_ups(stock_code, analysis_text):
 
 @app.route('/api/conversations', methods=['GET'])
 def list_conversations():
-    """获取对话列表"""
+    """获取对话列表
+    Input: limit query param (S2-A1 校验，1-200)
+    Output: JSON {conversations: [...]}
+    Pos: 对话历史列表端点
+    """
     from app.core.conversation import get_conversation_manager
-    limit = request.args.get('limit', 20, type=int)
+    limit = validate_int_range(request.args.get('limit'), 'limit', 1, 200, default=20)  # S2-A1
     conversations = get_conversation_manager().list_conversations(limit)
     return jsonify({'conversations': conversations})
 
