@@ -4,6 +4,29 @@
 
 ---
 
+## Sprint 3-A 交付记录（commits 6072d7d + c4b9f92，2026-05-20 02:30 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-A1 依赖 CVE 升级（Hunt1-Major）| PASS | cryptography 43→48.0.0，Pillow 10.2→12.2.0，npm audit 13→8 漏洞 |
+| S3-A2 ErrorBoundary 全局（Hunt4-Major）| PASS | 新建 global-error.tsx，[NEW-FILE:#20260520-S3A] |
+| S3-A3 adapter Session thread-safe（Hunt2-M3）| PASS | get_thread_local_session() + threading.local()，改造 nbs/shipping/satellite |
+| S3-A4 API v1 版本前缀（Hunt5-Major）| PASS | _register_v1_aliases() 注册 68 条 alias |
+
+铁证：
+- 真重启 uptime_s = 35.032 < 60（PID 38834）
+- 50 并发 adapters/status 全 200
+- /api/v1/market_indices 与 /api/market_indices 同返回 indices=4
+- Next.js HTML 包含 global-error.tsx boundary 引用
+
+特例登记（CLAUDE.md 附录 C）：
+- 触发原因：Next.js global-error.tsx 为框架约定路径，无法在现有文件实现
+- 白名单类别：e 项（全新框架约定模块）
+- 新文件：frontend/src/app/global-error.tsx
+- Commit 标签：[NEW-FILE:#20260520-S3A]
+
+---
+
 ## Sprint 2-B1 交付记录（commit beff8d3，2026-05-20 +08:00）
 
 | 条目 | 状态 | 关键实现 |
