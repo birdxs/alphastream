@@ -9,6 +9,7 @@ import os
 import json
 import uuid
 import logging
+import threading
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -18,10 +19,17 @@ CONVERSATION_DIR = os.path.join(os.path.dirname(__file__), '../../data/conversat
 
 
 class ConversationManager:
-    """对话管理器 — 存储和检索多轮对话历史"""
+    """对话管理器 — 存储和检索多轮对话历史
+
+    线程安全：所有 read-modify-write 操作以及底层 _load / _save 均由可重入锁
+    `_lock` 保护，避免多线程并发下的 lost-update 与 JSON 文件半写损坏。
+    """
 
     def __init__(self):
         os.makedirs(CONVERSATION_DIR, exist_ok=True)
+        # 可重入锁：add_message 内部会同时调 _load_conversation 和 _save_conversation，
+        # 因此使用 RLock 允许同线程多次获取。
+        self._lock = threading.RLock()
 
     def create_conversation(self, title: str = '') -> str:
         """创建新对话，返回conversation_id"""
@@ -40,35 +48,41 @@ class ConversationManager:
 
     def add_message(self, conversation_id: str, role: str, content: str,
                     artifacts: List[Dict] = None, tool_calls: List[Dict] = None) -> str:
-        """添加消息到对话，返回message_id"""
-        conv = self._load_conversation(conversation_id)
-        if conv is None:
-            conv_id = self.create_conversation()
-            conv = self._load_conversation(conv_id)
-            conversation_id = conv_id
+        """添加消息到对话，返回message_id (线程安全)
 
-        msg_id = f"msg_{uuid.uuid4().hex[:8]}"
-        message = {
-            'message_id': msg_id,
-            'role': role,
-            'content': content,
-            'artifacts': artifacts or [],
-            'tool_calls': tool_calls or [],
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        conv['messages'].append(message)
-        conv['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        使用 RLock 串行化 read-modify-write 序列，避免多线程并发下：
+        - lost update（两线程基于同一旧快照覆盖写）
+        - JSON 文件半写损坏（open('w') 截断与写入穿插）
+        """
+        with self._lock:
+            conv = self._load_conversation(conversation_id)
+            if conv is None:
+                conv_id = self.create_conversation()
+                conv = self._load_conversation(conv_id)
+                conversation_id = conv_id
 
-        # 自动更新标题（第一条用户消息的前20个字符）
-        if role == 'user' and conv['title'] == '新对话':
-            conv['title'] = content[:20] + ('...' if len(content) > 20 else '')
+            msg_id = f"msg_{uuid.uuid4().hex[:8]}"
+            message = {
+                'message_id': msg_id,
+                'role': role,
+                'content': content,
+                'artifacts': artifacts or [],
+                'tool_calls': tool_calls or [],
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            conv['messages'].append(message)
+            conv['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # 保留最近50条消息防止无限增长
-        if len(conv['messages']) > 50:
-            conv['messages'] = conv['messages'][-50:]
+            # 自动更新标题（第一条用户消息的前20个字符）
+            if role == 'user' and conv['title'] == '新对话':
+                conv['title'] = content[:20] + ('...' if len(content) > 20 else '')
 
-        self._save_conversation(conversation_id, conv)
-        return msg_id
+            # 保留最近50条消息防止无限增长
+            if len(conv['messages']) > 50:
+                conv['messages'] = conv['messages'][-50:]
+
+            self._save_conversation(conversation_id, conv)
+            return msg_id
 
     def get_messages_for_ai(self, conversation_id: str, max_messages: int = 20) -> List[Dict]:
         """获取对话历史，转换为OpenAI messages格式（优先使用摘要压缩上下文）"""
@@ -177,21 +191,36 @@ class ConversationManager:
 
     def _load_conversation(self, conversation_id: str) -> Optional[Dict]:
         filepath = os.path.join(CONVERSATION_DIR, f"{conversation_id}.json")
-        try:
-            if os.path.exists(filepath):
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.warning(f"加载对话失败: {e}")
-        return None
+        with self._lock:
+            try:
+                if os.path.exists(filepath):
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            except Exception as e:
+                logger.warning(f"加载对话失败: {e}")
+            return None
 
     def _save_conversation(self, conversation_id: str, data: Dict):
+        """原子化保存：先写临时文件再 os.replace，保证读侧永远读到完整 JSON。"""
         filepath = os.path.join(CONVERSATION_DIR, f"{conversation_id}.json")
-        try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"保存对话失败: {e}")
+        tmppath = f"{filepath}.tmp.{os.getpid()}.{threading.get_ident()}"
+        with self._lock:
+            try:
+                with open(tmppath, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    f.flush()
+                    try:
+                        os.fsync(f.fileno())
+                    except OSError:
+                        pass
+                os.replace(tmppath, filepath)
+            except Exception as e:
+                logger.error(f"保存对话失败: {e}")
+                try:
+                    if os.path.exists(tmppath):
+                        os.remove(tmppath)
+                except OSError:
+                    pass
 
 
 # 全局单例
