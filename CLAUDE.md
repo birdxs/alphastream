@@ -391,3 +391,52 @@ LangGraph #7845 的根因是：共享同一个 graph **实例** 并用 `astream`
 - 真重启：uptime_s=6.787 < 60（PID 30885）
 - pytest：777 passed, 0 failed（修复 naive/aware 兼容 2 处测试）
 - 18 文件变更，+231/-124 行
+
+---
+
+## Sprint 1-C 错误处理+并发安全修复记录（commit 67ff9ec，2026-05-20 00:50 +08:00）
+
+### S1-C1 错误响应统一外壳（Hunt3-Critical）
+
+- `api_error(code, message, details, status)` 工具函数加入 web_server.py
+- `ERROR_CODES` 字典：INVALID_INPUT/NOT_FOUND/INTERNAL/... → HTTP status
+- `@app.errorhandler(Exception)` 全局兜底；HTTPException 透传状态码防 405→500 升级
+- 34 处 `return jsonify({'error': str(e)}), 500` → `api_error('INTERNAL', 语义message, details=str(e))`
+- `details` 仅 `app.debug=True` 时可见，生产环境不泄露 str(e)/traceback
+
+### S1-C2 任务 JSON 原子写（Hunt2-C5）
+
+- `atomic_write_json(filepath, data)` 工具函数：tempfile.mkstemp + os.fdopen + fsync + os.replace
+- `FileSessionManager.save_task` 改走 `atomic_write_json`
+
+### S1-C3 _PROFILE_CACHE 加锁（Hunt2-C1）
+
+- `_PROFILE_CACHE_LOCK = threading.RLock()`
+- 包装函数：`_profile_cache_get`, `_profile_cache_set`, `_profile_cache_evict_and_set`
+- 3 处直接访问改走包装函数
+
+### S1-C4 _STOCK_NAME_CACHE 加锁（Hunt2-C2）
+
+- `_STOCK_NAME_CACHE_LOCK = threading.RLock()`
+- 启动期批量写（for row in df）包入锁
+- `items()` 迭代读改为先在锁内 `_cache_snapshot = dict(...)` 再迭代
+
+### S1-C5 _AKSHARE_HC_CACHE 加锁（Hunt2-C3）
+
+- `_AKSHARE_HC_CACHE_LOCK = threading.RLock()` 加入 akshare_adapter.py
+- 读缓存和写缓存（双字段 ok + ts）均在锁内
+
+### S1-C6 SqliteSaver WAL（Hunt2-C4）
+
+- `conn.execute('PRAGMA journal_mode=WAL')`
+- `conn.execute('PRAGMA synchronous=NORMAL')`
+- `conn.execute('PRAGMA busy_timeout=5000')`
+
+### 铁证汇总
+
+- 真重启：uptime_s=3.625 < 60
+- 错误外壳真测：`{"error_code":"INVALID_INPUT","success":false}` 无 traceback 泄露
+- 20 并发 stock_profile：无 RuntimeError（日志 grep 0 条）
+- WAL 确认：`PRAGMA journal_mode = wal`，`*.db-wal` + `*.db-shm` 文件存在
+- pytest：777 passed, 0 failed
+- 6 文件变更，+201/-93 行
