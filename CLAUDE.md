@@ -322,3 +322,36 @@ LangGraph #7845 的根因是：共享同一个 graph **实例** 并用 `astream`
 - `body_top` 含：上证指数4169.54 +0.92%、深证成指15569.91 +0.26%、创业板指3908.44 -0.16%、沪深3004852.88 +0.40%
 - `api_calls`：GET /api/market_indices (×2) + SSE market_stream
 - 截图：/tmp/b25-home-5s.png（476793 bytes）
+
+---
+
+## Sprint 1-A 安全 Critical 修复记录（commit 8bc70e3，2026-05-19 23:14 +08:00）
+
+### 修复清单
+
+| ID | 根因 | 修复方案 | 文件 |
+|---|---|---|---|
+| S1-A1 | Hunt1-C1：全路由 0 鉴权 | before_request 鉴权门 + PUBLIC_PATHS 白名单 | auth_middleware.py, web_server.py |
+| S1-A2 | Hunt1-C2：CSRF 完全缺失 | Flask-WTF CSRFProtect + /api/csrf_token + 前端自动附加 | web_server.py, client.ts |
+| S1-A3 | Hunt1-C3：gunicorn CVE-2024-1135 | requirements.txt 20.1.0 → >=22.0.0（安装为 26.0.0） | requirements.txt |
+| S1-A4 | Hunt1-C4：upload 路径遍历+无鉴权 | secure_filename + magic bytes + 大小限制 + 绝对路径 | web_server.py |
+
+### 铁证（2026-05-19 23:xx +08:00）
+
+- 真重启：uptime_s=6.507（< 60）
+- S1-A1：无 key → HTTP 401；带 key → HTTP 200；/health 无需 key → HTTP 200
+- S1-A2：/api/csrf_token 返回 token；前端 POST 自动附 X-CSRFToken
+- S1-A3：pip show gunicorn → Version 26.0.0
+- S1-A4：路径遍历 `../../../../etc/passwd` → HTTP 400；/etc/passwd 未被覆写；非图片 magic bytes → HTTP 400；真实 PNG → HTTP 200
+- pytest：777 passed, 0 failed（test_upload_non_image_rejected 从 xfail 变 xpass，证明安全加固生效）
+- Playwright dashboard：加载正常（has_realnum=true: 4169/15569）
+
+### 关键 env 变量
+
+| env key | 默认值 | 说明 |
+|---|---|---|
+| STOCKANAL_API_KEY | 自动生成（打印到日志） | API 鉴权 key |
+| AUTH_REQUIRED | true | false=开发模式跳过鉴权 |
+| SECRET_KEY | 自动生成 | Flask session/CSRF 签名 |
+| MAX_UPLOAD_SIZE_MB | 5 | upload_image 大小限制 |
+| UPLOAD_DIR | /tmp/stockanal_uploads | 上传文件绝对目录 |
