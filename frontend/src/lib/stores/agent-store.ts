@@ -75,7 +75,10 @@ export const useAgentStore = create<AgentState>((set) => ({
       else updated.push(progress);
       return { agentProgresses: updated, overallProgress: progress.progress };
     }),
-  addToolCall: (tc) => set((s) => ({ toolCalls: [...s.toolCalls, tc] })),
+  addToolCall: (tc) => set((s) => {
+    const next = [...s.toolCalls, tc];
+    return { toolCalls: next.length > MAX_EVENTS ? next.slice(next.length - MAX_EVENTS) : next };
+  }),
   setToolCallResult: (id, result) =>
     set((s) => ({
       toolCalls: s.toolCalls.map((tc) =>

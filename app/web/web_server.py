@@ -1270,14 +1270,19 @@ def _bs_logout_on_exit():
 
 @app.route('/api/stock_profile', methods=['GET'])
 def api_stock_profile():
+    # Input: stock_code query param
+    # Output: JSON profile (industry/pe_ttm/pb/roe) or 503 on timeout
+    # Pos: baostock I/O 重路径，外层 ThreadPoolExecutor 兜底确保 ≤25s 必返回
     import baostock as bs
     from datetime import datetime, timedelta
     import time as _time
+    from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TPETimeout
+
     stock_code = request.args.get('stock_code', '')
     if not stock_code:
         return custom_jsonify({'error': 'stock_code required'}), 400
 
-    # 命中短缓存
+    # 命中短缓存（主线程快速返回，不进入任何 I/O）
     now = _time.time()
     cached = _PROFILE_CACHE.get(stock_code)
     if cached and (now - cached[0] < _PROFILE_TTL):
@@ -1286,76 +1291,112 @@ def api_stock_profile():
     # 名称：直接走预加载缓存，不走analyzer.get_stock_info（该函数在eastmoney阻断时会60s超时）
     _load_stock_name_cache()
     name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
-    profile = {'stock_code': stock_code, 'stock_name': name,
-               'industry': None, 'market_cap': None, 'pe_ttm': None, 'pb': None, 'roe': None}
     # baostock需要 sh./sz. 前缀
     prefix = 'sh.' if stock_code.startswith('6') else 'sz.'
     bs_code = prefix + stock_code
-    _ensure_bs_login()
-    with _BAOSTOCK_LOCK:
-      try:
-        pass  # 进程级session已登录
-        # 行业
+
+    # 2026-05-19 B10-FIX：
+    # 根因：原实现 _ensure_bs_login() 在主 Flask 线程调用（bs.login() 可阻塞 10-30s），
+    #       随后 _BAOSTOCK_LOCK.acquire(timeout=15) 在主线程同步等待锁（最多再加 15s），
+    #       两段合计可达 35s+，导致请求 hang。
+    # 修复：将 _ensure_bs_login() + lock acquire + 全部 baostock I/O 全部放入子线程，
+    #       外层 future.result(timeout=22) 是唯一 hard deadline，主 Flask 线程最多等 22s，
+    #       超时立即返回 503，释放 worker。
+    def _do_all_baostock():
+        _local_profile = {
+            'stock_code': stock_code, 'stock_name': name,
+            'industry': None, 'market_cap': None, 'pe_ttm': None, 'pb': None, 'roe': None
+        }
+        # --- login（含网络阻塞风险，必须在子线程里）---
+        _ensure_bs_login()
+
+        # --- 获取锁（最多等 18s，给外层 22s timeout 留 4s 余量）---
+        if not _BAOSTOCK_LOCK.acquire(timeout=18):
+            app.logger.warning(f"stock_profile lock acquire timeout 18s ({stock_code})，返回基础数据")
+            return _local_profile
+
         try:
-            rs = bs.query_stock_industry(code=bs_code)
-            rows = []
-            while rs.error_code == '0' and rs.next():
-                rows.append(rs.get_row_data())
-            if rows:
-                profile['industry'] = rows[0][3] if len(rows[0]) > 3 else None
-        except Exception as e:
-            app.logger.warning(f"baostock industry失败({stock_code}): {e}")
-        # PE/PB/close — 取最近可用交易日（baostock数据有2-3天滞后，向前扩展90天）
-        try:
-            end = datetime.now().strftime('%Y-%m-%d')
-            start = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
-            rs = bs.query_history_k_data_plus(bs_code,
-                'date,code,open,high,low,close,volume,amount,adjustflag,turn,tradestatus,pctChg,peTTM,pbMRQ,psTTM,pcfNcfTTM,isST',
-                start_date=start, end_date=end, frequency='d', adjustflag='3')
-            rows = []
-            while rs.error_code == '0' and rs.next():
-                rows.append(rs.get_row_data())
-            if rows:
-                last = rows[-1]
-                # 字段索引：5=close, 12=peTTM, 13=pbMRQ
-                def _f(i):
-                    try: return float(last[i]) if last[i] else None
-                    except: return None
-                profile['pe_ttm'] = _f(12)
-                profile['pb'] = _f(13)
-                close = _f(5)
-                # market_cap 需要total_share，由 query_stock_basic 或独立接口获取
-                if close:
-                    try:
-                        rs2 = bs.query_stock_basic(code=bs_code)
-                        # query_stock_basic returns: code, code_name, ipoDate, outDate, type, status
-                        # 不含 total_share，需要 query_history_k_data_plus 中的 turn 等估算不可行
-                        # 使用 akshare name cache中可能缺失 market cap，暂留close作价格展示
-                        pass
-                    except: pass
-        except Exception as e:
-            app.logger.warning(f"baostock k_data失败({stock_code}): {e}")
-        # ROE — 最近年报
-        try:
-            year = datetime.now().year
-            for y in [year - 1, year - 2]:
-                rs = bs.query_profit_data(code=bs_code, year=y, quarter=4)
+            # 行业
+            try:
+                rs = bs.query_stock_industry(code=bs_code)
                 rows = []
                 while rs.error_code == '0' and rs.next():
                     rows.append(rs.get_row_data())
-                if rows and len(rows[0]) > 3 and rows[0][3]:
-                    profile['roe'] = float(rows[0][3]) * 100  # baostock roeAvg 为小数
-                    break
+                if rows:
+                    _local_profile['industry'] = rows[0][3] if len(rows[0]) > 3 else None
+            except Exception as e:
+                app.logger.warning(f"baostock industry失败({stock_code}): {e}")
+
+            # PE/PB/close — 取最近可用交易日（baostock数据有2-3天滞后，向前扩展120天）
+            try:
+                end = datetime.now().strftime('%Y-%m-%d')
+                start = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
+                rs = bs.query_history_k_data_plus(bs_code,
+                    'date,code,open,high,low,close,volume,amount,adjustflag,turn,tradestatus,pctChg,peTTM,pbMRQ,psTTM,pcfNcfTTM,isST',
+                    start_date=start, end_date=end, frequency='d', adjustflag='3')
+                rows = []
+                while rs.error_code == '0' and rs.next():
+                    rows.append(rs.get_row_data())
+                if rows:
+                    last = rows[-1]
+                    # 字段索引：5=close, 12=peTTM, 13=pbMRQ
+                    def _f(i):
+                        try: return float(last[i]) if last[i] else None
+                        except: return None
+                    _local_profile['pe_ttm'] = _f(12)
+                    _local_profile['pb'] = _f(13)
+                    close = _f(5)
+                    # market_cap 需要total_share，query_stock_basic 不含该字段，暂留close
+                    if close:
+                        try:
+                            bs.query_stock_basic(code=bs_code)
+                        except: pass
+            except Exception as e:
+                app.logger.warning(f"baostock k_data失败({stock_code}): {e}")
+
+            # ROE — 最近年报
+            try:
+                year = datetime.now().year
+                for y in [year - 1, year - 2]:
+                    rs = bs.query_profit_data(code=bs_code, year=y, quarter=4)
+                    rows = []
+                    while rs.error_code == '0' and rs.next():
+                        rows.append(rs.get_row_data())
+                    if rows and len(rows[0]) > 3 and rows[0][3]:
+                        _local_profile['roe'] = float(rows[0][3]) * 100  # baostock roeAvg 为小数
+                        break
+            except Exception as e:
+                app.logger.warning(f"baostock profit失败({stock_code}): {e}")
+        finally:
+            _BAOSTOCK_LOCK.release()
+
+        return _local_profile
+
+    # 外层 executor：主 Flask 线程最多阻塞 22s，超时 → 503
+    _outer_pool = _TPE(max_workers=1, thread_name_prefix='profile_outer')
+    try:
+        fut = _outer_pool.submit(_do_all_baostock)
+        try:
+            profile = fut.result(timeout=22)
+        except _TPETimeout:
+            app.logger.warning(f"api_stock_profile overall timeout 22s ({stock_code})，返回 503")
+            return custom_jsonify({
+                'error': 'baostock_timeout',
+                'reason': 'overall_timeout_22s',
+                'stock_code': stock_code
+            }), 503
         except Exception as e:
-            app.logger.warning(f"baostock profit失败({stock_code}): {e}")
-      except Exception as e:
-        app.logger.error(f"baostock 查询失败: {e}")
+            app.logger.error(f"api_stock_profile 子线程异常 ({stock_code}): {e}")
+            return custom_jsonify({'error': 'internal_error', 'detail': str(e)}), 500
+    finally:
+        _outer_pool.shutdown(wait=False, cancel_futures=True)
+
     # 淘汰过期条目，防止无限增长
-    now = _time.time()
-    stale_keys = [k for k, (ts, _) in _PROFILE_CACHE.items() if now - ts > _PROFILE_TTL]
+    now2 = _time.time()
+    stale_keys = [k for k, (ts, _) in list(_PROFILE_CACHE.items()) if now2 - ts > _PROFILE_TTL]
     for k in stale_keys:
-        del _PROFILE_CACHE[k]
-    _PROFILE_CACHE[stock_code] = (now, profile)
+        _PROFILE_CACHE.pop(k, None)
+    _PROFILE_CACHE[stock_code] = (now2, profile)
     return custom_jsonify(profile)
 
 
@@ -4005,6 +4046,11 @@ def adapters_status():
     2026-05-18 B1 修复：原串行循环最多 22×5s=110s 导致端点 HANG；
     改为 ThreadPoolExecutor 并行，每个 future 独立 timeout=5s，整体 10s 内必返回。
     超时的 adapter 标记 degraded，不阻塞整体响应。
+    2026-05-19 B9 修复：with ThreadPoolExecutor 的 __exit__ 调用 shutdown(wait=True)；
+    当 as_completed 超时抛 TimeoutError 时，__exit__ 会等待所有未完成 future（包括
+    BaostockAdapter.health_check → bs.login() 无限阻塞），导致端点永久 HANG。
+    改为 try/finally 手动管理 pool，finally 用 shutdown(wait=False, cancel_futures=True)
+    确保超时后立即返回，不等待阻塞中的线程。
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
 
@@ -4014,21 +4060,31 @@ def adapters_status():
     _overall_timeout = float(os.getenv('ADAPTERS_STATUS_OVERALL_TIMEOUT', '10'))
     _per_call_timeout = float(os.getenv('ADAPTERS_STATUS_PER_CALL_TIMEOUT', '5'))
     # 并行执行所有 adapter 健康检查，整体超时由 ADAPTERS_STATUS_OVERALL_TIMEOUT 驱动
-    with ThreadPoolExecutor(max_workers=min(total, 16)) as pool:
+    # 不使用 with 语句：with __exit__ 默认 shutdown(wait=True)，会在超时时阻塞等待慢线程
+    pool = ThreadPoolExecutor(max_workers=min(total, 16))
+    try:
         future_map = {
             pool.submit(_hc_one, cls_name, mod_path, _per_call_timeout): cls_name
             for cls_name, mod_path in _ADAPTER_SPECS
         }
-        for fut in as_completed(future_map, timeout=_overall_timeout):
-            cls_name = future_map[fut]
-            try:
-                results[cls_name] = fut.result(timeout=0)  # result 已就绪，立即取
-            except _FutTimeout:
-                results[cls_name] = {"ok": False, "latency_ms": None, "error": "timeout", "status": "degraded"}
-            except Exception as exc:
-                results[cls_name] = {"ok": False, "latency_ms": None, "error": str(exc), "status": "degraded"}
+        try:
+            for fut in as_completed(future_map, timeout=_overall_timeout):
+                cls_name = future_map[fut]
+                try:
+                    results[cls_name] = fut.result(timeout=0)  # result 已就绪，立即取
+                except _FutTimeout:
+                    results[cls_name] = {"ok": False, "latency_ms": None, "error": "timeout", "status": "degraded"}
+                except Exception as exc:
+                    results[cls_name] = {"ok": False, "latency_ms": None, "error": str(exc), "status": "degraded"}
+        except _FutTimeout:
+            # as_completed 整体超时：未收集到的 future 在下面补 degraded
+            pass
+    finally:
+        # cancel_futures=True 取消排队但未运行的任务；wait=False 不等待正在运行的线程
+        # 这确保即使 BaostockAdapter.bs.login() 无限阻塞，此函数也能在 overall_timeout+ε 返回
+        pool.shutdown(wait=False, cancel_futures=True)
 
-    # as_completed 超过 10s 后未完成的 future 不会出现在结果中，补上 degraded
+    # as_completed 超过 overall_timeout 后未完成的 future 不会出现在结果中，补上 degraded
     for cls_name, _ in _ADAPTER_SPECS:
         if cls_name not in results:
             results[cls_name] = {"ok": False, "latency_ms": None, "error": "overall_timeout", "status": "degraded"}

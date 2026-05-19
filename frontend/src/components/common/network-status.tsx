@@ -30,6 +30,7 @@ export function NetworkStatus() {
     // 指数退避（首次失败到下次重试 1s，逐级翻倍封顶 16s）
     const BACKOFF = [1000, 2000, 4000, 8000, 16000];
     const STARTUP_GRACE_MS = 35000; // mount 后 35s 内即便累计失败也不显示 [REAL-01 2026-05-18 Q4 临界修正]
+    const STARTUP_PROBE_DELAY_MS = 8000; // 首次探测延迟，宽限期内不发任何探测
     const PROBE_TIMEOUT_MS = 8000;
 
     startupAtRef.current = Date.now();
@@ -107,8 +108,8 @@ export function NetworkStatus() {
       }
     };
 
-    // 启动后给后端 1s 后开始第一次探测（在 25s 启动宽限期内即便失败也不显示）
-    timerRef.current = setTimeout(checkApi, 1000);
+    // 启动后延迟 STARTUP_PROBE_DELAY_MS 再发第一次探测，前 8s 完全静默
+    timerRef.current = setTimeout(checkApi, STARTUP_PROBE_DELAY_MS);
 
     return () => {
       cancelled = true;
