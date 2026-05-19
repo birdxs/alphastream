@@ -1,5 +1,5 @@
-// Input: 基本面评分数据（score、财务指标、定性评估）
-// Output: 专业基本面评分卡组件（评分头部、定性评估标签、财务指标网格）
+// Input: 基本面评分数据（score、财务指标、定性评估，或 success=false 失败结构）
+// Output: 专业基本面评分卡组件（评分头部、定性评估标签、财务指标网格）；失败时显示 ErrorState
 // Pos: artifact-renderer.tsx的子组件，fundamental_metrics类型Artifact渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,6 +8,9 @@ import { Badge } from "@/components/ui/badge";
 
 interface Props {
   data: {
+    success?: boolean;
+    error?: string;
+    message?: string;
     score?: number;
     financial_health?: string;
     profitability?: string;
@@ -40,7 +43,15 @@ export function FundamentalScorecardArtifact({ data }: Props) {
     );
   }
 
-  const score = Number(data.score || 50);
+  if (data.success === false) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        {data.message ?? 'AI 分析不可用，请稍后重试'}
+      </div>
+    );
+  }
+
+  const score = Number(data.score ?? 0);
   const indicators = data.financial_indicators || {};
 
   const scoreColor = 'from-[#3737CC] to-[#6B5EE4]';

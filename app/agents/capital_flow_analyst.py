@@ -117,7 +117,7 @@ class CapitalFlowAnalystAgent:
 def _parse_ai_result(content: str) -> Dict[str, Any]:
     """解析AI输出的JSON结果，支持处理markdown代码块"""
     if not content:
-        return {'score': 50, 'ai_commentary': '未获取到AI分析结果', 'recommendation': '观望'}
+        return {'success': False, 'error': 'llm_parse_failed', 'message': '资金流向 AI 分析失败，请稍后重试'}
 
     # 尝试从markdown代码块中提取JSON
     json_str = content
@@ -129,7 +129,6 @@ def _parse_ai_result(content: str) -> Dict[str, Any]:
     try:
         result = json.loads(json_str)
         if isinstance(result, dict):
-            result.setdefault('score', 50)
             result.setdefault('ai_commentary', content)
             result.setdefault('recommendation', '观望')
             return result
@@ -142,20 +141,18 @@ def _parse_ai_result(content: str) -> Dict[str, Any]:
         try:
             result = json.loads(json_match.group(0))
             if isinstance(result, dict):
-                result.setdefault('score', 50)
                 result.setdefault('ai_commentary', content)
                 result.setdefault('recommendation', '观望')
                 return result
         except json.JSONDecodeError:
             pass
 
-    # JSON解析完全失败
-    logger.warning("资金流向分析JSON解析失败，使用纯文本模式")
+    # JSON解析完全失败，禁止伪装成中立评分
+    logger.warning("资金流向分析JSON解析失败，返回明确失败标志")
     return {
-        'score': 50,
-        'ai_commentary': content,
-        'recommendation': '观望',
-        'parse_warning': 'AI输出非标准JSON，已降级为纯文本'
+        'success': False,
+        'error': 'llm_parse_failed',
+        'message': '资金流向 AI 分析失败，请稍后重试'
     }
 
 

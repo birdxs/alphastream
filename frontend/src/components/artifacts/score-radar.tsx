@@ -1,5 +1,5 @@
-// Input: 多维度评分数据（趋势/动量/成交量/支撑/风险/综合）
-// Output: Recharts雷达图可视化组件
+// Input: 多维度评分数据（趋势/动量/成交量/支撑/风险/综合，或 success=false 失败结构）
+// Output: Recharts雷达图可视化组件；失败时显示 ErrorState
 // Pos: artifact-renderer.tsx的子组件，technical_indicators类型Artifact辅助渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -17,6 +17,9 @@ import { useThemeStore } from "@/lib/stores/theme-store";
 
 interface Props {
   data: {
+    success?: boolean;
+    error?: string;
+    message?: string;
     score?: number;
     trend_score?: number;
     momentum_score?: number;
@@ -30,13 +33,21 @@ interface Props {
 export function ScoreRadarArtifact({ data }: Props) {
   const { theme } = useThemeStore();
 
+  if (data.success === false) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        {data.message ?? 'AI 分析不可用，请稍后重试'}
+      </div>
+    );
+  }
+
   const radarData = [
-    { subject: "趋势", value: Number(data.trend_score || data.score || 50) },
-    { subject: "动量", value: Number(data.momentum_score || 50) },
-    { subject: "成交量", value: Number(data.volume_score || 50) },
-    { subject: "支撑", value: Number(data.support_score || 50) },
-    { subject: "风险", value: 100 - Number(data.risk_score || 50) },
-    { subject: "综合", value: Number(data.score || 50) },
+    { subject: "趋势", value: Number(data.trend_score ?? data.score ?? 0) },
+    { subject: "动量", value: Number(data.momentum_score ?? 0) },
+    { subject: "成交量", value: Number(data.volume_score ?? 0) },
+    { subject: "支撑", value: Number(data.support_score ?? 0) },
+    { subject: "风险", value: 100 - Number(data.risk_score ?? 50) },
+    { subject: "综合", value: Number(data.score ?? 0) },
   ];
 
   const avgScore = Math.round(radarData.reduce((sum, d) => sum + d.value, 0) / radarData.length);

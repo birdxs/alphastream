@@ -1,5 +1,5 @@
-// Input: 技术分析数据（score/trend/rsi/macd/volume/recommendation/支撑阻力位）
-// Output: 技术评分面板，含评分条、指标网格、价格支撑阻力展示
+// Input: 技术分析数据（score/trend/rsi/macd/volume/recommendation/支撑阻力位，或 success=false 失败结构）
+// Output: 技术评分面板，含评分条、指标网格、价格支撑阻力展示；失败时显示 ErrorState
 // Pos: artifact-renderer.tsx 的子组件，technical_indicators 类型 Artifact 渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,6 +8,9 @@ import { Badge } from "@/components/ui/badge";
 
 interface Props {
   data: {
+    success?: boolean;
+    error?: string;
+    message?: string;
     score?: number;
     trend?: string;
     rsi?: number;
@@ -22,7 +25,14 @@ interface Props {
 }
 
 export function TechnicalPanelArtifact({ data }: Props) {
-  const score = Number(data.score || 50);
+  if (data.success === false) {
+    return (
+      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+        {data.message ?? 'AI 分析不可用，请稍后重试'}
+      </div>
+    );
+  }
+  const score = Number(data.score ?? 0);
   const scoreGradient =
     score >= 80
       ? "bg-gradient-to-r from-[#46BEA3] to-[#34D399] bg-clip-text text-transparent"

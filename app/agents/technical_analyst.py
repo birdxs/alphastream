@@ -138,7 +138,7 @@ def _build_system_prompt(state: Dict[str, Any]) -> str:
 def _parse_ai_result(content: str) -> Dict[str, Any]:
     """解析AI输出的JSON结果，支持处理markdown代码块"""
     if not content:
-        return {'score': 50, 'ai_commentary': '未获取到AI分析结果', 'trend': '未知', 'recommendation': '观望'}
+        return {'success': False, 'error': 'llm_parse_failed', 'message': '技术面 AI 分析失败，请稍后重试'}
 
     # 尝试从markdown代码块中提取JSON
     json_str = content
@@ -151,7 +151,6 @@ def _parse_ai_result(content: str) -> Dict[str, Any]:
         result = json.loads(json_str)
         if isinstance(result, dict):
             # 确保必要字段存在
-            result.setdefault('score', 50)
             result.setdefault('ai_commentary', content)
             result.setdefault('trend', '未知')
             result.setdefault('recommendation', '观望')
@@ -165,7 +164,6 @@ def _parse_ai_result(content: str) -> Dict[str, Any]:
         try:
             result = json.loads(json_match.group(0))
             if isinstance(result, dict):
-                result.setdefault('score', 50)
                 result.setdefault('ai_commentary', content)
                 result.setdefault('trend', '未知')
                 result.setdefault('recommendation', '观望')
@@ -173,14 +171,12 @@ def _parse_ai_result(content: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # JSON解析完全失败，用纯文本作为ai_commentary
-    logger.warning("技术分析JSON解析失败，使用纯文本模式")
+    # JSON解析完全失败，禁止伪装成中立评分
+    logger.warning("技术分析JSON解析失败，返回明确失败标志")
     return {
-        'score': 50,
-        'ai_commentary': content,
-        'trend': '未知',
-        'recommendation': '观望',
-        'parse_warning': 'AI输出非标准JSON，已降级为纯文本'
+        'success': False,
+        'error': 'llm_parse_failed',
+        'message': '技术面 AI 分析失败，请稍后重试'
     }
 
 
