@@ -19,7 +19,7 @@ export async function GET(req: Request): Promise<Response> {
 
   let upstream: Response;
   try {
-    upstream = await fetch(BACKEND, { signal });
+    upstream = await fetch(BACKEND, { signal, cache: 'no-store' });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return new Response(JSON.stringify({ error: msg }), {
