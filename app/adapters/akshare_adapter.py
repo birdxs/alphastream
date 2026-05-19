@@ -12,13 +12,15 @@ import pandas as pd
 import logging
 import os
 import time
+import threading
 from typing import List, Dict, Optional
 from .base_adapter import BaseAdapter
 
 logger = logging.getLogger(__name__)
 
-# B16 AkshareAdapter 探针缓存常量
+# B16 AkshareAdapter 探针缓存常量（S1-C5: RLock 保护并发双字段写）
 _AKSHARE_HC_CACHE = {'ok': None, 'ts': 0.0}
+_AKSHARE_HC_CACHE_LOCK = threading.RLock()
 _AKSHARE_HC_TTL = float(os.getenv('AKSHARE_HC_CACHE_TTL', '60'))
 _AKSHARE_HC_PROBE_SYMBOL = os.getenv('AKSHARE_HC_PROBE_SYMBOL', 'SH600519')
 
@@ -345,14 +347,18 @@ class AkshareAdapter(BaseAdapter):
         - 与 ADAPTERS_STATUS_PER_CALL_TIMEOUT=5s 兼容
         """
         now = time.time()
-        if _AKSHARE_HC_CACHE['ok'] is not None and (now - _AKSHARE_HC_CACHE['ts']) < _AKSHARE_HC_TTL:
-            return _AKSHARE_HC_CACHE['ok']
+        # S1-C5: 读缓存加锁，防止并发下双字段非原子读
+        with _AKSHARE_HC_CACHE_LOCK:
+            if _AKSHARE_HC_CACHE['ok'] is not None and (now - _AKSHARE_HC_CACHE['ts']) < _AKSHARE_HC_TTL:
+                return _AKSHARE_HC_CACHE['ok']
         try:
             df = ak.stock_individual_spot_xq(symbol=_AKSHARE_HC_PROBE_SYMBOL)
             ok = df is not None and len(df) > 0
         except Exception as e:
             logger.warning(f"akshare健康检查失败: {type(e).__name__}: {e}")
             ok = False
-        _AKSHARE_HC_CACHE['ok'] = ok
-        _AKSHARE_HC_CACHE['ts'] = now
+        # S1-C5: 写缓存加锁，保证 ok 和 ts 同时更新的原子性
+        with _AKSHARE_HC_CACHE_LOCK:
+            _AKSHARE_HC_CACHE['ok'] = ok
+            _AKSHARE_HC_CACHE['ts'] = now
         return ok

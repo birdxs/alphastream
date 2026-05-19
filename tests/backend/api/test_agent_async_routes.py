@@ -26,6 +26,11 @@ import pytest
 # 共用工具：等待异步线程把任务文件写盘                                       #
 # --------------------------------------------------------------------------- #
 
+def _has_error(body: dict) -> bool:
+    """兼容旧 {'error': ...} 与新统一外壳 {'error_code': ..., 'success': False}"""
+    return "error" in body or "error_code" in body
+
+
 def _wait_task_persisted(session_manager, task_id: str, timeout: float = 3.0):
     """轮询 session_manager.load_task 直到拿到非 None，或超时。"""
     deadline = time.time() + timeout
@@ -92,7 +97,7 @@ class TestStartAgentAnalysis:
         )
         assert resp.status_code == 400
         body = resp.get_json()
-        assert 'error' in body
+        assert _has_error(body)
 
     def test_start_agent_analysis_missing_stock_code(self, flask_client):
         """错误路径：缺失 stock_code → 400。"""
@@ -102,7 +107,7 @@ class TestStartAgentAnalysis:
         )
         assert resp.status_code == 400
         body = resp.get_json()
-        assert 'error' in body
+        assert _has_error(body)
 
 
 # --------------------------------------------------------------------------- #
@@ -144,7 +149,7 @@ class TestAgentAnalysisStatus:
         resp = flask_client.get('/api/agent_analysis_status/nonexistent-task-xyz-999')
         assert resp.status_code == 404
         body = resp.get_json()
-        assert 'error' in body
+        assert _has_error(body)
 
 
 # --------------------------------------------------------------------------- #
@@ -284,7 +289,7 @@ class TestAgentSubmitApproval:
         )
         assert resp.status_code == 400
         body = resp.get_json()
-        assert 'error' in body
+        assert _has_error(body)
 
     def test_submit_approval_unknown_task(self, flask_client):
         """错误路径：未注册的 task_id → 404。"""
@@ -294,7 +299,7 @@ class TestAgentSubmitApproval:
         )
         assert resp.status_code == 404
         body = resp.get_json()
-        assert 'error' in body
+        assert _has_error(body)
 
 
 # --------------------------------------------------------------------------- #
@@ -414,7 +419,7 @@ class TestAgentAnalysisHistory:
         resp = flask_client.get('/api/agent_analysis_history')
         assert resp.status_code == 500
         body = resp.get_json()
-        assert 'error' in body
+        assert _has_error(body)
 
 
 # --------------------------------------------------------------------------- #

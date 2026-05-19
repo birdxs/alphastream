@@ -18,6 +18,7 @@ from logging.handlers import RotatingFileHandler
 import traceback
 import os
 import json
+import tempfile
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask_cors import CORS
@@ -705,7 +706,7 @@ def analyze():
         return jsonify({'results': results})
     except Exception as e:
         app.logger.error(f"分析股票时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '行情分析失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/north_flow_history', methods=['POST'])
@@ -732,7 +733,7 @@ def api_north_flow_history():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"获取北向资金历史数据出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '北向资金数据加载失败，请稍后重试', details=str(e))
 
 
 @app.route('/search_us_stocks', methods=['GET'])
@@ -747,7 +748,7 @@ def search_us_stocks():
 
     except Exception as e:
         app.logger.error(f"搜索美股代码时出错: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '搜索股票失败，请稍后重试', details=str(e))
 
 
 # 新增可视化分析页面路由
@@ -910,7 +911,7 @@ def start_stock_analysis():
 
     except Exception as e:
         app.logger.error(f"启动个股分析任务时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '启动分析任务失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/analysis_status/<task_id>', methods=['GET'])
@@ -1025,7 +1026,7 @@ def start_etf_analysis():
 
     except Exception as e:
         app.logger.error(f"启动ETF分析任务时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '启动ETF分析任务失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/etf_analysis_status/<task_id>', methods=['GET'])
@@ -1125,21 +1126,56 @@ def enhanced_analysis():
 
     except Exception as e:
         app.logger.error(f"执行增强版分析时出错: {traceback.format_exc()}")
-        return custom_jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '增强分析执行失败，请稍后重试', details=str(e))
 
 
-# 添加在web_server.py主代码中
+# ============ 统一错误响应外壳（S1-C1 Hunt3-Critical 2026-05-20） ============
+# Input: error_code 字符串, 用户友好 message, 可选 details（仅 debug 暴露）
+# Output: JSON {success:false, error_code, message} + HTTP status
+# Pos: 所有 API 错误出口统一经此函数，防止内部细节泄露
+ERROR_CODES = {
+    'INVALID_INPUT': 400, 'UNAUTHORIZED': 401, 'FORBIDDEN': 403,
+    'NOT_FOUND': 404, 'RATE_LIMITED': 429, 'INTERNAL': 500,
+    'UPSTREAM_TIMEOUT': 504, 'UPSTREAM_FAILED': 502, 'DEGRADED': 503,
+}
+
+
+def api_error(code: str = 'INTERNAL', message: str = '服务异常，请稍后重试',
+              details=None, status: int = None):
+    """统一错误响应外壳：不泄露 str(e) / traceback 到 response"""
+    resp = {
+        'success': False,
+        'error_code': code,
+        'message': message,
+    }
+    if details and app.debug:
+        resp['details'] = details  # 仅 debug 模式可见
+    return jsonify(resp), status or ERROR_CODES.get(code, 500)
+
+
+@app.errorhandler(Exception)
+def handle_unhandled(e):
+    """兜底：未被路由 catch 的异常；HTTPException（4xx/5xx）保持原状态码透传"""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        # 405/404 等 werkzeug 标准异常：透传状态码，不升级为 500
+        if request.path.startswith('/api/'):
+            code_map = {404: 'NOT_FOUND', 405: 'INVALID_INPUT', 400: 'INVALID_INPUT',
+                        401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 429: 'RATE_LIMITED'}
+            err_code = code_map.get(e.code, 'INTERNAL')
+            return api_error(err_code, e.description or str(e), status=e.code)
+        return e  # 非 API 路径，Flask 默认 HTML 处理
+    app.logger.exception(f"Unhandled exception in {request.path}: {e}")
+    if request.path.startswith('/api/'):
+        return api_error('INTERNAL', '服务内部错误，请稍后重试', details=str(e))
+    return render_template('error.html', error_code=500, message="服务器内部错误"), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """处理404错误"""
     if request.path.startswith('/api/'):
-        # 为API请求返回JSON格式的错误
-        return jsonify({
-            'error': '找不到请求的API端点',
-            'path': request.path,
-            'method': request.method
-        }), 404
-    # 为网页请求返回HTML错误页
+        return api_error('NOT_FOUND', '找不到请求的API端点')
     return render_template('error.html', error_code=404, message="找不到请求的页面"), 404
 
 
@@ -1148,12 +1184,7 @@ def server_error(error):
     """处理500错误"""
     app.logger.error(f"服务器错误: {str(error)}")
     if request.path.startswith('/api/'):
-        # 为API请求返回JSON格式的错误
-        return jsonify({
-            'error': '服务器内部错误',
-            'message': str(error)
-        }), 500
-    # 为网页请求返回HTML错误页
+        return api_error('INTERNAL', '服务器内部错误，请稍后重试')
     return render_template('error.html', error_code=500, message="服务器内部错误"), 500
 
 
@@ -1162,6 +1193,7 @@ def server_error(error):
 _STOCK_NAME_CACHE = {}
 _CACHE_LOADED = False
 _CACHE_LOCK = threading.Lock()
+_STOCK_NAME_CACHE_LOCK = threading.RLock()  # S1-C4: 并发读写保护（启动期循环写与请求读并发）
 
 
 def _load_stock_name_cache():
@@ -1186,8 +1218,9 @@ def _load_stock_name_cache():
                 except _FTimeout:
                     app.logger.warning("加载A股名称缓存超时(>5s)，本进程不再重试")
                     return
-            for _, row in df.iterrows():
-                _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
+            with _STOCK_NAME_CACHE_LOCK:
+                for _, row in df.iterrows():
+                    _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
             app.logger.info(f"A股名称缓存加载完成，共 {len(_STOCK_NAME_CACHE)} 条")
         except Exception as e:
             app.logger.warning(f"加载A股名称缓存失败: {str(e)}")
@@ -1234,8 +1267,9 @@ def _get_stock_name_safe(stock_code, market_type='A'):
 
     # 2. 降级：全量A股缓存
     _load_stock_name_cache()
-    if stock_code in _STOCK_NAME_CACHE:
-        return _STOCK_NAME_CACHE[stock_code]
+    with _STOCK_NAME_CACHE_LOCK:
+        if stock_code in _STOCK_NAME_CACHE:
+            return _STOCK_NAME_CACHE[stock_code]
 
     # 3. 最终降级
     return stock_code
@@ -1322,7 +1356,7 @@ def get_stock_data():
     except Exception as e:
         app.logger.error(f"获取股票数据时出错: {str(e)}")
         app.logger.error(traceback.format_exc())
-        return custom_jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '行情数据加载失败，请稍后重试', details=str(e))
 
 
 # 股票概要：名称/行业/市值/PE/PB/ROE — 供对比页快速对比使用（baostock主，不依赖eastmoney）
@@ -1331,9 +1365,32 @@ import threading as _threading
 import atexit as _atexit
 _BAOSTOCK_LOCK = _threading.Lock()
 _PROFILE_CACHE = {}  # {stock_code: (ts, profile)}
+_PROFILE_CACHE_LOCK = _threading.RLock()  # S1-C3: 并发读写保护
 _PROFILE_TTL = 3600  # 1小时
 _PROFILE_STALE_MAX_S = int(os.getenv('PROFILE_STALE_MAX_S', '86400'))  # B16：stale cache 最长留存
 _BS_LOGGED_IN = False
+
+
+def _profile_cache_get(key):
+    """S1-C3: 线程安全读 _PROFILE_CACHE"""
+    with _PROFILE_CACHE_LOCK:
+        return _PROFILE_CACHE.get(key)
+
+
+def _profile_cache_set(key, value):
+    """S1-C3: 线程安全写 _PROFILE_CACHE"""
+    with _PROFILE_CACHE_LOCK:
+        _PROFILE_CACHE[key] = value
+
+
+def _profile_cache_evict_and_set(stock_code, value, ttl):
+    """S1-C3: 先淘汰过期再写入，整体加锁避免 dict size change"""
+    now = time.time()
+    with _PROFILE_CACHE_LOCK:
+        stale_keys = [k for k, (ts, _) in _PROFILE_CACHE.items() if now - ts > ttl]
+        for k in stale_keys:
+            _PROFILE_CACHE.pop(k, None)
+        _PROFILE_CACHE[stock_code] = value
 
 def _ensure_bs_login():
     # [Batch8-FIX 2026-05-19] DISABLE_NETWORK=1 时跳过真实 baostock 网络连接（测试环境）
@@ -1374,7 +1431,7 @@ def api_stock_profile():
 
     # 命中短缓存（主线程快速返回，不进入任何 I/O）
     now = _time.time()
-    cached = _PROFILE_CACHE.get(stock_code)
+    cached = _profile_cache_get(stock_code)
     if cached and (now - cached[0] < _PROFILE_TTL):
         return custom_jsonify(cached[1])
 
@@ -1583,7 +1640,7 @@ def api_stock_profile():
                 return resp
 
             # akshare 也失败 → 尝试 stale cache
-            _stale = _PROFILE_CACHE.get(stock_code)
+            _stale = _profile_cache_get(stock_code)
             if _stale:
                 _stale_ts, _stale_data = _stale if isinstance(_stale, tuple) else (0, _stale)
                 if (_time.time() - _stale_ts) < _PROFILE_STALE_MAX_S:
@@ -1603,12 +1660,9 @@ def api_stock_profile():
     finally:
         _outer_pool.shutdown(wait=False, cancel_futures=True)
 
-    # 淘汰过期条目，防止无限增长
+    # 淘汰过期条目并写入（S1-C3 原子操作，整体在锁内）
     now2 = _time.time()
-    stale_keys = [k for k, (ts, _) in list(_PROFILE_CACHE.items()) if now2 - ts > _PROFILE_TTL]
-    for k in stale_keys:
-        _PROFILE_CACHE.pop(k, None)
-    _PROFILE_CACHE[stock_code] = (now2, profile)
+    _profile_cache_evict_and_set(stock_code, (now2, profile), _PROFILE_TTL)
     return custom_jsonify(profile)
 
 
@@ -1638,7 +1692,9 @@ def api_stock_name_search():
         exact = []
         prefix = []
         contains = []
-        for code, name in _STOCK_NAME_CACHE.items():
+        with _STOCK_NAME_CACHE_LOCK:
+            _cache_snapshot = dict(_STOCK_NAME_CACHE)
+        for code, name in _cache_snapshot.items():
             if name == q:
                 exact.append({'stock_code': code, 'stock_name': name})
             elif name.startswith(q):
@@ -1803,7 +1859,7 @@ def start_market_scan():
 
     except Exception as e:
         app.logger.error(f"启动市场扫描任务时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '启动市场扫描任务失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/scan_status/<task_id>', methods=['GET'])
@@ -2098,7 +2154,7 @@ def get_index_stocks():
         return jsonify({'stock_list': stock_list})
     except Exception as e:
         app.logger.error(f"获取指数成分股时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取指数成分股失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/industry_stocks', methods=['GET'])
@@ -2120,7 +2176,7 @@ def get_industry_stocks():
         return jsonify({'stock_list': stock_list})
     except Exception as e:
         app.logger.error(f"获取行业成分股时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取行业成分股失败，请稍后重试', details=str(e))
 
 
 # Issue #29: 按板块获取股票列表（科创板/创业板/北交所等）
@@ -2154,7 +2210,7 @@ def get_board_stocks():
         return jsonify({'stock_list': stock_list, 'count': len(stock_list), 'index_name': index_name})
     except Exception as e:
         app.logger.error(f"获取板块股票时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取板块股票失败，请稍后重试', details=str(e))
 
 
 # 添加到web_server.py
@@ -2263,7 +2319,7 @@ def api_fundamental_analysis():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"基本面分析出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '基本面分析失败，请稍后重试', details=str(e))
 
 
 # 资金流向分析路由
@@ -2281,7 +2337,7 @@ def api_concept_fund_flow():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error getting concept fund flow: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取概念资金流向失败，请稍后重试', details=str(e))
 
 
 # 获取个股资金流向排名的API端点
@@ -2296,7 +2352,7 @@ def api_individual_fund_flow_rank():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error getting individual fund flow ranking: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取个股资金流向排名失败，请稍后重试', details=str(e))
 
 
 # 获取个股资金流向的API端点
@@ -2315,7 +2371,7 @@ def api_individual_fund_flow():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error getting individual fund flow: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取个股资金流向失败，请稍后重试', details=str(e))
 
 
 # 获取板块内股票的API端点
@@ -2333,7 +2389,7 @@ def api_sector_stocks():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error getting sector stocks: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取板块股票失败，请稍后重试', details=str(e))
 
 
 # Update the existing capital flow API endpoint
@@ -2359,7 +2415,7 @@ def api_capital_flow():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error calculating capital flow score: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '资金流向评分计算失败，请稍后重试', details=str(e))
 
 
 # 情景预测路由
@@ -2385,7 +2441,7 @@ def api_scenario_predict():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"情景预测出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '情景预测失败，请稍后重试', details=str(e))
 
 
 # 智能问答路由
@@ -2411,7 +2467,7 @@ def api_qa():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"智能问答出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '智能问答失败，请稍后重试', details=str(e))
 
 
 # 风险分析路由
@@ -2436,7 +2492,7 @@ def api_risk_analysis():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"风险分析出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '风险分析失败，请稍后重试', details=str(e))
 
 
 # 投资组合风险分析路由
@@ -2455,7 +2511,7 @@ def api_portfolio_risk():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"投资组合风险分析出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '组合风险分析失败，请稍后重试', details=str(e))
 
 
 # 指数分析路由
@@ -2474,7 +2530,7 @@ def api_index_analysis():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"指数分析出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '指数分析失败，请稍后重试', details=str(e))
 
 
 # 行业分析路由
@@ -2493,7 +2549,7 @@ def api_industry_analysis():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"行业分析出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '行业分析失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/industry_fund_flow', methods=['GET'])
@@ -2507,7 +2563,7 @@ def api_industry_fund_flow():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"获取行业资金流向数据出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取行业资金流向失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/industry_detail', methods=['GET'])
@@ -2528,7 +2584,7 @@ def api_industry_detail():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"获取行业详细信息出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取行业详情失败，请稍后重试', details=str(e))
 
 
 # 行业比较路由
@@ -2543,7 +2599,7 @@ def api_industry_compare():
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"行业比较出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '行业对比失败，请稍后重试', details=str(e))
 
 
 # 保存股票分析结果到数据库
@@ -2609,7 +2665,7 @@ def get_history_analysis():
 
     except Exception as e:
         app.logger.error(f"获取历史分析结果时出错: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取历史分析失败，请稍后重试', details=str(e))
     finally:
         if session:
             session.close()
@@ -2801,6 +2857,29 @@ def get_news_sentiment():
 
 
 # --- Start of new FileSessionManager implementation ---
+def atomic_write_json(filepath, data, encoder_cls=None):
+    """原子写 JSON：tempfile + os.replace + fsync，防止 read/write 并发拿到半文件（S1-C2）
+    Input: filepath(str|Path), data(dict/list), encoder_cls(JSONEncoder 子类)
+    Output: None，成功则 filepath 替换为新内容
+    Pos: FileSessionManager.save_task 唯一写出口
+    """
+    filepath = str(filepath)
+    dirpath = os.path.dirname(filepath) or '.'
+    fd, tmppath = tempfile.mkstemp(dir=dirpath, prefix='.tmp_', suffix='.json')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4, cls=encoder_cls)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmppath, filepath)
+    except Exception:
+        try:
+            os.unlink(tmppath)
+        except OSError:
+            pass
+        raise
+
+
 class FileSessionManager:
     """A Flask-compatible file-based session manager for agent tasks."""
     def __init__(self, data_dir):
@@ -2816,8 +2895,7 @@ class FileSessionManager:
             return
         task_id = task_data['id']
         task_file = self._get_task_path(task_id)
-        with open(task_file, 'w', encoding='utf-8') as f:
-            json.dump(task_data, f, ensure_ascii=False, indent=4, cls=NumpyJSONEncoder)
+        atomic_write_json(task_file, task_data, encoder_cls=NumpyJSONEncoder)
 
     def load_task(self, task_id):
         task_file = self._get_task_path(task_id)
@@ -3099,7 +3177,7 @@ def start_agent_analysis():
 
     except Exception as e:
         app.logger.error(f"启动智能体分析时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '启动智能体分析失败，请稍后重试', details=str(e))
 
 @app.route('/api/agent_analysis_status/<task_id>', methods=['GET'])
 def get_agent_analysis_status(task_id):
@@ -3141,7 +3219,7 @@ def get_agent_analysis_history():
         return custom_jsonify({'history': history})
     except Exception as e:
         app.logger.error(f"获取分析历史时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取智能体分析历史失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/delete_agent_analysis', methods=['POST'])
@@ -3184,7 +3262,7 @@ def delete_agent_analysis():
 
     except Exception as e:
         app.logger.error(f"删除分析历史时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '删除分析记录失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/agent_pending_approvals', methods=['GET'])
@@ -3195,7 +3273,7 @@ def get_pending_approvals():
         pending = approval_manager.get_pending_approvals()
         return jsonify({'approvals': pending})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取待审批任务失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/agent_submit_approval', methods=['POST'])
@@ -3214,7 +3292,7 @@ def submit_agent_approval():
             return jsonify({'message': '审批已提交', 'approved': approved})
         return jsonify({'error': '未找到待审批任务'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '提交审批失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/active_tasks', methods=['GET'])
@@ -3237,7 +3315,7 @@ def get_active_tasks():
         return custom_jsonify({'active_tasks': active_tasks_list})
     except Exception as e:
         app.logger.error(f"获取活动任务时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取活跃任务失败，请稍后重试', details=str(e))
 
 
 # ===== MCP 工具服务端点 =====
@@ -3249,7 +3327,7 @@ def mcp_list_tools():
         from app.mcp.stock_data_server import MCP_SERVER_CONFIG
         return jsonify(MCP_SERVER_CONFIG)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return api_error('INTERNAL', '获取MCP工具列表失败，请稍后重试', details=str(e))
 
 @app.route('/api/mcp/call', methods=['POST'])
 def mcp_call_tool():

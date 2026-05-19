@@ -154,8 +154,12 @@ def get_checkpointer():
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, 'langgraph_checkpoint.db')
             conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
+            # S1-C6: WAL 模式，并发 agent state 读写不阻塞（多 reader + 1 writer）
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA synchronous=NORMAL')
+            conn.execute('PRAGMA busy_timeout=5000')
             _checkpointer_instance = SqliteSaver(conn)
-            logger.info(f"LangGraph Checkpointer 已初始化: {db_path}")
+            logger.info(f"LangGraph Checkpointer 已初始化(WAL): {db_path}")
         except Exception as e:
             logger.warning(f"LangGraph Checkpointer 初始化失败, 降级为无持久化模式: {type(e).__name__}: {e}")
             _checkpointer_instance = None

@@ -38,6 +38,11 @@ def _json(resp) -> Dict[str, Any]:
     return json.loads(resp.get_data(as_text=True))
 
 
+def _has_error(body: Dict[str, Any]) -> bool:
+    """兼容旧格式 {'error': ...} 和新统一外壳 {'error_code': ..., 'success': False}"""
+    return "error" in body or "error_code" in body
+
+
 # =========================================================================
 # 1-3. 市场扫描三件套
 # =========================================================================
@@ -61,14 +66,14 @@ class TestMarketScan:
         resp = flask_client.post("/api/start_market_scan", json={"stock_list": []})
         assert resp.status_code == 400
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
     def test_scan_status_not_found(self, flask_client):
         """错误路径：未知 task_id → 404。"""
         resp = flask_client.get("/api/scan_status/nonexistent-task-xyz")
         assert resp.status_code == 404
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
     def test_scan_status_happy(self, flask_client):
         """快乐路径：注入伪 task → 返回状态。"""
@@ -148,7 +153,7 @@ class TestStockComposition:
         with patch("app.core.data_provider.get_data_provider", return_value=mock_dp):
             resp = flask_client.get("/api/index_stocks?index_code=000300")
         assert resp.status_code == 500
-        assert "error" in _json(resp)
+        assert _has_error(_json(resp))
 
     def test_industry_stocks_happy(self, flask_client):
         mock_dp = MagicMock()
@@ -182,7 +187,7 @@ class TestStockComposition:
         resp = flask_client.get("/api/board_stocks?board=invalid_xxx")
         assert resp.status_code == 400
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
 
 # =========================================================================
@@ -207,7 +212,7 @@ class TestFundFlow:
             mock_cfa.get_concept_fund_flow.side_effect = RuntimeError("API限流")
             resp = flask_client.get("/api/concept_fund_flow")
         assert resp.status_code == 500
-        assert "error" in _json(resp)
+        assert _has_error(_json(resp))
 
     def test_individual_fund_flow_rank_happy(self, flask_client):
         with patch("app.web.web_server.capital_flow_analyzer") as mock_cfa:
@@ -237,7 +242,7 @@ class TestHistoryAnalysis:
         resp = flask_client.get("/api/history_analysis")
         assert resp.status_code == 400
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
     def test_history_analysis_response(self, flask_client):
         """快乐/错误路径：根据数据库是否启用，分别验证不同 200/400 行为。"""
@@ -248,7 +253,7 @@ class TestHistoryAnalysis:
             resp = flask_client.get("/api/history_analysis?stock_code=600000")
             assert resp.status_code == 400
             body = _json(resp)
-            assert "数据库" in body.get("error", "")
+            assert "数据库" in (body.get("error") or body.get("message") or "")
         else:
             # 启用了数据库：mock get_session 返回空列表
             mock_session = MagicMock()
@@ -288,13 +293,13 @@ class TestDeleteAgentAnalysis:
         )
         assert resp.status_code == 400
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
     def test_delete_agent_analysis_empty(self, flask_client):
         """错误路径：空列表 → 400。"""
         resp = flask_client.post("/api/delete_agent_analysis", json={"task_ids": []})
         assert resp.status_code == 400
-        assert "error" in _json(resp)
+        assert _has_error(_json(resp))
 
 
 # =========================================================================
@@ -330,7 +335,7 @@ class TestUploadImage:
         resp = flask_client.post("/api/upload_image", data={})
         assert resp.status_code == 400
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
     def test_upload_image_invalid_type(self, flask_client):
         """错误路径：非图片格式 → 400。"""
@@ -344,7 +349,7 @@ class TestUploadImage:
         )
         assert resp.status_code == 400
         body = _json(resp)
-        assert "error" in body
+        assert _has_error(body)
 
     def test_upload_image_happy(self, flask_client):
         """快乐路径：上传 PNG → 200。"""

@@ -44,6 +44,16 @@ def _json(resp) -> Dict[str, Any]:
     return data
 
 
+def _has_error(body: Dict[str, Any]) -> bool:
+    """兼容旧 {'error': ...} 与新统一外壳 {'error_code': ..., 'success': False}"""
+    return "error" in body or "error_code" in body
+
+
+def _get_error_msg(body: Dict[str, Any]) -> str:
+    """从旧/新外壳中提取错误信息字符串"""
+    return body.get("error") or body.get("message") or ""
+
+
 def _no_stacktrace(resp) -> None:
     """断言响应体不泄露 Python 堆栈关键字。"""
     body = resp.data.decode("utf-8", errors="replace").lower()
@@ -63,7 +73,7 @@ class TestStockDataRoute:
         resp = flask_client.get("/api/stock_data")
         assert resp.status_code == 400
         data = _json(resp)
-        assert "error" in data and "股票代码" in data["error"]
+        assert _has_error(data) and "股票代码" in _get_error_msg(data)
         _no_stacktrace(resp)
 
     def test_invalid_stock_code_returns_400(self, flask_client):
@@ -110,7 +120,7 @@ class TestStockDataRoute:
         resp = flask_client.get("/api/stock_data?stock_code=600001&market_type=A&period=3m")
         assert resp.status_code == 404
         data = _json(resp)
-        assert "error" in data
+        assert _has_error(data)
         _no_stacktrace(resp)
 
 
@@ -123,7 +133,7 @@ class TestStockNameRoute:
         resp = flask_client.get("/api/stock_name")
         assert resp.status_code == 400
         data = _json(resp)
-        assert data.get("error") == "stock_code required"
+        assert _has_error(data)  # stock_code required (old: error key, new: error_code key)
         _no_stacktrace(resp)
 
     def test_happy_path_uses_cache(self, flask_client, monkeypatch):
@@ -159,7 +169,7 @@ class TestStockProfileRoute:
         resp = flask_client.get("/api/stock_profile")
         assert resp.status_code == 400
         data = _json(resp)
-        assert data.get("error") == "stock_code required"
+        assert _has_error(data)  # stock_code required (old: error key, new: error_code key)
         _no_stacktrace(resp)
 
     def test_happy_path_with_mocked_baostock(self, flask_client, monkeypatch):
@@ -238,7 +248,7 @@ class TestStockNameSearchRoute:
         resp = flask_client.get("/api/stock_name_search")
         assert resp.status_code == 400
         data = _json(resp)
-        assert data.get("error") == "q required"
+        assert _has_error(data)  # q required (old: error key, new: error_code key)
         assert data.get("results") == []
         _no_stacktrace(resp)
 
@@ -379,7 +389,7 @@ class TestNorthFlowHistoryRoute:
         resp = flask_client.post("/api/north_flow_history", json={"days": 10})
         assert resp.status_code == 400
         data = _json(resp)
-        assert "error" in data and "股票代码" in data["error"]
+        assert _has_error(data) and "股票代码" in _get_error_msg(data)
         _no_stacktrace(resp)
 
     def test_happy_path(self, flask_client, monkeypatch):
@@ -410,7 +420,7 @@ class TestSearchUsStocksRoute:
         resp = flask_client.get("/search_us_stocks")
         assert resp.status_code == 400
         data = _json(resp)
-        assert "error" in data and "搜索关键词" in data["error"]
+        assert _has_error(data) and "搜索关键词" in _get_error_msg(data)
         _no_stacktrace(resp)
 
     def test_happy_path(self, flask_client, monkeypatch):
@@ -437,5 +447,5 @@ class TestSearchUsStocksRoute:
         resp = flask_client.get("/search_us_stocks?keyword=a")
         assert resp.status_code == 500
         data = _json(resp)
-        assert "error" in data
+        assert _has_error(data)
         _no_stacktrace(resp)
