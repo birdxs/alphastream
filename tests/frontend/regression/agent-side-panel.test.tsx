@@ -2,10 +2,13 @@
 // Output : 基本渲染验证 + UI 调整后可见性
 // Pos    : tests/frontend/regression/ - REGR-01
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, act } from "@testing-library/react";
 import React from "react";
 import { AgentSidePanel } from "@/components/agent/agent-side-panel";
+
+// 快照测试固定时钟：2026-05-18 16:17:33 CST (UTC+8)
+const FIXED_NOW = new Date("2026-05-18T08:17:33.000Z").getTime();
 
 vi.mock("@/lib/api/client", () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), sse: vi.fn() },
@@ -21,6 +24,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("REGR-01 AgentSidePanel 基本渲染", () => {
   it("默认 props 渲染不抛错", () => {
     const { container } = render(<AgentSidePanel />);
@@ -28,8 +35,13 @@ describe("REGR-01 AgentSidePanel 基本渲染", () => {
     expect(container).toBeTruthy();
   });
 
-  it("DOM 快照（含闭合态）", () => {
-    const { container } = render(<AgentSidePanel />);
+  it("DOM 快照（含闭合态）", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    let container!: HTMLElement;
+    await act(async () => {
+      ({ container } = render(<AgentSidePanel />));
+    });
     expect(container.firstChild).toMatchSnapshot();
   });
 });

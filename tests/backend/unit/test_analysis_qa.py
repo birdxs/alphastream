@@ -116,8 +116,12 @@ def test_answer_question_with_tool_call(qa):
 
 # ---------------------------------------------------------------- 4. LLM 失败
 def test_answer_question_llm_failure(qa):
+    mock_fa = MagicMock()
+    mock_fa.get_financial_indicators.return_value = {}
     with patch("app.analysis.stock_qa.chat_completion",
-               return_value=(None, "API quota exhausted")):
+               return_value=(None, "API quota exhausted")), \
+         patch("app.analysis.fundamental_analyzer.FundamentalAnalyzer",
+               return_value=mock_fa):
         result = qa.answer_question("600519", "估值")
     assert "error" in result
     assert result["error"] == "API quota exhausted"

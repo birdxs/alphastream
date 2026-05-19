@@ -65,6 +65,10 @@ def stub_deps(monkeypatch):
     mock_nf = MagicMock(name="mock_news_fetcher")
     mock_nf.get_latest_news.return_value = []
     monkeypatch.setattr("app.analysis.news_fetcher.news_fetcher", mock_nf)
+    try:
+        monkeypatch.setattr("app.core.search.search_web", lambda *a, **kw: [])
+    except AttributeError:
+        pass  # 模块未安装时忽略
 
     # 保留 stub_deps dict（旧测试断言引用 akshare/yfinance 的测试将通过 skip 接口验证）
     aks = MagicMock(name="mock_akshare_adapter")
