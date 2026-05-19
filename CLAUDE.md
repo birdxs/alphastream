@@ -4,6 +4,40 @@
 
 ---
 
+## 🚨 铁律 #1：金融数据零假值（最高优先级，2026-05-19 19:30 入永久记忆）
+
+**触发背景**：B27 Kimi 真测发现 dashboard 10s 显示假数据 1174.06 / 4384.17（组件 mock / SWR fallback 旧值），用户可能误以为是真实行情。Comdr 严正声明：金融领域追求数据精确度，禁止任何场景下任何理由使用任何假数据。
+
+### 强制约束
+
+1. **严禁任何形式的假数据**，包括但不限于：
+   - 组件 `useState(MOCK_DATA)` 初始 state 含具体数值
+   - SWR `fallbackData` / `initialData` 含具体数值
+   - localStorage / sessionStorage 缓存命中旧 schema 返回旧值
+   - mock module / fixtures 在生产代码路径被引用
+   - demo / placeholder / stub 数据流入用户可见 UI
+   - 测试 fixture 的硬编码股价/指数被 prod 代码 import
+
+2. **数据未到位时唯一允许的呈现**：
+   - `<Skeleton />` / `<Spinner />`（loading 态）
+   - "—" / "暂无" / "加载中"（明确无数据文案）
+   - `null` / `undefined`（不渲染）
+   - 禁止任何看起来像真实金融数据的占位（包括 0.00 / N/A 数字、demo 股价、历史快照）
+
+3. **代码审查**：
+   - 任何 PR 含数字硬编码（除 timeout/limit/page-size 等基础设施常量）必须明确说明非数据用途
+   - 任何 `fallback` / `default` / `mock` / `placeholder` 命名的变量含数值必须代码评审
+
+4. **测试义务**：
+   - 用 Kimi WebBridge 真测，多时间窗采样（5s/10s/15s/20s/30s）
+   - 任何时间窗显示"看起来像真数"但与 API 返回不一致 = 假数 bug
+
+5. **违反处理**：
+   - 发现假数据 = Blocker 级别立即修
+   - commit message 必须标注遵守本铁律
+
+---
+
 ## 团队管理机制（继承全局）
 
 - 香草少校担任 PM，下达指令、跟踪验收，不插手具体事务
