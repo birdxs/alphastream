@@ -355,3 +355,39 @@ LangGraph #7845 的根因是：共享同一个 graph **实例** 并用 `astream`
 | SECRET_KEY | 自动生成 | Flask session/CSRF 签名 |
 | MAX_UPLOAD_SIZE_MB | 5 | upload_image 大小限制 |
 | UPLOAD_DIR | /tmp/stockanal_uploads | 上传文件绝对目录 |
+
+---
+
+## Sprint 1-B 金融维度 4 条 Critical 修复记录（commit 829fc9b，2026-05-19 23:38 +08:00）
+
+### S1-B1：MA-EMA 字段名算法对齐（Hunt6-C1）
+
+- **决策**：方案 A，保留字段名 MA5/MA20/MA60，改算法为 SMA
+- **改动**：`app/analysis/stock_analyzer.py` 新增 `calculate_sma()` 方法（`rolling(window).mean()`）；`calculate_indicators()` 三行改调 `calculate_sma`
+- **验证**：curl /api/stock_data → `MA5:1333.3 MA20:1380.64 MA60:1421.43`（SMA 值，非 EMA）
+
+### S1-B2：Decimal 输出层量化（Hunt5-C2/Hunt6-C3）
+
+- **工具函数**：`quantize_finance(value, places)` 加入 `app/web/web_server.py` 顶部工具区
+- **套用位置**：market_indices 三条路径（eastmoney/sina/daily）price→4位，change_pct→2位
+- **验证**：price=4169.5378（4位），change_pct=0.92（2位），无 float 精度噪声
+
+### S1-B3：时区感知（Hunt5-C1）
+
+- **工具函数**：`now_cn()` 加入 web_server.py 顶部；18 个模块各自 inline `_ASIA_SHANGHAI = timezone(timedelta(hours=8))` + `now_cn = lambda`
+- **替换数量**：93 处 `datetime.now()` → `now_cn()`（非测试文件全覆盖）
+- **兼容修复**：`clean_old_tasks()` 用 naive `datetime.now()` 匹配 strptime 数据；`industry_analyzer` 缓存比较加 `tzinfo` 守卫
+- **timestamp 字段**：market_indices 三路径输出 `now_cn().isoformat()` 含 +08:00
+- **验证**：timestamp=2026-05-19T23:36:50.395902+08:00（含 +08:00）
+
+### S1-B4：涨跌幅除零守卫（Hunt6-C4）
+
+- **工具函数**：`safe_change_pct(curr, prev)` 加入 web_server.py 顶部工具区
+- **替换位置**：web_server.py 两处直接除法
+- **验证**：prev=0→None，prev=None→None，(11,10)→10.0
+
+### 铁证汇总
+
+- 真重启：uptime_s=6.787 < 60（PID 30885）
+- pytest：777 passed, 0 failed（修复 naive/aware 兼容 2 处测试）
+- 18 文件变更，+231/-124 行
