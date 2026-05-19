@@ -16,6 +16,19 @@ import { apiClient, ApiError } from "@/lib/api/client";
 import { useAltData } from "@/lib/hooks/use-alt-data";
 import { inferMarketType } from "@/lib/utils/stock-code";
 
+/* ---------- 局部类型 ---------- */
+// C1(Hunt4): 消除 useState<any>，为各 Tab 数据 state 提供明确类型
+// 结构与 candlestick-chart.tsx 内部 OHLCVData 保持一致（structural typing 兼容）
+interface OHLCVRow {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+  amount?: number;
+}
+
 /* ---------- 动态加载 Artifact 组件 ---------- */
 const CandlestickChartArtifact = dynamic(
   () =>
@@ -121,16 +134,11 @@ export default function StockDetailPage({
   const { data: altData, loading: altLoading, error: altError, reload: reloadAlt } = useAltData(altTicker);
 
   /* 各Tab数据 */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [klineData, setKlineData] = useState<any[] | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [fundamentalData, setFundamentalData] = useState<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [capitalData, setCapitalData] = useState<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [newsData, setNewsData] = useState<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [riskData, setRiskData] = useState<any>(null);
+  const [klineData, setKlineData] = useState<OHLCVRow[] | null>(null);
+  const [fundamentalData, setFundamentalData] = useState<Record<string, unknown> | null>(null);
+  const [capitalData, setCapitalData] = useState<Record<string, unknown> | null>(null);
+  const [newsData, setNewsData] = useState<{ items: Record<string, unknown>[]; [key: string]: unknown } | null>(null);
+  const [riskData, setRiskData] = useState<Record<string, unknown> | null>(null);
 
   /* 加载状态 */
   const [loadingTab, setLoadingTab] = useState<Record<TabKey, boolean>>({
@@ -158,7 +166,7 @@ export default function StockDetailPage({
     setLoadingTab((p) => ({ ...p, kline: true }));
     setErrorTab((p) => ({ ...p, kline: null }));
     try {
-      const res = await apiClient.get<{ data: Record<string, unknown>[]; stock_name?: string }>(
+      const res = await apiClient.get<{ data: OHLCVRow[]; stock_name?: string }>(
         "/api/stock_data",
         { stock_code: code, market_type: inferMarketType(code), period: "1y" }
       );

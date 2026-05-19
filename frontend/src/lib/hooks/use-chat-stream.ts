@@ -5,7 +5,7 @@
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useChatStore } from '@/lib/stores/chat-store';
 import { useAgentStore } from '@/lib/stores/agent-store';
@@ -69,6 +69,15 @@ async function lookupCodeByName(message: string): Promise<string | null> {
 export function useChatStream() {
   // 不订阅store — 通过getState()在回调内获取最新状态，避免全量重渲染
   const abortRef = useRef<AbortController | null>(null);
+  // C4(Hunt4): 保存 stopBlink 清理函数，组件卸载时调用避免 timer 泄漏
+  const blinkCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      blinkCleanupRef.current?.();
+      blinkCleanupRef.current = null;
+    };
+  }, []);
 
   const sendMessage = useCallback(
     async (
@@ -79,7 +88,9 @@ export function useChatStream() {
         research_depth?: number;
       } = {}
     ) => {
-      // 取消之前的请求
+      // 取消之前的请求，并清理上一次 blink timer
+      blinkCleanupRef.current?.();
+      blinkCleanupRef.current = null;
       abortRef.current?.abort();
       abortRef.current = new AbortController();
 
@@ -273,11 +284,15 @@ export function useChatStream() {
             }, 1000);
             const stopBlink = () => {
               clearInterval(interval);
+              clearTimeout(blinkAutoStopId);
               document.title = originalTitle;
               document.removeEventListener('visibilitychange', stopBlink);
+              blinkCleanupRef.current = null;
             };
             document.addEventListener('visibilitychange', stopBlink);
-            setTimeout(stopBlink, 10000);
+            const blinkAutoStopId = setTimeout(stopBlink, 10000);
+            // C4(Hunt4): 注册清理函数到 ref，保证组件卸载时 timer/listener 不泄漏
+            blinkCleanupRef.current = stopBlink;
 
             // 浏览器Notification推送
             const stockLabel = options.stock_code || '分析';
