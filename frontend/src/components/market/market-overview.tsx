@@ -1,4 +1,4 @@
-// Input: 后端 /api/market_stream SSE 实时推送 或 /api/market_indices 轮询(降级)
+// Input: 后端 /api/market_stream SSE(直连8888) 或 /api/market_indices REST轮询(proxy)
 // Output: 紧凑市场ticker条 (h-7)，显示上证/深证/创业板/沪深300实时行情
 // Pos: 首页顶部，显示主要市场指数数据
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
@@ -6,7 +6,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { apiClient } from "@/lib/api/client";
 
 interface IndexQuote {
   name: string;
@@ -31,7 +30,11 @@ export function MarketOverview() {
 
   const fetchIndices = useCallback(async () => {
     try {
-      const res = await apiClient.get<MarketIndicesResponse>("/api/market_indices");
+      // B23: 走 Next.js proxy (同 origin)，避免 Playwright/Chromium 冷启动时直连 8888 的 16s IPv6 超时
+      // SSE 单独直连 8888（见下方 connectSSE），两者分离互不阻塞连接池
+      const rawRes = await fetch('/api/market_indices');
+      if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
+      const res: MarketIndicesResponse = await rawRes.json();
       if (res?.indices && res.indices.length > 0) {
         // 比较新旧价格，触发flash动画
         const prev = prevQuotesRef.current;
@@ -69,7 +72,12 @@ export function MarketOverview() {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+    // B23: SSE 直连后端，避免与 REST fetch 共享 Next.js proxy HTTP/1.1 连接池
+    // 若显式设置 NEXT_PUBLIC_API_URL 则用之；否则用 window.location.hostname:8888 直连后端
+    const apiBase = process.env.NEXT_PUBLIC_API_URL ||
+      (typeof window !== 'undefined'
+        ? `${window.location.protocol}//${window.location.hostname}:8888`
+        : '');
 
     const handleSSEData = (rawData: string) => {
       try {

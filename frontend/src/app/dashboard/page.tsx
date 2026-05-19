@@ -1,4 +1,4 @@
-// Input: 后端 /api/market_indices、/api/latest_news、watchlist-store、portfolio-store、useStockNames、useStockPrices
+// Input: 后端 /api/market_indices(proxy)、/api/latest_news、watchlist-store、portfolio-store、useStockNames、useStockPrices
 // Output: 投资看板页面 — Bento Grid布局、自选股+持仓表格实时补全中文名与最新价，Dark Glassmorphism风格
 // Pos: app/dashboard/page.tsx - Dashboard看板主页面 (R1 Q3契约收尾 2026-04-15 21:28: DEDUP fetchWatchQuotes→useStockPrices+useStockNames; news published_at/source 字段统一)
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
@@ -128,7 +128,10 @@ export default function DashboardPage() {
 
   const fetchIndices = useCallback(async () => {
     try {
-      const res = await apiClient.get<MarketIndicesResponse>("/api/market_indices");
+      // B23: 走 Next.js proxy (同 origin)，Node.js proxy 到 8888 连接快（13ms vs 直连 16s 冷启动）
+      const rawRes = await fetch('/api/market_indices');
+      if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
+      const res: MarketIndicesResponse = await rawRes.json();
       if (res?.indices?.length) {
         setIndices(res.indices);
       }

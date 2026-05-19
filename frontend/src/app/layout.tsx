@@ -38,6 +38,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
+      {/* B23: 预连接后端，让浏览器 Network Service 在 React hydration 前完成冷启动
+          避免 Playwright headless 首次 fetch 的 17s 延迟 */}
+      <head>
+        <link rel="prefetch" href="/api/market_indices" as="fetch" crossOrigin="anonymous" />
+      </head>
       <body className={`${inter.className} antialiased`}>
         <a
           href="#main-content"
