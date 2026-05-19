@@ -10,8 +10,11 @@ import time
 import traceback
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 import requests
 from typing import Dict, List, Optional, Tuple
 from dotenv import load_dotenv
@@ -75,9 +78,9 @@ class StockAnalyzer:
             return self.data_cache[cache_key].copy()
 
         if start_date is None:
-            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
+            start_date = (now_cn() - timedelta(days=365)).strftime('%Y%m%d')
         if end_date is None:
-            end_date = datetime.now().strftime('%Y%m%d')
+            end_date = now_cn().strftime('%Y%m%d')
 
         try:
             df = None
@@ -161,8 +164,14 @@ class StockAnalyzer:
             self.logger.error(f"获取北向资金历史数据出错: {str(e)}")
             return {"history": []}
 
+    def calculate_sma(self, series, period):
+        """计算简单移动平均线（Simple Moving Average）
+        MA5/MA20/MA60 字段均使用 SMA，符合行业惯例。"""
+        return series.rolling(window=period).mean()
+
     def calculate_ema(self, series, period):
-        """计算指数移动平均线"""
+        """计算指数移动平均线（Exponential Moving Average）
+        仅用于 MACD 等明确需要 EMA 的场景，不用于 MA5/MA20/MA60。"""
         return series.ewm(span=period, adjust=False).mean()
 
     def calculate_rsi(self, series, period):
@@ -230,10 +239,10 @@ class StockAnalyzer:
         """计算技术指标"""
 
         try:
-            # 计算移动平均线
-            df['MA5'] = self.calculate_ema(df['close'], self.params['ma_periods']['short'])
-            df['MA20'] = self.calculate_ema(df['close'], self.params['ma_periods']['medium'])
-            df['MA60'] = self.calculate_ema(df['close'], self.params['ma_periods']['long'])
+            # 计算移动平均线（Hunt6-C1: 字段名 MA5/MA20/MA60 = SMA，不是 EMA）
+            df['MA5'] = self.calculate_sma(df['close'], self.params['ma_periods']['short'])
+            df['MA20'] = self.calculate_sma(df['close'], self.params['ma_periods']['medium'])
+            df['MA60'] = self.calculate_sma(df['close'], self.params['ma_periods']['long'])
 
             # 计算RSI
             df['RSI'] = self.calculate_rsi(df['close'], self.params['rsi_period'])
@@ -719,7 +728,7 @@ class StockAnalyzer:
     def _is_earnings_season(self):
         """检查当前是否处于财报季(辅助函数)"""
         from datetime import datetime
-        current_month = datetime.now().month
+        current_month = now_cn().month
         # 美股财报季大致在1月、4月、7月和10月
         return current_month in [1, 4, 7, 10]
 
@@ -761,7 +770,7 @@ class StockAnalyzer:
             # 缓存键
             cache_key = f"{stock_code}_{market_type}_news"
             if cache_key in self.data_cache and (
-                    datetime.now() - self.data_cache[cache_key]['timestamp']).seconds < 3600:
+                    now_cn() - self.data_cache[cache_key]['timestamp']).seconds < 3600:
                 # 缓存1小时内的数据
                 return self.data_cache[cache_key]['data']
 
@@ -807,7 +816,7 @@ class StockAnalyzer:
                                 for item in tavily_response["results"][:limit]:
                                     source = urlparse(item.get("url")).netloc if item.get("url") else ""
                                     news_results.append({
-                                        "title": item.get("title", ""), "date": datetime.now().strftime("%Y-%m-%d"),
+                                        "title": item.get("title", ""), "date": now_cn().strftime("%Y-%m-%d"),
                                         "source": source, "link": item.get("url", ""), "snippet": item.get("content", "")
                                     })
 
@@ -817,7 +826,7 @@ class StockAnalyzer:
                                 for item in tavily_industry_response["results"][:limit]:
                                     source = urlparse(item.get("url")).netloc if item.get("url") else ""
                                     industry_news.append({
-                                        "title": item.get("title", ""), "date": datetime.now().strftime("%Y-%m-%d"),
+                                        "title": item.get("title", ""), "date": now_cn().strftime("%Y-%m-%d"),
                                         "source": source, "summary": item.get("content", "")
                                     })
                         except ImportError:
@@ -867,10 +876,10 @@ class StockAnalyzer:
             news_data.setdefault('announcements', [])
             news_data.setdefault('industry_news', [])
             news_data.setdefault('market_sentiment', 'neutral')
-            news_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            news_data['timestamp'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
             # 缓存结果
-            self.data_cache[cache_key] = {'data': news_data, 'timestamp': datetime.now()}
+            self.data_cache[cache_key] = {'data': news_data, 'timestamp': now_cn()}
             return news_data
 
         except Exception as e:
@@ -878,7 +887,7 @@ class StockAnalyzer:
             return {
                 'news': [], 'announcements': [], 'industry_news': [],
                 'market_sentiment': 'neutral',
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S')
             }
 
     def get_ai_analysis_from_prompt(self, prompt: str) -> str:
@@ -1091,7 +1100,7 @@ class StockAnalyzer:
                 'stock_code': stock_code,
                 'stock_name': stock_name,
                 'industry': industry,
-                'analysis_date': datetime.now().strftime('%Y-%m-%d'),
+                'analysis_date': now_cn().strftime('%Y-%m-%d'),
                 'score': score,
                 'price': latest['close'],
                 'price_change': (latest['close'] - prev['close']) / prev['close'] * 100,
@@ -1185,7 +1194,7 @@ class StockAnalyzer:
     #             'stock_code': stock_code,
     #             'stock_name': stock_name,
     #             'industry': industry,
-    #             'analysis_date': datetime.now().strftime('%Y-%m-%d'),
+    #             'analysis_date': now_cn().strftime('%Y-%m-%d'),
     #             'score': score,
     #             'price': float(latest['close']),
     #             'price_change': float((latest['close'] - prev['close']) / prev['close'] * 100),
@@ -1239,7 +1248,7 @@ class StockAnalyzer:
                 'stock_code': stock_code,
                 'stock_name': stock_name,
                 'industry': industry,
-                'analysis_date': datetime.now().strftime('%Y-%m-%d'),
+                'analysis_date': now_cn().strftime('%Y-%m-%d'),
                 'score': score,
                 'price': float(latest['close']),
                 'price_change': float((latest['close'] - prev['close']) / prev['close'] * 100),
@@ -1501,7 +1510,7 @@ class StockAnalyzer:
                     'stock_code': stock_code,
                     'stock_name': stock_info.get('股票名称', '未知'),
                     'industry': stock_info.get('行业', '未知'),
-                    'analysis_date': datetime.now().strftime('%Y-%m-%d')
+                    'analysis_date': now_cn().strftime('%Y-%m-%d')
                 },
                 'price_data': {
                     'current_price': float(latest['close']),  # 确保是Python原生类型
@@ -1562,7 +1571,7 @@ class StockAnalyzer:
                     'stock_code': stock_code,
                     'stock_name': '分析失败',
                     'industry': '未知',
-                    'analysis_date': datetime.now().strftime('%Y-%m-%d')
+                    'analysis_date': now_cn().strftime('%Y-%m-%d')
                 },
                 'price_data': {
                     'current_price': 0.0,

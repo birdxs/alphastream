@@ -18,7 +18,8 @@ from logging.handlers import RotatingFileHandler
 import traceback
 import os
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask_cors import CORS
 from pathlib import Path
 import time
@@ -49,6 +50,53 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../t
 
 # 加载环境变量（override=True 让 .env 成为单一真相源，覆盖 shell 注入的同名变量）
 load_dotenv(override=True)
+
+# ── Sprint 1-B 工具函数 ──────────────────────────────────────────────────────
+
+# S1-B3: 时区感知时间工具（Hunt5-C1）
+# Asia/Shanghai = UTC+8，与 Asia/Singapore 相同偏移
+ASIA_SHANGHAI = timezone(timedelta(hours=8))
+
+
+def now_cn() -> datetime:
+    """返回带 Asia/Shanghai (+08:00) 时区的当前时间，替代裸 now_cn()。
+    Input: 无
+    Output: timezone-aware datetime（+08:00）
+    Pos: 全局工具函数，web_server.py 内所有 now_cn() 调用点"""
+    return datetime.now(ASIA_SHANGHAI)
+
+
+# S1-B2: 金融精度 Decimal 量化工具（Hunt5-C2/Hunt6-C3）
+def quantize_finance(value, places: int = 2):
+    """将浮点数量化为指定小数位的 Decimal，避免 float 精度误差。
+    Input: value（int/float/str/None），places（小数位数，默认 2）
+    Output: float（JSON 可序列化）或 None（值无效时）
+    Pos: 全局工具函数，输出层调用，不参与 pandas/numpy 内部计算"""
+    if value is None:
+        return None
+    try:
+        quantizer = Decimal('0.' + '0' * places) if places > 0 else Decimal('1')
+        result = Decimal(str(value)).quantize(quantizer, rounding=ROUND_HALF_UP)
+        return float(result)
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+# S1-B4: 涨跌幅除零守卫（Hunt6-C4）
+def safe_change_pct(curr, prev) -> float | None:
+    """安全计算涨跌幅；prev <= 0 或 None 时返回 None（前端显示 '—'）。
+    Input: curr（当前价），prev（前收盘价）
+    Output: float 涨跌幅百分比，或 None
+    Pos: 全局工具函数，替换所有直接 (curr-prev)/prev*100 的位置"""
+    try:
+        if prev is None or prev <= 0 or curr is None:
+            return None
+        return round((float(curr) - float(prev)) / float(prev) * 100, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+# ── Sprint 1-B 工具函数 结束 ────────────────────────────────────────────────
 
 
 def validate_stock_code(stock_code, market_type='A'):
@@ -290,8 +338,8 @@ def get_or_create_task(task_type, **params):
         'type': task_type,
         'status': TASK_PENDING,
         'progress': 0,
-        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+        'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
         'params': params
     }
 
@@ -339,7 +387,7 @@ def start_market_scan_task_status(task_id, status, progress=None, result=None, e
                 task['result'] = result
             if error is not None:
                 task['error'] = error
-            task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            task['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
 
 def update_task_status(task_type, task_id, status, progress=None, result=None, error=None):
@@ -367,7 +415,7 @@ def update_task_status(task_type, task_id, status, progress=None, result=None, e
             task['result'].update(result)
         if error is not None:
             task['error'] = error
-        task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        task['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
         # 保存更新后的任务
         if task_type == 'agent_analysis':
@@ -406,8 +454,8 @@ def get_or_create_analysis_task(stock_code, market_type='A'):
             'key': task_key,
             'status': TASK_PENDING,
             'progress': 0,
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'params': {
                 'stock_code': stock_code,
                 'market_type': market_type
@@ -431,7 +479,7 @@ def update_analysis_task(task_id, status, progress=None, result=None, error=None
                 task['result'] = result
             if error is not None:
                 task['error'] = error
-            task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            task['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
 
 # 定义自定义JSON编码器
@@ -668,10 +716,10 @@ def api_north_flow_history():
         days = data.get('days', 10)  # 默认为10天，对应前端的默认选项
 
         # 计算 end_date 为当前时间
-        end_date = datetime.now().strftime('%Y%m%d')
+        end_date = now_cn().strftime('%Y%m%d')
 
         # 计算 start_date 为 end_date 减去指定的天数
-        start_date = (datetime.now() - timedelta(days=int(days))).strftime('%Y%m%d')
+        start_date = (now_cn() - timedelta(days=int(days))).strftime('%Y%m%d')
 
         if not stock_code:
             return jsonify({'error': '请提供股票代码'}), 400
@@ -911,7 +959,7 @@ def cancel_analysis(task_id):
         # 更新状态为失败
         task['status'] = TASK_FAILED
         task['error'] = '用户取消任务'
-        task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        task['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
         # 更新键索引的任务
         if 'key' in task and task['key'] in store:
@@ -1211,17 +1259,17 @@ def get_stock_data():
         stock_code = result
 
         # 根据period计算start_date
-        end_date = datetime.now().strftime('%Y%m%d')
+        end_date = now_cn().strftime('%Y%m%d')
         if period == '1m':
-            start_date = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
+            start_date = (now_cn() - timedelta(days=30)).strftime('%Y%m%d')
         elif period == '3m':
-            start_date = (datetime.now() - timedelta(days=90)).strftime('%Y%m%d')
+            start_date = (now_cn() - timedelta(days=90)).strftime('%Y%m%d')
         elif period == '6m':
-            start_date = (datetime.now() - timedelta(days=180)).strftime('%Y%m%d')
+            start_date = (now_cn() - timedelta(days=180)).strftime('%Y%m%d')
         elif period == '1y':
-            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
+            start_date = (now_cn() - timedelta(days=365)).strftime('%Y%m%d')
         else:
-            start_date = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
+            start_date = (now_cn() - timedelta(days=365)).strftime('%Y%m%d')
 
         # 获取股票历史数据（30秒硬超时，避免akshare外网卡死占满werkzeug线程池）
         app.logger.info(
@@ -1459,8 +1507,8 @@ def api_stock_profile():
 
             # PE/PB/close — 取最近可用交易日（baostock数据有2-3天滞后，向前扩展120天）
             try:
-                end = datetime.now().strftime('%Y-%m-%d')
-                start = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
+                end = now_cn().strftime('%Y-%m-%d')
+                start = (now_cn() - timedelta(days=120)).strftime('%Y-%m-%d')
                 rs = bs.query_history_k_data_plus(bs_code,
                     'date,code,open,high,low,close,volume,amount,adjustflag,turn,tradestatus,pctChg,peTTM,pbMRQ,psTTM,pcfNcfTTM,isST',
                     start_date=start, end_date=end, frequency='d', adjustflag='3')
@@ -1486,7 +1534,7 @@ def api_stock_profile():
 
             # ROE — 最近年报
             try:
-                year = datetime.now().year
+                year = now_cn().year
                 for y in [year - 1, year - 2]:
                     rs = bs.query_profit_data(code=bs_code, year=y, quarter=4)
                     rows = []
@@ -1684,8 +1732,8 @@ def start_market_scan():
             'status': TASK_PENDING,
             'progress': 0,
             'total': len(stock_list),
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'params': {
                 'stock_list': stock_list,
                 'min_score': min_score,
@@ -1803,7 +1851,7 @@ def cancel_scan(task_id):
         # 更新状态为失败
         task['status'] = TASK_FAILED
         task['error'] = '用户取消任务'
-        task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        task['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
         return jsonify({'message': '任务已取消'})
 
@@ -1856,8 +1904,8 @@ def _fetch_market_indices_data():
                     result.append({
                         'name': str(r['名称']),
                         'code': code,
-                        'price': float(r['最新价']),
-                        'change_pct': float(r['涨跌幅'])
+                        'price': quantize_finance(r['最新价'], 4),
+                        'change_pct': quantize_finance(r['涨跌幅'], 2)
                     })
             return result
 
@@ -1866,7 +1914,7 @@ def _fetch_market_indices_data():
             try:
                 result = fut.result(timeout=_PRIMARY_TIMEOUT)
                 if result:
-                    data = {'indices': result}
+                    data = {'indices': result, 'timestamp': now_cn().isoformat()}
                     _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'eastmoney'})
                     data['source'] = 'eastmoney'
                     return data
@@ -1893,8 +1941,8 @@ def _fetch_market_indices_data():
                     result.append({
                         'name': str(r['名称']) if '名称' in r.index else name,
                         'code': code,
-                        'price': float(r['最新价']),
-                        'change_pct': float(r['涨跌幅'])
+                        'price': quantize_finance(r['最新价'], 4),
+                        'change_pct': quantize_finance(r['涨跌幅'], 2)
                     })
             return result
 
@@ -1903,7 +1951,7 @@ def _fetch_market_indices_data():
             try:
                 result = fut.result(timeout=_FALLBACK_TIMEOUT)
                 if result:
-                    data = {'indices': result}
+                    data = {'indices': result, 'timestamp': now_cn().isoformat()}
                     _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'sina'})
                     data['source'] = 'sina'
                     return data
@@ -1928,8 +1976,8 @@ def _fetch_market_indices_data():
                     if df is not None and len(df) >= 2:
                         latest = df.iloc[-1]
                         prev = df.iloc[-2]
-                        price = float(latest['close'])
-                        change_pct = round((price - float(prev['close'])) / float(prev['close']) * 100, 2)
+                        price = quantize_finance(latest['close'], 4)
+                        change_pct = safe_change_pct(latest['close'], prev['close'])
                         return {'name': name, 'code': symbol[2:], 'price': price, 'change_pct': change_pct}
                 except Exception:
                     pass
@@ -1940,7 +1988,7 @@ def _fetch_market_indices_data():
             result = [x for x in items if x]
 
             if result:
-                data = {'indices': result}
+                data = {'indices': result, 'timestamp': now_cn().isoformat()}
                 _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'daily'})
                 data['source'] = 'daily'
                 return data
@@ -2113,6 +2161,7 @@ def get_board_stocks():
 def clean_old_tasks():
     """清理旧的扫描任务"""
     with task_lock:
+        # 使用 naive datetime 以匹配 strptime 解析的 updated_at 字符串（无时区）
         now = datetime.now()
         to_delete = []
 
@@ -2159,7 +2208,7 @@ def run_task_cleaner():
     """定期运行任务清理，并在每天 16:30 左右清理所有缓存"""
     while True:
         try:
-            now = datetime.now()
+            now = now_cn()
             # 判断是否在收盘时间附近（16:25-16:35）
             is_market_close_time = (now.hour == 16 and 25 <= now.minute <= 35)
 
@@ -2796,7 +2845,7 @@ class FileSessionManager:
         """Clean up stale 'running' tasks that have exceeded a timeout."""
         app.logger.info("开始清理过时的任务...")
         cleaned_count = 0
-        now = datetime.now()
+        now = now_cn()
         
         tasks = self.get_all_tasks()
         for task in tasks:
@@ -2867,8 +2916,8 @@ def start_agent_analysis():
             'status': TASK_PENDING,
             'progress': 0,
             'current_step': '任务已创建',
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'params': {
                 'stock_code': stock_code,
                 'research_depth': research_depth,
@@ -2987,7 +3036,7 @@ def start_agent_analysis():
                         config=config
                     )
 
-                    today = analysis_date or datetime.now().strftime('%Y-%m-%d')
+                    today = analysis_date or now_cn().strftime('%Y-%m-%d')
 
                     import inspect
                     propagate_sig = inspect.signature(ta.propagate)
@@ -3119,7 +3168,7 @@ def delete_agent_analysis():
             # If the task is running, mark it as cancelled
             if task.get('status') == TASK_RUNNING:
                 task['status'] = TASK_CANCELLED
-                task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                task['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
                 task['error'] = '任务已被用户取消'
                 agent_session_manager.save_task(task)
                 cancelled_count += 1
@@ -4306,8 +4355,8 @@ def stock_quote_batch():
         codes = codes[:max_codes]
 
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout, as_completed
-    end_date = datetime.now().strftime('%Y%m%d')
-    start_date = (datetime.now() - timedelta(days=14)).strftime('%Y%m%d')
+    end_date = now_cn().strftime('%Y%m%d')
+    start_date = (now_cn() - timedelta(days=14)).strftime('%Y%m%d')
 
     def _fetch_one(code):
         try:
@@ -4324,7 +4373,7 @@ def stock_quote_batch():
             latest = float(closes[-1])
             prev = float(closes[-2]) if len(closes) > 1 else latest
             change = latest - prev
-            change_pct = (change / prev * 100.0) if prev else 0.0
+            change_pct = safe_change_pct(latest, prev) or 0.0
             name = _get_stock_name_safe(normalized, market_type)
             return {
                 'code': normalized,

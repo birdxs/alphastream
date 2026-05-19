@@ -1,8 +1,11 @@
 
 import akshare as ak
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 from stockstats import StockDataFrame
 import logging
 
@@ -24,13 +27,13 @@ class EtfAnalyzer:
         """获取缓存数据"""
         if key in self._cache:
             cache_time, data = self._cache[key]
-            if (datetime.now() - cache_time).total_seconds() < self._cache_ttl:
+            if (now_cn() - cache_time).total_seconds() < self._cache_ttl:
                 return data
         return None
 
     def _set_cached(self, key, data):
         """设置缓存"""
-        self._cache[key] = (datetime.now(), data)
+        self._cache[key] = (now_cn(), data)
 
     def run_analysis(self):
         """
@@ -98,7 +101,7 @@ class EtfAnalyzer:
         print("开始分析市场表现...")
         try:
             # 获取近一年的历史数据
-            end_date = datetime.now()
+            end_date = now_cn()
             start_date = end_date - timedelta(days=365)
             
             end_date_str = end_date.strftime('%Y%m%d')
@@ -442,11 +445,11 @@ class EtfAnalyzer:
         print("开始分析持仓...")
         try:
             # 获取ETF持仓明细（带缓存）
-            cache_key = f"holdings_{self.etf_code}_{datetime.now().strftime('%Y')}"
+            cache_key = f"holdings_{self.etf_code}_{now_cn().strftime('%Y')}"
             holdings_df = self._get_cached(cache_key)
             if holdings_df is None:
                 try:
-                    holdings_df = ak.fund_portfolio_hold_em(symbol=self.etf_code, date=datetime.now().strftime("%Y"))
+                    holdings_df = ak.fund_portfolio_hold_em(symbol=self.etf_code, date=now_cn().strftime("%Y"))
                     if holdings_df is not None and not holdings_df.empty:
                         self._set_cached(cache_key, holdings_df)
                     else:

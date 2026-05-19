@@ -9,7 +9,11 @@ import logging
 import queue
 import threading
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Callable, Dict, List, Any, Optional, Tuple
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +76,7 @@ class EventBus:
                     bridge_queue.put_nowait({
                         'event': event_name,
                         'data': data,
-                        'timestamp': __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S %z')
                     })
                 except queue.Full:
                     logger.warning(f"SSE桥接队列已满，丢弃事件: {event_name}")

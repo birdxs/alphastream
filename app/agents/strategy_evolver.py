@@ -13,7 +13,10 @@ import re
 import json
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +168,7 @@ class StrategyEvolver:
             logger.warning(f"策略JSON解析失败, 保留当前策略. content前200字: {content[:200]!r}")
             return current_strategy
         try:
-            new_strategy['last_evolved'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            new_strategy['last_evolved'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
             new_strategy['evolution_count'] = current_strategy.get('evolution_count', 0) + 1
             # 保存新策略
             self._save_strategy(f"{stock_code}_strategy", new_strategy)

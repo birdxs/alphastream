@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 @tool
 def get_stock_data(stock_code: str, market_type: str = 'A', days: int = 120) -> str:
     """获取股票历史K线数据，返回最近N天的OHLCV数据摘要"""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timezone, timedelta
+    _tz = timezone(timedelta(hours=8))
     dp = get_data_provider()
-    end_date = datetime.now().strftime('%Y%m%d')
-    start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+    end_date = datetime.now(_tz).strftime('%Y%m%d')
+    start_date = (datetime.now(_tz) - timedelta(days=days)).strftime('%Y%m%d')
     try:
         df = dp.get_stock_history(stock_code, start_date, end_date)
         if df is None or df.empty:

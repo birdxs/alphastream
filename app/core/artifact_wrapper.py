@@ -8,7 +8,11 @@ Pos: app/core/artifact_wrapper.py - Generative UI后端数据协议层，将工�
 import json
 import logging
 from typing import Dict, Any, Optional, Tuple, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# S1-B3: 时区感知时间（Hunt5-C1）
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +117,7 @@ def execute_tool_with_artifact(tool_name: str, arguments: dict) -> Tuple[str, Op
             "source_tool": tool_name,
             "stock_code": stock_code,
             "stock_name": stock_name,
-            "generated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "generated_at": now_cn().strftime('%Y-%m-%d %H:%M:%S'),
         }
     }
 
@@ -155,8 +159,8 @@ def _get_stock_data_structured(arguments: dict) -> Optional[Dict]:
         days = arguments.get("days", 120)
 
         dp = get_data_provider()
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+        end_date = now_cn().strftime('%Y%m%d')
+        start_date = (now_cn() - timedelta(days=days)).strftime('%Y%m%d')
 
         df = dp.get_stock_history(stock_code, start_date, end_date)
         if df is None or df.empty:
@@ -507,7 +511,7 @@ def _df_to_records(data: Any, max_rows: int = 60) -> list:
 def _build_p3_artifact(artifact_type: str, title: str, data: Any,
                        domain: str, confidence: float = 0.75,
                        metadata: Optional[Dict] = None) -> Dict:
-    meta = {"generated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "domain": domain}
+    meta = {"generated_at": now_cn().strftime('%Y-%m-%d %H:%M:%S'), "domain": domain}
     if metadata:
         meta.update(metadata)
     return {

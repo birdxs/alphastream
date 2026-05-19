@@ -9,7 +9,10 @@ import logging
 import json
 import os
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +109,7 @@ class ReflectionAgent:
                 {
                     'agent': '反思Agent',
                     'status': 'success',
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S')
                 }
             ]
         }
@@ -155,7 +158,7 @@ def _save_reflection(stock_code: str, reflection: dict):
             with open(filename, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         data.append({
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'reflection': reflection
         })
         # 保留最近20条

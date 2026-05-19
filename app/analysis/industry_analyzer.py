@@ -11,7 +11,10 @@ import random
 import akshare as ak
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 
 class IndustryAnalyzer:
@@ -38,8 +41,9 @@ class IndustryAnalyzer:
             # 检查缓存
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
+                _now_cmp = now_cn() if getattr(cache_time, 'tzinfo', None) else datetime.now()
                 # 如果缓存时间在30分钟内，直接返回
-                if (datetime.now() - cache_time).total_seconds() < 1800:
+                if (_now_cmp - cache_time).total_seconds() < 1800:
                     self.logger.info(f"从缓存获取行业资金流向数据: {symbol}")
                     return cached_data
 
@@ -99,7 +103,7 @@ class IndustryAnalyzer:
                         continue
 
             # 缓存结果
-            self.data_cache[cache_key] = (datetime.now(), result)
+            self.data_cache[cache_key] = (now_cn(), result)
 
             return result
 
@@ -189,8 +193,10 @@ class IndustryAnalyzer:
             # 检查缓存
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
+                # 兼容 naive/aware cache_time：若 cache_time 无时区则用 naive now 比较
+                _now_cmp = now_cn() if getattr(cache_time, 'tzinfo', None) else datetime.now()
                 # 如果缓存时间在1小时内，直接返回
-                if (datetime.now() - cache_time).total_seconds() < 3600:
+                if (_now_cmp - cache_time).total_seconds() < 3600:
                     self.logger.info(f"从缓存获取行业成分股: {industry}")
                     return cached_data
 
@@ -241,7 +247,7 @@ class IndustryAnalyzer:
                 result = []
 
             # 缓存结果
-            self.data_cache[cache_key] = (datetime.now(), result)
+            self.data_cache[cache_key] = (now_cn(), result)
 
             return result
 
@@ -270,7 +276,7 @@ class IndustryAnalyzer:
 
                 if industry_period_data:
                     days = int(period.replace("日排行", ""))
-                    date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+                    date = (now_cn() - timedelta(days=days)).strftime("%Y-%m-%d")
 
                     history_data.append({
                         "date": date,
@@ -282,7 +288,7 @@ class IndustryAnalyzer:
 
             # 添加即时数据
             history_data.append({
-                "date": datetime.now().strftime("%Y-%m-%d"),
+                "date": now_cn().strftime("%Y-%m-%d"),
                 "inflow": industry_data["inflow"],
                 "outflow": industry_data["outflow"],
                 "netFlow": industry_data["netFlow"],

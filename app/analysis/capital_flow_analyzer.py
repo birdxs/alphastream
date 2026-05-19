@@ -4,7 +4,10 @@ import traceback
 import akshare as ak
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 
 class CapitalFlowAnalyzer:
@@ -30,7 +33,7 @@ class CapitalFlowAnalyzer:
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
                 # 如果在最近一小时内有缓存数据，则返回缓存数据
-                if (datetime.now() - cache_time).total_seconds() < 3600:
+                if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
             # 从akshare获取数据
@@ -57,7 +60,7 @@ class CapitalFlowAnalyzer:
                     continue
 
             # 缓存结果
-            self.data_cache[cache_key] = (datetime.now(), result)
+            self.data_cache[cache_key] = (now_cn(), result)
 
             return result
         except Exception as e:
@@ -75,7 +78,7 @@ class CapitalFlowAnalyzer:
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
                 # 如果在最近一小时内有缓存数据，则返回缓存数据
-                if (datetime.now() - cache_time).total_seconds() < 3600:
+                if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
             # 从akshare获取数据
@@ -111,7 +114,7 @@ class CapitalFlowAnalyzer:
                     continue
 
             # 缓存结果
-            self.data_cache[cache_key] = (datetime.now(), result)
+            self.data_cache[cache_key] = (now_cn(), result)
 
             return result
         except Exception as e:
@@ -146,7 +149,7 @@ class CapitalFlowAnalyzer:
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
                 # 如果在一小时内有缓存数据，则返回缓存数据
-                if (datetime.now() - cache_time).total_seconds() < 3600:
+                if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
             # 以下分支已被上面的统一转换覆盖，保留作为防御性兜底
@@ -209,7 +212,7 @@ class CapitalFlowAnalyzer:
                 }
 
             # Cache the result
-            self.data_cache[cache_key] = (datetime.now(), result)
+            self.data_cache[cache_key] = (now_cn(), result)
 
             return result
         except Exception as e:
@@ -227,13 +230,13 @@ class CapitalFlowAnalyzer:
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
                 # 如果在一小时内有缓存数据，则返回缓存数据
-                if (datetime.now() - cache_time).total_seconds() < 3600:
+                if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
             # 使用DataProvider获取概念/行业成分股详细信息
             result = self.data_provider.get_concept_stocks_detail(sector)
             if result:
-                self.data_cache[cache_key] = (datetime.now(), result)
+                self.data_cache[cache_key] = (now_cn(), result)
             return result  # 没数据就返回空，不用mock
 
         except Exception as e:

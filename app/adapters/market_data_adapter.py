@@ -12,7 +12,10 @@ Pos: app/adapters/market_data_adapter.py - 多市场数据源统一接口
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -161,9 +164,9 @@ def get_kline(stock_code: str, market: str = 'A',
     """统一 K 线接口。返回 ['date','open','close','high','low','volume'] DataFrame。"""
     market = (market or 'A').upper()
     if start_date is None:
-        start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+        start_date = (now_cn() - timedelta(days=days)).strftime('%Y%m%d')
     if end_date is None:
-        end_date = datetime.now().strftime('%Y%m%d')
+        end_date = now_cn().strftime('%Y%m%d')
 
     try:
         if market == 'A':

@@ -18,8 +18,11 @@ import json
 import logging
 import time
 import hashlib
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import akshare as ak
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 import pandas as pd
 
 # 设置日志
@@ -53,7 +56,7 @@ class NewsFetcher:
         """加载已有文件中的新闻哈希值"""
         try:
             # 获取最近7天的文件来加载哈希值
-            today = datetime.now()
+            today = now_cn()
             for i in range(7):  # 检查最近7天的数据
                 date = today - timedelta(days=i)
                 filename = self.get_news_filename(date)
@@ -114,7 +117,7 @@ class NewsFetcher:
                 return ""
             # 纯时间 HH:MM:SS 情况: 补今日日期
             if not pd_str and pt_str:
-                pd_str = datetime.now().strftime("%Y-%m-%d")
+                pd_str = now_cn().strftime("%Y-%m-%d")
             # 纯日期: 补 00:00:00
             if pd_str and not pt_str:
                 pt_str = "00:00:00"
@@ -142,7 +145,7 @@ class NewsFetcher:
     def get_news_filename(self, date=None):
         """获取指定日期的新闻文件名"""
         if date is None:
-            date = datetime.now().strftime('%Y%m%d')
+            date = now_cn().strftime('%Y%m%d')
         else:
             date = date.strftime('%Y%m%d')
         return os.path.join(self.save_dir, f"news_{date}.json")
@@ -151,7 +154,7 @@ class NewsFetcher:
         """获取新闻并保存到JSON文件，避免重复内容"""
         try:
             # 获取当前时间
-            now = datetime.now()
+            now = now_cn()
 
             # 调用AKShare API获取财联社电报数据
             logger.info("开始获取财联社电报数据")
@@ -266,7 +269,7 @@ class NewsFetcher:
     def get_latest_news(self, days=1, limit=50):
         """获取最近几天的新闻数据，并去除重复项"""
         news_data = []
-        today = datetime.now()
+        today = now_cn()
         # 记录已处理的日期，便于日志
         processed_dates = []
 

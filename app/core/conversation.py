@@ -11,7 +11,10 @@ import uuid
 import logging
 import threading
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +40,8 @@ class ConversationManager:
         conv = {
             'conversation_id': conv_id,
             'title': title or '新对话',
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'messages': [],
             'stock_codes': [],
             'analysis_refs': []
@@ -68,10 +71,10 @@ class ConversationManager:
                 'content': content,
                 'artifacts': artifacts or [],
                 'tool_calls': tool_calls or [],
-                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S')
             }
             conv['messages'].append(message)
-            conv['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conv['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
 
             # 自动更新标题（第一条用户消息的前20个字符）
             if role == 'user' and conv['title'] == '新对话':
@@ -119,7 +122,7 @@ class ConversationManager:
         conv = self._load_conversation(conversation_id)
         if conv:
             conv['summary'] = summary
-            conv['summary_updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conv['summary_updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
             self._save_conversation(conversation_id, conv)
 
     def get_message_count(self, conversation_id: str) -> int:

@@ -14,7 +14,10 @@ import traceback
 import openai
 from openai import OpenAI
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 from app.core.ai_client import get_ai_client, get_ai_model, chat_completion
 
 
@@ -476,7 +479,7 @@ class StockQA:
                             
                             news_results.append({
                                 "title": item.get("title", ""),
-                                "date": datetime.now().strftime("%Y-%m-%d"),  # Tavily不提供日期
+                                "date": now_cn().strftime("%Y-%m-%d"),  # Tavily不提供日期
                                 "source": source,
                                 "snippet": item.get("content", ""),
                                 "link": item.get("url", "")

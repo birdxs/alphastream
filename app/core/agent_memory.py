@@ -9,7 +9,10 @@ import os
 import json
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,7 @@ class AgentMemory:
 
         decision = analysis_result.get('final_decision', {})
         entry = {
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'decision': {
                 **decision,
                 'confidence': self._normalize_confidence(decision.get('confidence', 0.5))
@@ -188,7 +191,7 @@ class AgentMemory:
         records = self._load_file(filename)
 
         entry = {
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'agent_name': agent_name,
             'summary': analysis_summary[:500]
         }

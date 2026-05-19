@@ -11,7 +11,10 @@ import baostock as bs
 import pandas as pd
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 from typing import List, Dict
 from .base_adapter import BaseAdapter
 
@@ -121,7 +124,7 @@ class BaostockAdapter(BaseAdapter):
 
     def _get_latest_quarter(self):
         """获取最近一个已结束的季度（动态计算）"""
-        now = datetime.now()
+        now = now_cn()
         year = now.year
         quarter = (now.month - 1) // 3  # 上一季度（0表示去年Q4）
         if quarter == 0:

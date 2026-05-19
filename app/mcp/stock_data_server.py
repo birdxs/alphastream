@@ -81,11 +81,12 @@ def handle_mcp_tool_call(tool_name: str, arguments: dict) -> Any:
 
 def _handle_stock_history(stock_code: str, days: int = 120) -> dict:
     """获取股票历史K线数据"""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
+    _tz = timezone(timedelta(hours=8))
     from app.core.data_provider import get_data_provider
     dp = get_data_provider()
-    end_date = datetime.now().strftime('%Y%m%d')
-    start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+    end_date = datetime.now(_tz).strftime('%Y%m%d')
+    start_date = (datetime.now(_tz) - timedelta(days=days)).strftime('%Y%m%d')
     df = dp.get_stock_history(stock_code, start_date, end_date)
     if df is None or df.empty:
         return {'error': f'未获取到{stock_code}数据'}

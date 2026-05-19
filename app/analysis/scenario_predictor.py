@@ -9,8 +9,11 @@
 import os
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import openai
+
+_ASIA_SHANGHAI = timezone(timedelta(hours=8))
+now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 from openai import OpenAI
 import logging
 from logging.handlers import RotatingFileHandler
@@ -115,7 +118,7 @@ class ScenarioPredictor:
             pes_path.append(new_price)
 
         # 生成日期序列
-        start_date = datetime.now()
+        start_date = now_cn()
         dates = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(days + 1)]
 
         # 组织结果
