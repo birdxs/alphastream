@@ -1243,6 +1243,7 @@ import atexit as _atexit
 _BAOSTOCK_LOCK = _threading.Lock()
 _PROFILE_CACHE = {}  # {stock_code: (ts, profile)}
 _PROFILE_TTL = 3600  # 1小时
+_PROFILE_STALE_MAX_S = int(os.getenv('PROFILE_STALE_MAX_S', '86400'))  # B16：stale cache 最长留存
 _BS_LOGGED_IN = False
 
 def _ensure_bs_login():
@@ -1294,6 +1295,94 @@ def api_stock_profile():
     # baostock需要 sh./sz. 前缀
     prefix = 'sh.' if stock_code.startswith('6') else 'sz.'
     bs_code = prefix + stock_code
+
+    # B16 辅助函数：用 akshare 多端点并行补齐 baostock 缺失的字段
+    def _akshare_fill(prof: dict, fields: list, budget_s: float) -> None:
+        """B12 兜底：用 akshare 多端点并行补齐 baostock 缺失的字段
+
+        端点选型（2026-05-19 实测可用）：
+          xq  → stock_individual_spot_xq(symbol='SH{code}')，提供 市盈率(TTM)/市净率/流通值
+          fa  → stock_financial_abstract(symbol=code)，提供 ROE
+          industry 暂时从 xq 无法获取，保持 None 供上游决策
+
+        Args:
+            prof: 待填充的 profile dict（原地修改）
+            fields: 待填充的字段名列表
+            budget_s: 总时间预算（秒）
+        """
+        import akshare as ak
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        # 雪球 symbol 格式：SH/SZ + 6位代码
+        xq_symbol = ('SH' if stock_code.startswith('6') else 'SZ') + stock_code
+
+        tasks = {}
+        pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='ak_fill')
+        try:
+            need_xq = any(k in fields for k in ('pe_ttm', 'pb', 'market_cap'))
+            need_fa = 'roe' in fields
+
+            if need_xq:
+                tasks[pool.submit(ak.stock_individual_spot_xq, symbol=xq_symbol)] = 'xq'
+            if need_fa:
+                tasks[pool.submit(ak.stock_financial_abstract, symbol=stock_code)] = 'fa'
+
+            for fut in as_completed(list(tasks.keys()), timeout=budget_s):
+                tag = tasks[fut]
+                try:
+                    df = fut.result()
+                    if df is None or len(df) == 0:
+                        continue
+                    if tag == 'xq':
+                        # 长表：第0列为指标名，第1列为值
+                        lookup = dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1]))
+                        if prof.get('pe_ttm') is None:
+                            raw = lookup.get('市盈率(TTM)')
+                            if raw is not None:
+                                try:
+                                    prof['pe_ttm'] = float(raw)
+                                except (ValueError, TypeError):
+                                    pass
+                        if prof.get('pb') is None:
+                            raw = lookup.get('市净率')
+                            if raw is not None:
+                                try:
+                                    prof['pb'] = float(raw)
+                                except (ValueError, TypeError):
+                                    pass
+                        if prof.get('market_cap') is None:
+                            # 流通值 单位为元，转亿元
+                            raw = lookup.get('流通值') or lookup.get('资产净值/总市值')
+                            if raw is not None:
+                                try:
+                                    prof['market_cap'] = float(raw) / 1e8
+                                except (ValueError, TypeError):
+                                    pass
+                    elif tag == 'fa':
+                        # stock_financial_abstract: 列为 ['选项', '指标', 日期1, 日期2, ...]
+                        if prof.get('roe') is None and len(df.columns) > 2:
+                            try:
+                                for _, row in df.iterrows():
+                                    indicator_name = str(row.iloc[1]) if len(row) > 1 else ''
+                                    if '净资产收益率' in indicator_name or 'ROE' in indicator_name.upper():
+                                        # 从最近日期列向前找非空值（列索引2起）
+                                        for col_idx in range(2, len(row)):
+                                            val = row.iloc[col_idx]
+                                            if val is not None and str(val) not in ('', 'nan', 'None', '--'):
+                                                try:
+                                                    prof['roe'] = float(val)
+                                                    break
+                                                except (ValueError, TypeError):
+                                                    continue
+                                        break
+                            except Exception:
+                                pass
+                except Exception as e:
+                    app.logger.warning(f"_akshare_fill {tag} 失败 ({stock_code}): {type(e).__name__}: {e}")
+        except TimeoutError:
+            app.logger.warning(f"_akshare_fill 总超时 {budget_s}s ({stock_code})")
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     # 2026-05-19 B10-FIX：
     # 根因：原实现 _ensure_bs_login() 在主 Flask 线程调用（bs.login() 可阻塞 10-30s），
@@ -1370,6 +1459,14 @@ def api_stock_profile():
         finally:
             _BAOSTOCK_LOCK.release()
 
+        # B12 兜底：baostock 部分字段缺失时用 akshare 补齐
+        _missing = [k for k in ('industry', 'pe_ttm', 'pb', 'roe', 'market_cap') if _local_profile.get(k) is None]
+        if _missing:
+            try:
+                _akshare_fill(_local_profile, _missing, budget_s=5.0)
+            except Exception as _e:
+                app.logger.warning(f"_akshare_fill 异常 ({stock_code}): {_e}")
+
         return _local_profile
 
     # 外层 executor：主 Flask 线程最多阻塞 22s，超时 → 503
@@ -1378,11 +1475,37 @@ def api_stock_profile():
         fut = _outer_pool.submit(_do_all_baostock)
         try:
             profile = fut.result(timeout=22)
-        except _TPETimeout:
-            app.logger.warning(f"api_stock_profile overall timeout 22s ({stock_code})，返回 503")
+        except (_TPETimeout, TimeoutError) as _toe:
+            app.logger.warning(f"baostock overall_timeout_22s ({stock_code})，进入 akshare-only 兜底")
+            _fb = {
+                'stock_code': stock_code,
+                'stock_name': _STOCK_NAME_CACHE.get(stock_code) or stock_code,
+                'industry': None, 'market_cap': None,
+                'pe_ttm': None, 'pb': None, 'roe': None,
+            }
+            try:
+                _akshare_fill(_fb, ['industry', 'market_cap', 'pe_ttm', 'pb', 'roe'], budget_s=6.0)
+            except Exception as _e:
+                app.logger.warning(f"akshare-only 兜底失败 ({stock_code}): {_e}")
+
+            if any(_fb.get(k) is not None for k in ('industry', 'pe_ttm', 'pb', 'roe')):
+                resp = custom_jsonify(_fb)
+                resp.headers['X-Data-Source'] = 'akshare-fallback'
+                return resp
+
+            # akshare 也失败 → 尝试 stale cache
+            _stale = _PROFILE_CACHE.get(stock_code)
+            if _stale:
+                _stale_ts, _stale_data = _stale if isinstance(_stale, tuple) else (0, _stale)
+                if (_time.time() - _stale_ts) < _PROFILE_STALE_MAX_S:
+                    resp = custom_jsonify(_stale_data)
+                    resp.headers['X-Cache'] = 'stale'
+                    resp.headers['X-Data-Source'] = 'cache-stale'
+                    return resp
+
             return custom_jsonify({
-                'error': 'baostock_timeout',
-                'reason': 'overall_timeout_22s',
+                'error': 'all_sources_failed',
+                'reason': 'baostock_timeout + akshare_fallback_failed',
                 'stock_code': stock_code
             }), 503
         except Exception as e:

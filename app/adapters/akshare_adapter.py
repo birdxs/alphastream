@@ -10,10 +10,17 @@ Pos: app/adapters层，作为主数据源适配器被fallback_manager调度
 import akshare as ak
 import pandas as pd
 import logging
+import os
+import time
 from typing import List, Dict, Optional
 from .base_adapter import BaseAdapter
 
 logger = logging.getLogger(__name__)
+
+# B16 AkshareAdapter 探针缓存常量
+_AKSHARE_HC_CACHE = {'ok': None, 'ts': 0.0}
+_AKSHARE_HC_TTL = float(os.getenv('AKSHARE_HC_CACHE_TTL', '60'))
+_AKSHARE_HC_PROBE_SYMBOL = os.getenv('AKSHARE_HC_PROBE_SYMBOL', 'SH600519')
 
 
 class AkshareAdapter(BaseAdapter):
@@ -331,10 +338,21 @@ class AkshareAdapter(BaseAdapter):
             return pd.DataFrame()
 
     def health_check(self) -> bool:
-        """健康检查"""
+        """轻量探针：雪球单股快照 + 60s 缓存
+
+        - 命中缓存：<1ms
+        - 冷启动：~3.5s（雪球，独立于东财上游）
+        - 与 ADAPTERS_STATUS_PER_CALL_TIMEOUT=5s 兼容
+        """
+        now = time.time()
+        if _AKSHARE_HC_CACHE['ok'] is not None and (now - _AKSHARE_HC_CACHE['ts']) < _AKSHARE_HC_TTL:
+            return _AKSHARE_HC_CACHE['ok']
         try:
-            df = ak.stock_zh_a_spot_em()
-            return df is not None and len(df) > 0
+            df = ak.stock_individual_spot_xq(symbol=_AKSHARE_HC_PROBE_SYMBOL)
+            ok = df is not None and len(df) > 0
         except Exception as e:
             logger.warning(f"akshare健康检查失败: {type(e).__name__}: {e}")
-            return False
+            ok = False
+        _AKSHARE_HC_CACHE['ok'] = ok
+        _AKSHARE_HC_CACHE['ts'] = now
+        return ok
