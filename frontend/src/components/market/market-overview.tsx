@@ -28,7 +28,8 @@ export function MarketOverview() {
   const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down' | null>>({});
   const prevQuotesRef = useRef<IndexQuote[]>([]);
 
-  const fetchIndices = useCallback(async () => {
+  // B25: fetchIndices 返回 true=有数据拿到, false=降级/空响应
+  const fetchIndices = useCallback(async (): Promise<boolean> => {
     try {
       // B23: 走 Next.js proxy (同 origin)，避免 Playwright/Chromium 冷启动时直连 8888 的 16s IPv6 超时
       // SSE 单独直连 8888（见下方 connectSSE），两者分离互不阻塞连接池
@@ -55,13 +56,14 @@ export function MarketOverview() {
         prevQuotesRef.current = res.indices;
         setQuotes(res.indices);
         setError(false);
-      } else {
-        setError(true);
+        setLoading(false);
+        return true;
       }
+      // B25: degraded(indices=[]) — 不立即报错，等重试或 SSE
+      return false;
     } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
+      // B25: 网络/JSON 错误也不立即报错，由调用方决定是否兜底
+      return false;
     }
   }, []);
 
@@ -70,6 +72,7 @@ export function MarketOverview() {
     let eventSource: EventSource | null = null;
     let fallbackInterval: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let loadingTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
     // B23: SSE 直连后端，避免与 REST fetch 共享 Next.js proxy HTTP/1.1 连接池
@@ -136,16 +139,33 @@ export function MarketOverview() {
       };
     };
 
-    // 先用fetch获取一次数据（快速首屏），然后连接SSE
-    fetchIndices().then(() => {
-      if (!disposed) connectSSE();
-    });
+    // B25: 带重试的初始加载 — 最多3次(间隔800ms)解决 Turbopack 首次 degraded 问题
+    // 若3次均无数据，兜底结束 loading(显示 error 态 ---)
+    const initFetch = async (attempt: number) => {
+      if (disposed) return;
+      const ok = await fetchIndices();
+      if (ok) {
+        if (!disposed) connectSSE();
+        return;
+      }
+      if (attempt < 3) {
+        loadingTimer = setTimeout(() => initFetch(attempt + 1), 800);
+      } else {
+        // 3次全部 degraded/失败 → 兜底结束 loading
+        setLoading(false);
+        setError(true);
+        if (!disposed) connectSSE();
+      }
+    };
+
+    initFetch(0);
 
     return () => {
       disposed = true;
       eventSource?.close();
       if (fallbackInterval) clearInterval(fallbackInterval);
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (loadingTimer) clearTimeout(loadingTimer);
     };
   }, [fetchIndices]);
 
