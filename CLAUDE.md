@@ -4,6 +4,19 @@
 
 ---
 
+## Sprint 2-A 交付记录（commit 205cb1f，2026-05-20 01:23 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S2-A1 输入校验中间件 | PASS | ValidationError + 5个端点覆盖 |
+| S2-A2 响应外壳推广 | PASS | api_ok() + 前端 extractData<T>() |
+| S2-A3 缓存 Header | PASS | with_cache 装饰器，5s/60s |
+| S2-A4 限流 | PASS | Flask-Limiter，429 RATE_LIMITED |
+
+铁证：真重启 uptime_s=3.6s / pytest 777 passed 0 failed / curl 全测通过
+
+---
+
 ## 🚨 铁律 #1：金融数据零假值（最高优先级，2026-05-19 19:30 入永久记忆）
 
 **触发背景**：B27 Kimi 真测发现 dashboard 10s 显示假数据 1174.06 / 4384.17（组件 mock / SWR fallback 旧值），用户可能误以为是真实行情。Comdr 严正声明：金融领域追求数据精确度，禁止任何场景下任何理由使用任何假数据。
