@@ -1389,8 +1389,8 @@ def api_stock_profile():
     #       随后 _BAOSTOCK_LOCK.acquire(timeout=15) 在主线程同步等待锁（最多再加 15s），
     #       两段合计可达 35s+，导致请求 hang。
     # 修复：将 _ensure_bs_login() + lock acquire + 全部 baostock I/O 全部放入子线程，
-    #       外层 future.result(timeout=22) 是唯一 hard deadline，主 Flask 线程最多等 22s，
-    #       超时立即返回 503，释放 worker。
+    #       外层 future.result(timeout=PROFILE_BAOSTOCK_TIMEOUT_S, default=8) 是唯一 hard deadline，
+    #       主 Flask 线程最多等 8s，超时后走 akshare-only fallback。
     def _do_all_baostock():
         _local_profile = {
             'stock_code': stock_code, 'stock_name': name,
@@ -1474,9 +1474,9 @@ def api_stock_profile():
     try:
         fut = _outer_pool.submit(_do_all_baostock)
         try:
-            profile = fut.result(timeout=22)
+            profile = fut.result(timeout=int(os.getenv('PROFILE_BAOSTOCK_TIMEOUT_S', '8')))
         except (_TPETimeout, TimeoutError) as _toe:
-            app.logger.warning(f"baostock overall_timeout_22s ({stock_code})，进入 akshare-only 兜底")
+            app.logger.warning(f"baostock overall_timeout ({stock_code})，进入 akshare-only 兜底")
             _fb = {
                 'stock_code': stock_code,
                 'stock_name': _STOCK_NAME_CACHE.get(stock_code) or stock_code,
@@ -1767,12 +1767,31 @@ def cancel_scan(task_id):
         return jsonify({'message': '任务已取消'})
 
 
-def _fetch_market_indices_data():
-    """内部函数：获取主要市场指数数据（上证/深证/创业板/沪深300），供API和SSE共用"""
-    import akshare as ak
+# --- M1/M2: 实时指数内存缓存（避免每次请求都调 akshare）---
+_market_indices_cache: dict = {}  # {'data': {...}, 'ts': float, 'source': str}
 
-    # 方案1: 尝试实时行情接口
-    try:
+def _fetch_market_indices_data():
+    """内部函数：获取主要市场指数数据（上证/深证/创业板/沪深300），供API和SSE共用。
+    Input: 无
+    Output: {'indices': [...], 'source': str}
+    Pos: 实时指数三级兜底链（东财→新浪→日线），30s 内存缓存
+    """
+    import akshare as ak
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
+    _PRIMARY_TIMEOUT = int(os.getenv('INDEX_PRIMARY_TIMEOUT_S', '5'))
+    _FALLBACK_TIMEOUT = int(os.getenv('INDEX_FALLBACK_TIMEOUT_S', '15'))  # 新浪约 9s
+    _CACHE_TTL = int(os.getenv('INDEX_CACHE_TTL_S', '30'))
+
+    # 检查 30s 内缓存
+    _cache = _market_indices_cache
+    if _cache.get('data') and (time.time() - _cache.get('ts', 0)) < _CACHE_TTL:
+        cached = dict(_cache['data'])
+        cached['source'] = 'cache'
+        return cached
+
+    # --- 主路径: 东财 stock_zh_index_spot_em ---
+    def _try_eastmoney():
         df = ak.stock_zh_index_spot_em()
         target_codes = ['000001', '399001', '399006', '000300']
         result = []
@@ -1786,12 +1805,60 @@ def _fetch_market_indices_data():
                     'price': float(r['最新价']),
                     'change_pct': float(r['涨跌幅'])
                 })
-        if result:
-            return {'indices': result}
-    except Exception as e:
-        app.logger.warning(f"实时指数接口失败: {e}")
+        return result
 
-    # 方案2: 用历史日线数据的最后一条（更稳定）
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(_try_eastmoney)
+        try:
+            result = fut.result(timeout=_PRIMARY_TIMEOUT)
+            if result:
+                data = {'indices': result}
+                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'eastmoney'})
+                data['source'] = 'eastmoney'
+                return data
+        except FuturesTimeout:
+            app.logger.warning(f"实时指数主路径超时({_PRIMARY_TIMEOUT}s): eastmoney push2, 切兜底")
+        except Exception as e:
+            app.logger.warning(f"实时指数接口失败: {e}, 切兜底")
+
+    # --- 兜底1: 新浪 stock_zh_index_spot_sina ---
+    def _try_sina():
+        df = ak.stock_zh_index_spot_sina()
+        # 新浪代码格式: sh000001 / sz399001
+        sina_map = {
+            'sh000001': ('000001', '上证指数'),
+            'sz399001': ('399001', '深证成指'),
+            'sz399006': ('399006', '创业板指'),
+            'sh000300': ('000300', '沪深300'),
+        }
+        result = []
+        for sina_code, (code, name) in sina_map.items():
+            row = df[df['代码'] == sina_code]
+            if not row.empty:
+                r = row.iloc[0]
+                result.append({
+                    'name': str(r['名称']) if '名称' in r.index else name,
+                    'code': code,
+                    'price': float(r['最新价']),
+                    'change_pct': float(r['涨跌幅'])
+                })
+        return result
+
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(_try_sina)
+        try:
+            result = fut.result(timeout=_FALLBACK_TIMEOUT)
+            if result:
+                data = {'indices': result}
+                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'sina'})
+                data['source'] = 'sina'
+                return data
+        except FuturesTimeout:
+            app.logger.warning(f"实时指数兜底1(新浪)超时({_FALLBACK_TIMEOUT}s), 切日线")
+        except Exception as e:
+            app.logger.warning(f"实时指数兜底1(新浪)失败: {e}, 切日线")
+
+    # --- 兜底2: 历史日线最后一条（4 路并发，减少串行等待）---
     try:
         indices_config = [
             ('sh000001', '上证指数'),
@@ -1799,8 +1866,9 @@ def _fetch_market_indices_data():
             ('sz399006', '创业板指'),
             ('sh000300', '沪深300'),
         ]
-        result = []
-        for symbol, name in indices_config:
+
+        def _fetch_one_daily(args):
+            symbol, name = args
             try:
                 df = ak.stock_zh_index_daily(symbol=symbol)
                 if df is not None and len(df) >= 2:
@@ -1808,26 +1876,51 @@ def _fetch_market_indices_data():
                     prev = df.iloc[-2]
                     price = float(latest['close'])
                     change_pct = round((price - float(prev['close'])) / float(prev['close']) * 100, 2)
-                    result.append({
-                        'name': name,
-                        'code': symbol[2:],
-                        'price': price,
-                        'change_pct': change_pct
-                    })
+                    return {'name': name, 'code': symbol[2:], 'price': price, 'change_pct': change_pct}
             except Exception:
-                continue
+                pass
+            return None
+
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            items = list(ex.map(_fetch_one_daily, indices_config, timeout=12))
+        result = [x for x in items if x]
+
         if result:
-            return {'indices': result}
+            data = {'indices': result}
+            _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'daily'})
+            data['source'] = 'daily'
+            return data
     except Exception as e:
         app.logger.error(f"历史指数数据也失败: {e}")
 
-    return {'indices': []}
+    # --- 兜底3: 返回已有缓存（无论是否过期）---
+    if _market_indices_cache.get('data'):
+        app.logger.warning("所有指数来源均失败，返回过期缓存")
+        stale = dict(_market_indices_cache['data'])
+        stale['source'] = 'stale_cache'
+        return stale
+
+    return {'indices': [], 'source': 'degraded'}
 
 
 @app.route('/api/market_indices', methods=['GET'])
 def get_market_indices():
-    """获取主要市场指数实时行情（上证/深证/创业板/沪深300）"""
-    return jsonify(_fetch_market_indices_data())
+    """获取主要市场指数实时行情（上证/深证/创业板/沪深300）
+    Input: 无
+    Output: JSON {'indices': [...], 'source': str}
+    Pos: 首页/Dashboard 实时指数端点，三级兜底链
+    """
+    data = _fetch_market_indices_data()
+    source = data.get('source', 'unknown')
+    resp = jsonify(data)
+    resp.headers['X-Data-Source'] = source
+    if source == 'cache':
+        resp.headers['X-Cache'] = 'HIT'
+    elif source in ('degraded', 'stale_cache'):
+        resp.headers['X-Cache'] = 'DEGRADED'
+    else:
+        resp.headers['X-Cache'] = 'MISS'
+    return resp
 
 
 @app.route('/api/market_stream')
