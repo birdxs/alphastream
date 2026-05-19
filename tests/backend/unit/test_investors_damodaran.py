@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-# Input  : DamodaranAgent.analyze mock LLM
-# Output : pytest 用例，覆盖快乐路径 + AI 失败降级
+# Input  : DamodaranAgent.analyze mock LLM + registry
+# Output : pytest 用例，覆盖快乐路径 + AI 失败降级（无外网）
 # Pos    : tests/backend/unit/test_investors_damodaran.py - BE-02b 达摩达兰人格 Agent 单元测试
 """BE-02b 达摩达兰 Agent 测试"""
 from __future__ import annotations
@@ -10,6 +10,16 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from app.agents.investors.damodaran import DamodaranAgent
+
+
+@pytest.fixture(autouse=True)
+def _no_registry_fetch(monkeypatch):
+    """阻止所有 damodaran 测试触发真实外网 AdapterRegistry 调用。
+    _registry_fetch 是 damodaran.py 内部函数，直接替换为立即返回 None。
+    这样 _collect_registry_context 不会发起任何 HTTP 请求，消除 4×120s 超时。
+    """
+    import app.agents.investors.damodaran as dm_mod
+    monkeypatch.setattr(dm_mod, "_registry_fetch", lambda domain, method, **kw: None)
 
 
 def test_damodaran_happy_path_buy(minimal_state):

@@ -189,6 +189,8 @@ def get_kline(stock_code: str, market: str = 'A',
             return _normalize_kline_df(raw)
         else:
             raise UnsupportedMarketError(f"不支持的市场: {market}")
+    except UnsupportedMarketError:
+        raise  # 不支持的市场类型，直接向上抛出，不应被 Exception 兜底吞掉
     except (DataSourceTimeoutError, DataSourceUnavailableError) as e:
         logger.warning(f"get_kline 数据源失败 {stock_code}/{market}: {e}")
         return pd.DataFrame()

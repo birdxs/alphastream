@@ -124,7 +124,7 @@ def test_risk_low_no_alert(mock_event_bus):
 
 
 # ---------------------------------------------------------------- 5. LLM error -> fallback
-def test_risk_llm_error_fallback(mock_event_bus):
+def test_risk_llm_error_fallback(mock_event_bus, monkeypatch):
     """LLM error -> 走 _fallback_analyze; mock RiskMonitor 避免真实数据访问"""
     state = _make_state()
     fake_rm = MagicMock()
@@ -132,13 +132,13 @@ def test_risk_llm_error_fallback(mock_event_bus):
         "risk_score": 25, "risk_level": "低风险", "ai_commentary": "fallback"
     }
 
-    # 通过 sys.modules 注入 app.analysis.risk_monitor & stock_analyzer 桩
+    # 通过 monkeypatch.setitem 注入 sys.modules，确保测试结束后自动回滚
     risk_mod = _types.ModuleType("app.analysis.risk_monitor")
     risk_mod.RiskMonitor = MagicMock(return_value=fake_rm)
     sa_mod = _types.ModuleType("app.analysis.stock_analyzer")
     sa_mod.StockAnalyzer = MagicMock()
-    _sys.modules["app.analysis.risk_monitor"] = risk_mod
-    _sys.modules["app.analysis.stock_analyzer"] = sa_mod
+    monkeypatch.setitem(_sys.modules, "app.analysis.risk_monitor", risk_mod)
+    monkeypatch.setitem(_sys.modules, "app.analysis.stock_analyzer", sa_mod)
 
     with patch("app.core.ai_client.get_ai_client", return_value=MagicMock()), \
          patch("app.core.ai_client.chat_with_tools",

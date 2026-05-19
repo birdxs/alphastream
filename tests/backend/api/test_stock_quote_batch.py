@@ -43,7 +43,8 @@ def test_batch_empty_codes(flask_client):
 
 
 def test_batch_too_many_codes(flask_client):
-    codes = ",".join([str(600000 + i) for i in range(60)])
+    # [REAL-01 2026-05-18] 上限已提升到 100；发送 101 个代码触发 400
+    codes = ",".join([str(600000 + i) for i in range(101)])
     resp = flask_client.get(f"/api/stock_quote_batch?codes={codes}")
     assert resp.status_code == 400
 

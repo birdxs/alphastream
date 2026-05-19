@@ -8,6 +8,7 @@ Pos: app/core/event_bus.py - Agent间事件通信总线 + SSE流式桥接
 import logging
 import queue
 import threading
+import time
 from typing import Callable, Dict, List, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,10 @@ class EventBus:
             return
         self._subscribers: Dict[str, List[Callable]] = {}
         self._sub_lock = threading.Lock()
-        self._sse_bridges: List[Tuple[queue.Queue, Optional[List[str]]]] = []
+        # 三元组: (queue, filter_events, created_at_monotonic)
+        self._sse_bridges: List[Tuple[queue.Queue, Optional[List[str]], float]] = []
         self._bridge_lock = threading.Lock()
+        self._SSE_BRIDGE_TTL = 30 * 60  # 30 分钟 TTL，防止连接泄漏
         self._initialized = True
 
     def subscribe(self, event_name: str, callback: Callable) -> None:
@@ -54,10 +57,16 @@ class EventBus:
             except Exception as e:
                 logger.error(f"事件处理失败({event_name}): {e}")
 
-        # 推送到SSE桥接队列
+        # 推送到SSE桥接队列（同时清理 30min TTL 超时的桥接）
+        now = time.monotonic()
         with self._bridge_lock:
+            # 清理超过 TTL 的桥接队列（防止连接泄漏）
+            self._sse_bridges = [
+                (q, f, t) for q, f, t in self._sse_bridges
+                if (now - t) < self._SSE_BRIDGE_TTL
+            ]
             bridges = self._sse_bridges.copy()
-        for bridge_queue, filter_events in bridges:
+        for bridge_queue, filter_events, _created_at in bridges:
             if filter_events is None or event_name in filter_events:
                 try:
                     bridge_queue.put_nowait({
@@ -92,7 +101,7 @@ class EventBus:
         #   一次深度分析可产生数千 token事件, 1000易被打满导致丢token
         bridge_queue = queue.Queue(maxsize=10000)
         with self._bridge_lock:
-            self._sse_bridges.append((bridge_queue, filter_events))
+            self._sse_bridges.append((bridge_queue, filter_events, time.monotonic()))
         logger.debug(f"创建SSE桥接队列, filter={filter_events}")
         return bridge_queue
 
@@ -100,7 +109,7 @@ class EventBus:
         """销毁SSE桥接队列，取消所有订阅"""
         with self._bridge_lock:
             self._sse_bridges = [
-                (q, f) for q, f in self._sse_bridges if q is not bridge_queue
+                (q, f, t) for q, f, t in self._sse_bridges if q is not bridge_queue
             ]
         logger.debug("销毁SSE桥接队列")
 

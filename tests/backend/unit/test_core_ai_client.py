@@ -297,9 +297,11 @@ def test_T014_chat_with_tools_exceed_rounds(ai_client_mod):
     assert len(log) == 2  # 2 轮工具调用
 
 
-# ============ T015 超时/重试配置（构造期，验证 timeout=180/connect=10/max_retries=2） ============
+# ============ T015 超时/重试配置（构造期，验证 timeout=600/connect=15/max_retries=2） ============
 def test_T015_client_timeout_and_retries(ai_client_mod, monkeypatch):
-    """构造的 OpenAI 客户端应带 180s 总超时 + 10s 连接超时 + 2 次重试。"""
+    """构造的 OpenAI 客户端应带 600s 总超时 + 15s 连接超时 + 2 次重试。
+    AI_HTTP_TIMEOUT 默认 600，AI_HTTP_CONNECT_TIMEOUT 默认 15 (2026-05-18 拉富足)。
+    """
     captured = {}
 
     class FakeOpenAI:
@@ -314,7 +316,7 @@ def test_T015_client_timeout_and_retries(ai_client_mod, monkeypatch):
     # httpx.Timeout 对象
     t = captured['timeout']
     # httpx.Timeout 可读 .connect / .read 等
-    assert getattr(t, 'connect', None) == 10.0
+    assert getattr(t, 'connect', None) == 15.0  # AI_HTTP_CONNECT_TIMEOUT 默认 15s（2026-05-18 拉富足调整）
 
 
 # ============ T016 chat_with_tools_stream 基础调用 (smoke) ============
@@ -413,7 +415,14 @@ def test_T020_chat_with_tools_default_executor(ai_client_mod, monkeypatch):
         tools_mod = importlib.import_module('app.core.tools')
     except Exception:
         pytest.skip("app.core.tools 不可导入")
-    monkeypatch.setattr(tools_mod, 'execute_tool', fake_execute_tool)
+    if not hasattr(tools_mod, 'execute_tool'):
+        # 其他测试文件在模块级 stub 了 app.core.tools（仅含 schema 属性），导致 execute_tool 缺失
+        # 强制重载以获取真实模块（或 setattr 注入 fake）
+        try:
+            tools_mod = importlib.reload(tools_mod)
+        except Exception:
+            pass
+    monkeypatch.setattr(tools_mod, 'execute_tool', fake_execute_tool, raising=False)
 
     client = mock.MagicMock()
     round1 = _make_stream_chunks(

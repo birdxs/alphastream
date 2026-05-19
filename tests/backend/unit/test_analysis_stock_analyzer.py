@@ -93,16 +93,17 @@ class TestGetStockData:
             "low": np.arange(9.5, 19.5),
             "volume": np.arange(100, 110),
         })
-        analyzer.data_provider.get_stock_history.return_value = raw
-
-        df = analyzer.get_stock_data("000001", market_type="A")
+        # FIX-7 2026-05-18: get_stock_data 已改走 market_data_adapter.get_kline
+        with patch("app.adapters.market_data_adapter.get_kline", return_value=raw):
+            df = analyzer.get_stock_data("000001", market_type="A")
         assert not df.empty
         assert {"date", "open", "close", "high", "low", "volume"}.issubset(df.columns)
         assert len(df) == 10
 
     def test_get_stock_data_empty_returns_empty_df(self, analyzer):
-        analyzer.data_provider.get_stock_history.return_value = pd.DataFrame()
-        df = analyzer.get_stock_data("999999", market_type="A")
+        # FIX-7 2026-05-18: get_stock_data 已改走 market_data_adapter.get_kline
+        with patch("app.adapters.market_data_adapter.get_kline", return_value=pd.DataFrame()):
+            df = analyzer.get_stock_data("999999", market_type="A")
         assert df.empty
 
     def test_get_stock_data_unsupported_market_returns_empty(self, analyzer):
@@ -119,14 +120,15 @@ class TestGetStockData:
             "low": [0.9, 1.9, 2.9, 3.9, 4.9],
             "volume": [100, 200, 300, 400, 500],
         })
-        analyzer.data_provider.get_stock_history.return_value = raw
-        df1 = analyzer.get_stock_data("000002", market_type="A",
-                                      start_date="20250101", end_date="20250105")
-        df2 = analyzer.get_stock_data("000002", market_type="A",
-                                      start_date="20250101", end_date="20250105")
+        # FIX-7 2026-05-18: get_stock_data 已改走 market_data_adapter.get_kline
+        with patch("app.adapters.market_data_adapter.get_kline", return_value=raw) as mock_kline:
+            df1 = analyzer.get_stock_data("000002", market_type="A",
+                                          start_date="20250101", end_date="20250105")
+            df2 = analyzer.get_stock_data("000002", market_type="A",
+                                          start_date="20250101", end_date="20250105")
         assert df1.equals(df2)
-        # 第二次走缓存：DataProvider.get_stock_history 只被调用一次
-        assert analyzer.data_provider.get_stock_history.call_count == 1
+        # 第二次走缓存：market_data_adapter.get_kline 只被调用一次
+        assert mock_kline.call_count == 1
 
 
 # ============================================================
@@ -357,15 +359,17 @@ class TestQuickAnalyze:
         assert "recommendation" in report
 
     def test_quick_analyze_empty_data_raises(self, analyzer):
-        analyzer.data_provider.get_stock_history.return_value = pd.DataFrame()
-        with pytest.raises(ValueError):
-            analyzer.quick_analyze_stock("999999", market_type="A")
+        # FIX-7 2026-05-18: get_stock_data 走 market_data_adapter.get_kline
+        with patch("app.adapters.market_data_adapter.get_kline", return_value=pd.DataFrame()):
+            with pytest.raises(ValueError):
+                analyzer.quick_analyze_stock("999999", market_type="A")
 
     def test_quick_analyze_info_failure_uses_default(self, analyzer):
         raw = _make_kline(80)
-        analyzer.data_provider.get_stock_history.return_value = raw
-        analyzer.data_provider.get_stock_info.side_effect = RuntimeError("info err")
-        report = analyzer.quick_analyze_stock("000005", market_type="A")
+        # FIX-7 2026-05-18: get_stock_data 走 market_data_adapter.get_kline
+        with patch("app.adapters.market_data_adapter.get_kline", return_value=raw):
+            analyzer.data_provider.get_stock_info.side_effect = RuntimeError("info err")
+            report = analyzer.quick_analyze_stock("000005", market_type="A")
         # info 异常被 get_stock_info 内部兜底为 "未知"
         assert report["stock_name"] in ("未知", "")
 
@@ -397,25 +401,26 @@ class TestFormatIndicatorData:
 class TestPerformEnhancedAnalysis:
     def test_enhanced_analysis_happy_path(self, analyzer):
         raw = _make_kline(80)
-        analyzer.data_provider.get_stock_history.return_value = raw
         analyzer.data_provider.get_stock_info.return_value = {
             "股票名称": "测试", "行业": "Tech"
         }
-        # 屏蔽内部 AI 调用
-        with patch.object(analyzer, "_build_stock_prompt_and_get_analysis", return_value="AI-MOCK"), \
+        # FIX-7 2026-05-18: get_stock_data 走 market_data_adapter.get_kline
+        with patch("app.adapters.market_data_adapter.get_kline", return_value=raw), \
+             patch.object(analyzer, "_build_stock_prompt_and_get_analysis", return_value="AI-MOCK"), \
              patch.object(analyzer, "get_stock_news", return_value=[]):
             report = analyzer.perform_enhanced_analysis("000001", market_type="A")
         # 不同实现可能返回 dict 或带 ai_analysis 的复合对象
         assert report is not None
 
     def test_enhanced_analysis_empty_data_handled(self, analyzer):
-        analyzer.data_provider.get_stock_history.return_value = pd.DataFrame()
         analyzer.data_provider.get_stock_info.return_value = {
             "股票名称": "X", "行业": "X"
         }
+        # FIX-7 2026-05-18: get_stock_data 走 market_data_adapter.get_kline
         # 空数据：方法应抛出或返回错误对象，不应静默成功
         try:
-            with patch.object(analyzer, "_build_stock_prompt_and_get_analysis", return_value="AI"), \
+            with patch("app.adapters.market_data_adapter.get_kline", return_value=pd.DataFrame()), \
+                 patch.object(analyzer, "_build_stock_prompt_and_get_analysis", return_value="AI"), \
                  patch.object(analyzer, "get_stock_news", return_value=[]):
                 report = analyzer.perform_enhanced_analysis("999999", market_type="A")
             # 若没有抛异常，则 report 至少不是 None

@@ -1246,6 +1246,9 @@ _PROFILE_TTL = 3600  # 1小时
 _BS_LOGGED_IN = False
 
 def _ensure_bs_login():
+    # [Batch8-FIX 2026-05-19] DISABLE_NETWORK=1 时跳过真实 baostock 网络连接（测试环境）
+    if os.getenv("DISABLE_NETWORK") == "1":
+        return
     global _BS_LOGGED_IN
     if _BS_LOGGED_IN: return
     with _BAOSTOCK_LOCK:
@@ -3909,15 +3912,15 @@ def stock_quote_batch():
     codes = [c.strip() for c in codes_raw.split(',') if c.strip()]
     if not codes:
         return custom_jsonify({'error': 'codes 解析为空'}), 400
-    # [REAL-01 2026-05-18] 提升上限到 100；支持 max_codes 客户端限批
+    # [REAL-01 2026-05-18] 提升上限到 100；超过 100 直接拒绝；支持 max_codes 客户端限批
+    if len(codes) > 100:
+        return custom_jsonify({'error': 'codes 最多 100 个'}), 400
     try:
         max_codes = int(request.args.get('max_codes', '100'))
     except ValueError:
         max_codes = 100
     if max_codes > 0 and len(codes) > max_codes:
         codes = codes[:max_codes]
-    if len(codes) > 100:
-        return custom_jsonify({'error': 'codes 最多 100 个'}), 400
 
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout, as_completed
     end_date = datetime.now().strftime('%Y%m%d')
@@ -4084,6 +4087,9 @@ _preload_thread.start()
 
 # 预热 /api/stock_profile 常用股票，避免首次访问compare/dashboard时等待baostock
 def _preload_profiles():
+    # [Batch8-FIX 2026-05-19] DISABLE_NETWORK=1 时（测试环境）跳过 baostock 真实连接
+    if os.getenv("DISABLE_NETWORK") == "1":
+        return
     import time as _t
     _t.sleep(3)  # 等A股名称缓存先加载
     common = ['600519', '000858', '300750', '000001', '300059', '688981']
