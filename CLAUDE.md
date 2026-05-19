@@ -4,6 +4,21 @@
 
 ---
 
+## Sprint 2-B1 交付记录（commit beff8d3，2026-05-20 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| Hunt4-C1 4×useState<any> | PASS | 新增 OHLCVRow 接口 + Record<string,unknown>，移除6处 eslint-disable |
+| Hunt4-C2 useState 148处分散 | TODO | 文档化，建议后续 Sprint 引入 zustand store |
+| Hunt4-C3 EventSource三件套 | N/A（已修复）| market-overview.tsx cleanup 已完整，无需改动 |
+| Hunt4-C4 stopBlink副作用泄漏 | PASS | blinkCleanupRef + useEffect cleanup + sendMessage 前置清理 |
+| Hunt4-C5 use client 91.25% | TODO | 文档化，建议后续按需精简 Server Component |
+| Hunt4-C6 localStorage SSR | N/A（已修复）| getInitialWidth() 已有 typeof window 保护 |
+
+铁证：tsc --noEmit 零错误 / 前端真重启 PID=56394 / 3路由 HTTP 200 / Next.js 日志无 hydration 错误
+
+---
+
 ## Sprint 2-A 交付记录（commit 205cb1f，2026-05-20 01:23 +08:00）
 
 | 条目 | 状态 | 关键实现 |

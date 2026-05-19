@@ -46,14 +46,14 @@ def _safe_json_parse(text: str) -> Optional[Dict[str, Any]]:
         obj = json.loads(s)
         return obj if isinstance(obj, dict) else None
     except Exception:
-        pass
+        pass  # 尝试下一步修复
     # 去 trailing comma: ,} 或 ,]
     try:
         s2 = re.sub(r',\s*([}\]])', r'\1', s)
         obj = json.loads(s2)
         return obj if isinstance(obj, dict) else None
     except Exception:
-        pass
+        pass  # 尝试下一步修复
     # 提取首个大括号块
     try:
         m = re.search(r'\{.*\}', s, re.DOTALL)
@@ -61,8 +61,8 @@ def _safe_json_parse(text: str) -> Optional[Dict[str, Any]]:
             candidate = re.sub(r',\s*([}\]])', r'\1', m.group(0))
             obj = json.loads(candidate)
             return obj if isinstance(obj, dict) else None
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"_safe_json_parse: 所有解析尝试均失败: {e}")
     return None
 
 
@@ -223,8 +223,8 @@ class StrategyEvolver:
             if os.path.exists(filename):
                 with open(filename, 'r', encoding='utf-8') as f:
                     return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[StrategyEvolver] _load_strategy 读取失败 {filename}: {e}", exc_info=True)
         return None
 
     def _save_strategy(self, name: str, strategy: Dict):

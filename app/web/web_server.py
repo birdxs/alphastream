@@ -1489,8 +1489,23 @@ def get_stock_data():
         # 获取股票名称（主路径失败自动降级到akshare全量缓存）
         stock_name = _get_stock_name_safe(stock_code, market_type)
 
+        # B2-3: 标注复权方式，消除 akshare/yfinance 混用歧义
+        _adjust_param = request.args.get('adjust', 'qfq')
+        _adjust_flag_map = {'qfq': 'qfq', 'hfq': 'hfq', 'none': 'none', '': 'qfq'}
+        _adjust_flag = _adjust_flag_map.get(_adjust_param, 'qfq')
+        if market_type in ('US', 'HK'):
+            # yfinance 默认 auto_adjust=True
+            _adjust_flag = 'auto'
+
         app.logger.info(f"数据处理完成，返回 {len(records)} 条记录, 股票名称: {stock_name}")
-        return custom_jsonify({'data': records, 'stock_name': stock_name})
+        return custom_jsonify({
+            'data': records,
+            'stock_name': stock_name,
+            'meta': {
+                'adjust_flag': _adjust_flag,
+                'source': 'akshare' if market_type == 'A' else 'yfinance',
+            },
+        })
     except Exception as e:
         app.logger.error(f"获取股票数据时出错: {str(e)}")
         app.logger.error(traceback.format_exc())
@@ -2231,6 +2246,28 @@ def get_market_indices():
                 data = {'indices': [], 'source': 'degraded'}
 
     source = data.get('source', 'unknown')
+
+    # B2-4: 标注行情时效性
+    _dq_map = {
+        'cache':       'cached_30s',
+        'eastmoney':   'realtime',
+        'sina':        'realtime',
+        'daily':       'delayed_15min',
+        'stale_cache': 'stale_cache',
+        'degraded':    'stale_cache',
+    }
+    data_quality = _dq_map.get(source, 'unknown')
+    data.setdefault('meta', {})['data_quality'] = data_quality
+
+    # B2-5: 完全 degraded 时返回 503（无任何有效数据）
+    if source == 'degraded' and not data.get('indices'):
+        resp = jsonify({'success': False, 'error_code': 'DEGRADED',
+                        'message': '所有上游数据源均不可用', 'meta': {'data_quality': 'stale_cache'}})
+        resp.status_code = 503
+        resp.headers['X-Data-Source'] = source
+        resp.headers['X-Cache'] = 'DEGRADED'
+        return resp
+
     resp = jsonify(data)
     resp.headers['X-Data-Source'] = source
     if source == 'cache':
@@ -2506,6 +2543,10 @@ def api_individual_fund_flow():
 
         # Get individual fund flow data
         result = capital_flow_analyzer.get_individual_fund_flow(stock_code, market_type, re_date)
+        # B2-5: 完全 degraded（无任何有效数据）→ HTTP 503
+        if result.get('source') == 'degraded' and not result.get('data'):
+            return jsonify({'success': False, 'error_code': 'DEGRADED',
+                            'message': '资金流向数据源不可用', 'reason': result.get('reason', '')}), 503
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error getting individual fund flow: {traceback.format_exc()}")
@@ -2549,7 +2590,10 @@ def api_capital_flow():
 
         # Calculate capital flow score
         result = capital_flow_analyzer.calculate_capital_flow_score(stock_code, market_type)
-
+        # B2-5: 完全 degraded（无任何有效数据）→ HTTP 503
+        if result.get('source') == 'degraded' and not result.get('data'):
+            return jsonify({'success': False, 'error_code': 'DEGRADED',
+                            'message': '资金流向评分数据源不可用', 'reason': result.get('reason', '')}), 503
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error calculating capital flow score: {traceback.format_exc()}")

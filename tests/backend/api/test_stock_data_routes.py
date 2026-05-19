@@ -299,7 +299,9 @@ class TestMarketIndicesRoute:
         resp = flask_client.get("/api/market_indices")
         assert resp.status_code == 200
         data = _json(resp)
-        assert data == {"indices": []}
+        # B2-4: 响应现在含 meta.data_quality 字段，只验证核心字段
+        assert data["indices"] == []
+        assert "data_quality" in data.get("meta", {})
 
 
 # --------------------------------------------------------------------------- #

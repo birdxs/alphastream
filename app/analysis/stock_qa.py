@@ -432,7 +432,7 @@ class StockQA:
                         "num": 5  # 获取5条结果
                     }
                     
-                    response = requests.get(url, params=params)
+                    response = requests.get(url, params=params, timeout=int(os.getenv('STOCK_QA_HTTP_TIMEOUT_S', '15')))
                     search_results = response.json()
                     
                     # 提取新闻结果
