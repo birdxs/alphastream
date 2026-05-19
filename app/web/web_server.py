@@ -88,12 +88,53 @@ app = Flask(__name__)
 # [K3 2026-04-15 14:32 +08:00] 进程启动时间锚点 — 用于 /health uptime 计算
 START_TIME = time.time()
 APP_VERSION = "3.1.0"
+
+# ── 安全配置 ────────────────────────────────────────────────────────────────
+# SECRET_KEY：Flask session / CSRF 签名所需；生产必须通过 SECRET_KEY env 设置
+import secrets as _secrets
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or _secrets.token_hex(32)
+app.config['WTF_CSRF_TIME_LIMIT'] = int(os.getenv('WTF_CSRF_TIME_LIMIT', '3600'))
+# WTF_CSRF_CHECK_DEFAULT=False：允许我们仅对 SPA 路由做 CSRF exempt（API key 路由已鉴权）
+app.config['WTF_CSRF_CHECK_DEFAULT'] = False
+
+# CSRF 保护（Flask-WTF）
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+csrf = CSRFProtect(app)
+
+# 鉴权中间件
+from app.web.auth_middleware import check_api_key, is_auth_required, get_api_key as _get_api_key, PUBLIC_PATHS
+
+# ── 全局 before_request 鉴权门 ───────────────────────────────────────────────
+@app.before_request
+def global_auth_gate():
+    """所有请求经过此门；PUBLIC_PATHS + /static 无需鉴权，其余必须携带 X-API-Key"""
+    path = request.path
+    # 静态资源、Swagger UI、页面路由不鉴权
+    if (path.startswith('/static')
+            or path.startswith('/api/docs')
+            or path in PUBLIC_PATHS
+            or any(path.startswith(p) for p in ('/stock_detail/', '/api/docs'))):
+        return None
+    return check_api_key()
+
+
+# ── CSRF token 端点（SPA 调用此接口获取 token）───────────────────────────────
+@app.route('/api/csrf_token', methods=['GET'])
+def get_csrf_token():
+    """公开端点：返回 CSRF token，前端存入 sessionStorage 后随 POST 请求附上"""
+    token = generate_csrf()
+    resp = jsonify({'csrf_token': token})
+    resp.headers['X-CSRFToken'] = token
+    return resp
+
+
+# ────────────────────────────────────────────────────────────────────────────
 allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127.0.0.1:8888,http://localhost:3000,http://127.0.0.1:3000').split(',')
 # Dev兜底: 允许常见局域网IP(192.168.x/10.x)+任意:3000/8888端口, 便于Comdr从多主机访问
 _DEV_ORIGIN_PATTERNS = [
     re.compile(r'^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):(3000|8888)$'),
 ]
-CORS(app, resources={r"/api/*": {"origins": allowed_origins + _DEV_ORIGIN_PATTERNS, "methods": ["GET", "POST"], "allow_headers": ["Content-Type", "X-API-Key"]}})
+CORS(app, resources={r"/api/*": {"origins": allowed_origins + _DEV_ORIGIN_PATTERNS, "methods": ["GET", "POST", "PUT", "DELETE"], "allow_headers": ["Content-Type", "X-API-Key", "X-CSRFToken"]}})
 analyzer = StockAnalyzer()
 us_stock_service = USStockService()
 
@@ -3184,35 +3225,84 @@ def mcp_call_tool():
 
 @app.route('/api/upload_image', methods=['POST'])
 def upload_image():
-    """接收图片并返回描述（用于多模态分析）"""
+    """接收图片并返回描述（用于多模态分析）
+    安全加固（Hunt1-C4）：secure_filename + magic bytes + 扩展名白名单 + 大小限制 + 绝对路径
+    """
+    from werkzeug.utils import secure_filename as _secure_filename
+    import tempfile
+
     if 'file' not in request.files:
         return jsonify({'error': '未找到文件'}), 400
     file = request.files['file']
-    if file.filename == '':
+    if not file.filename:
         return jsonify({'error': '未选择文件'}), 400
-    # 校验文件大小（最大10MB）
-    MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+
+    # ── 1. 安全文件名（防路径遍历）────────────────────────────────────────────
+    safe_name = _secure_filename(file.filename)
+    if not safe_name:
+        return jsonify({'error': '非法文件名'}), 400
+
+    # ── 2. 扩展名白名单 ──────────────────────────────────────────────────────
+    ALLOWED_EXT = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+    ext = os.path.splitext(safe_name)[1].lower()
+    if ext not in ALLOWED_EXT:
+        return jsonify({'error': f'不支持的文件类型: {ext}，仅允许: {", ".join(sorted(ALLOWED_EXT))}'}), 400
+
+    # ── 3. 文件大小限制 ──────────────────────────────────────────────────────
+    _max_mb = int(os.getenv('MAX_UPLOAD_SIZE_MB', '5'))
+    MAX_IMAGE_SIZE = _max_mb * 1024 * 1024
     file.seek(0, os.SEEK_END)
     file_size = file.tell()
     file.seek(0)
     if file_size > MAX_IMAGE_SIZE:
-        return jsonify({'error': f'文件大小超过限制（最大10MB），当前: {round(file_size / 1024 / 1024, 1)}MB'}), 413
-    # 校验文件类型
-    allowed_ext = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in allowed_ext:
-        return jsonify({'error': f'不支持的文件类型: {ext}'}), 400
-    # 保存到临时目录
-    import tempfile
-    temp_dir = tempfile.mkdtemp()
-    filepath = os.path.join(temp_dir, file.filename)
+        return jsonify({'error': f'文件大小超过限制（最大 {_max_mb}MB），当前: {round(file_size / 1024 / 1024, 1)}MB'}), 413
+
+    # ── 4. Magic bytes 校验（防伪装上传）────────────────────────────────────
+    MAGIC_BYTES: list[tuple[bytes, str]] = [
+        (b'\xff\xd8\xff', '.jpg'),        # JPEG
+        (b'\x89PNG\r\n\x1a\n', '.png'),   # PNG
+        (b'GIF87a', '.gif'),               # GIF87a
+        (b'GIF89a', '.gif'),               # GIF89a
+        (b'RIFF', '.webp'),               # WEBP（需进一步判断）
+    ]
+    header = file.read(12)
+    file.seek(0)
+    detected_ext: str | None = None
+    for magic, mext in MAGIC_BYTES:
+        if header.startswith(magic):
+            if magic == b'RIFF' and header[8:12] != b'WEBP':
+                continue
+            detected_ext = mext
+            break
+    if detected_ext is None:
+        return jsonify({'error': 'magic bytes 校验失败，文件内容与声明的图片格式不匹配'}), 400
+    # JPEG 文件允许 .jpeg/.jpg 互换
+    _ext_group = {'.jpg', '.jpeg'}
+    if detected_ext != ext and not (detected_ext in _ext_group and ext in _ext_group):
+        return jsonify({'error': f'文件扩展名 ({ext}) 与实际格式 ({detected_ext}) 不匹配'}), 400
+
+    # ── 5. 安全路径拼接（UPLOAD_DIR 为绝对路径，不含用户输入）───────────────
+    _upload_dir = os.getenv('UPLOAD_DIR') or os.path.join(tempfile.gettempdir(), 'stockanal_uploads')
+    # 强制解析为绝对路径，杜绝相对路径注入
+    UPLOAD_DIR = os.path.realpath(os.path.abspath(_upload_dir))
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+    # 加随机前缀防止同名文件覆盖
+    import uuid as _uuid
+    unique_name = f"{_uuid.uuid4().hex[:8]}_{safe_name}"
+    filepath = os.path.join(UPLOAD_DIR, unique_name)
+
+    # 最后防御：确保路径在 UPLOAD_DIR 内
+    if not os.path.realpath(filepath).startswith(UPLOAD_DIR):
+        return jsonify({'error': '非法路径'}), 400
+
     file.save(filepath)
-    # 返回成功（实际图片分析需要多模态AI模型，暂返回占位）
+
+    # 返回 URL 不含原始用户输入
     return jsonify({
         'success': True,
-        'filename': file.filename,
+        'filename': unique_name,
         'size': os.path.getsize(filepath),
-        'filepath': filepath,
         'message': '图片已上传，多模态分析功能开发中'
     })
 

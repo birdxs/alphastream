@@ -1,3 +1,7 @@
+# Input: Flask request headers (X-API-Key) + env vars (STOCKANAL_API_KEY, AUTH_REQUIRED)
+# Output: 401/403 JSON error or pass-through to route handler
+# Pos: Security gate, applied globally via before_request + public-path whitelist
+
 from functools import wraps
 from flask import request, jsonify
 import os
@@ -13,30 +17,81 @@ logger = logging.getLogger(__name__)
 _runtime_api_key = None
 _runtime_hmac_secret = None
 
+# 公开路由白名单（无需鉴权）
+PUBLIC_PATHS = {
+    '/health',
+    '/api/csrf_token',
+    '/api/market_indices',
+    '/api/market-indices',
+    '/',
+    '/dashboard',
+    '/stock_detail',
+    '/portfolio',
+    '/market_scan',
+    '/fundamental',
+    '/capital_flow',
+    '/scenario_predict',
+    '/risk_monitor',
+    '/qa',
+    '/industry_analysis',
+    '/agent_analysis',
+    '/etf_analysis',
+    '/analyze',
+    '/search_us_stocks',
+}
 
-def get_api_key():
+
+def get_api_key() -> str:
+    """获取 API Key：优先 STOCKANAL_API_KEY，兼容旧 API_KEY，最终自动生成运行时密钥"""
     global _runtime_api_key
-    key = os.getenv('API_KEY')
+    # 优先读新 key
+    key = os.getenv('STOCKANAL_API_KEY') or os.getenv('API_KEY')
     if key:
         return key
     # 环境变量未设置，生成随机临时密钥并记录警告
     if _runtime_api_key is None:
         _runtime_api_key = secrets.token_urlsafe(32)
-        logger.warning("环境变量 API_KEY 未设置，已生成随机临时密钥。请在生产环境中配置 API_KEY。")
+        logger.warning(
+            "环境变量 STOCKANAL_API_KEY 未设置，已生成随机临时密钥: %s "
+            "请在生产环境中配置 STOCKANAL_API_KEY。",
+            _runtime_api_key,
+        )
     return _runtime_api_key
 
 
+def is_auth_required() -> bool:
+    """读取 AUTH_REQUIRED 环境变量；生产默认 true"""
+    val = os.getenv('AUTH_REQUIRED', 'true').strip().lower()
+    if val in ('false', '0', 'no', 'off'):
+        logger.debug("AUTH_REQUIRED=false，鉴权已禁用（仅限开发环境）")
+        return False
+    return True
+
+
+def check_api_key() -> 'flask.Response | None':
+    """检查当前请求的 API Key，通过返回 None，失败返回 Response。
+    供 before_request 调用。
+    """
+    if not is_auth_required():
+        return None
+
+    api_key = request.headers.get('X-API-Key') or request.headers.get('Authorization', '').removeprefix('Bearer ')
+    if not api_key:
+        return jsonify({'error': '缺少 API Key，请在 X-API-Key 请求头中提供'}), 401
+
+    if not hmac.compare_digest(api_key, get_api_key()):
+        return jsonify({'error': '无效的 API Key'}), 403
+
+    return None
+
+
 def require_api_key(f):
-    """需要API密钥验证的装饰器"""
+    """需要 API Key 验证的装饰器（向下兼容，单路由使用）"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        api_key = request.headers.get('X-API-Key')
-        if not api_key:
-            return jsonify({'error': '缺少API密钥'}), 401
-
-        if api_key != get_api_key():
-            return jsonify({'error': '无效的API密钥'}), 403
-
+        result = check_api_key()
+        if result is not None:
+            return result
         return f(*args, **kwargs)
     return decorated_function
 
@@ -79,15 +134,12 @@ def require_hmac_auth(f):
         if not request_signature:
             return jsonify({'error': '缺少HMAC签名'}), 401
 
-        # 获取请求数据
-        data = request.get_json(silent=True) or {}
-
-        # 添加时间戳防止重放攻击
         timestamp = request.headers.get('X-Timestamp')
         if not timestamp:
             return jsonify({'error': '缺少时间戳'}), 401
 
-        # 验证时间戳有效性（有效期5分钟）
+        data = request.get_json(silent=True) or {}
+
         current_time = int(time.time())
         if abs(current_time - int(timestamp)) > 300:
             return jsonify({'error': '时间戳已过期'}), 401

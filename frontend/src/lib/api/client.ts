@@ -4,6 +4,7 @@
  * Pos: lib/api/client.ts - 统一API客户端，所有后端调用的唯一入口
  * Note: GET/POST 均走 safeJSONParse, 兼容非标 JSON (NaN/Infinity -> null)
  * Note: streamPost 直连后端 SSE_BASE (绕过Next dev rewrites流式buffer问题)
+ * Note: POST 请求自动附加 X-CSRFToken（从 /api/csrf_token 获取，sessionStorage 缓存）
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
@@ -13,6 +14,36 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 // 前端 fetch 默认超时（由 NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS 驱动，默认 60s）
 const API_DEFAULT_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS) || 60000;
+
+// ── CSRF Token 管理 ────────────────────────────────────────────────────────
+// sessionStorage key，浏览器 session 级别缓存（标签页关闭即清除）
+const CSRF_SESSION_KEY = 'stockanal_csrf_token';
+
+/**
+ * 获取 CSRF token：优先从 sessionStorage 读取缓存；若无则向 /api/csrf_token 请求。
+ * 返回 token 字符串，或 null（如后端未启用 CSRF 或请求失败）。
+ */
+async function fetchCsrfToken(): Promise<string | null> {
+  // 仅在浏览器环境执行
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+    return null;
+  }
+  const cached = sessionStorage.getItem(CSRF_SESSION_KEY);
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${API_BASE}/api/csrf_token`, { method: 'GET', credentials: 'include' });
+    if (!res.ok) return null;
+    const data = await res.json() as { csrf_token?: string };
+    const token = data.csrf_token ?? res.headers.get('X-CSRFToken');
+    if (token) {
+      sessionStorage.setItem(CSRF_SESSION_KEY, token);
+      return token;
+    }
+  } catch {
+    // CSRF 端点不可达时静默失败（开发环境可能未启用）
+  }
+  return null;
+}
 
 // SSE 后端 URL 策略（2026-04-15 UI-Q2 修复）
 // 问题：原策略直连 http://localhost:8888，但从局域网 IP(如 192.168.43.125:3000)访问前端时
@@ -92,12 +123,17 @@ class ApiClient {
   async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), API_DEFAULT_TIMEOUT_MS);
+    // 自动附加 CSRF token（Hunt1-C2：防止 CSRF 攻击）
+    const csrfToken = await fetchCsrfToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRFToken'] = csrfToken;
     try {
       const res = await fetch(`${this.baseUrl}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: ctrl.signal,
+        credentials: 'include',
       });
       if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
       return safeJSONParse<T>(await res.text());
