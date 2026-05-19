@@ -66,35 +66,36 @@ def test_individual_fund_flow_happy_path(analyzer):
     assert result["summary"]["negative_days"] == 5
 
 
-# ---------------------------------------------------------------- 2. akshare 抛异常 → mock 兜底
+# ---------------------------------------------------------------- 2. akshare 抛异常 → 降级空数据（金融铁律：禁止 mock）
 def test_individual_fund_flow_akshare_exception_fallback(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow",
                side_effect=Exception("akshare 网络异常")):
         result = analyzer.get_individual_fund_flow("600519", market_type="A")
 
-    # 降级 mock 必有 data 列表
+    # 金融铁律：降级必须返回空数据 + degraded 标记，不允许伪造
     assert "data" in result
     assert isinstance(result["data"], list)
-    assert len(result["data"]) > 0
+    assert len(result["data"]) == 0
+    assert result.get("source") == "degraded"
 
 
-# ---------------------------------------------------------------- 3. 美股短路
+# ---------------------------------------------------------------- 3. 美股短路（金融铁律：不支持市场返回 unsupported，禁止 mock）
 def test_individual_fund_flow_us_market_short_circuit(analyzer):
-    # 即便 akshare 仍可调用，US 应走短路 mock，不应调用 akshare
+    # 即便 akshare 仍可调用，US 应走短路，不应调用 akshare
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow") as mock_ak:
         result = analyzer.get_individual_fund_flow("AAPL", market_type="US")
     mock_ak.assert_not_called()
-    assert "data" in result
-    assert len(result["data"]) > 0
+    assert result.get("data") == []
+    assert result.get("source") == "unsupported"
 
 
-# ---------------------------------------------------------------- 4. 空 DataFrame → mock
+# ---------------------------------------------------------------- 4. 空 DataFrame → 降级空数据（金融铁律：禁止 mock）
 def test_individual_fund_flow_empty_df_fallback(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow",
                return_value=pd.DataFrame()):
         result = analyzer.get_individual_fund_flow("000001", market_type="A")
-    assert "data" in result
-    assert len(result["data"]) > 0  # 走 mock 生成
+    assert result.get("data") == []
+    assert result.get("source") == "degraded"
 
 
 # ---------------------------------------------------------------- 5. 计算评分
@@ -163,8 +164,10 @@ def test_get_concept_fund_flow_exception_returns_mock(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_concept",
                side_effect=Exception("net err")):
         result = analyzer.get_concept_fund_flow(period="10日排行")
-    assert isinstance(result, list)
-    assert len(result) > 0  # 走 mock
+    # 金融铁律：异常降级返回空数据 + degraded 标记，禁止 mock 伪造数据
+    assert isinstance(result, dict)
+    assert result.get("data") == []
+    assert result.get("source") == "degraded"
 
 
 # ---------------------------------------------------------------- 9. get_individual_fund_flow_rank
@@ -172,8 +175,10 @@ def test_get_individual_fund_flow_rank_exception_returns_mock(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
                side_effect=Exception("net err")):
         result = analyzer.get_individual_fund_flow_rank(period="10日")
-    assert isinstance(result, list)
-    assert len(result) > 0  # mock 兜底
+    # 金融铁律：异常降级返回空数据 + degraded 标记，禁止 mock 伪造数据
+    assert isinstance(result, dict)
+    assert result.get("data") == []
+    assert result.get("source") == "degraded"
 
 
 # ---------------------------------------------------------------- 10. 沪市/深市 market_type 推导

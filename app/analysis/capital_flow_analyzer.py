@@ -63,8 +63,7 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting concept fund flow: {str(e)}")
             self.logger.error(traceback.format_exc())
-            # 如果API调用失败则返回模拟数据
-            return self._generate_mock_concept_fund_flow(period)
+            return {'data': [], 'source': 'degraded', 'reason': str(e)}
 
     def get_individual_fund_flow_rank(self, period="10日"):
         """获取个股资金流向排名"""
@@ -118,8 +117,7 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting individual fund flow ranking: {str(e)}")
             self.logger.error(traceback.format_exc())
-            # 如果API调用失败则返回模拟数据
-            return self._generate_mock_individual_fund_flow_rank(period)
+            return {'data': [], 'source': 'degraded', 'reason': str(e)}
 
     def get_individual_fund_flow(self, stock_code, market_type="", re_date="10日"):
         """获取个股资金流向数据"""
@@ -130,8 +128,8 @@ class CapitalFlowAnalyzer:
             # 对美股symbol(如AAPL)会返回None或抛异常, 导致下游 None.iterrows() NoneType.
             # 非A股直接返回mock, 避免触底爬网.
             if market_type in ('US', 'us', 'HK', 'hk'):
-                self.logger.info(f"非A股市场 {market_type}, 资金流向接口不支持, 返回mock数据")
-                return self._generate_mock_individual_fund_flow(stock_code, market_type)
+                self.logger.info(f"非A股市场 {market_type}, 资金流向接口不支持, 返回空数据")
+                return {'data': [], 'source': 'unsupported', 'reason': 'market_type not supported'}
 
             # 转换market参数为akshare期望的 'sh'/'sz' 格式
             # 'A'/'a'/None/空字符串 均需根据股票代码自动判断
@@ -165,8 +163,8 @@ class CapitalFlowAnalyzer:
 
             # [I2-2026-04-15] None/空 guard: 某些股票/市场组合akshare会返回None而非抛异常
             if flow_data is None or (hasattr(flow_data, 'empty') and flow_data.empty):
-                self.logger.warning(f"akshare 返回空数据 stock={stock_code} market={market_type}, 降级mock")
-                return self._generate_mock_individual_fund_flow(stock_code, market_type)
+                self.logger.warning(f"akshare 返回空数据 stock={stock_code} market={market_type}, 降级为空数据")
+                return {'data': [], 'source': 'degraded', 'reason': 'akshare_empty'}
 
             # 处理数据
             result = {
@@ -217,8 +215,7 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting individual fund flow: {str(e)}")
             self.logger.error(traceback.format_exc())
-            # 如果API调用失败则返回模拟数据
-            return self._generate_mock_individual_fund_flow(stock_code, market_type)
+            return {'data': [], 'source': 'degraded', 'reason': str(e)}
 
     def get_sector_stocks(self, sector):
         """获取特定行业的股票"""
@@ -375,182 +372,3 @@ class CapitalFlowAnalyzer:
         except (ValueError, TypeError):
             return 0.0
 
-    def _generate_mock_concept_fund_flow(self, period):
-        """生成模拟概念资金流向数据"""
-        # self.logger.warning(f"Generating mock concept fund flow data for period: {period}")
-
-        sectors = [
-            "新能源", "医药", "半导体", "芯片", "人工智能", "大数据", "云计算", "5G",
-            "汽车", "消费", "金融", "互联网", "游戏", "农业", "化工", "建筑", "军工",
-            "钢铁", "有色金属", "煤炭", "石油"
-        ]
-
-        result = []
-        for i, sector in enumerate(sectors):
-            # 随机数据 - 前半部分为正，后半部分为负
-            is_positive = i < len(sectors) // 2
-
-            inflow = round(np.random.uniform(10, 50), 2) if is_positive else round(
-                np.random.uniform(5, 20), 2)
-            outflow = round(np.random.uniform(5, 20), 2) if is_positive else round(
-                np.random.uniform(10, 50), 2)
-            net_flow = round(inflow - outflow, 2)
-
-            change_percent = round(np.random.uniform(0, 5), 2) if is_positive else round(
-                np.random.uniform(-5, 0), 2)
-
-            item = {
-                "rank": i + 1,
-                "sector": sector,
-                "company_count": np.random.randint(10, 100),
-                "sector_index": round(np.random.uniform(1000, 5000), 2),
-                "change_percent": change_percent,
-                "inflow": inflow,
-                "outflow": outflow,
-                "net_flow": net_flow
-            }
-            result.append(item)
-
-        # 按净流入降序排序
-        return sorted(result, key=lambda x: x["net_flow"], reverse=True)
-
-    def _generate_mock_individual_fund_flow_rank(self, period):
-        """生成模拟个股资金流向排名数据"""
-        # self.logger.warning(f"Generating mock individual fund flow ranking data for period: {period}")
-
-        # Sample stock data
-        stocks = [
-            {"code": "600000", "name": "浦发银行"}, {"code": "600036", "name": "招商银行"},
-            {"code": "601318", "name": "中国平安"}, {"code": "600519", "name": "贵州茅台"},
-            {"code": "000858", "name": "五粮液"}, {"code": "000333", "name": "美的集团"},
-            {"code": "600276", "name": "恒瑞医药"}, {"code": "601888", "name": "中国中免"},
-            {"code": "600030", "name": "中信证券"}, {"code": "601166", "name": "兴业银行"},
-            {"code": "600887", "name": "伊利股份"}, {"code": "601398", "name": "工商银行"},
-            {"code": "600028", "name": "中国石化"}, {"code": "601988", "name": "中国银行"},
-            {"code": "601857", "name": "中国石油"}, {"code": "600019", "name": "宝钢股份"},
-            {"code": "600050", "name": "中国联通"}, {"code": "601328", "name": "交通银行"},
-            {"code": "601668", "name": "中国建筑"}, {"code": "601288", "name": "农业银行"}
-        ]
-
-        result = []
-        for i, stock in enumerate(stocks):
-            # 随机数据 - 前半部分为正，后半部分为负
-            is_positive = i < len(stocks) // 2
-
-            main_net_inflow = round(np.random.uniform(1e6, 5e7), 2) if is_positive else round(
-                np.random.uniform(-5e7, -1e6), 2)
-            main_net_inflow_percent = round(np.random.uniform(1, 10), 2) if is_positive else round(
-                np.random.uniform(-10, -1), 2)
-
-            super_large_net_inflow = round(main_net_inflow * np.random.uniform(0.3, 0.5), 2)
-            super_large_net_inflow_percent = round(main_net_inflow_percent * np.random.uniform(0.3, 0.5), 2)
-
-            large_net_inflow = round(main_net_inflow * np.random.uniform(0.3, 0.5), 2)
-            large_net_inflow_percent = round(main_net_inflow_percent * np.random.uniform(0.3, 0.5), 2)
-
-            medium_net_inflow = round(np.random.uniform(-1e6, 1e6), 2)
-            medium_net_inflow_percent = round(np.random.uniform(-2, 2), 2)
-
-            small_net_inflow = round(np.random.uniform(-1e6, 1e6), 2)
-            small_net_inflow_percent = round(np.random.uniform(-2, 2), 2)
-
-            change_percent = round(np.random.uniform(0, 5), 2) if is_positive else round(np.random.uniform(-5, 0), 2)
-
-            item = {
-                "rank": i + 1,
-                "code": stock["code"],
-                "name": stock["name"],
-                "price": round(np.random.uniform(10, 100), 2),
-                "change_percent": change_percent,
-                "main_net_inflow": main_net_inflow,
-                "main_net_inflow_percent": main_net_inflow_percent,
-                "super_large_net_inflow": super_large_net_inflow,
-                "super_large_net_inflow_percent": super_large_net_inflow_percent,
-                "large_net_inflow": large_net_inflow,
-                "large_net_inflow_percent": large_net_inflow_percent,
-                "medium_net_inflow": medium_net_inflow,
-                "medium_net_inflow_percent": medium_net_inflow_percent,
-                "small_net_inflow": small_net_inflow,
-                "small_net_inflow_percent": small_net_inflow_percent
-            }
-            result.append(item)
-
-        # 按主力净流入降序排序
-        return sorted(result, key=lambda x: x["main_net_inflow"], reverse=True)
-
-    def _generate_mock_individual_fund_flow(self, stock_code, market_type):
-        """生成模拟个股资金流向数据"""
-        # self.logger.warning(f"Generating mock individual fund flow data for stock: {stock_code}")
-
-        # 生成30天的模拟数据
-        end_date = datetime.now()
-
-        result = {
-            "stock_code": stock_code,
-            "data": []
-        }
-
-        # 创建模拟价格趋势（使用合理的随机游走）
-        base_price = np.random.uniform(10, 100)
-        current_price = base_price
-
-        for i in range(30):
-            date = (end_date - timedelta(days=i)).strftime('%Y-%m-%d')
-
-            # 随机价格变化（-2%到+2%）
-            change_percent = np.random.uniform(-2, 2)
-            price = round(current_price * (1 + change_percent / 100), 2)
-            current_price = price
-
-            # 随机资金流向数据，与价格变化有一定相关性
-            is_positive = change_percent > 0
-
-            main_net_inflow = round(np.random.uniform(1e5, 5e6), 2) if is_positive else round(
-                np.random.uniform(-5e6, -1e5), 2)
-            main_net_inflow_percent = round(np.random.uniform(1, 5), 2) if is_positive else round(
-                np.random.uniform(-5, -1), 2)
-
-            super_large_net_inflow = round(main_net_inflow * np.random.uniform(0.3, 0.5), 2)
-            super_large_net_inflow_percent = round(main_net_inflow_percent * np.random.uniform(0.3, 0.5), 2)
-
-            large_net_inflow = round(main_net_inflow * np.random.uniform(0.3, 0.5), 2)
-            large_net_inflow_percent = round(main_net_inflow_percent * np.random.uniform(0.3, 0.5), 2)
-
-            medium_net_inflow = round(np.random.uniform(-1e5, 1e5), 2)
-            medium_net_inflow_percent = round(np.random.uniform(-2, 2), 2)
-
-            small_net_inflow = round(np.random.uniform(-1e5, 1e5), 2)
-            small_net_inflow_percent = round(np.random.uniform(-2, 2), 2)
-
-            item = {
-                "date": date,
-                "price": price,
-                "change_percent": round(change_percent, 2),
-                "main_net_inflow": main_net_inflow,
-                "main_net_inflow_percent": main_net_inflow_percent,
-                "super_large_net_inflow": super_large_net_inflow,
-                "super_large_net_inflow_percent": super_large_net_inflow_percent,
-                "large_net_inflow": large_net_inflow,
-                "large_net_inflow_percent": large_net_inflow_percent,
-                "medium_net_inflow": medium_net_inflow,
-                "medium_net_inflow_percent": medium_net_inflow_percent,
-                "small_net_inflow": small_net_inflow,
-                "small_net_inflow_percent": small_net_inflow_percent
-            }
-            result["data"].append(item)
-
-        # 按日期降序排序（最新的在前）
-        result["data"].sort(key=lambda x: x["date"], reverse=True)
-
-        # 计算汇总统计数据
-        recent_data = result["data"][:10]
-
-        result["summary"] = {
-            "recent_days": len(recent_data),
-            "total_main_net_inflow": sum(item["main_net_inflow"] for item in recent_data),
-            "avg_main_net_inflow_percent": np.mean([item["main_net_inflow_percent"] for item in recent_data]),
-            "positive_days": sum(1 for item in recent_data if item["main_net_inflow"] > 0),
-            "negative_days": sum(1 for item in recent_data if item["main_net_inflow"] <= 0)
-        }
-
-        return result

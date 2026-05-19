@@ -141,7 +141,7 @@ def test_get_industry_code_mapping(analyzer):
 
 
 def test_get_industry_stocks_fallback_mock(analyzer):
-    """用例 12：data_provider 返回空 → 走 mock 数据回退。"""
+    """用例 12：data_provider 返回空 → 金融铁律：返回空列表，禁止 mock 伪造数据。"""
     analyzer.data_provider = MagicMock()
     analyzer.data_provider.get_industry_stocks.return_value = []
     # 同时让 get_industry_fund_flow 走缓存（直接预置 data_cache）
@@ -151,11 +151,9 @@ def test_get_industry_stocks_fallback_mock(analyzer):
         [{"industry": "半导体", "companyCount": 5}],
     )
     result = analyzer.get_industry_stocks("半导体")
+    # 金融铁律：数据未到位返回空列表，不允许 mock 伪造股票代码/价格
     assert isinstance(result, list)
-    assert len(result) >= 1
-    # 模拟数据每个 item 含 code/name/price/change
-    for item in result:
-        assert {"code", "name", "price", "change"}.issubset(item.keys())
+    assert len(result) == 0
 
 
 def test_get_industry_stocks_cache(analyzer):

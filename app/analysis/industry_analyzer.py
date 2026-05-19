@@ -236,9 +236,9 @@ class IndustryAnalyzer:
                             continue
 
             except Exception as e:
-                # 3. 如果上述方法都失败，生成模拟数据
-                self.logger.warning(f"无法通过API获取行业成分股，使用模拟数据: {str(e)}")
-                result = self._generate_mock_industry_stocks(industry)
+                # 3. 如果上述方法都失败，返回空列表
+                self.logger.warning(f"无法通过API获取行业成分股，返回空列表: {str(e)}")
+                result = []
 
             # 缓存结果
             self.data_cache[cache_key] = (datetime.now(), result)
@@ -250,55 +250,6 @@ class IndustryAnalyzer:
             import traceback
             self.logger.error(traceback.format_exc())
             return []
-
-    def _generate_mock_industry_stocks(self, industry):
-        """生成模拟的行业成分股数据"""
-        self.logger.info(f"生成行业 {industry} 的模拟成分股数据")
-
-        # 使用来自资金流向的行业数据获取该行业的基本信息
-        fund_flow_data = self.get_industry_fund_flow("即时")
-        industry_data = next((item for item in fund_flow_data if item["industry"] == industry), None)
-
-        company_count = 20  # 默认值
-        if industry_data and "companyCount" in industry_data:
-            company_count = min(industry_data["companyCount"], 30)  # 限制最多30只股票
-
-        # 生成模拟股票
-        result = []
-        for i in range(company_count):
-            # 生成6位数字的股票代码，确保前缀是0或6
-            prefix = "6" if i % 2 == 0 else "0"
-            code = prefix + str(100000 + i).zfill(5)[-5:]
-
-            # 生成股票价格和涨跌幅
-            price = round(random.uniform(10, 100), 2)
-            change = round(random.uniform(-5, 5), 2)
-
-            # 生成成交量和成交额
-            volume = round(random.uniform(100000, 10000000))
-            turnover = round(volume * price / 10000, 2)  # 转换为万元
-
-            # 生成换手率和振幅
-            turnover_rate = round(random.uniform(0.5, 5), 2)
-            amplitude = round(random.uniform(1, 10), 2)
-
-            item = {
-                "code": code,
-                "name": f"{industry}股{i + 1}",
-                "price": price,
-                "change": change,
-                "change_amount": round(price * change / 100, 2),
-                "volume": volume,
-                "turnover": turnover,
-                "amplitude": amplitude,
-                "turnover_rate": turnover_rate
-            }
-            result.append(item)
-
-        # 按涨跌幅排序
-        result.sort(key=lambda x: x["change"], reverse=True)
-
-        return result
 
     def get_industry_detail(self, industry):
         """获取行业详细信息"""

@@ -64,15 +64,8 @@ function extractStockCode(text: string): string | null {
   return m ? m[0] : null;
 }
 
-/* ---------- 板块Mock数据 ---------- */
-const SECTORS = [
-  { name: "军工", score: 7.8 }, { name: "算力", score: 8.2 },
-  { name: "黄金", score: 6.5 }, { name: "白酒", score: 5.1 },
-  { name: "新能源", score: 4.3 }, { name: "化工", score: 5.8 },
-  { name: "存储", score: 7.1 }, { name: "芯片", score: 8.5 },
-  { name: "光通信", score: 6.9 }, { name: "保险", score: 4.8 },
-  { name: "银行", score: 5.5 }, { name: "地产", score: 3.2 },
-];
+/* ---------- 板块情绪数据（暂无真实来源，禁止硬编码）---------- */
+const SECTORS: { name: string; score: number }[] = [];
 
 /* ---------- 组件 ---------- */
 /* ---------- 去重 & 时间键 ---------- */
@@ -445,7 +438,11 @@ export default function NewsPage() {
             </div>
 
             <div className="grid grid-cols-4 gap-1.5">
-              {SECTORS.map((sec) => {
+              {SECTORS.length === 0 ? (
+                <div className="col-span-4 py-3 text-center text-[11px] text-slate-500 dark:text-white/30">
+                  板块情绪数据暂不可用
+                </div>
+              ) : SECTORS.map((sec) => {
                 const intensity = sec.score / 10;
                 const bg = sec.score >= 6
                   ? `rgba(52,211,153,${0.15 + intensity * 0.4})`
