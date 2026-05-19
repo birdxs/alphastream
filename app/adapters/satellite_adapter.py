@@ -56,15 +56,23 @@ class SatelliteAdapter(BaseAdapter):
         self.timeout = timeout
         # Earthdata Login Token；仅下载粒度数据时使用，search 不需要
         self.edl_token = edl_token
-        self._session = requests.Session()
-        headers = {
-            "User-Agent": self._UA,
-            "Accept": "application/json",
-        }
-        if self.edl_token:
-            headers["Authorization"] = f"Bearer {self.edl_token}"
-        self._session.headers.update(headers)
+        # S3-A3 2026-05-20: 改用 thread-local session，每线程独立，避免并发竞态
         self._last_request_ts = 0.0
+
+    @property
+    def _session(self) -> requests.Session:
+        """thread-local session，每线程独立，避免并发竞态（S3-A3）"""
+        extra_h = {"Accept": "application/json", "User-Agent": self._UA}
+        if self.edl_token:
+            extra_h["Authorization"] = f"Bearer {self.edl_token}"
+        import threading
+        _tl = getattr(self, "_tl", None) or threading.local()
+        object.__setattr__(self, "_tl", _tl)
+        if not hasattr(_tl, "sess"):
+            import requests as _req
+            _tl.sess = _req.Session()
+            _tl.sess.headers.update(extra_h)
+        return _tl.sess
 
     @property
     def name(self) -> str:

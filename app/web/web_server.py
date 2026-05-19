@@ -4805,6 +4805,48 @@ cleaner_thread = threading.Thread(target=run_task_cleaner)
 cleaner_thread.daemon = True
 cleaner_thread.start()
 
+# ── S3-A4 API v1 版本前缀 alias（2026-05-20）────────────────────────────────
+# 批量注册 /api/v1/<path> → /api/<path> 别名，不破坏现有路由
+# 采用 add_url_rule，原因：Flask 不允许直接修改 request.path
+
+def _register_v1_aliases() -> None:
+    """将所有 /api/* 路由批量注册为 /api/v1/* 别名。
+
+    在所有路由注册完毕后调用（模块加载末尾）。
+    """
+    registered = 0
+    skipped = 0
+    for rule in list(app.url_map.iter_rules()):
+        if not rule.rule.startswith('/api/'):
+            continue
+        if rule.rule.startswith('/api/v1/'):
+            continue
+        rest = rule.rule[len('/api/'):]
+        new_rule = f'/api/v1/{rest}'
+        new_endpoint = f'v1_{rule.endpoint}'
+        if new_endpoint in app.view_functions:
+            skipped += 1
+            continue
+        original_func = app.view_functions.get(rule.endpoint)
+        if original_func is None:
+            skipped += 1
+            continue
+        try:
+            app.add_url_rule(
+                new_rule,
+                endpoint=new_endpoint,
+                view_func=original_func,
+                methods=list(rule.methods or ['GET']),
+            )
+            registered += 1
+        except Exception as exc:
+            app.logger.warning(f"v1 alias skip {new_rule}: {exc}")
+            skipped += 1
+    app.logger.info(f"[S3-A4] /api/v1/* alias 注册完成：{registered} 条，跳过 {skipped} 条")
+
+
+_register_v1_aliases()
+
 # 启动时后台预加载A股名称缓存，避免首次请求时名字降级为代码
 _preload_thread = threading.Thread(target=_load_stock_name_cache, daemon=True)
 _preload_thread.start()

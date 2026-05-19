@@ -32,7 +32,7 @@ import requests
 import pandas as pd
 
 from .base_adapter import BaseAdapter
-from ._retry_utils import random_ua, retry_with_backoff, rotate_ua
+from ._retry_utils import get_thread_local_session, random_ua, retry_with_backoff, rotate_ua
 from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
@@ -85,19 +85,23 @@ class ShippingAdapter(BaseAdapter):
         self.timeout = timeout
         # AISHub username 可通过环境变量注入；未设置则 AIS 能力降级空DF
         self.aishub_username = aishub_username or os.environ.get("AISHUB_USERNAME")
-        self._session = requests.Session()
-        self._session.headers.update({
-            "User-Agent": random_ua(),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.5",
-            "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-        })
-        # K1: 代理强制应用 (H4 proxy utils)
+        # S3-A3 2026-05-20: 改用 thread-local session，每线程独立，避免并发竞态
+        self._last_request_ts = 0.0
+
+    @property
+    def _session(self) -> requests.Session:
+        """thread-local session，每线程独立，避免并发竞态（S3-A3）"""
+        sess = get_thread_local_session(
+            extra_headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.5",
+                "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
+            },
+            namespace="shipping",
+        )
         proxies = get_proxies()
         if proxies:
-            self._session.proxies.update(proxies)
-        self._last_request_ts = 0.0
+            sess.proxies.update(proxies)
+        return sess
 
     @property
     def name(self) -> str:

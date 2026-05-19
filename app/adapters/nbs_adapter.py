@@ -27,7 +27,7 @@ import requests
 import pandas as pd
 
 from .base_adapter import BaseAdapter
-from ._retry_utils import random_ua, retry_with_backoff, rotate_ua
+from ._retry_utils import get_thread_local_session, random_ua, retry_with_backoff, rotate_ua
 from ._proxy_utils import get_proxies
 
 logger = logging.getLogger(__name__)
@@ -69,20 +69,24 @@ class NBSAdapter(BaseAdapter):
 
     def __init__(self, timeout: int = DEFAULT_TIMEOUT):
         self.timeout = timeout
-        self._session = requests.Session()
-        self._session.headers.update({
-            "User-Agent": random_ua(),
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate",
-            "Referer": "https://data.stats.gov.cn/",
-            "Connection": "keep-alive",
-        })
-        # K1: 强制代理应用
+        # S3-A3 2026-05-20: 改用 thread-local session，每线程独立，避免并发竞态
+        self._last_request_ts = 0.0
+
+    @property
+    def _session(self) -> requests.Session:
+        """thread-local session，每线程独立，避免并发竞态（S3-A3）"""
+        sess = get_thread_local_session(
+            referer="https://data.stats.gov.cn/",
+            extra_headers={
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            },
+            namespace="nbs",
+        )
         proxies = get_proxies()
         if proxies:
-            self._session.proxies.update(proxies)
-        self._last_request_ts = 0.0
+            sess.proxies.update(proxies)
+        return sess
 
     @property
     def name(self) -> str:

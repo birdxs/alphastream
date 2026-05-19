@@ -3,6 +3,7 @@
 通用重试+UA池工具 [NEW-FILE:#20260415-44]
 Input: HTTP GET 调用函数 / 可重试状态码集合 / UA 字符串需求
 Output: random_ua() -> str / retry_with_backoff(func,...) -> Any / build_session_with_ua(...) -> requests.Session
+       get_thread_local_session(...) -> requests.Session  (thread-safe, S3-A3 2026-05-20)
 Pos: app/adapters 层通用底座，被 shipping/nbs/corporate/esg/rss_news/efinance 复用
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
@@ -26,10 +27,15 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from typing import Any, Callable, Iterable, Optional, Tuple
 
 import requests
+
+# S3-A3: thread-local session 存储，保证多线程下每线程独立 Session
+# requests.Session 非线程安全（issue #1871），通过 threading.local() 隔离
+_thread_local = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -169,3 +175,30 @@ def rotate_ua(session: requests.Session) -> str:
     ua = random_ua()
     session.headers["User-Agent"] = ua
     return ua
+
+
+def get_thread_local_session(
+    *,
+    extra_headers: Optional[dict] = None,
+    referer: Optional[str] = None,
+    namespace: str = "default",
+) -> requests.Session:
+    """获取当前线程独立的 requests.Session（thread-safe, S3-A3 2026-05-20）。
+
+    requests.Session 非线程安全（https://github.com/psf/requests/issues/1871）。
+    本函数通过 threading.local() 为每个线程维护独立 Session，避免并发 race condition。
+
+    Args:
+        extra_headers: 附加请求头（仅在首次创建 Session 时应用）
+        referer: Referer 头（仅在首次创建时应用）
+        namespace: Session 命名空间，同一线程内不同 adapter 可用不同 ns 隔离
+
+    Returns:
+        当前线程专属的 requests.Session 实例
+    """
+    attr = f"_session_{namespace}"
+    sess: Optional[requests.Session] = getattr(_thread_local, attr, None)
+    if sess is None:
+        sess = build_session_with_ua(extra_headers=extra_headers, referer=referer)
+        setattr(_thread_local, attr, sess)
+    return sess
