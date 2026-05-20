@@ -34,6 +34,21 @@ def etf():
     return EtfAnalyzer("510300", _MockAnalyzer())
 
 
+def _build_benchmark_df(n=300, base=3000.0):
+    """构造 ak.stock_zh_index_daily 返回的标准格式 DataFrame（含 date / close 列）"""
+    rng = np.random.default_rng(42)
+    prices = base + np.cumsum(rng.normal(0, 5, n))
+    dates = pd.date_range("2024-01-01", periods=n, freq="D")
+    return pd.DataFrame({
+        "date": dates.strftime("%Y-%m-%d"),
+        "open": prices,
+        "close": prices,
+        "high": prices * 1.005,
+        "low": prices * 0.995,
+        "volume": rng.integers(1e9, 1e10, n),
+    })
+
+
 def _build_hist_df(n=300, base=4.0):
     rng = np.random.default_rng(123)
     prices = base + np.cumsum(rng.normal(0, 0.01, n))
@@ -89,8 +104,11 @@ def test_get_basic_info_akshare_exception_returns_error(etf):
 # ---------------------------------------------------------------- 4. analyze_market_performance 成功
 def test_analyze_market_performance_happy_path(etf):
     hist_df = _build_hist_df(300)
+    bench_df = _build_benchmark_df(300)
     with patch("app.analysis.etf_analyzer.ak.fund_etf_hist_em",
-               return_value=hist_df):
+               return_value=hist_df), \
+         patch("app.analysis.etf_analyzer.ak.stock_zh_index_daily",
+               return_value=bench_df):
         etf.analyze_market_performance()
 
     perf = etf.analysis_result.get("market_performance")
