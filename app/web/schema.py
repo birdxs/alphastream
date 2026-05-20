@@ -99,11 +99,79 @@ class AgentAnalysisHistorySchema(Schema):
     limit = fields.Integer(load_default=200, validate=mv.Range(min=1, max=200))
 
 
+# ── S3-D3 扩展 schema（+10 个路由覆盖）──────────────────────────────
+
+class StockNameSchema(Schema):
+    """GET /api/stock_name"""
+    stock_code = StockCodeField(required=True)
+
+
+class StockNameSearchSchema(Schema):
+    """GET /api/stock_name_search"""
+    q = fields.String(required=True, validate=mv.Length(min=1, max=20))
+    limit = fields.Integer(load_default=10, validate=mv.Range(min=1, max=100))
+
+
+class HistoryAnalysisSchema(Schema):
+    """GET /api/history_analysis"""
+    stock_code = StockCodeField(required=True)
+    limit = fields.Integer(load_default=10, validate=mv.Range(min=1, max=500))
+
+
+class LatestNewsSchema(Schema):
+    """GET /api/latest_news"""
+    days = fields.Integer(load_default=1, validate=mv.Range(min=1, max=30))
+    limit = fields.Integer(load_default=500, validate=mv.Range(min=1, max=500))
+    important = fields.String(load_default='0', validate=mv.OneOf(['0', '1']))
+    type = fields.String(load_default='all', validate=mv.OneOf(['all', 'hotspot']))
+
+
+class NewsSentimentSchema(Schema):
+    """GET /api/news_sentiment"""
+    days = fields.Integer(load_default=1, validate=mv.Range(min=1, max=30))
+
+
+class IndustryDetailSchema(Schema):
+    """GET /api/industry_detail"""
+    industry = fields.String(required=True, validate=mv.Length(min=1, max=50))
+
+
+class IndustryCompareSchema(Schema):
+    """GET /api/industry_compare"""
+    limit = fields.Integer(load_default=10, validate=mv.Range(min=1, max=500))
+
+
+class StockQuoteBatchSchema(Schema):
+    """GET /api/stock_quote_batch"""
+    codes = fields.String(required=True, validate=mv.Length(min=1, max=2000))
+    market_type = fields.String(load_default='A', validate=mv.OneOf(['A', 'HK', 'US', 'B']))
+    max_codes = fields.Integer(load_default=100, validate=mv.Range(min=1, max=100))
+
+
+class StartStockAnalysisSchema(Schema):
+    """POST /api/start_stock_analysis"""
+    stock_code = StockCodeField(required=True)
+    market_type = fields.String(load_default='A', validate=mv.OneOf(['A', 'HK', 'US', 'B']))
+    research_depth = fields.Integer(load_default=3, validate=mv.Range(min=1, max=5))
+    analysts = fields.List(fields.String(), load_default=None, allow_none=True)
+
+
+class StartAgentAnalysisSchema(Schema):
+    """POST /api/start_agent_analysis"""
+    stock_code = StockCodeField(required=True)
+    market_type = fields.String(load_default='A', validate=mv.OneOf(['A', 'HK', 'US', 'B']))
+    research_depth = fields.Integer(load_default=3, validate=mv.Range(min=1, max=5))
+    selected_analysts = fields.List(fields.String(), load_default=None, allow_none=True)
+    analysis_date = DateField(load_default=None, allow_none=True)
+    enable_memory = fields.Boolean(load_default=True)
+    max_output_length = fields.Integer(load_default=2048, validate=mv.Range(min=256, max=16384))
+
+
 # ─────────────────────────────────────────────
 # 装饰器
 # ─────────────────────────────────────────────
 
-def validate_schema(schema_cls: Type[Schema], source: str = 'args'):
+def validate_schema(schema_cls: Type[Schema], source: str = 'args', extra_error_fields: dict | None = None):
     """路由参数 schema 校验装饰器。
 
     Args:
@@ -142,11 +210,16 @@ def validate_schema(schema_cls: Type[Schema], source: str = 'args'):
                 )
                 from flask import current_app
                 current_app.logger.debug(f'[validate_schema] {schema_cls.__name__} 拒绝: {msgs}')
-                return jsonify({
+                # error 字段保持向后兼容（旧测试 / 旧客户端 通过 data["error"] 检测）
+                resp_body = {
                     'success': False,
                     'error_code': 'INVALID_INPUT',
+                    'error': f'参数校验失败：{msgs}',
                     'message': f'参数校验失败：{msgs}',
-                }), 400
+                }
+                if extra_error_fields:
+                    resp_body.update(extra_error_fields)
+                return jsonify(resp_body), 400
 
             request.validated = validated  # type: ignore[attr-defined]
             return f(*args, **kwargs)

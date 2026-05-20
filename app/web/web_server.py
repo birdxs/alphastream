@@ -62,6 +62,17 @@ from app.web.schema import (
     MarketIndicesSchema,
     ConversationsListSchema,
     AgentAnalysisHistorySchema,
+    # S3-D3 扩展 schema
+    StockNameSchema,
+    StockNameSearchSchema,
+    HistoryAnalysisSchema,
+    LatestNewsSchema,
+    NewsSentimentSchema,
+    IndustryDetailSchema,
+    IndustryCompareSchema,
+    StockQuoteBatchSchema,
+    StartStockAnalysisSchema,
+    StartAgentAnalysisSchema,
 )
 from app.web.openapi_spec import OPENAPI_SPEC
 
@@ -867,6 +878,7 @@ def make_cache_key_with_stock():
 
 
 @app.route('/api/start_stock_analysis', methods=['POST'])
+@validate_schema(StartStockAnalysisSchema, source='json')  # S3-D3: schema 校验扩展
 def start_stock_analysis():
     """启动个股分析任务"""
     try:
@@ -1835,6 +1847,7 @@ def api_stock_profile():
 
 # 轻量名称查询接口 — 直接走A股预加载缓存，避免analyzer.get_stock_info在eastmoney阻断时60s超时
 @app.route('/api/stock_name', methods=['GET'])
+@validate_schema(StockNameSchema)  # S3-D3: schema 校验扩展
 def api_stock_name():
     stock_code = request.args.get('stock_code', '')
     if not stock_code:
@@ -1850,6 +1863,7 @@ def api_stock_name():
 
 # 股票名称反查接口 — 根据名称关键词搜索代码（FE意图路由用）
 @app.route('/api/stock_name_search', methods=['GET'])
+@validate_schema(StockNameSearchSchema, extra_error_fields={'results': []})  # S3-D3: schema 校验扩展
 def api_stock_name_search():
     q = (request.args.get('q') or '').strip()
     if not q:
@@ -2765,6 +2779,7 @@ def api_industry_fund_flow():
 
 
 @app.route('/api/industry_detail', methods=['GET'])
+@validate_schema(IndustryDetailSchema)  # S3-D3: schema 校验扩展
 def api_industry_detail():
     """获取行业详细信息"""
     try:
@@ -2787,6 +2802,7 @@ def api_industry_detail():
 
 # 行业比较路由
 @app.route('/api/industry_compare', methods=['GET'])
+@validate_schema(IndustryCompareSchema)  # S3-D3: schema 校验扩展
 def api_industry_compare():
     try:
         limit = min(max(int(request.args.get('limit', 10)), 1), 500)
@@ -2835,6 +2851,7 @@ def save_analysis_result(stock_code, market_type, result):
 
 # 从数据库获取历史分析结果
 @app.route('/api/history_analysis', methods=['GET'])
+@validate_schema(HistoryAnalysisSchema)  # S3-D3: schema 校验扩展
 def get_history_analysis():
     """获取股票的历史分析结果"""
     if not USE_DATABASE:
@@ -2871,6 +2888,7 @@ def get_history_analysis():
 # 添加新闻API端点
 # 添加到web_server.py文件中
 @app.route('/api/latest_news', methods=['GET'])
+@validate_schema(LatestNewsSchema)  # S3-D3: schema 校验扩展
 def get_latest_news():
     # Input: days/limit/important/type query params (S2-A1 校验)
     # Output: JSON news list
@@ -3008,6 +3026,7 @@ def get_latest_news():
 
 
 @app.route('/api/news_sentiment', methods=['GET'])
+@validate_schema(NewsSentimentSchema)  # S3-D3: schema 校验扩展
 def get_news_sentiment():
     """获取新闻情绪分析统计
     Input: days query param (S2-A1 校验，1-30)
@@ -3172,6 +3191,7 @@ agent_session_manager.cleanup_stale_tasks()
 
 # 智能体分析路由
 @app.route('/api/start_agent_analysis', methods=['POST'])
+@validate_schema(StartAgentAnalysisSchema, source='json')  # S3-D3: schema 校验扩展
 def start_agent_analysis():
     """启动智能体分析任务"""
     try:
@@ -4689,6 +4709,7 @@ def _hc_one(cls_name: str, mod_path: str, timeout_s: float = 5.0) -> dict:
 
 
 @app.route('/api/stock_quote_batch', methods=['GET'])
+@validate_schema(StockQuoteBatchSchema)  # S3-D3: schema 校验扩展
 @cache.cached(timeout=60, query_string=True)
 def stock_quote_batch():
     """

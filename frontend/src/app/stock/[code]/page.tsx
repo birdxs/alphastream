@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { ArrowLeft, Star, StarOff, Bot, Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/common/glass-card";
+import { ErrorBoundary } from "@/components/common/error-boundary";
 import { useWatchlistStore } from "@/lib/stores/watchlist-store";
 import { apiClient, ApiError } from "@/lib/api/client";
 import { useAltData } from "@/lib/hooks/use-alt-data";
@@ -408,9 +409,11 @@ export default function StockDetailPage({
           );
         }
         return (
-          <CandlestickChartArtifact
-            data={{ stock_code: code, stock_name: stockName, ohlcv: klineData }}
-          />
+          <ErrorBoundary fallbackTitle="K线图渲染失败">
+            <CandlestickChartArtifact
+              data={{ stock_code: code, stock_name: stockName, ohlcv: klineData }}
+            />
+          </ErrorBoundary>
         );
       case "fundamental":
         return fundamentalData ? (
@@ -418,7 +421,9 @@ export default function StockDetailPage({
         ) : null;
       case "capital":
         return capitalData ? (
-          <CapitalFlowArtifact data={capitalData} />
+          <ErrorBoundary fallbackTitle="资金流向图渲染失败">
+            <CapitalFlowArtifact data={capitalData} />
+          </ErrorBoundary>
         ) : null;
       case "news":
         return newsData ? <NewsFeedArtifact data={newsData} /> : null;

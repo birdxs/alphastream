@@ -13,7 +13,9 @@ Pos: app/agents/coordinator.py - Agent系统的核心编排器，基于LangGraph
 """
 import logging
 import os
+import sqlite3
 import threading
+import time
 from typing import Dict, Any, List, Optional
 from langgraph.graph import StateGraph, END
 from app.agents.state import StockAnalysisState
@@ -133,6 +135,41 @@ def _to_native(obj):
 # 进程级单例 checkpointer — 同 DB 文件被所有 thread 共享，check_same_thread=False
 _checkpointer_instance = None
 _checkpointer_lock = threading.Lock()
+
+# S3-D1: commit 写操作锁，序列化并发 invoke 时的 sqlite commit
+_sqlite_write_lock = threading.Lock()
+
+_SQLITE_RETRY_DELAYS = (0.1, 0.3, 1.0)  # 3 次指数退避：100ms / 300ms / 1s
+
+
+def _invoke_with_commit_retry(graph, initial_state: dict, invoke_config: dict) -> dict:
+    """包装 graph.invoke，对 sqlite3.OperationalError（database is locked / disk I/O error）
+    自动重试 3 次（指数退避）。失败后 log 并重新抛出，让上层 try/except 处理。
+
+    S3-D1 Hunt2-M6 2026-05-20 +08:00
+    """
+    last_exc: Exception = RuntimeError("unreachable")
+    for attempt, delay in enumerate([0.0] + list(_SQLITE_RETRY_DELAYS), start=1):
+        if delay:
+            logger.warning(
+                f"[S3-D1] graph.invoke sqlite commit 失败（第 {attempt-1} 次），"
+                f"{delay}s 后重试…"
+            )
+            time.sleep(delay)
+        try:
+            with _sqlite_write_lock:
+                return graph.invoke(initial_state, invoke_config)
+        except sqlite3.OperationalError as exc:
+            err_msg = str(exc).lower()
+            if 'locked' in err_msg or 'disk i/o' in err_msg or 'unable to open' in err_msg:
+                last_exc = exc
+                logger.warning(f"[S3-D1] sqlite OperationalError (attempt {attempt}): {exc}")
+                continue
+            raise  # 非 lock/io 类错误直接抛出
+        except Exception:
+            raise
+    logger.error(f"[S3-D1] graph.invoke 重试 {len(_SQLITE_RETRY_DELAYS)} 次后仍失败: {last_exc}")
+    raise last_exc
 
 
 def get_checkpointer():
@@ -556,7 +593,7 @@ def run_agent_analysis(
     try:
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
         with ThreadPoolExecutor(max_workers=1) as _pool:
-            _fut = _pool.submit(graph.invoke, initial_state, invoke_config)
+            _fut = _pool.submit(_invoke_with_commit_retry, graph, initial_state, invoke_config)
             try:
                 result = _fut.result(timeout=_agent_graph_timeout)
             except _FutTimeout:

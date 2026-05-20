@@ -9,6 +9,7 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { ArtifactPanel } from "@/components/chat/artifact-panel";
 import { AgentSidePanel } from "@/components/agent/agent-side-panel";
 import { MarketOverview } from "@/components/market/market-overview";
+import { ErrorBoundary } from "@/components/common/error-boundary";
 import { MessageSquare, BarChart3, Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -92,7 +93,9 @@ export default function HomePage() {
         <div className="absolute bottom-1/6 right-1/6 w-[300px] h-[300px] bg-[#FF8767]/[0.05] rounded-full blur-[100px]" style={{ animation: 'drift-4 35s ease-in-out infinite' }} />
       </div>
       {/* Market ticker — fixed height */}
-      <MarketOverview />
+      <ErrorBoundary fallbackTitle="市场指数加载失败">
+        <MarketOverview />
+      </ErrorBoundary>
 
       {/* Desktop: three-column layout */}
       <div
