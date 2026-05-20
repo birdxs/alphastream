@@ -135,8 +135,9 @@ export default function DashboardPage() {
       if (res?.indices?.length) {
         setIndices(res.indices);
       }
-    } catch {
-      // 静默失败，保留上次数据
+    } catch (e) {
+      // S3-B4: 补 error log（Hunt3 前端 Major）— 保留上次数据，但记录错误便于排查
+      console.error('[dashboard] fetchIndices 失败:', e);
     } finally {
       setIndicesLoading(false);
       setLastRefresh(new Date());
@@ -152,8 +153,9 @@ export default function DashboardPage() {
       if (res?.success && res.news?.length) {
         setNews(res.news.slice(0, 5));
       }
-    } catch {
-      // 静默
+    } catch (e) {
+      // S3-B4: 补 error log（Hunt3 前端 Major）— 保留上次数据
+      console.error('[dashboard] fetchNews 失败:', e);
     } finally {
       setNewsLoading(false);
     }

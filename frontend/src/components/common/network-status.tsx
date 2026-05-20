@@ -77,7 +77,9 @@ export function NetworkStatus() {
           consecutiveFailuresRef.current += 1;
           updateStatus();
         }
-      } catch {
+      } catch (e) {
+        // S3-B4: 补 debug log（Hunt3 前端 Major）— 探针失败是正常降级处理
+        if (process.env.NODE_ENV !== 'production') console.debug('[network-status] probe 失败:', e);
         if (cancelled) return;
         failuresRef.current += 1;
         consecutiveFailuresRef.current += 1;

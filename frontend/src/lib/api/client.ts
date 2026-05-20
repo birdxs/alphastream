@@ -299,10 +299,16 @@ class ApiClient {
     }
   }
 
-  // DELETE请求
+  // DELETE请求（S3-B4: 补 AbortController + 超时，Hunt3 前端 Major）
   async delete(path: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}${path}`, { method: 'DELETE' });
-    if (!res.ok) throw new ApiError(res.status, await res.text());
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), API_DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${this.baseUrl}${path}`, { method: 'DELETE', signal: ctrl.signal });
+      if (!res.ok) throw new ApiError(res.status, await res.text());
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

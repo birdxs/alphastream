@@ -1566,7 +1566,8 @@ def _bs_logout_on_exit():
     try:
         import baostock as bs
         bs.logout()
-    except: pass
+    except Exception as e:  # S3-B1: 裸 except 补 log（Hunt3-M1）
+        app.logger.debug(f"baostock logout 失败（进程退出，可忽略）: {e}")
 
 @app.route('/api/stock_profile', methods=['GET'])
 @with_cache(60)  # S2-A3: 半实时 1分钟缓存
@@ -1737,7 +1738,8 @@ def api_stock_profile():
                     if close:
                         try:
                             bs.query_stock_basic(code=bs_code)
-                        except: pass
+                        except Exception as e:  # S3-B1: 裸 except 补 log（Hunt3-M1）
+                            app.logger.debug(f"baostock query_stock_basic({bs_code}) 忽略（仅试探字段）: {e}")
             except Exception as e:
                 app.logger.warning(f"baostock k_data失败({stock_code}): {e}")
 

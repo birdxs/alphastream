@@ -61,8 +61,10 @@ export function MarketOverview() {
       }
       // B25: degraded(indices=[]) — 不立即报错，等重试或 SSE
       return false;
-    } catch {
+    } catch (e) {
       // B25: 网络/JSON 错误也不立即报错，由调用方决定是否兜底
+      // S3-B4: 补 debug log 便于排查（Hunt3 前端 Major）
+      console.error('[market-overview] fetchIndices 失败:', e);
       return false;
     }
   }, []);
@@ -105,8 +107,9 @@ export function MarketOverview() {
           setError(false);
           setLoading(false);
         }
-      } catch {
-        // 解析失败忽略，等待下一次推送
+      } catch (e) {
+        // S3-B4: 补 debug log（Hunt3 前端 Major）— SSE 解析失败等待下一次推送
+        if (process.env.NODE_ENV !== 'production') console.debug('[market-overview] SSE 解析失败:', e);
       }
     };
 
