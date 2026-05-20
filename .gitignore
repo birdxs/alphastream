@@ -37,6 +37,10 @@ myenv2/
 .DS_Store
 
 # Logs
+# 运行日志 / E2E 归档（CLAUDE.md 资源策略 + 铁律 #2 衔接）：
+# - *.log 全局忽略
+# - logs/ 整目录忽略（覆盖 logs/*.log / logs/*.log.* / logs/real_browser_e2e_*/ 等）
+# - 已 tracked 的 logs/*.md 报告（adapter_smoke / agent_audit / e2e_j2 / security_audit）不受影响
 *.log
 logs/
 log/
