@@ -4,6 +4,26 @@
 
 ---
 
+## Sprint 3-B 交付记录（commit 116fc91，2026-05-20 09:45 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-B1 裸 except 补 log（Hunt3-M1）| PASS | web_server.py 2 处：_bs_logout_on_exit + query_stock_basic 试探 |
+| S3-B2 requests timeout 扫荡（Hunt2-M2）| PASS（已合规）| 5 处调用均已有 timeout，文档化确认 |
+| S3-B3 cache 锁补强（Hunt2 余项）| PASS（已合规）| 4 个模块级 cache 均已有 RLock/Lock，文档化确认 |
+| S3-B4 前端 fetch error log（Hunt3 前端 Major）| PASS | 5 处：dashboard/page.tsx × 2、client.ts delete()、market-overview.tsx × 2、network-status.tsx |
+
+铁证：
+- pytest 776 passed 1 failed（基线一致，1 failed = test_analysis_qa 预存在 baostock 登录问题）
+- tsc --noEmit 零错误
+- 资源策略：不启服务，无 Playwright（铁律 #2）
+
+S3-B2/S3-B3 文档化（全部已合规，无需修改）：
+- requests：search_engines.py:169/250/334、stock_qa.py:435、coingecko_adapter.py:60 均含 timeout
+- cache：_STOCK_NAME_CACHE/LOCK(S1-C4)、_PROFILE_CACHE/LOCK(S1-C3)、_market_indices_cache/lock(B23)、_AKSHARE_HC_CACHE/LOCK(S1-C5)
+
+---
+
 ## Sprint 3-A 交付记录（commits 6072d7d + c4b9f92，2026-05-20 02:30 +08:00）
 
 | 条目 | 状态 | 关键实现 |
