@@ -4,6 +4,32 @@
 
 ---
 
+## Sprint 3-C 交付记录（commit 413d43a，2026-05-20 10:25 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-C1 cursor 分页替代 offset（Hunt5-Major）| PASS | /api/conversations + /api/agent_analysis_history 加 cursor/?limit= 参数，旧 offset 兼容 Deprecation header |
+| S3-C2 K 线交易日历对齐（Hunt6-Major）| PASS | akshare_adapter.py 新增 _get_trade_date_set() + filter_kline_by_trade_dates()，三条 K 线路径各加过滤，DISABLE_NETWORK=1 自动降级 |
+| S3-C3 OpenAPI 3.0 spec 暴露（Hunt5-Major）| PASS | 新建 openapi_spec.py（10 核心路由）+ /api/openapi.json 端点，与 /api-docs Swagger UI 并存 |
+| S3-C4 路由参数 schema 校验（Hunt5-Major）| PASS | 新建 schema.py（marshmallow 3.x + @validate_schema 装饰器），5 个热门路由前置校验 |
+
+铁证：
+- pytest 777 passed, 0 failed（AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1）
+- tsc --noEmit 零错误
+- 资源策略：不启服务，无 Playwright
+
+特例登记（CLAUDE.md 附录 C）：
+- [NEW-FILE:#20260520-S3C-1] app/web/schema.py：marshmallow 路由 schema 无法在现有文件实现（逻辑独立，需被多路由 import）
+- [NEW-FILE:#20260520-S3C-2] app/web/openapi_spec.py：OpenAPI spec dict 独立模块，与 web_server.py 解耦，便于后续自动生成
+
+时间校验记录（Sprint 3-C）：
+- 本机：2026-05-20 10:16:36 +08:00（Asia/Singapore）
+- 源1：timeanddate.com Date 头（UTC 02:16:37）
+- 源2：cloudflare.com Date 头（UTC 02:16:43）
+- 最大偏差：< 10s，判定通过
+
+---
+
 ## Sprint 3-B 交付记录（commit 116fc91，2026-05-20 09:45 +08:00）
 
 | 条目 | 状态 | 关键实现 |
