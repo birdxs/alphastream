@@ -20,6 +20,8 @@ _runtime_hmac_secret = None
 # 公开路由白名单（无需鉴权）
 PUBLIC_PATHS = {
     '/health',
+    '/api/health/deep',  # S3-G2: 深度健康检查
+    '/api/metrics',      # S3-G4: 请求计数器端点
     '/api/csrf_token',
     '/api/market_indices',
     '/api/market-indices',

@@ -327,3 +327,114 @@ class McpCallSchema(Schema):
     """POST /api/mcp/call"""
     tool = fields.Str(required=True, validate=mv.Length(min=1, max=100))
     arguments = fields.Dict(load_default={})
+
+
+# ─────────────────────────────────────────────
+# S3-G1 +15 schema（2026-05-20）
+# ─────────────────────────────────────────────
+
+class StartEtfAnalysisSchema(Schema):
+    """POST /api/start_etf_analysis"""
+    etf_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+    research_depth = fields.Int(load_default=3, validate=mv.Range(min=1, max=5))
+
+
+class EnhancedAnalysisSchema(Schema):
+    """POST /api/enhanced_analysis"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+    research_depth = fields.Int(load_default=3, validate=mv.Range(min=1, max=5))
+
+
+class StartMarketScanSchema(Schema):
+    """POST /api/start_market_scan"""
+    stock_list = fields.List(
+        fields.Str(validate=mv.Length(min=1, max=20)),
+        load_default=None,
+    )
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+    min_score = fields.Float(load_default=0.0, validate=mv.Range(min=0.0, max=100.0))
+    max_stocks = fields.Int(load_default=50, validate=mv.Range(min=1, max=500))
+
+
+class ScanStatusSchema(Schema):
+    """GET /api/scan_status/<task_id>  — path param only, no query validation needed"""
+    # path param validated by Flask routing; schema used as sentinel for documentation
+    pass
+
+
+class IndexStocksSchema(Schema):
+    """GET /api/index_stocks"""
+    index_code = fields.Str(
+        load_default='000300',
+        validate=mv.OneOf(['000300', '000905', '000852', '000001']),
+    )
+
+
+class IndustryStocksSchema(Schema):
+    """GET /api/industry_stocks"""
+    industry = fields.Str(required=True, validate=mv.Length(min=1, max=50))
+
+
+class BoardStocksSchema(Schema):
+    """GET /api/board_stocks"""
+    board = fields.Str(
+        load_default='hs300',
+        validate=mv.OneOf(['hs300', 'zz500', 'zz1000', 'kc50', 'kc100', 'bj50']),
+    )
+
+
+class ConceptFundFlowSchema(Schema):
+    """GET /api/concept_fund_flow"""
+    period = fields.Str(load_default='10日排行', validate=mv.Length(max=20))
+
+
+class IndividualFundFlowRankSchema(Schema):
+    """GET /api/individual_fund_flow_rank"""
+    period = fields.Str(load_default='今日', validate=mv.Length(max=20))
+    market = fields.Str(load_default='', validate=mv.Length(max=10))
+
+
+class AiChatStreamSchema(Schema):
+    """POST /api/ai/chat"""
+    message = fields.Str(required=True, validate=mv.Length(min=1, max=5000))
+    conversation_id = fields.Str(load_default='', validate=mv.Length(max=100))
+    stock_code = fields.Str(load_default='', validate=mv.Length(max=20))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+    research_depth = fields.Int(load_default=3, validate=mv.Range(min=1, max=5))
+
+
+class AiAgentAnalyzeSchema(Schema):
+    """POST /api/ai/agent-analyze"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+    research_depth = fields.Int(load_default=3, validate=mv.Range(min=1, max=5))
+    conversation_id = fields.Str(load_default='', validate=mv.Length(max=100))
+    user_message = fields.Str(load_default='', validate=mv.Length(max=5000))
+    message = fields.Str(load_default='', validate=mv.Length(max=5000))
+
+
+class SatelliteSearchSchema(Schema):
+    """GET /api/satellite/search"""
+    q = fields.Str(required=True, validate=mv.Length(min=1, max=200))
+
+
+class AdaptersStatusSchema(Schema):
+    """GET /api/adapters/status  — no required params"""
+    pass
+
+
+class RegistryStatsSchema(Schema):
+    """GET /api/registry/stats  — no required params"""
+    pass
+
+
+class AgentPendingApprovalsSchema(Schema):
+    """GET /api/agent_pending_approvals  — no required params"""
+    pass
+
+
+class ActiveTasksSchema(Schema):
+    """GET /api/active_tasks  — no required params"""
+    pass

@@ -90,6 +90,22 @@ from app.web.schema import (
     DeleteAgentAnalysisSchema,
     AgentSubmitApprovalSchema,
     McpCallSchema,
+    # S3-G1: +15 schema
+    StartEtfAnalysisSchema,
+    EnhancedAnalysisSchema,
+    StartMarketScanSchema,
+    IndexStocksSchema,
+    IndustryStocksSchema,
+    BoardStocksSchema,
+    ConceptFundFlowSchema,
+    IndividualFundFlowRankSchema,
+    AiChatStreamSchema,
+    AiAgentAnalyzeSchema,
+    SatelliteSearchSchema,
+    AdaptersStatusSchema,
+    RegistryStatsSchema,
+    AgentPendingApprovalsSchema,
+    ActiveTasksSchema,
 )
 from app.web.openapi_spec import OPENAPI_SPEC
 
@@ -179,6 +195,16 @@ app = Flask(__name__)
 START_TIME = time.time()
 APP_VERSION = "3.1.0"
 
+# ── S3-G4: 基础 metrics 计数器 ─────────────────────────────────────────────
+_METRICS_LOCK = threading.RLock()
+_METRICS: dict = {
+    'requests_total': 0,
+    'requests_by_status': {},   # {'2xx': 0, '4xx': 0, '5xx': 0}
+    'requests_by_path': {},     # {'/api/market_indices': 123, ...}
+    'errors_total': 0,
+    'started_at': START_TIME,
+}
+
 # ── 安全配置 ────────────────────────────────────────────────────────────────
 # SECRET_KEY：Flask session / CSRF 签名所需；生产必须通过 SECRET_KEY env 设置
 import secrets as _secrets
@@ -197,8 +223,11 @@ from app.web.auth_middleware import check_api_key, is_auth_required, get_api_key
 # ── S3-F2: correlation_id 注入（每请求生成唯一12位hex ID）───────────────────
 @app.before_request
 def inject_correlation_id():
-    """在 flask.g 中注入 correlation_id，供日志 Filter 和响应头使用。"""
+    """在 flask.g 中注入 correlation_id，供日志 Filter 和响应头使用。
+    S3-G4: 同时记录请求开始时间用于 metrics。
+    """
     g.correlation_id = _uuid.uuid4().hex[:12]
+    g.request_start_time = time.monotonic()  # S3-G4: metrics 计时
 
 
 # ── 全局 before_request 鉴权门 ───────────────────────────────────────────────
@@ -267,6 +296,35 @@ def add_security_and_correlation_headers(resp):
             "font-src 'self'; "
             "frame-ancestors 'none'"
         )
+
+    # ── S3-G4: 更新 metrics 计数器 ───────────────────────────────────────
+    try:
+        status_code = resp.status_code
+        # 路径归一化：优先用 url_rule.rule（Flask route pattern），去掉 query string
+        rule = request.url_rule
+        if rule is not None:
+            # 把 Flask 规则格式 <string:xxx> / <int:xxx> 统一为 :id
+            import re as _re
+            path_key = _re.sub(r'<[^>]+>', ':id', rule.rule)
+        else:
+            path_key = request.path.split('?')[0][:80]
+
+        bucket = f'{status_code // 100}xx'
+        is_error = status_code >= 500
+
+        with _METRICS_LOCK:
+            _METRICS['requests_total'] += 1
+            _METRICS['requests_by_status'][bucket] = (
+                _METRICS['requests_by_status'].get(bucket, 0) + 1
+            )
+            _METRICS['requests_by_path'][path_key] = (
+                _METRICS['requests_by_path'].get(path_key, 0) + 1
+            )
+            if is_error:
+                _METRICS['errors_total'] += 1
+    except Exception:
+        pass  # metrics 统计不得影响正常响应
+
     return resp
 
 
@@ -1088,6 +1146,7 @@ def cancel_analysis(task_id):
 
 # ETF 分析路由
 @app.route('/api/start_etf_analysis', methods=['POST'])
+@validate_schema(StartEtfAnalysisSchema, source='json')  # S3-G1: schema 校验扩展
 def start_etf_analysis():
     """启动ETF分析任务"""
     try:
@@ -1175,6 +1234,7 @@ def get_etf_analysis_status(task_id):
 
 # 保留原有API用于向后兼容
 @app.route('/api/enhanced_analysis', methods=['POST'])
+@validate_schema(EnhancedAnalysisSchema, source='json')  # S3-G1: schema 校验扩展
 def enhanced_analysis():
     """原增强分析API的向后兼容版本"""
     try:
@@ -2026,6 +2086,7 @@ def api_stock_name_search():
 #         return custom_jsonify({'error': str(e)}), 500
 
 @app.route('/api/start_market_scan', methods=['POST'])
+@validate_schema(StartMarketScanSchema, source='json')  # S3-G1: schema 校验扩展
 def start_market_scan():
     """启动市场扫描任务"""
     try:
@@ -2421,6 +2482,7 @@ def market_stream():
 
 
 @app.route('/api/index_stocks', methods=['GET'])
+@validate_schema(IndexStocksSchema)  # S3-G1: schema 校验扩展
 def get_index_stocks():
     """获取指数成分股 - 使用DataProvider统一数据层"""
     try:
@@ -2443,6 +2505,7 @@ def get_index_stocks():
 
 
 @app.route('/api/industry_stocks', methods=['GET'])
+@validate_schema(IndustryStocksSchema)  # S3-G1: schema 校验扩展
 def get_industry_stocks():
     """获取行业成分股 - 使用DataProvider统一数据层"""
     try:
@@ -2466,6 +2529,7 @@ def get_industry_stocks():
 
 # Issue #29: 按板块获取股票列表（科创板/创业板/北交所等）
 @app.route('/api/board_stocks', methods=['GET'])
+@validate_schema(BoardStocksSchema)  # S3-G1: schema 校验扩展
 def get_board_stocks():
     """获取指定板块的股票列表 - 使用DataProvider统一数据层"""
     try:
@@ -2613,6 +2677,7 @@ def api_fundamental_analysis():
 
 # 获取概念资金流向的API端点
 @app.route('/api/concept_fund_flow', methods=['GET'])
+@validate_schema(ConceptFundFlowSchema)  # S3-G1: schema 校验扩展
 def api_concept_fund_flow():
     try:
         period = request.args.get('period', '10日排行')  # Default to 10-day ranking
@@ -2628,6 +2693,7 @@ def api_concept_fund_flow():
 
 # 获取个股资金流向排名的API端点
 @app.route('/api/individual_fund_flow_rank', methods=['GET'])
+@validate_schema(IndividualFundFlowRankSchema)  # S3-G1: schema 校验扩展
 def api_individual_fund_flow_rank():
     try:
         period = request.args.get('period', '10日')  # Default to today
@@ -3613,6 +3679,7 @@ def delete_agent_analysis():
 
 
 @app.route('/api/agent_pending_approvals', methods=['GET'])
+@validate_schema(AgentPendingApprovalsSchema)  # S3-G1: schema 校验扩展
 def get_pending_approvals():
     """获取待人工审批的Agent决策"""
     try:
@@ -3644,6 +3711,7 @@ def submit_agent_approval():
 
 
 @app.route('/api/active_tasks', methods=['GET'])
+@validate_schema(ActiveTasksSchema)  # S3-G1: schema 校验扩展
 def get_active_tasks():
     """获取所有正在进行的智能体分析任务"""
     try:
@@ -3787,6 +3855,7 @@ def upload_image():
 
 @app.route('/api/ai/chat', methods=['POST'])
 @limiter.limit(os.getenv('RATE_LIMIT_LLM', '20 per minute'))  # S2-A4: LLM 限流
+@validate_schema(AiChatStreamSchema, source='json')  # S3-G1: schema 校验扩展
 def ai_chat_stream():
     """AI对话流式端点 — SSE输出Token+工具调用+Agent状态+Artifact
     Input: JSON body {message, conversation_id}
@@ -4222,6 +4291,7 @@ def a2a_json_rpc():
 
 
 @app.route('/api/ai/agent-analyze', methods=['POST'])
+@validate_schema(AiAgentAnalyzeSchema, source='json')  # S3-G1: schema 校验扩展
 def ai_agent_analyze_stream():
     """Agent深度分析SSE端点 — 流式推送Agent执行过程"""
     from flask import Response, stream_with_context
@@ -4616,6 +4686,7 @@ def api_jobs_company(company: str):
 
 # -------- Satellite --------
 @app.route('/api/satellite/search', methods=['GET'])
+@validate_schema(SatelliteSearchSchema)  # S3-G1: schema 校验扩展
 def api_satellite_search():
     from app.core.artifact_wrapper import wrap_satellite_artifact
     try:
@@ -4908,6 +4979,139 @@ def health_basic():
     }), 200
 
 
+@app.route('/api/health/deep', methods=['GET'])
+def health_deep():
+    """深度健康检查 — sqlite / akshare / llm / market_indices_cache（S3-G2 Hunt5-M）
+    Input: 无必需参数
+    Output: JSON {status, uptime_s, version, checks:{sqlite,akshare,llm,market_indices_cache}}
+    Pos: 可观测性探针，PUBLIC_PATHS 白名单，总超时 ≤ 3s
+    """
+    import sqlite3 as _sq3
+    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
+
+    checks: dict = {}
+    overall_ok = True
+    _DEEP_TIMEOUT = float(os.getenv('HEALTH_DEEP_TIMEOUT_S', '3.0'))
+
+    # ── 1. sqlite check: SELECT 1 to langgraph checkpoint db ──
+    def _check_sqlite() -> dict:
+        try:
+            db_dir = os.path.join(os.path.dirname(__file__), '../../data')
+            db_path = os.path.join(db_dir, 'langgraph_checkpoint.db')
+            t0 = time.monotonic()
+            conn = _sq3.connect(db_path, timeout=1.0)
+            conn.execute('SELECT 1')
+            conn.close()
+            return {'ok': True, 'latency_ms': round((time.monotonic() - t0) * 1000, 2)}
+        except Exception as exc:
+            return {'ok': False, 'error': str(exc)[:200]}
+
+    # ── 2. akshare check: 复用 AkshareAdapter.health_check ──
+    def _check_akshare() -> dict:
+        try:
+            from app.adapters.akshare_adapter import AkshareAdapter
+            adapter = AkshareAdapter()
+            t0 = time.monotonic()
+            result = adapter.health_check()
+            latency = round((time.monotonic() - t0) * 1000, 2)
+            ok = result.get('status') == 'ok' if isinstance(result, dict) else bool(result)
+            info = {'ok': ok, 'latency_ms': latency}
+            if isinstance(result, dict) and 'probe_symbol' in result:
+                info['source'] = result.get('probe_symbol', 'stock_individual_spot_xq')
+            return info
+        except Exception as exc:
+            return {'ok': False, 'error': str(exc)[:200]}
+
+    # ── 3. llm check: MOCK_LLM=1 时跳过 ──
+    def _check_llm() -> dict:
+        if os.getenv('MOCK_LLM', '0') == '1':
+            return {'ok': True, 'skipped': True, 'reason': 'MOCK_LLM=1'}
+        try:
+            from app.core.ai_client import get_ai_client
+            t0 = time.monotonic()
+            client = get_ai_client()
+            # 仅校验客户端可创建，不发送实际请求（避免消耗 token）
+            _ = client  # 创建无异常即 ok
+            return {'ok': True, 'latency_ms': round((time.monotonic() - t0) * 1000, 2), 'skipped': False}
+        except Exception as exc:
+            return {'ok': False, 'error': str(exc)[:200]}
+
+    # ── 4. market_indices_cache check ──
+    def _check_market_cache() -> dict:
+        cache_ts = _market_indices_cache.get('ts', 0)
+        ttl = int(os.getenv('INDEX_CACHE_TTL_S', '30'))
+        age_s = round(time.time() - cache_ts, 1) if cache_ts else None
+        has_data = bool(_market_indices_cache.get('data'))
+        ok = has_data and (age_s is not None) and (age_s < ttl)
+        return {'ok': ok, 'age_s': age_s, 'ttl_s': ttl, 'has_data': has_data}
+
+    # 并行运行所有 check，总超时 _DEEP_TIMEOUT
+    check_fns = {
+        'sqlite': _check_sqlite,
+        'akshare': _check_akshare,
+        'llm': _check_llm,
+        'market_indices_cache': _check_market_cache,
+    }
+
+    with _TPE(max_workers=4) as ex:
+        futures = {ex.submit(fn): name for name, fn in check_fns.items()}
+        remaining = _DEEP_TIMEOUT
+        for fut in _ac(futures, timeout=remaining):
+            name = futures[fut]
+            try:
+                checks[name] = fut.result(timeout=0.1)
+            except Exception as exc:
+                checks[name] = {'ok': False, 'error': str(exc)[:200]}
+
+    # 填补超时未返回的 check
+    for name in check_fns:
+        if name not in checks:
+            checks[name] = {'ok': False, 'error': 'check timeout'}
+
+    overall_ok = all(c.get('ok', False) for c in checks.values())
+    status = 'ok' if overall_ok else 'degraded'
+
+    return jsonify({
+        'status': status,
+        'uptime_s': round(time.time() - START_TIME, 3),
+        'version': APP_VERSION,
+        'checks': checks,
+    }), 200
+
+
+@app.route('/api/metrics', methods=['GET'])
+def get_metrics():
+    """基础请求计数器快照（S3-G4 Hunt5-M）
+    Input: 无必需参数
+    Output: JSON {uptime_s, requests_total, requests_by_status, top_paths, errors_total, error_rate}
+    Pos: 可观测性端点，PUBLIC_PATHS 白名单，只读 _METRICS 快照
+    """
+    with _METRICS_LOCK:
+        snap = {
+            'requests_total': _METRICS['requests_total'],
+            'requests_by_status': dict(_METRICS['requests_by_status']),
+            'requests_by_path': dict(_METRICS['requests_by_path']),
+            'errors_total': _METRICS['errors_total'],
+        }
+
+    total = snap['requests_total']
+    errors = snap['errors_total']
+    error_rate = round(errors / total, 4) if total > 0 else 0.0
+
+    # top_paths: 按计数降序，取 top 10
+    sorted_paths = sorted(snap['requests_by_path'].items(), key=lambda x: x[1], reverse=True)
+    top_paths = [[p, c] for p, c in sorted_paths[:10]]
+
+    return jsonify({
+        'uptime_s': round(time.time() - START_TIME, 3),
+        'requests_total': total,
+        'requests_by_status': snap['requests_by_status'],
+        'top_paths': top_paths,
+        'errors_total': errors,
+        'error_rate': error_rate,
+    }), 200
+
+
 @app.route('/api/openapi.json', methods=['GET'])
 def get_openapi_spec():
     """暴露 OpenAPI 3.0 spec（S3-C3 Hunt5-Major）
@@ -4924,6 +5128,7 @@ def get_openapi_spec():
 
 
 @app.route('/api/adapters/status', methods=['GET'])
+@validate_schema(AdaptersStatusSchema)  # S3-G1: schema 校验扩展
 def adapters_status():
     """遍历所有 adapter 调用 health_check, 返回逐个健康状态.
     2026-05-18 B1 修复：原串行循环最多 22×5s=110s 导致端点 HANG；
@@ -4984,6 +5189,7 @@ def adapters_status():
 
 
 @app.route('/api/registry/stats', methods=['GET'])
+@validate_schema(RegistryStatsSchema)  # S3-G1: schema 校验扩展
 def registry_stats():
     """AdapterRegistry 16 domain × adapter 注册表快照 (轻量, 只查字典)."""
     try:
