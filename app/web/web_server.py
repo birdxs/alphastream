@@ -54,6 +54,17 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../t
 # 加载环境变量（override=True 让 .env 成为单一真相源，覆盖 shell 注入的同名变量）
 load_dotenv(override=True)
 
+# ── Sprint 3-C 路由 schema 校验 & OpenAPI spec ────────────────────────────────
+from app.web.schema import (
+    validate_schema,
+    StockDataSchema,
+    StockProfileSchema,
+    MarketIndicesSchema,
+    ConversationsListSchema,
+    AgentAnalysisHistorySchema,
+)
+from app.web.openapi_spec import OPENAPI_SPEC
+
 # ── Sprint 1-B 工具函数 ──────────────────────────────────────────────────────
 
 # S1-B3: 时区感知时间工具（Hunt5-C1）
@@ -1409,10 +1420,11 @@ def _get_stock_name_safe(stock_code, market_type='A'):
 @with_cache(60)  # S2-A3: 半实时 1分钟缓存
 @limiter.limit('200 per minute')  # S2-A4
 @cache.cached(timeout=300, query_string=True)
+@validate_schema(StockDataSchema)  # S3-C4: marshmallow schema 前置校验
 def get_stock_data():
-    # Input: stock_code/period/start_date/end_date/market_type query params
+    # Input: stock_code/period/start_date/end_date/market_type query params（S3-C4 schema 校验）
     # Output: JSON OHLCV 历史数据
-    # Pos: K线页面核心数据端点，已套 S2-A1 校验
+    # Pos: K线页面核心数据端点，已套 S2-A1 校验 + S3-C4 schema 校验
     # S2-A1: validate 在 try 外，ValidationError 直达全局 errorhandler → 400 INVALID_INPUT
     raw_code = request.args.get('stock_code', '')
     stock_code_checked = validate_stock_code_strict(raw_code)
@@ -1571,8 +1583,9 @@ def _bs_logout_on_exit():
 
 @app.route('/api/stock_profile', methods=['GET'])
 @with_cache(60)  # S2-A3: 半实时 1分钟缓存
+@validate_schema(StockProfileSchema)  # S3-C4: marshmallow schema 前置校验
 def api_stock_profile():
-    # Input: stock_code query param (S2-A1 校验)
+    # Input: stock_code query param（S2-A1 + S3-C4 schema 校验）
     # Output: JSON profile (industry/pe_ttm/pb/roe) or 503 on timeout
     # Pos: baostock I/O 重路径，外层 ThreadPoolExecutor 兜底确保 ≤25s 必返回
     import baostock as bs
@@ -2217,9 +2230,10 @@ def _fetch_market_indices_data():
 
 @app.route('/api/market_indices', methods=['GET'])
 @with_cache(5)  # S2-A3: 实时类 5秒短缓存
+@validate_schema(MarketIndicesSchema)  # S3-C4: marshmallow schema 前置校验
 def get_market_indices():
     """获取主要市场指数实时行情（上证/深证/创业板/沪深300）
-    Input: 无
+    Input: 无（S3-C4 schema 校验，可选 refresh=bool）
     Output: JSON {'indices': [...], 'source': str}
     Pos: 首页/Dashboard 实时指数端点，三级兜底链，S2-A3 5s 缓存 header
     B23: 添加快速超时路径（FAST_TIMEOUT_MS env）——缓存为空时先返回 degraded，
@@ -3398,17 +3412,46 @@ def get_agent_analysis_status(task_id):
 
 
 @app.route('/api/agent_analysis_history', methods=['GET'])
+@validate_schema(AgentAnalysisHistorySchema)  # S3-C4: schema 校验
 def get_agent_analysis_history():
-    """获取已完成的智能体分析任务历史"""
+    """获取已完成的智能体分析任务历史（S3-C1 cursor 分页）
+    Input: cursor（游标）/ limit（1-200）
+    Output: JSON {items: [...], next_cursor: str|null, limit: int, history: [...]}
+    Pos: 智能体历史任务列表，cursor 分页
+    """
     try:
+        params = request.validated  # type: ignore[attr-defined]
+        limit = params['limit']
+        cursor = params.get('cursor')
+
+        # cursor 格式同 conversations：offset:{n}
+        skip = 0
+        if cursor and cursor.startswith('offset:'):
+            try:
+                skip = int(cursor[7:])
+            except ValueError:
+                skip = 0
+
         all_tasks = agent_session_manager.get_all_tasks()
         history = [
-            task for task in all_tasks 
+            task for task in all_tasks
             if task.get('status') in [TASK_COMPLETED, TASK_FAILED]
         ]
         # 按更新时间排序，最新的在前
         history.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
-        return custom_jsonify({'history': history})
+
+        # 多取 1 条判断是否有下一页
+        page = history[skip: skip + limit]
+        has_more = len(history) > skip + limit
+        next_cursor = f'offset:{skip + limit}' if has_more else None
+
+        return custom_jsonify({
+            'items': page,
+            'next_cursor': next_cursor,
+            'limit': limit,
+            # 旧字段兼容
+            'history': page,
+        })
     except Exception as e:
         app.logger.error(f"获取分析历史时出错: {traceback.format_exc()}")
         return api_error('INTERNAL', '获取智能体分析历史失败，请稍后重试', details=str(e))
@@ -3919,16 +3962,56 @@ def _generate_follow_ups(stock_code, analysis_text):
 
 
 @app.route('/api/conversations', methods=['GET'])
+@validate_schema(ConversationsListSchema)  # S3-C4: schema 校验
 def list_conversations():
-    """获取对话列表
-    Input: limit query param (S2-A1 校验，1-200)
-    Output: JSON {conversations: [...]}
-    Pos: 对话历史列表端点
+    """获取对话列表（S3-C1 cursor 分页）
+    Input: cursor（游标）/ limit（1-200）/ offset（deprecated 兼容旧客户端）
+    Output: JSON {items: [...], next_cursor: str|null, limit: int}
+    Pos: 对话历史列表端点，cursor 分页替代 offset，兼容旧 offset 参数
     """
     from app.core.conversation import get_conversation_manager
-    limit = validate_int_range(request.args.get('limit'), 'limit', 1, 200, default=20)  # S2-A1
-    conversations = get_conversation_manager().list_conversations(limit)
-    return jsonify({'conversations': conversations})
+    params = request.validated  # type: ignore[attr-defined]
+    limit = params['limit']
+    cursor = params.get('cursor')
+    offset = params.get('offset')
+
+    # offset 兼容：将 offset 转成 cursor（offset 是 skip 数量，cursor 编码为 "offset:{n}"）
+    # 旧客户端传 offset 时返回 Deprecation header 提示
+    use_offset_compat = offset is not None and cursor is None
+    if use_offset_compat:
+        cursor = f'offset:{offset}'
+
+    mgr = get_conversation_manager()
+    # cursor 分页实现：cursor 格式 "offset:{n}" 表示跳过 n 条
+    # 默认从 0 开始（无 cursor）；updated_at 倒序
+    skip = 0
+    if cursor:
+        if cursor.startswith('offset:'):
+            try:
+                skip = int(cursor[7:])
+            except ValueError:
+                skip = 0
+        # 未来可扩展为 "ts:{iso}" 格式的 timestamp cursor
+
+    # 多取 1 条以判断是否有下一页
+    all_convs = mgr.list_conversations(skip + limit + 1)
+    page = all_convs[skip: skip + limit]
+    has_more = len(all_convs) > skip + limit
+    next_cursor = f'offset:{skip + limit}' if has_more else None
+
+    resp = jsonify({
+        'items': page,
+        'next_cursor': next_cursor,
+        'limit': limit,
+        # 旧字段兼容（前端可能仍读 conversations）
+        'conversations': page,
+    })
+    if use_offset_compat:
+        resp.headers['Deprecation'] = (
+            'offset 参数已废弃，请改用 cursor 分页；'
+            'next_cursor 在响应体中'
+        )
+    return resp
 
 
 @app.route('/api/conversations/<conversation_id>', methods=['GET'])
@@ -4708,6 +4791,21 @@ def health_basic():
         "version": APP_VERSION,
         "ts": int(time.time()),
     }), 200
+
+
+@app.route('/api/openapi.json', methods=['GET'])
+def get_openapi_spec():
+    """暴露 OpenAPI 3.0 spec（S3-C3 Hunt5-Major）
+    Input: 无
+    Output: OpenAPI 3.0 JSON（10 个核心路由）
+    Pos: API 文档契约端点，Swagger UI 可直接消费
+    """
+    from flask import make_response
+    import json as _json
+    resp = make_response(_json.dumps(OPENAPI_SPEC, ensure_ascii=False, indent=2))
+    resp.headers['Content-Type'] = 'application/json; charset=utf-8'
+    resp.headers['Cache-Control'] = 'public, max-age=300'
+    return resp
 
 
 @app.route('/api/adapters/status', methods=['GET'])

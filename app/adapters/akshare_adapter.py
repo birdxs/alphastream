@@ -24,6 +24,97 @@ _AKSHARE_HC_CACHE_LOCK = threading.RLock()
 _AKSHARE_HC_TTL = float(os.getenv('AKSHARE_HC_CACHE_TTL', '60'))
 _AKSHARE_HC_PROBE_SYMBOL = os.getenv('AKSHARE_HC_PROBE_SYMBOL', 'SH600519')
 
+# ── S3-C2 交易日历缓存（Hunt6-Major 2026-05-20）──────────────────────────────
+# 缓存 A 股交易日集合，TTL 24h，DISABLE_NETWORK=1 时跳过（避免 CI 网络依赖）
+_TRADE_DATE_CACHE: Optional[set] = None
+_TRADE_DATE_CACHE_TS: float = 0.0
+_TRADE_DATE_CACHE_TTL: float = float(os.getenv('TRADE_DATE_CACHE_TTL_S', str(86400)))
+_TRADE_DATE_CACHE_LOCK = threading.RLock()
+
+
+def _get_trade_date_set() -> Optional[set]:
+    """获取 A 股交易日集合（datetime.date 对象）。
+
+    - 数据来源：ak.tool_trade_date_hist_sina()（新浪交易日历，全量历史）
+    - TTL：24h（TRADE_DATE_CACHE_TTL_S env 可覆盖）
+    - DISABLE_NETWORK=1 时直接返回 None（CI 环境不调外网）
+    - 失败时返回 None（允许降级，不抛异常）
+    """
+    if os.getenv('DISABLE_NETWORK', '0') == '1':
+        return None
+
+    global _TRADE_DATE_CACHE, _TRADE_DATE_CACHE_TS
+    now = time.time()
+    with _TRADE_DATE_CACHE_LOCK:
+        if _TRADE_DATE_CACHE is not None and (now - _TRADE_DATE_CACHE_TS) < _TRADE_DATE_CACHE_TTL:
+            return _TRADE_DATE_CACHE
+        # 缓存过期 / 首次加载
+        try:
+            df = ak.tool_trade_date_hist_sina()
+            if df is not None and not df.empty:
+                import datetime as _dt
+                col = df.columns[0]
+                dates: set = set()
+                for v in df[col]:
+                    try:
+                        if isinstance(v, _dt.date):
+                            dates.add(v)
+                        else:
+                            dates.add(pd.to_datetime(str(v)).date())
+                    except Exception:
+                        pass
+                _TRADE_DATE_CACHE = dates
+                _TRADE_DATE_CACHE_TS = now
+                logger.info(f"[S3-C2] 交易日历加载成功，共 {len(dates)} 个交易日")
+                return _TRADE_DATE_CACHE
+        except Exception as e:
+            logger.warning(f"[S3-C2] 交易日历加载失败（降级，不过滤）: {type(e).__name__}: {e}")
+        return None
+
+
+def filter_kline_by_trade_dates(df: pd.DataFrame, date_col: str = 'date') -> pd.DataFrame:
+    """过滤 K 线 DataFrame，只保留 A 股交易日数据行。
+
+    - 若无法获取交易日历（DISABLE_NETWORK=1 / 网络失败），原样返回 df（降级）
+    - 非交易日行（节假日/周末）会被剔除，前端渲染时不再出现 0 值/断点混淆
+    - date_col 支持 'date'（string YYYYMMDD / YYYY-MM-DD）或 datetime64 列
+
+    Args:
+        df: K 线 DataFrame，含 date_col 列
+        date_col: 日期列名
+
+    Returns:
+        过滤后的 DataFrame（trading days only），或原始 df（降级）
+    """
+    if df is None or df.empty:
+        return df
+    if date_col not in df.columns:
+        return df
+
+    trade_dates = _get_trade_date_set()
+    if trade_dates is None:
+        return df  # 降级：不过滤
+
+    import datetime as _dt
+    try:
+        def _to_date(v) -> Optional[_dt.date]:
+            if isinstance(v, _dt.date):
+                return v
+            try:
+                return pd.to_datetime(str(v)).date()
+            except Exception:
+                return None
+
+        mask = df[date_col].apply(lambda v: (_to_date(v) in trade_dates))
+        filtered = df[mask].copy()
+        dropped = len(df) - len(filtered)
+        if dropped > 0:
+            logger.debug(f"[S3-C2] 过滤非交易日 {dropped} 行 / 原始 {len(df)} 行")
+        return filtered
+    except Exception as e:
+        logger.warning(f"[S3-C2] 交易日过滤异常（降级）: {e}")
+        return df
+
 
 class AkshareAdapter(BaseAdapter):
     """akshare数据源适配器，支持内部多数据源冗余"""
@@ -98,6 +189,7 @@ class AkshareAdapter(BaseAdapter):
                                      end_date=end_date, adjust=adjust)
             if df is not None and not df.empty:
                 df = self._normalize_sina_daily(df)
+                df = filter_kline_by_trade_dates(df)  # S3-C2: 交易日历过滤
                 logger.info(f"akshare新浪 daily 成功(symbol={sina_code}, rows={len(df)})")
                 return df
         except Exception as e:
@@ -109,6 +201,7 @@ class AkshareAdapter(BaseAdapter):
             df = ak.stock_zh_a_hist_tx(symbol=tx_code, start_date=start_date,
                                        end_date=end_date, adjust=adjust)
             if df is not None and not df.empty:
+                df = filter_kline_by_trade_dates(df)  # S3-C2: 交易日历过滤
                 logger.info(f"akshare腾讯接口成功兜底(symbol={tx_code}, rows={len(df)})")
                 return df
         except Exception as e:
@@ -123,6 +216,7 @@ class AkshareAdapter(BaseAdapter):
                 mapping = {k: v for k, v in self.FIELD_MAPPING['stock_zh_a_hist'].items() if k in df.columns}
                 if mapping:
                     df = df.rename(columns=mapping)
+                df = filter_kline_by_trade_dates(df)  # S3-C2: 交易日历过滤
                 logger.info(f"akshare东财接口最终兜底成功(symbol={code}, rows={len(df)})")
                 return df
         except Exception as e:

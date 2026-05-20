@@ -35,4 +35,5 @@
 
 - 所有新适配器必须继承 `BaseAdapter`，实现 6 个抽象方法（不支持的能力返回空对象）
 - 头部 3 行铭牌 `Input/Output/Pos` 必填
-- 爬取/外部进程类适配器必须对环境缺失做降级，不得向上游抛异常
+- 爬取/外部进程类适配器必须对环境缺失做降级，不得向上给上游抛异常
+- S3-C2（2026-05-20）：akshare_adapter.py 新增 `_get_trade_date_set()` + `filter_kline_by_trade_dates()`，K 线三条路径返回前自动过滤非交易日；DISABLE_NETWORK=1 时降级不过滤
