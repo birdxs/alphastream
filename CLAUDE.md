@@ -4,6 +4,29 @@
 
 ---
 
+## Sprint 3-F 交付记录（commits 5dfa7c1 + 0d2c7d9，2026-05-20 15:00 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-F1 前端 Vitest 测试框架接入 + 5 spec（Hunt6 前端 0 cov）| PASS | vitest.config.ts + 5 spec（client/utils/chart-container/global-error/use-chat-stream），42/42 PASS |
+| S3-F2 后端 correlation_id + 结构化日志（Hunt3-M）| PASS | g.correlation_id = uuid4().hex[:12]，logger format 含 cid，response 加 X-Correlation-Id header |
+| S3-F3 SqliteSaver thread_id 索引（Hunt5-M）| PASS | coordinator.py:198-208 CREATE INDEX IF NOT EXISTS ix_*_thread_id |
+| S3-F4 security headers ×4（Hunt1 余项）| PASS | X-Content-Type-Options=nosniff / X-Frame-Options=DENY / Referrer-Policy / Permissions-Policy |
+
+铁证：
+- 时间校验：本机 2026-05-20 15:00:18 +08:00 / timeanddate.com +1s / cloudflare.com +7s（≤100s 通过）
+- pytest 776 passed / 1 failed（test_analysis_qa::test_answer_question_with_tool_call 顺序污染，单跑 PASS，与 S3-F 无关，与基线一致）
+- tsc --noEmit 零错误
+- vitest 5 spec / 42 test cases 全 PASS
+- 资源策略：不启服务，无 Playwright
+
+特例登记（CLAUDE.md 附录 C）：
+- [NEW-FILE:#20260520-S3F] frontend/vitest.config.ts + 5 spec：vitest 测试框架配置 + 单测属白名单 b 项（缺失且必需的最小单元测试）
+- 触发原因：前端 0 测试覆盖，必须新建配置 + 5 个 spec 文件以覆盖关键 hook/util/component
+- 回滚方案：删除 frontend/vitest.config.ts + 5 个 __tests__ 目录 + package.json test script
+
+---
+
 ## Sprint 3-E 交付记录（commit 13b6f12，2026-05-20 13:40 +08:00）
 
 | 条目 | 状态 | 关键实现 |
