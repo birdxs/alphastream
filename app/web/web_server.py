@@ -73,6 +73,22 @@ from app.web.schema import (
     StockQuoteBatchSchema,
     StartStockAnalysisSchema,
     StartAgentAnalysisSchema,
+    # S3-E1: +15 schema
+    NorthFlowHistorySchema,
+    FundamentalAnalysisSchema,
+    CapitalFlowSchema,
+    ScenarioPredictSchema,
+    QASchema,
+    RiskAnalysisSchema,
+    PortfolioRiskSchema,
+    IndexAnalysisSchema,
+    IndustryAnalysisApiSchema,
+    IndustryFundFlowSchema,
+    IndividualFundFlowSchema,
+    SectorStocksSchema,
+    DeleteAgentAnalysisSchema,
+    AgentSubmitApprovalSchema,
+    McpCallSchema,
 )
 from app.web.openapi_spec import OPENAPI_SPEC
 
@@ -706,7 +722,7 @@ def analyze():
         market_type = data.get('market_type', 'A')
 
         if not stock_codes:
-            return jsonify({'error': '请输入代码'}), 400
+            return api_error('INVALID_INPUT', '请输入代码')
 
         app.logger.info(f"分析股票请求: {stock_codes}, 市场类型: {market_type}")
 
@@ -747,6 +763,7 @@ def analyze():
 
 
 @app.route('/api/north_flow_history', methods=['POST'])
+@validate_schema(NorthFlowHistorySchema, source='json')  # S3-E1: schema 校验扩展
 def api_north_flow_history():
     try:
         data = request.json
@@ -760,7 +777,7 @@ def api_north_flow_history():
         start_date = (now_cn() - timedelta(days=int(days))).strftime('%Y%m%d')
 
         if not stock_code:
-            return jsonify({'error': '请提供股票代码'}), 400
+            return api_error('INVALID_INPUT', '请提供股票代码')
 
         # 调用北向资金历史数据方法
 
@@ -778,7 +795,7 @@ def search_us_stocks():
     try:
         keyword = request.args.get('keyword', '')
         if not keyword:
-            return jsonify({'error': '请输入搜索关键词'}), 400
+            return api_error('INVALID_INPUT', '请输入搜索关键词')
 
         results = us_stock_service.search_us_stocks(keyword)
         return jsonify({'results': results})
@@ -884,16 +901,16 @@ def start_stock_analysis():
     try:
         data = request.get_json(silent=True)
         if not data or not isinstance(data, dict):
-            return jsonify({'error': '请求体必须为有效的JSON格式'}), 400
+            return api_error('INVALID_INPUT', '请求体必须为有效的JSON格式')
         stock_code = data.get('stock_code')
         market_type = data.get('market_type', 'A')
 
         if not stock_code:
-            return jsonify({'error': '请输入股票代码'}), 400
+            return api_error('INVALID_INPUT', '请输入股票代码')
 
         valid, result = validate_stock_code(stock_code, market_type)
         if not valid:
-            return jsonify({'error': result}), 400
+            return api_error('INVALID_INPUT', result)
         stock_code = result
 
         app.logger.info(f"准备分析股票: {stock_code}")
@@ -1287,6 +1304,7 @@ def api_error(code: str = 'INTERNAL', message: str = '服务异常，请稍后�
         'success': False,
         'error_code': code,
         'message': message,
+        'error': message,  # 向后兼容旧 {'error': ...} 形式，供已有测试/前端使用
     }
     if details and app.debug:
         resp['details'] = details  # 仅 debug 模式可见
@@ -2505,6 +2523,7 @@ def run_task_cleaner():
 
 # 基本面分析路由
 @app.route('/api/fundamental_analysis', methods=['POST'])
+@validate_schema(FundamentalAnalysisSchema, source='json')  # S3-E1: schema 校验扩展
 def api_fundamental_analysis():
     try:
         data = request.json
@@ -2562,6 +2581,7 @@ def api_individual_fund_flow_rank():
 
 # 获取个股资金流向的API端点
 @app.route('/api/individual_fund_flow', methods=['GET'])
+@validate_schema(IndividualFundFlowSchema)  # S3-E1: schema 校验扩展
 def api_individual_fund_flow():
     try:
         stock_code = request.args.get('stock_code')
@@ -2569,7 +2589,7 @@ def api_individual_fund_flow():
         re_date = request.args.get('period-select')
 
         if not stock_code:
-            return jsonify({'error': 'Stock code is required'}), 400
+            return api_error('INVALID_INPUT', 'Stock code is required')
 
         # Get individual fund flow data
         result = capital_flow_analyzer.get_individual_fund_flow(stock_code, market_type, re_date)
@@ -2585,12 +2605,13 @@ def api_individual_fund_flow():
 
 # 获取板块内股票的API端点
 @app.route('/api/sector_stocks', methods=['GET'])
+@validate_schema(SectorStocksSchema)  # S3-E1: schema 校验扩展
 def api_sector_stocks():
     try:
         sector = request.args.get('sector')
 
         if not sector:
-            return jsonify({'error': 'Sector name is required'}), 400
+            return api_error('INVALID_INPUT', 'Sector name is required')
 
         # Get sector stocks data
         result = capital_flow_analyzer.get_sector_stocks(sector)
@@ -2603,6 +2624,7 @@ def api_sector_stocks():
 
 # Update the existing capital flow API endpoint
 @app.route('/api/capital_flow', methods=['POST'])
+@validate_schema(CapitalFlowSchema, source='json')  # S3-E1: schema 校验扩展
 def api_capital_flow():
     try:
         data = request.json
@@ -2610,12 +2632,12 @@ def api_capital_flow():
         market_type = data.get('market_type', '')  # Auto-detect if not provided
 
         if not stock_code:
-            return jsonify({'error': 'Stock code is required'}), 400
+            return api_error('INVALID_INPUT', 'Stock code is required')
 
         if market_type:
             valid, result = validate_stock_code(stock_code, market_type)
             if not valid:
-                return jsonify({'error': result}), 400
+                return api_error('INVALID_INPUT', result)
             stock_code = result
 
         # Calculate capital flow score
@@ -2632,6 +2654,7 @@ def api_capital_flow():
 
 # 情景预测路由
 @app.route('/api/scenario_predict', methods=['POST'])
+@validate_schema(ScenarioPredictSchema, source='json')  # S3-E1: schema 校验扩展
 def api_scenario_predict():
     try:
         data = request.json
@@ -2658,6 +2681,7 @@ def api_scenario_predict():
 
 # 智能问答路由
 @app.route('/api/qa', methods=['POST'])
+@validate_schema(QASchema, source='json')  # S3-E1: schema 校验扩展
 def api_qa():
     try:
         data = request.json
@@ -2684,6 +2708,7 @@ def api_qa():
 
 # 风险分析路由
 @app.route('/api/risk_analysis', methods=['POST'])
+@validate_schema(RiskAnalysisSchema, source='json')  # S3-E1: schema 校验扩展
 def api_risk_analysis():
     try:
         data = request.json
@@ -2691,11 +2716,11 @@ def api_risk_analysis():
         market_type = data.get('market_type', 'A')
 
         if not stock_code:
-            return jsonify({'error': '请提供股票代码'}), 400
+            return api_error('INVALID_INPUT', '请提供股票代码')
 
         valid, result = validate_stock_code(stock_code, market_type)
         if not valid:
-            return jsonify({'error': result}), 400
+            return api_error('INVALID_INPUT', result)
         stock_code = result
 
         # 获取风险分析结果
@@ -2709,6 +2734,7 @@ def api_risk_analysis():
 
 # 投资组合风险分析路由
 @app.route('/api/portfolio_risk', methods=['POST'])
+@validate_schema(PortfolioRiskSchema, source='json')  # S3-E1: schema 校验扩展
 def api_portfolio_risk():
     try:
         data = request.json
@@ -2728,6 +2754,7 @@ def api_portfolio_risk():
 
 # 指数分析路由
 @app.route('/api/index_analysis', methods=['GET'])
+@validate_schema(IndexAnalysisSchema)  # S3-E1: schema 校验扩展
 def api_index_analysis():
     try:
         index_code = request.args.get('index_code')
@@ -2747,6 +2774,7 @@ def api_index_analysis():
 
 # 行业分析路由
 @app.route('/api/industry_analysis', methods=['GET'])
+@validate_schema(IndustryAnalysisApiSchema)  # S3-E1: schema 校验扩展
 def api_industry_analysis():
     try:
         industry = request.args.get('industry')
@@ -2765,6 +2793,7 @@ def api_industry_analysis():
 
 
 @app.route('/api/industry_fund_flow', methods=['GET'])
+@validate_schema(IndustryFundFlowSchema)  # S3-E1: schema 校验扩展
 def api_industry_fund_flow():
     """获取行业资金流向数据"""
     try:
@@ -3478,6 +3507,7 @@ def get_agent_analysis_history():
 
 
 @app.route('/api/delete_agent_analysis', methods=['POST'])
+@validate_schema(DeleteAgentAnalysisSchema, source='json')  # S3-E1: schema 校验扩展
 def delete_agent_analysis():
     """Cancel and/or delete one or more agent analysis tasks."""
     try:
@@ -3532,6 +3562,7 @@ def get_pending_approvals():
 
 
 @app.route('/api/agent_submit_approval', methods=['POST'])
+@validate_schema(AgentSubmitApprovalSchema, source='json')  # S3-E1: schema 校验扩展
 def submit_agent_approval():
     """提交人工审批结果"""
     try:
@@ -3585,6 +3616,7 @@ def mcp_list_tools():
         return api_error('INTERNAL', '获取MCP工具列表失败，请稍后重试', details=str(e))
 
 @app.route('/api/mcp/call', methods=['POST'])
+@validate_schema(McpCallSchema, source='json')  # S3-E1: schema 校验扩展
 def mcp_call_tool():
     """调用MCP工具"""
     try:

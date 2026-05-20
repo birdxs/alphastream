@@ -225,3 +225,105 @@ def validate_schema(schema_cls: Type[Schema], source: str = 'args', extra_error_
             return f(*args, **kwargs)
         return wrapper
     return decorator
+
+
+# ─── S3-E1: 新增 15 个 schema（覆盖 capital_flow / risk / qa / agent / mcp 等）───
+
+class NorthFlowHistorySchema(Schema):
+    """POST /api/north_flow_history"""
+    stock_code = fields.Str(
+        required=True,
+        validate=mv.Length(min=1, max=20),
+        error_messages={"required": "请提供股票代码", "null": "股票代码不能为空"},
+    )
+    days = fields.Int(load_default=10, validate=mv.Range(min=1, max=365))
+
+
+class FundamentalAnalysisSchema(Schema):
+    """POST /api/fundamental_analysis"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+
+
+class CapitalFlowSchema(Schema):
+    """POST /api/capital_flow"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='', validate=mv.Length(max=10))
+
+
+class ScenarioPredictSchema(Schema):
+    """POST /api/scenario_predict"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+    days = fields.Int(load_default=60, validate=mv.Range(min=1, max=365))
+
+
+class QASchema(Schema):
+    """POST /api/qa"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    question = fields.Str(required=True, validate=mv.Length(min=1, max=1000))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+
+
+class RiskAnalysisSchema(Schema):
+    """POST /api/risk_analysis"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
+
+
+class PortfolioRiskSchema(Schema):
+    """POST /api/portfolio_risk"""
+    portfolio = fields.List(
+        fields.Raw(),
+        required=True,
+        validate=mv.Length(min=1, max=100),
+    )
+
+
+class IndexAnalysisSchema(Schema):
+    """GET /api/index_analysis"""
+    index_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    limit = fields.Int(load_default=30, validate=mv.Range(min=1, max=500))
+
+
+class IndustryAnalysisApiSchema(Schema):
+    """GET /api/industry_analysis"""
+    industry = fields.Str(required=True, validate=mv.Length(min=1, max=50))
+    limit = fields.Int(load_default=30, validate=mv.Range(min=1, max=500))
+
+
+class IndustryFundFlowSchema(Schema):
+    """GET /api/industry_fund_flow"""
+    symbol = fields.Str(load_default='即时', validate=mv.Length(max=20))
+
+
+class IndividualFundFlowSchema(Schema):
+    """GET /api/individual_fund_flow"""
+    stock_code = fields.Str(required=True, validate=mv.Length(min=1, max=20))
+    market_type = fields.Str(load_default='', validate=mv.Length(max=10))
+
+
+class SectorStocksSchema(Schema):
+    """GET /api/sector_stocks"""
+    sector = fields.Str(required=True, validate=mv.Length(min=1, max=50))
+
+
+class DeleteAgentAnalysisSchema(Schema):
+    """POST /api/delete_agent_analysis"""
+    task_ids = fields.List(
+        fields.Str(validate=mv.Length(min=1, max=100)),
+        required=True,
+        validate=mv.Length(min=1, max=200),
+    )
+
+
+class AgentSubmitApprovalSchema(Schema):
+    """POST /api/agent_submit_approval"""
+    task_id = fields.Str(required=True, validate=mv.Length(min=1, max=100))
+    approved = fields.Bool(load_default=False)
+    feedback = fields.Str(load_default='', validate=mv.Length(max=2000))
+
+
+class McpCallSchema(Schema):
+    """POST /api/mcp/call"""
+    tool = fields.Str(required=True, validate=mv.Length(min=1, max=100))
+    arguments = fields.Dict(load_default={})
