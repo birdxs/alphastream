@@ -9,7 +9,7 @@
 import numpy as np
 import pandas as pd
 import re
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, g
 from app.analysis.stock_analyzer import StockAnalyzer
 from app.analysis.us_stock_service import USStockService
 import threading
@@ -19,6 +19,7 @@ import traceback
 import os
 import json
 import tempfile
+import uuid as _uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from flask_cors import CORS
@@ -193,6 +194,13 @@ csrf = CSRFProtect(app)
 # 鉴权中间件
 from app.web.auth_middleware import check_api_key, is_auth_required, get_api_key as _get_api_key, PUBLIC_PATHS
 
+# ── S3-F2: correlation_id 注入（每请求生成唯一12位hex ID）───────────────────
+@app.before_request
+def inject_correlation_id():
+    """在 flask.g 中注入 correlation_id，供日志 Filter 和响应头使用。"""
+    g.correlation_id = _uuid.uuid4().hex[:12]
+
+
 # ── 全局 before_request 鉴权门 ───────────────────────────────────────────────
 @app.before_request
 def global_auth_gate():
@@ -224,6 +232,44 @@ _DEV_ORIGIN_PATTERNS = [
     re.compile(r'^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):(3000|8888)$'),
 ]
 CORS(app, resources={r"/api/*": {"origins": allowed_origins + _DEV_ORIGIN_PATTERNS, "methods": ["GET", "POST", "PUT", "DELETE"], "allow_headers": ["Content-Type", "X-API-Key", "X-CSRFToken"]}})
+
+
+# ── S3-F2: after_request: X-Correlation-Id 响应头 + S3-F4: security headers ─
+@app.after_request
+def add_security_and_correlation_headers(resp):
+    """
+    S3-F2: 将 correlation_id 写入 X-Correlation-Id 响应头。
+    S3-F4: 追加 security headers（nosniff / X-Frame / Referrer / Permissions）。
+    CSP 仅在 production 模式（非 debug）启用。
+    Input: Flask Response 对象
+    Output: 附加了安全及追踪 header 的 Response
+    Pos: after_request hook，所有响应必经
+    """
+    # S3-F2: correlation_id
+    cid = getattr(g, 'correlation_id', '-')
+    resp.headers['X-Correlation-Id'] = cid
+
+    # S3-F4: security headers
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    resp.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=()')
+
+    # CSP 较激进，仅在 production 模式启用（避免破坏开发热更新）
+    if not app.debug:
+        resp.headers.setdefault(
+            'Content-Security-Policy',
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+    return resp
+
+
 analyzer = StockAnalyzer()
 us_stock_service = USStockService()
 
@@ -302,9 +348,23 @@ log_file = os.getenv('LOG_FILE', 'data/logs/server.log')
 # 确保日志目录存在
 os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
+# ── S3-F2: 结构化日志 correlation_id Filter ──────────────────────────────────
+
+class _CorrelationIdFilter(logging.Filter):
+    """将当前请求的 correlation_id 注入 LogRecord，非请求上下文时填 '-'。"""
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            from flask import g as _g
+            record.correlation_id = getattr(_g, 'correlation_id', '-')
+        except RuntimeError:
+            record.correlation_id = '-'
+        return True
+
+_cid_filter = _CorrelationIdFilter()
+
 # 创建日志格式化器
 formatter = logging.Formatter(
-    '[%(asctime)s] [%(process)d:%(thread)d] [%(levelname)s] [%(name)s:%(lineno)d] - %(message)s',
+    '[%(asctime)s] [%(levelname)s] [%(name)s] [cid=%(correlation_id)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
@@ -319,11 +379,13 @@ if root_logger.hasHandlers():
 # 添加文件处理器
 file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024*10, backupCount=5, encoding='utf-8') # 10MB
 file_handler.setFormatter(formatter)
+file_handler.addFilter(_cid_filter)
 root_logger.addHandler(file_handler)
 
 # 添加控制台处理器
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(formatter)
+console_handler.addFilter(_cid_filter)
 root_logger.addHandler(console_handler)
 
 # 将Flask的默认处理器移除，使其日志也遵循我们的配置

@@ -195,8 +195,20 @@ def get_checkpointer():
             conn.execute('PRAGMA journal_mode=WAL')
             conn.execute('PRAGMA synchronous=NORMAL')
             conn.execute('PRAGMA busy_timeout=5000')
+            # S3-F3: 辅助索引 — checkpoints 表按 thread_id 的 ORDER BY / GROUP BY 加速
+            # 主键已覆盖 (thread_id, checkpoint_ns, checkpoint_id)；
+            # 单独 thread_id 索引加速"查某 thread 全部 checkpoint"的 WHERE thread_id=? 扫描
+            conn.execute(
+                'CREATE INDEX IF NOT EXISTS ix_checkpoints_thread_id '
+                'ON checkpoints (thread_id)'
+            )
+            conn.execute(
+                'CREATE INDEX IF NOT EXISTS ix_writes_thread_id '
+                'ON writes (thread_id)'
+            )
+            conn.commit()
             _checkpointer_instance = SqliteSaver(conn)
-            logger.info(f"LangGraph Checkpointer 已初始化(WAL): {db_path}")
+            logger.info(f"LangGraph Checkpointer 已初始化(WAL+索引): {db_path}")
         except Exception as e:
             logger.warning(f"LangGraph Checkpointer 初始化失败, 降级为无持久化模式: {type(e).__name__}: {e}")
             _checkpointer_instance = None

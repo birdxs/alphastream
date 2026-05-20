@@ -76,8 +76,12 @@ def test_answer_question_happy_path(qa):
     fake_msg.tool_calls = None
     fake_resp = MagicMock()
     fake_resp.choices = [MagicMock(message=fake_msg)]
+    mock_fa = MagicMock()
+    mock_fa.get_financial_indicators.return_value = {}
     with patch("app.analysis.stock_qa.chat_completion",
-               return_value=(fake_resp, None)):
+               return_value=(fake_resp, None)), \
+         patch("app.analysis.fundamental_analyzer.FundamentalAnalyzer",
+               return_value=mock_fa):
         result = qa.answer_question("600519", "估值如何？")
 
     assert result["answer"] == "这是回答"

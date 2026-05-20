@@ -298,7 +298,7 @@ _SANITIZE_ROUTES = [
     ("GET",  "/api/health"),
     ("GET",  "/api/version"),
     ("GET",  "/api/dashboard_data"),
-    ("GET",  "/api/index_stocks"),
+    ("GET",  "/api/index_stocks?index_code=INVALID_CODE"),
     ("GET",  "/api/latest_news"),
     ("GET",  "/api/conversations"),
     ("POST", "/api/north_flow_history"),       # POST 空 body → 400/422

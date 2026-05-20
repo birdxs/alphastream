@@ -132,8 +132,14 @@ def test_generate_industry_recommendation_levels(analyzer):
 
 
 def test_get_industry_code_mapping(analyzer):
-    """用例 11：行业代码映射 - 已知与未知。"""
-    # 已知映射（如有）
+    """用例 11：行业代码映射 - 已知与未知。mock data_provider 避免真实网络调用。"""
+    import pandas as pd
+    mock_df = pd.DataFrame({"板块名称": ["半导体", "银行"], "板块代码": ["BK0460", "BK0475"]})
+    analyzer.data_provider = MagicMock()
+    analyzer.data_provider.get_industry_list.return_value = mock_df
+    # 清除实例缓存，使 _get_industry_code 重新构建映射
+    analyzer.industry_code_map = {}
+    # 已知映射
     known = analyzer._get_industry_code("半导体")
     assert known is None or isinstance(known, str)
     # 未知
