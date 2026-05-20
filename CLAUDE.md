@@ -4,6 +4,26 @@
 
 ---
 
+## Sprint 3-D 交付记录（commit f9e2560，2026-05-20 12:45 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-D1 SqliteSaver commit retry（Hunt2-M6）| PASS | _invoke_with_commit_retry() + _sqlite_write_lock，3 次指数退避 100ms/300ms/1s |
+| S3-D2 npm audit 收尾（Hunt1-M）| PARTIAL | next 16.2.1→16.2.6（同大版本补丁）；剩余 8 个漏洞依赖 next 官方未发布修复版本 |
+| S3-D3 schema 校验扩展 +10 端点（Hunt5）| PASS | 新增 StockName/StockNameSearch/HistoryAnalysis/LatestNews/NewsSentiment/IndustryDetail/IndustryCompare/StockQuoteBatch/StartStockAnalysis/StartAgentAnalysis schema；合计 15 端点覆盖 |
+| S3-D4 前端 ErrorBoundary x4（Hunt3）| PASS | MarketOverview(page.tsx) + CandlestickChart(stock/page.tsx) + CapitalFlowChart(stock/page.tsx) + ChartContainer(chart-container.tsx) |
+
+铁证：
+- pytest 777 passed, 0 failed（AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1）
+- tsc --noEmit 零错误
+- 资源策略：不启服务，无 Playwright
+
+npm audit 残余漏洞说明（8 个，全 moderate+1 high）：
+- 来源：esbuild/vite/vitest（开发工具，生产不暴露）+ next.js 内嵌 postcss（next 官方修复版本尚未发布 stable）
+- 处置：next 已升到同大版本最新 16.2.6；remaining 需等 next 17.x stable
+
+---
+
 ## Sprint 3-C 交付记录（commit 413d43a，2026-05-20 10:25 +08:00）
 
 | 条目 | 状态 | 关键实现 |
