@@ -4,6 +4,39 @@
 
 ---
 
+## Sprint 3-K 交付记录（commit 39fe389，2026-05-20 20:30 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-K1 /api/health/deep TimeoutError 兜底（Critical）| PASS | as_completed 替换为 fut.result(timeout=remaining)，每 future 单独 try/except TimeoutError+Exception，手动 shutdown(wait=False, cancel_futures=True)，永远返回 200 + status=degraded |
+| S3-K2 health_deep 3 个专项单测 | PASS | 正常 200/ok、check 异常 200 degraded、check 超时 200 timeout 标记 全 PASS |
+
+根因（已修）：`as_completed(futures, timeout=_DEEP_TIMEOUT)` 整体超时未 try/except，`concurrent.futures.TimeoutError` 冒泡至 Flask 全局 errorhandler 触发 api_error('INTERNAL') 500。
+
+触发现象（修前）：浏览器首次访问 100% 500，curl 顺序访问复现率 ~33%。
+
+关键实现细节：
+- 四个 inline check 函数提升为模块级私有函数（`_hd_check_sqlite` / `_hd_check_akshare` / `_hd_check_llm` / `_hd_check_market_cache`），支持 monkeypatch
+- 手动管理 pool（`pool = _TPE(...)` + `finally: pool.shutdown(wait=False, cancel_futures=True)`），规避 `with` 语句 `__exit__` 的 `shutdown(wait=True)` 在异常时挂死
+- 逐 future 动态 deadline 分配：`remaining = max(0.05, deadline - time.monotonic())`
+- 超时项：`{'ok': False, 'timeout': True, 'message': ...}`
+- 异常项：`{'ok': False, 'error': True, 'message': str(exc)[:200]}`
+- 新增 `elapsed_ms` 字段
+
+特例登记（CLAUDE.md 附录 C）：
+- [NEW-FILE:#20260520-S3K] `tests/backend/api/test_health_deep.py`
+- 触发原因：api/ 目录下无 health/deep 专项测试，必须新建覆盖 TimeoutError 兜底逻辑
+- 白名单类别：b 项（缺失且必需的最小单元测试）
+
+铁证（2026-05-20 20:30 +08:00）：
+- pytest api/：**184 passed, 1 failed（pre-existing）**，3 个新增专项测试全 PASS
+- pytest unit/：453 passed, 3 xfailed（基线一致）
+- pytest integration+sse/：146 passed, 0 failed（基线一致）
+- vm_stat free pages 全程 > 11000（阈值 5000）
+- 时间校验：本机 2026-05-20 20:26:32 +08:00 / timeanddate.com UTC 12:26:33 / 偏差 < 10s，通过
+
+---
+
 ## Sprint 3-J(A) 交付记录（commit e4158e1，2026-05-20 19:58 +08:00）
 
 | 条目 | 状态 | 关键实现 |
