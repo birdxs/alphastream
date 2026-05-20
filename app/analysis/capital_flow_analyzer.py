@@ -69,7 +69,12 @@ class CapitalFlowAnalyzer:
             return {'data': [], 'source': 'degraded', 'reason': str(e)}
 
     def get_individual_fund_flow_rank(self, period="10日"):
-        """获取个股资金流向排名"""
+        """获取个股资金流向排名。
+
+        返回统一结构（H2-4 修复）：
+            {'data': list[dict], 'error': str | None, 'count': int}
+        调用方通过 result['error'] is not None 判断失败，通过 result['data'] 取列表。
+        """
         try:
             self.logger.info(f"Getting individual fund flow ranking for period: {period}")
 
@@ -85,7 +90,7 @@ class CapitalFlowAnalyzer:
             stock_data = ak.stock_individual_fund_flow_rank(indicator=period)
 
             # 处理数据
-            result = []
+            items = []
             for _, row in stock_data.iterrows():
                 try:
                     # 根据不同时间段设置列名前缀
@@ -108,11 +113,12 @@ class CapitalFlowAnalyzer:
                         "small_net_inflow": float(row.get(f"{period_prefix}小单净流入-净额", 0)),
                         "small_net_inflow_percent": float(row.get(f"{period_prefix}小单净流入-净占比", 0))
                     }
-                    result.append(item)
+                    items.append(item)
                 except Exception as e:
                     self.logger.warning(f"Error processing row in individual fund flow rank: {str(e)}")
                     continue
 
+            result = {'data': items, 'error': None, 'count': len(items)}
             # 缓存结果
             self.data_cache[cache_key] = (now_cn(), result)
 
@@ -120,7 +126,7 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting individual fund flow ranking: {str(e)}")
             self.logger.error(traceback.format_exc())
-            return {'data': [], 'source': 'degraded', 'reason': str(e)}
+            return {'data': [], 'error': str(e), 'count': 0}
 
     def get_individual_fund_flow(self, stock_code, market_type="", re_date="10日"):
         """获取个股资金流向数据"""

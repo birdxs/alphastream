@@ -179,3 +179,58 @@ def test_calculate_cagr_zero_earlier_returns_none(fa):
     series = pd.Series([200, 100, 50, 0, 0])
     cagr = fa._calculate_cagr(series, years=4)
     assert cagr is None
+
+
+# ================================================================ Sprint 3-N 新增测试（H3-1 + H3-2）
+# [NEW-FILE:#20260520-S3N] 追加至现有文件
+
+# ---------------------------------------------------------------- S3-N1 H3-1 净利率不得拾取 ROE 列
+def test_net_profit_margin_does_not_pick_roe(fa):
+    """H3-1：mock DataFrame 仅有 ROE 列，无净利率列，net_profit_margin 应返回 None"""
+    import pandas as pd
+    financial_df = pd.DataFrame([{
+        # 仅有 ROE 类列，无净利率列
+        "加权净资产收益率(%)": 18.5,
+        "加权ROE(%)": 18.5,
+        "ROE(%)": 18.5,
+    }])
+    # _safe_get_column 用净利率候选列名查，ROE 列不在列表中 → 应返回 None
+    result = fa._safe_get_column(
+        financial_df,
+        ['销售净利率(%)', '净利润率(%)', '总资产净利润率(%)', 'net_profit_margin'],
+    )
+    assert result is None, f"净利率字段不应拾取 ROE 列，实际返回: {result}"
+
+
+# ---------------------------------------------------------------- S3-N2 H3-2 财务指标缺字段默认 None（铁律 #1）
+def test_financial_indicator_defaults_to_none_not_zero(fa):
+    """H3-2：DataFrame 无对应列时，默认值必须是 None 而非 0"""
+    import pandas as pd
+    empty_df = pd.DataFrame([{"OTHER_COL": 999}])
+    for col_list in [
+        ['PE(TTM)', 'pe_ttm'],
+        ['市净率', 'PB', 'pb'],
+        ['加权净资产收益率(%)', 'ROE', 'roe'],
+        ['销售净利率(%)', '净利润率(%)', 'net_profit_margin'],
+        ['资产负债率(%)', 'debt_ratio'],
+    ]:
+        val = fa._safe_get_column(empty_df, col_list)
+        assert val is None, f"缺失字段 {col_list} 应返回 None，实际返回: {val}"
+
+
+# ---------------------------------------------------------------- S3-N3 H3-2 NaN 值转换为 None（铁律 #1）
+def test_financial_indicator_handles_nan(fa):
+    """H3-2：列存在但值为 NaN 时应返回 None，不应返回 float('nan') 或 0"""
+    import pandas as pd
+    import math
+    nan_df = pd.DataFrame([{
+        "PE(TTM)": float("nan"),
+        "加权净资产收益率(%)": float("nan"),
+        "销售净利率(%)": float("nan"),
+    }])
+    pe = fa._safe_get_column(nan_df, ['PE(TTM)', 'pe_ttm'])
+    roe = fa._safe_get_column(nan_df, ['加权净资产收益率(%)', 'ROE', 'roe'])
+    npm = fa._safe_get_column(nan_df, ['销售净利率(%)', '净利润率(%)', 'net_profit_margin'])
+    assert pe is None, f"NaN PE 应返回 None，实际: {pe}"
+    assert roe is None, f"NaN ROE 应返回 None，实际: {roe}"
+    assert npm is None, f"NaN 净利率应返回 None，实际: {npm}"

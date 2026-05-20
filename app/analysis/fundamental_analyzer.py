@@ -22,15 +22,20 @@ class FundamentalAnalyzer:
         from app.core.data_provider import get_data_provider
         self.data_provider = get_data_provider()
 
-    def _safe_get_column(self, df, col_options, row_idx=0, default=0):
-        """安全获取DataFrame列值，支持多个候选列名"""
+    def _safe_get_column(self, df, col_options, row_idx=0, default=None):
+        """安全获取DataFrame列值，支持多个候选列名。
+        默认返回 None（铁律 #1：财务指标缺失时不应以 0 充当真实值）。
+        """
         if df is None or df.empty:
             return default
         for col in col_options if isinstance(col_options, list) else [col_options]:
             if col in df.columns:
                 try:
                     val = df[col].iloc[row_idx]
-                    return float(val) if val is not None and str(val) != '' else default
+                    if val is None or str(val) == '' or (isinstance(val, float) and pd.isna(val)):
+                        return default
+                    fval = float(val)
+                    return default if pd.isna(fval) else fval
                 except (IndexError, ValueError, TypeError):
                     continue
         return default
@@ -56,14 +61,21 @@ class FundamentalAnalyzer:
                 logger.warning(f"获取估值指标失败: {e}")
 
             # 整合数据（使用安全列名访问）
+            # H3-1 修复：各字段候选列名严格按语义边界定义，禁止交叉污染。
+            # H3-2 修复：default=None（铁律 #1），缺失 / NaN → None，前端显示 "—"。
             indicators = {
-                'pe_ttm': self._safe_get_column(valuation, ['PE(TTM)', 'PE-TTM', 'pe_ttm'], default=0),
-                'pb': self._safe_get_column(valuation, ['市净率', 'PB', 'pb'], default=0),
-                'ps_ttm': self._safe_get_column(valuation, ['市销率', 'PS(TTM)', 'ps_ttm'], default=0),
-                'roe': self._safe_get_column(financial_data, ['加权净资产收益率(%)', '加权ROE(%)', 'ROE', 'roe'], default=0),
-                'gross_margin': self._safe_get_column(financial_data, ['销售毛利率(%)', '毛利率(%)', 'gross_margin'], default=0),
-                'net_profit_margin': self._safe_get_column(financial_data, ['总资产净利润率(%)', '净利润率(%)', '净资产收益率(%)', 'net_profit_margin'], default=0),
-                'debt_ratio': self._safe_get_column(financial_data, ['资产负债率(%)', '负债率(%)', 'debt_ratio'], default=0)
+                # 估值指标 —— 来自 akshare stock_value_em
+                'pe_ttm': self._safe_get_column(valuation, ['PE(TTM)', 'PE-TTM', 'pe_ttm']),
+                'pb': self._safe_get_column(valuation, ['市净率', 'PB', 'pb']),
+                'ps_ttm': self._safe_get_column(valuation, ['市销率', 'PS(TTM)', 'ps_ttm']),
+                # ROE（净资产收益率）—— 仅包含 ROE 相关列名，不得混入净利率列
+                'roe': self._safe_get_column(financial_data, ['加权净资产收益率(%)', '加权ROE(%)', 'ROE(%)', 'ROE', 'roe']),
+                # 毛利率 —— 仅包含毛利率/销售毛利率列名
+                'gross_margin': self._safe_get_column(financial_data, ['销售毛利率(%)', '毛利率(%)', 'gross_margin']),
+                # H3-1 核心修复：净利率候选列名中移除 ROE 列（'净资产收益率(%)' 是 ROE，不是净利率）
+                'net_profit_margin': self._safe_get_column(financial_data, ['销售净利率(%)', '净利润率(%)', '总资产净利润率(%)', 'net_profit_margin']),
+                # 负债率 —— 仅包含负债/资产负债率列名
+                'debt_ratio': self._safe_get_column(financial_data, ['资产负债率(%)', '负债率(%)', 'debt_ratio']),
             }
             if progress_callback:
                 progress_callback(10, "财务指标获取成功")

@@ -170,15 +170,16 @@ def test_get_concept_fund_flow_exception_returns_mock(analyzer):
     assert result.get("source") == "degraded"
 
 
-# ---------------------------------------------------------------- 9. get_individual_fund_flow_rank
+# ---------------------------------------------------------------- 9. get_individual_fund_flow_rank（H2-4 统一返回契约）
 def test_get_individual_fund_flow_rank_exception_returns_mock(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
                side_effect=Exception("net err")):
         result = analyzer.get_individual_fund_flow_rank(period="10日")
-    # 金融铁律：异常降级返回空数据 + degraded 标记，禁止 mock 伪造数据
+    # H2-4 统一契约：异常 → {'data': [], 'error': str, 'count': 0}
     assert isinstance(result, dict)
     assert result.get("data") == []
-    assert result.get("source") == "degraded"
+    assert result.get("count") == 0
+    assert result.get("error") is not None and isinstance(result["error"], str)
 
 
 # ---------------------------------------------------------------- 10. 沪市/深市 market_type 推导
@@ -199,3 +200,57 @@ def test_individual_fund_flow_sz_code_routing(analyzer):
         analyzer.get_individual_fund_flow("000001", market_type="A")
         args, kwargs = mock_ak.call_args
         assert "sz" in str(args) + str(kwargs) or kwargs.get("market") == "sz"
+
+
+# ================================================================ Sprint 3-N 新增测试（H2-4 统一返回契约）
+# [NEW-FILE:#20260520-S3N] 追加至现有文件
+
+# ---------------------------------------------------------------- S3-N4 成功路径返回 unified schema
+def test_fund_flow_rank_success_returns_unified_schema(analyzer):
+    """H2-4：成功路径应返回 {'data': list, 'error': None, 'count': int}"""
+    import pandas as pd
+    # 构造最小可用 DataFrame
+    mock_df = pd.DataFrame([{
+        "序号": 1,
+        "代码": "600519",
+        "名称": "贵州茅台",
+        "最新价": 1800.0,
+        "10日涨跌幅": 2.5,
+        "10日主力净流入-净额": 1000000.0,
+        "10日主力净流入-净占比": 0.5,
+        "10日超大单净流入-净额": 500000.0,
+        "10日超大单净流入-净占比": 0.25,
+        "10日大单净流入-净额": 300000.0,
+        "10日大单净流入-净占比": 0.15,
+        "10日中单净流入-净额": 100000.0,
+        "10日中单净流入-净占比": 0.05,
+        "10日小单净流入-净额": 100000.0,
+        "10日小单净流入-净占比": 0.05,
+    }])
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
+               return_value=mock_df):
+        result = analyzer.get_individual_fund_flow_rank(period="10日")
+    # 统一 schema 校验
+    assert isinstance(result, dict), "成功路径应返回 dict"
+    assert "data" in result, "缺少 data 字段"
+    assert "error" in result, "缺少 error 字段"
+    assert "count" in result, "缺少 count 字段"
+    assert isinstance(result["data"], list), "data 应为 list"
+    assert result["error"] is None, f"成功路径 error 应为 None，实际: {result['error']}"
+    assert result["count"] == len(result["data"]), "count 应等于 data 长度"
+    assert result["count"] == 1
+
+
+# ---------------------------------------------------------------- S3-N5 异常路径返回 unified schema
+def test_fund_flow_rank_exception_returns_unified_schema(analyzer):
+    """H2-4：异常路径应返回 {'data': [], 'error': str, 'count': 0}"""
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
+               side_effect=ValueError("mock api error")):
+        result = analyzer.get_individual_fund_flow_rank(period="今日")
+    # 统一 schema 校验
+    assert isinstance(result, dict), "异常路径应返回 dict"
+    assert "data" in result and result["data"] == [], "data 应为空列表"
+    assert "error" in result and result["error"] is not None, "error 应为非 None 字符串"
+    assert isinstance(result["error"], str), "error 应为 str 类型"
+    assert "count" in result and result["count"] == 0, "count 应为 0"
+    assert "mock api error" in result["error"], "error 应包含原始异常信息"

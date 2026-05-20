@@ -2733,9 +2733,13 @@ def api_individual_fund_flow_rank():
         period = request.args.get('period', '10日')  # Default to today
 
         # Get individual fund flow ranking data
+        # H2-4 统一返回契约：{'data': list, 'error': str|None, 'count': int}
         result = capital_flow_analyzer.get_individual_fund_flow_rank(period)
 
-        return custom_jsonify(result)
+        if result.get('error') is not None:
+            return api_error('INTERNAL', '获取个股资金流向排名失败', details=result['error'])
+
+        return api_ok(result)
     except Exception as e:
         app.logger.error(f"Error getting individual fund flow ranking: {traceback.format_exc()}")
         return api_error('INTERNAL', '获取个股资金流向排名失败，请稍后重试', details=str(e))

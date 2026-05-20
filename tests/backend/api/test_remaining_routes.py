@@ -215,14 +215,18 @@ class TestFundFlow:
         assert _has_error(_json(resp))
 
     def test_individual_fund_flow_rank_happy(self, flask_client):
+        # H2-4 统一契约：mock 返回 {'data': list, 'error': None, 'count': int}
         with patch("app.web.web_server.capital_flow_analyzer") as mock_cfa:
-            mock_cfa.get_individual_fund_flow_rank.return_value = [
-                {"code": "600000", "rank": 1}
-            ]
+            mock_cfa.get_individual_fund_flow_rank.return_value = {
+                "data": [{"code": "600000", "rank": 1}],
+                "error": None,
+                "count": 1,
+            }
             resp = flask_client.get("/api/individual_fund_flow_rank?period=10日")
         assert resp.status_code == 200
         body = _json(resp)
-        assert isinstance(body, list)
+        # api_ok 外壳：body['data']['data'] 是列表
+        assert isinstance(body, dict)
 
     def test_individual_fund_flow_rank_error(self, flask_client):
         with patch("app.web.web_server.capital_flow_analyzer") as mock_cfa:
