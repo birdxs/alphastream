@@ -106,6 +106,22 @@ from app.web.schema import (
     RegistryStatsSchema,
     AgentPendingApprovalsSchema,
     ActiveTasksSchema,
+    # S3-J(A): +15 schema（45→60/87 = 69%）
+    AnalysisStatusSchema,
+    CancelAnalysisSchema,
+    EtfAnalysisStatusSchema,
+    CancelScanSchema,
+    AgentAnalysisStatusSchema,
+    McpListToolsSchema,
+    UploadImageSchema,
+    ConversationDetailSchema,
+    ShippingBdiSchema,
+    ShippingPortSchema,
+    EsgScoreSchema,
+    CorporateSearchSchema,
+    JobsSearchSchema,
+    JobsCompanySchema,
+    ScanStatusSchema,
 )
 from app.web.openapi_spec import OPENAPI_SPEC
 
@@ -1103,6 +1119,7 @@ def start_stock_analysis():
 
 
 @app.route('/api/analysis_status/<task_id>', methods=['GET'])
+@validate_schema(AnalysisStatusSchema)  # S3-J(A): schema 校验扩展
 def get_analysis_status(task_id):
     """获取个股分析任务状态"""
     store = get_task_store('stock_analysis')
@@ -1133,6 +1150,7 @@ def get_analysis_status(task_id):
 
 
 @app.route('/api/cancel_analysis/<task_id>', methods=['POST'])
+@validate_schema(CancelAnalysisSchema, source='json')  # S3-J(A): schema 校验扩展
 def cancel_analysis(task_id):
     """取消个股分析任务"""
     store = get_task_store('stock_analysis')
@@ -1219,6 +1237,7 @@ def start_etf_analysis():
 
 
 @app.route('/api/etf_analysis_status/<task_id>', methods=['GET'])
+@validate_schema(EtfAnalysisStatusSchema)  # S3-J(A): schema 校验扩展
 def get_etf_analysis_status(task_id):
     """获取ETF分析任务状态"""
     store = get_task_store('etf_analysis')
@@ -2198,6 +2217,7 @@ def start_market_scan():
 
 
 @app.route('/api/scan_status/<task_id>', methods=['GET'])
+@validate_schema(ScanStatusSchema)  # S3-J(A): schema 校验扩展
 def get_scan_status(task_id):
     """获取扫描任务状态"""
     with task_lock:
@@ -2228,6 +2248,7 @@ def get_scan_status(task_id):
 
 
 @app.route('/api/cancel_scan/<task_id>', methods=['POST'])
+@validate_schema(CancelScanSchema, source='json')  # S3-J(A): schema 校验扩展
 def cancel_scan(task_id):
     """取消扫描任务"""
     with task_lock:
@@ -3576,6 +3597,7 @@ def start_agent_analysis():
         return api_error('INTERNAL', '启动智能体分析失败，请稍后重试', details=str(e))
 
 @app.route('/api/agent_analysis_status/<task_id>', methods=['GET'])
+@validate_schema(AgentAnalysisStatusSchema)  # S3-J(A): schema 校验扩展
 def get_agent_analysis_status(task_id):
     """获取智能体分析任务的状态"""
     task = agent_session_manager.load_task(task_id)
@@ -3750,6 +3772,7 @@ def get_active_tasks():
 # ===== MCP 工具服务端点 =====
 
 @app.route('/api/mcp/tools', methods=['GET'])
+@validate_schema(McpListToolsSchema)  # S3-J(A): schema 校验扩展
 def mcp_list_tools():
     """列出MCP可用工具"""
     try:
@@ -3781,6 +3804,7 @@ def mcp_call_tool():
 # ===== 多模态图片上传接口 =====
 
 @app.route('/api/upload_image', methods=['POST'])
+@validate_schema(UploadImageSchema, source='form')  # S3-J(A): schema 校验扩展（multipart form）
 def upload_image():
     """接收图片并返回描述（用于多模态分析）
     安全加固（Hunt1-C4）：secure_filename + magic bytes + 扩展名白名单 + 大小限制 + 绝对路径
@@ -4211,6 +4235,7 @@ def list_conversations():
 
 
 @app.route('/api/conversations/<conversation_id>', methods=['GET'])
+@validate_schema(ConversationDetailSchema)  # S3-J(A): schema 校验扩展
 def get_conversation(conversation_id):
     """获取单个对话详情"""
     from app.core.conversation import get_conversation_manager
@@ -4221,6 +4246,7 @@ def get_conversation(conversation_id):
 
 
 @app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
+@validate_schema(ConversationDetailSchema, source='json')  # S3-J(A): schema 校验扩展
 def delete_conversation(conversation_id):
     """删除对话"""
     from app.core.conversation import get_conversation_manager
@@ -4516,6 +4542,7 @@ def _p3_ok(artifact: dict, **extra):
 
 # -------- Shipping --------
 @app.route('/api/shipping/bdi', methods=['GET'])
+@validate_schema(ShippingBdiSchema)  # S3-J(A): schema 校验扩展
 def api_shipping_bdi():
     from app.core.artifact_wrapper import wrap_shipping_v2
     try:
@@ -4537,6 +4564,7 @@ def api_shipping_bdi():
 
 
 @app.route('/api/shipping/port/<string:port>', methods=['GET'])
+@validate_schema(ShippingPortSchema)  # S3-J(A): schema 校验扩展
 def api_shipping_port(port: str):
     from app.core.artifact_wrapper import wrap_shipping_v2
     try:
@@ -4559,6 +4587,7 @@ def api_shipping_port(port: str):
 
 # -------- ESG --------
 @app.route('/api/esg/<string:ticker>', methods=['GET'])
+@validate_schema(EsgScoreSchema)  # S3-J(A): schema 校验扩展
 def api_esg_score(ticker: str):
     from app.core.artifact_wrapper import wrap_esg_v2
     try:
@@ -4598,6 +4627,7 @@ def api_esg_climate(cik: str):
 
 # -------- Corporate --------
 @app.route('/api/corporate/search', methods=['GET'])
+@validate_schema(CorporateSearchSchema)  # S3-J(A): schema 校验扩展
 def api_corporate_search():
     from app.core.artifact_wrapper import _build_p3_artifact
     try:
@@ -4655,6 +4685,7 @@ def api_corporate_network(company_id: str):
 
 # -------- Jobs --------
 @app.route('/api/jobs/search', methods=['GET'])
+@validate_schema(JobsSearchSchema)  # S3-J(A): schema 校验扩展
 def api_jobs_search():
     from app.core.artifact_wrapper import wrap_hiring_v2
     try:
@@ -4680,6 +4711,7 @@ def api_jobs_search():
 
 
 @app.route('/api/jobs/company/<string:company>', methods=['GET'])
+@validate_schema(JobsCompanySchema)  # S3-J(A): schema 校验扩展
 def api_jobs_company(company: str):
     from app.core.artifact_wrapper import wrap_hiring_v2
     try:

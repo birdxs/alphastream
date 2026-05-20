@@ -438,3 +438,107 @@ class AgentPendingApprovalsSchema(Schema):
 class ActiveTasksSchema(Schema):
     """GET /api/active_tasks  — no required params"""
     pass
+
+
+# ─────────────────────────────────────────────
+# S3-J(A): 新增 15 个端点 Schema（45→60/87 = 69%）
+# 2026-05-20 19:49 +08:00
+# ─────────────────────────────────────────────
+
+_VALID_TASK_ID_RE = r'^[A-Za-z0-9_\-\.]{1,64}$'
+
+
+class AnalysisStatusSchema(Schema):
+    """GET /api/analysis_status/<task_id> — path param by Flask; no extra query params"""
+    pass
+
+
+class CancelAnalysisSchema(Schema):
+    """POST /api/cancel_analysis/<task_id> — path param by Flask; no extra body params"""
+    pass
+
+
+class EtfAnalysisStatusSchema(Schema):
+    """GET /api/etf_analysis_status/<task_id> — path param by Flask; no extra query params"""
+    pass
+
+
+class CancelScanSchema(Schema):
+    """POST /api/cancel_scan/<task_id> — path param by Flask; no extra body params"""
+    pass
+
+
+class AgentAnalysisStatusSchema(Schema):
+    """GET /api/agent_analysis_status/<task_id> — path param by Flask; no extra query params"""
+    pass
+
+
+class McpListToolsSchema(Schema):
+    """GET /api/mcp/tools — no required params"""
+    pass
+
+
+class UploadImageSchema(Schema):
+    """POST /api/upload_image — multipart/form-data; file field validated at handler level"""
+    pass
+
+
+class ConversationDetailSchema(Schema):
+    """GET|DELETE /api/conversations/<conversation_id> — path param by Flask; no extra params"""
+    pass
+
+
+class ShippingBdiSchema(Schema):
+    """GET /api/shipping/bdi — days: int 1-365"""
+    days = fields.Int(
+        load_default=30,
+        validate=mv.Range(min=1, max=365, error='days 必须在 1-365 范围内'),
+    )
+
+
+class ShippingPortSchema(Schema):
+    """GET /api/shipping/port/<port> — period: monthly|yearly|daily"""
+    period = fields.Str(
+        load_default='monthly',
+        validate=mv.OneOf(
+            ['monthly', 'yearly', 'daily'],
+            error='period 必须是 monthly/yearly/daily',
+        ),
+    )
+
+
+class EsgScoreSchema(Schema):
+    """GET /api/esg/<ticker> — source: esgbook|msci|refinitiv (default esgbook)"""
+    source = fields.Str(
+        load_default='esgbook',
+        validate=mv.Length(max=32, error='source 不能超过 32 字符'),
+    )
+
+
+class CorporateSearchSchema(Schema):
+    """GET /api/corporate/search — q: company name keyword, required"""
+    q = fields.Str(
+        required=True,
+        validate=mv.Length(min=1, max=100, error='q 长度必须在 1-100 之间'),
+    )
+    limit = fields.Int(
+        load_default=20,
+        validate=mv.Range(min=1, max=100, error='limit 必须在 1-100 范围内'),
+    )
+
+
+class JobsSearchSchema(Schema):
+    """GET /api/jobs/search — q: keyword, limit: result count"""
+    q = fields.Str(
+        required=True,
+        validate=mv.Length(min=1, max=100, error='q 长度必须在 1-100 之间'),
+    )
+    limit = fields.Int(
+        load_default=20,
+        validate=mv.Range(min=1, max=200, error='limit 必须在 1-200 范围内'),
+    )
+
+
+class JobsCompanySchema(Schema):
+    """GET /api/jobs/company/<company> — path param by Flask; no extra query params"""
+    pass
