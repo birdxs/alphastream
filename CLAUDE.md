@@ -4,6 +4,32 @@
 
 ---
 
+## Sprint 3-L 交付记录（commit 4c46b55，2026-05-20 21:12 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-L(C) 前端 ESLint warning 清零 + 类型收紧 | PASS | ESLint error 19 → 0，warning 17 → 1（97% 下降），any 用量 4 不变，eslint-disable 13 → 11，改动 21 个源码文件 |
+
+铁证：
+- tsc --noEmit 零错误（修前修后一致）
+- vitest 单 spec 串行 8/8 PASS（80 test cases）
+- ESLint 报告：/tmp/s3l_eslint_{before,after}.txt
+- 资源策略：未启 next dev / npm build / 全量 vitest，free pages 全程 > 4000
+
+时间校验记录（Sprint 3-L）：
+- 本机：2026-05-20 20:39:07 +08:00（Asia/Singapore）
+- 源1：timeanddate.com Date 头（UTC 12:39:16）→ +08:00 = 20:39:16，偏差 < 10s
+- 源2：cloudflare.com Date 头（UTC 12:39:22）→ +08:00 = 20:39:22，偏差 < 15s
+- 判定：通过
+
+修改文件清单：
+- P1 未使用 import/变量：page.tsx / dashboard/page.tsx / agent-progress-panel.tsx / message-list.tsx / global-search.tsx / investor-personas.tsx / score-radar.tsx / conversation-sidebar.tsx / compare/page.tsx / artifact-card.tsx / use-chat-stream.ts
+- P1 set-state-in-effect errors：agent-side-panel.tsx / chat-input.tsx / command-palette.tsx / mobile-drawer.tsx / message-bubble.tsx / stock-search.tsx / use-alt-data.ts / use-stock-names.ts
+- P1 no-unescaped-entities：portfolio/page.tsx
+- 测试文件：use-chat-stream.test.ts / utils.test.ts / client.test.ts
+
+---
+
 ## Sprint 3-K 交付记录（commit 39fe389，2026-05-20 20:30 +08:00）
 
 | 条目 | 状态 | 关键实现 |
