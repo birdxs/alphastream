@@ -4,6 +4,32 @@
 
 ---
 
+## Sprint 3-G 交付记录（commit 372306d，2026-05-20 17:00 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-G1 schema 校验扩展 +15 端点（30→45/87 = 52%）| PASS | app/web/schema.py 新增 15 个 Schema + web_server.py 装饰器套用 |
+| S3-G2 深度健康检查 /api/health/deep（Hunt5-M）| PASS | sqlite/akshare/llm/cache 四 check，DISABLE_NETWORK=1+MOCK_LLM=1 skipped，3s 硬超时，PUBLIC_PATHS 白名单 |
+| S3-G3 前端 vitest spec +5（推迟）| DEFER | 上轮触发 vitest 全量 OOM，untracked 3 spec 暂留下批单 spec 模式跑 |
+| S3-G4 基础 metrics 计数器（Hunt5-M）| PASS | requests_total/by_status/by_path + /api/metrics 路由 + top 10 paths + RLock 保护 |
+
+铁证：
+- 时间校验：本机 2026-05-20 17:00:53 +08:00 / cloudflare.com +4s / timeanddate.com +5s（≤100s 通过）
+- pytest 分批：api 178 / unit 453 / int+sse 146 → 全量 777 passed / 1 skipped / 6 xfailed / 1 xpassed（比基线 +1 passed，0 fail）
+- tsc --noEmit 零错误（本地 binary 调用）
+- diff +320/-1（3 文件）
+- 资源策略：不启服务，无 Playwright，pytest 分批，vm_stat 全程 14000–47000 free pages
+
+崩溃根因复盘（2026-05-20 14:21 + 16:47 两次 OOM reboot）：
+- R1（主因）vitest 全量多 worker pool + esbuild 实例叠加
+- R2 历史 chromium / next dev 残留
+- R3 pytest 全量 776 单进程 langchain 全栈 import ~2-3GB
+- R4 macOS mds/proactived 后台索引
+- R5 Claude Code 多 subagent 累积
+- 铁证：kernel memorystatus compressor_size=776782 pages (~12GB) / available_pages=19656 (~300MB)
+
+---
+
 ## Sprint 3-F 交付记录（commits 5dfa7c1 + 0d2c7d9，2026-05-20 15:00 +08:00）
 
 | 条目 | 状态 | 关键实现 |
@@ -220,6 +246,46 @@ S3-B2/S3-B3 文档化（全部已合规，无需修改）：
    - 真实数据：curl 真返回 + Kimi WebBridge DOM 抓取
 
 5. **违反处理**：发现 worker 调用 Playwright = 任务失败重做
+
+---
+
+## 🚨 铁律 #3：worker 资源策略硬约束（2026-05-20 入永久记忆）
+
+**触发背景**：S3-G 第一次派发时 worker 跑 vitest 全量 + pytest 全量 + 历史 chromium 残留三重叠加，触发 macOS kernel memorystatus OOM，强制 reboot 两次（14:21 / 16:47）。compressor_size 飙至 776782 pages (~12GB)，available_pages 跌至 19656 (~300MB)。
+
+### 强制约束
+
+1. **vitest 严禁全量 / watch 模式**：
+   - 只允许 `npm run test -- --run <specific/path.test.ts>` 单 spec
+   - 禁 `npm run test`（默认 watch）/ `npx vitest`（默认全量）
+   - 多 spec 必须串行：跑一个释放一个
+
+2. **pytest 必须分批**：
+   - 按 `tests/backend/api/` / `tests/backend/unit/` / `tests/backend/integration/ tests/backend/sse/` 三批
+   - 每批 < 500 case，单进程预期 < 1GB
+   - 全量回归仅在三批均 PASS 后做一次确认
+
+3. **环境监控**：
+   - 每批前后 `vm_stat | head -5` 检查 free pages
+   - free pages < 5000 立即停手并取证
+
+4. **绝禁服务启动**（worker 内部任何环节）：
+   - `python run.py` / `flask run`
+   - `next dev` / `npm run dev`
+   - `npm run build`（Turbopack 6-8GB）
+   - chromium / playwright / puppeteer
+   - 替代方案：import smoke `python -c "from app.web import web_server"` + 路由注册断言
+
+5. **工具选型**：
+   - tsc 用 `node node_modules/typescript/bin/tsc --noEmit`（不走 npx 触发包下载）
+   - 包安装单次只装一个版本，不并发 `npm i` × N
+
+6. **崩溃取证三件套**（事后必查）：
+   - `log show --predicate 'eventMessage CONTAINS "memorystatus"' --last 30m`
+   - `last reboot | head -5`
+   - `vm_stat | grep compressor`
+
+7. **违反处理**：worker 触发服务启动 / 全量 vitest / 全量 npm build = 任务失败重做，记录到 CLAUDE.md 复盘段
 
 ---
 
