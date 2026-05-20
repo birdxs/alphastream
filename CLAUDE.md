@@ -89,6 +89,36 @@
 
 ---
 
+## 🚨 铁律 #2：禁用 Playwright，统一 Kimi WebBridge（最高优先级，2026-05-20 入永久记忆）
+
+**触发背景**：S1-A → S3-A 期间反复使用 Playwright headless chromium 跑前端真测，叠加 6 batch python+next+chromium 进程，把 16GB 内存 compressor 池压到 6GB，触发 macOS OOM 强制崩溃（2026-05-20 01:00 +08:00）。
+
+### 强制约束
+
+1. **禁止使用 Playwright** 进行前端真测，包括：
+   - `playwright` Python package
+   - `@playwright/test` npm package
+   - `chromium.launch()` / `browser.newPage()` headless 调用
+   - `frontend/b*-*.js` / 根目录 `b*-*.js` 等 Playwright 脚本
+
+2. **统一改用 Kimi WebBridge**：
+   - 通过 Kimi WebBridge 调用真实浏览器
+   - 截图、DOM 抽取、Console 捕获、Network 监控由 WebBridge 提供
+   - 不在本机 spawn chromium 进程
+
+3. **历史 Playwright 脚本处置**：
+   - `frontend/b*-*.js`（11 个）+ 根目录 `b*-*.js`（9 个）= 20 个均已归档至 `/tmp/stockanal_test_scripts_archive_20260520`
+   - 后续 batch 验证证据：使用 `curl` + Kimi WebBridge 截图+DOM，不再产出 b*-*.js
+
+4. **铁证三件套（铁律 #3 衔接）继续生效**：
+   - 进程指纹：真重启 uptime_s < 60
+   - 真实复现：Kimi WebBridge 真测前后对比（不再使用 Playwright 截图）
+   - 真实数据：curl 真返回 + Kimi WebBridge DOM 抓取
+
+5. **违反处理**：发现 worker 调用 Playwright = 任务失败重做
+
+---
+
 ## 团队管理机制（继承全局）
 
 - 香草少校担任 PM，下达指令、跟踪验收，不插手具体事务
