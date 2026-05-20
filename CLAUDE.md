@@ -4,6 +4,40 @@
 
 ---
 
+## Sprint 3-I 交付记录（commit 4241953，2026-05-20 19:30 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-I1 api/ flaky 顺序污染根治（B 方案 conftest autouse）| PASS | tests/backend/api/conftest.py 新建 autouse fixture 清 5 个模块缓存（_market_indices_cache/_PROFILE_CACHE/_STOCK_NAME_CACHE/_INDEX_CACHE/_AKSHARE_HC_CACHE）|
+| S3-I2 pytest-randomly 引入（默认关闭）| PASS | requirements.txt + pytest.ini addopts=-p no:randomly，文档化启用方式 |
+
+诊断（污染链）：
+- 污染源：tests/backend/api/test_cache_control_headers.py::test_market_indices_cache_header_present（S3-H2 引入）
+- 污染面：app.web.web_server._market_indices_cache（30s TTL 模块级 dict）
+- 受害：test_stock_data_routes.py::TestMarketIndicesRoute::test_happy_path_returns_indices + test_empty_when_fetch_fails（monkeypatch 被 cache 快路径绕过）
+
+铁证：
+- 时间校验：本机 2026-05-20 19:28:49 +08:00 / timeanddate.com +1s / cloudflare.com +4s（≤100s 通过）
+- api/ 默认顺序：182 passed / 0 failed
+- api/ seed=42：182 passed / 0 failed
+- api/ seed=99999：182 passed / 0 failed
+- unit/：453 passed / 0 failed
+- integration/+sse：146 passed / 0 failed
+- vm_stat free pages：全程 > 5000（最低 4450 → 回升至 11500+）
+- 资源策略：不启服务，无 Playwright，pytest 分批，free pages 全程监控
+
+randomly 使用指南：
+- 默认关闭（addopts=-p no:randomly），避免 CI 抖动
+- 显式启用：`pytest -p randomly --randomly-seed=<N>`
+- 复现历史顺序：`pytest -p randomly --randomly-seed=last`
+
+特例登记（CLAUDE.md 附录 C）：
+- [NEW-FILE:#20260520-S3I] tests/backend/api/conftest.py：测试基础设施新建，属白名单 b 项（缺失且必需的最小测试基础设施）
+- 触发原因：api/ 批次无 conftest，无法在现有文件挂 autouse fixture
+- 回滚方案：删除 tests/backend/api/conftest.py + pytest.ini addopts 还原 + requirements.txt 删 pytest-randomly
+
+---
+
 ## Sprint 3-H 交付记录（commits 4882ed6 + 28b42c9，2026-05-20 17:30 +08:00）
 
 | 条目 | 状态 | 关键实现 |
