@@ -4,6 +4,21 @@
 
 ---
 
+## Sprint 3-E 交付记录（commit 13b6f12，2026-05-20 13:40 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-E1 schema 校验扩展 +15 端点（Hunt5）| PASS | 新增 15 个 Schema（NorthFlowHistory/FundamentalAnalysis/CapitalFlow/ScenarioPredict/QA/RiskAnalysis/PortfolioRisk/IndexAnalysis/IndustryAnalysisApi/IndustryFundFlow/IndividualFundFlow/SectorStocks/DeleteAgentAnalysis/AgentSubmitApproval/McpCall）；累计 30/87 = 34% |
+| S3-E2 时区扩展收尾（Hunt6-M）| SKIP（已合规）| 扫描 3 处 datetime.now() 均属 naive/aware 兼容守卫，保留逻辑正确 |
+| S3-E3 后端 try/except 全栈审查（Hunt3）| SKIP（已合规）| 扫描 0 处裸 except 命中 |
+| S3-E4 response 工具推广 +10 处（Hunt3-M）| PASS | api_error 加 error 向后兼容字段；14 处 jsonify 错误返回改走 api_error；修复 status 元组嵌套 bug |
+
+铁证：
+- pytest 777/0（真实运行，auth=false, mock_llm=1）
+- tsc 零错误
+
+---
+
 ## Sprint 3-D 交付记录（commit f9e2560，2026-05-20 12:45 +08:00）
 
 | 条目 | 状态 | 关键实现 |
