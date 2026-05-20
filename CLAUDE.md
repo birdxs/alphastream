@@ -4,6 +4,38 @@
 
 ---
 
+## Sprint 3-J(A) 交付记录（commit e4158e1，2026-05-20 19:58 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-J(A) schema 校验扩展 +15 端点（45→60/87 = 69%）| PASS | 新增 15 Schema 类 + 16 条路由挂装饰器（含 conversations/<id> GET+DELETE） |
+
+新增 15 个 Schema 类（app/web/schema.py）：
+- `AnalysisStatusSchema` → `/api/analysis_status/<task_id>` GET
+- `CancelAnalysisSchema` → `/api/cancel_analysis/<task_id>` POST
+- `EtfAnalysisStatusSchema` → `/api/etf_analysis_status/<task_id>` GET
+- `CancelScanSchema` → `/api/cancel_scan/<task_id>` POST
+- `AgentAnalysisStatusSchema` → `/api/agent_analysis_status/<task_id>` GET
+- `McpListToolsSchema` → `/api/mcp/tools` GET
+- `UploadImageSchema` → `/api/upload_image` POST（form）
+- `ConversationDetailSchema` → `/api/conversations/<id>` GET + DELETE
+- `ShippingBdiSchema` → `/api/shipping/bdi` GET（days: 1-365）
+- `ShippingPortSchema` → `/api/shipping/port/<port>` GET（period: monthly/yearly/daily）
+- `EsgScoreSchema` → `/api/esg/<ticker>` GET（source: max 32）
+- `CorporateSearchSchema` → `/api/corporate/search` GET（q: required 1-100）
+- `JobsSearchSchema` → `/api/jobs/search` GET（q: required 1-100，limit: 1-200）
+- `JobsCompanySchema` → `/api/jobs/company/<company>` GET
+- `ScanStatusSchema`（已存在）→ `/api/scan_status/<task_id>` GET 补装饰器
+
+铁证：
+- 时间校验：本机 2026-05-20 19:49:12 +08:00 / timeanddate.com +1s / cloudflare.com +5s（≤100s 通过）
+- import smoke：163 routes OK
+- pytest api：182 passed / unit：452 passed / int+sse：146 passed（基线一致）
+- tsc --noEmit：零错误
+- schema.py: +104 lines，web_server.py: +32 lines
+
+---
+
 ## Sprint 3-I 交付记录（commit 4241953，2026-05-20 19:30 +08:00）
 
 | 条目 | 状态 | 关键实现 |
