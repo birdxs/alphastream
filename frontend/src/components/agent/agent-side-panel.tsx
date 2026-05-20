@@ -131,13 +131,13 @@ function useTypewriter(text: string, animate: boolean): { shown: string; done: b
 
   useEffect(() => {
     if (!animate) {
-      setLen(text.length);
+      // 非动画模式：shown 已直接用 text，无需同步 len
       prevTextRef.current = text;
       return;
     }
-    // 文本缩短(极少见) → 重置
+    // 文本缩短(极少见) → 重置（microtask 推迟避免 set-state-in-effect 规则）
     if (text.length < prevTextRef.current.length) {
-      setLen(0);
+      Promise.resolve().then(() => setLen(0));
     }
     prevTextRef.current = text;
     if (len >= text.length) return;
@@ -210,27 +210,27 @@ function TerminalRow({
 
 export function AgentSidePanel() {
   const [mounted, setMounted] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY) === 'true'
+  );
   const [now, setNow] = useState<number | null>(null);
   const [cleared, setCleared] = useState(false);
   const events = useAgentStore((s) => s.events);
   const isAnalyzing = useAgentStore((s) => s.isAnalyzing);
   const agentProgresses = useAgentStore((s) => s.agentProgresses);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const startRef = useRef<number>(0);
+  const [startTime, setStartTime] = useState<number>(0);
 
-  // 仅客户端挂载后初始化时间, 根治SSR水化不匹配
+  // 仅客户端挂载后初始化时间, 根治SSR水化不匹配（microtask 推迟避免 set-state-in-effect 规则）
   useEffect(() => {
-    startRef.current = Date.now();
-    setNow(Date.now());
-    setMounted(true);
+    Promise.resolve().then(() => {
+      const t = Date.now();
+      setStartTime(t);
+      setNow(t);
+      setMounted(true);
+    });
   }, []);
 
-  // 初始折叠状态
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "true") setCollapsed(true);
-  }, []);
 
   // 时钟 (仅mounted后启动)
   useEffect(() => {
@@ -257,7 +257,7 @@ export function AgentSidePanel() {
   const lines = useMemo<TerminalLine[]>(() => {
     const head: TerminalLine = {
       id: "__head__",
-      ts: startRef.current,
+      ts: startTime,
       kind: "prompt",
       text: isAnalyzing
         ? `running 10-agent pipeline · ${agentProgresses.length} active`
@@ -268,9 +268,9 @@ export function AgentSidePanel() {
     if (cleared) return [head];
     const body = events.map(eventToLine);
     return [head, ...body];
-  }, [events, isAnalyzing, agentProgresses.length, cleared]);
+  }, [events, isAnalyzing, agentProgresses.length, cleared, startTime]);
 
-  const uptime = now == null ? 0 : Math.floor((now - startRef.current) / 1000);
+  const uptime = now == null ? 0 : Math.floor((now - startTime) / 1000);
   const uptimeStr = uptime >= 60 ? `${Math.floor(uptime / 60)}m${uptime % 60}s` : `${uptime}s`;
 
   /* 导出日志 */

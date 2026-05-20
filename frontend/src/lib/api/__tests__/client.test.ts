@@ -77,7 +77,7 @@ describe('apiClient.get', () => {
       headers: { get: () => 'application/json' },
     });
 
-    const { apiClient, ApiError } = await import('../client');
+    const { apiClient } = await import('../client');
     await expect(apiClient.get('/api/missing')).rejects.toThrow();
   });
 

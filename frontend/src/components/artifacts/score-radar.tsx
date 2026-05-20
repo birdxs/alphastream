@@ -87,8 +87,6 @@ export function ScoreRadarArtifact({ data }: Props) {
               boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.1)',
             }}
             formatter={(value, _name, entry) => {
-              const score = Number(value);
-              const color = score >= 60 ? '#46BEA3' : score >= 40 ? '#F59E0B' : '#FF8767';
               return [`${value}分`, entry.payload?.subject || '评分'];
             }}
             labelStyle={{ display: 'none' }}

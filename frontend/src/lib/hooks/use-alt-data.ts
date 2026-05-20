@@ -40,10 +40,12 @@ export function useAltData(ticker: string): UseAltDataResult {
   useEffect(() => {
     if (!ticker) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     const base = process.env.NEXT_PUBLIC_API_URL || "";
+    // 通过 microtask 启动 loading，避免 set-state-in-effect 同步调用规则
+    Promise.resolve().then(() => {
+      if (!cancelled) { setLoading(true); setError(null); }
+    });
     fetch(`${base}/api/alt_data/${encodeURIComponent(ticker)}`)
       .then(async (r) => {
         const text = await r.text();

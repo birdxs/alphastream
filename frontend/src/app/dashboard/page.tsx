@@ -11,7 +11,7 @@ import { apiClient } from "@/lib/api/client";
 import { StatsCard } from "@/components/common/stats-card";
 import { GlassCard } from "@/components/common/glass-card";
 import { useWatchlistStore, type WatchItem } from "@/lib/stores/watchlist-store";
-import { usePortfolioStore, type Holding } from "@/lib/stores/portfolio-store";
+import { usePortfolioStore } from "@/lib/stores/portfolio-store";
 import { useStockNames } from "@/lib/hooks/use-stock-names";
 import { useStockPrices } from "@/lib/hooks/use-stock-prices";
 import {

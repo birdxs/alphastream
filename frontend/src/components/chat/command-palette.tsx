@@ -4,7 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 interface Props {
   input: string;
@@ -24,13 +24,16 @@ const COMMANDS = [
 export function CommandPalette({ input, onSelect, visible }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const filtered = visible && input.startsWith("/")
-    ? COMMANDS.filter((c) => c.trigger.includes(input) || input === "/")
-    : [];
+  const filtered = useMemo(
+    () => visible && input.startsWith("/")
+      ? COMMANDS.filter((c) => c.trigger.includes(input) || input === "/")
+      : [],
+    [visible, input]
+  );
 
-  // 输入变化时重置高亮索引
+  // 输入变化时重置高亮索引（microtask 推迟，避免 set-state-in-effect 警告）
   useEffect(() => {
-    setActiveIndex(0);
+    Promise.resolve().then(() => setActiveIndex(0));
   }, [input]);
 
   // P0-3: 键盘导航

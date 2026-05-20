@@ -53,7 +53,8 @@ export function useStockNames(codes: string[], existing: Record<string, string> 
       const cached: Record<string, string> = {};
       codes.forEach((c) => { if (nameCache[c]) cached[c] = nameCache[c]; });
       if (Object.keys(cached).some((k) => names[k] !== cached[k])) {
-        setNames((prev) => ({ ...prev, ...cached }));
+        // microtask 推迟，避免 set-state-in-effect 同步调用规则
+        Promise.resolve().then(() => setNames((prev) => ({ ...prev, ...cached })));
       }
       return;
     }

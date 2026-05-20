@@ -25,12 +25,7 @@ export function useCountUp(
   const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!enabled) {
-      setCurrent(target);
-      return;
-    }
-
-    setCurrent(0);
+    if (!enabled) return;
     startTimeRef.current = null;
 
     const animate = (timestamp: number) => {

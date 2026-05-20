@@ -46,14 +46,12 @@ const groupByDate = (convs: Conversation[]) => {
 function SwipeableConvItem({
   conv,
   isActive,
-  pendingDelete,
   onSelect,
   onDelete,
   searchQuery = '',
 }: {
   conv: Conversation;
   isActive: boolean;
-  pendingDelete: string | null;
   onSelect: (conv: Conversation) => void;
   onDelete: (id: string) => void;
   searchQuery?: string;
@@ -309,7 +307,6 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
                       key={conv.conversation_id}
                       conv={conv}
                       isActive={activeConversationId === conv.conversation_id}
-                      pendingDelete={pendingDelete}
                       onSelect={selectConversation}
                       onDelete={swipeDeleteConversation}
                       searchQuery={searchQuery}

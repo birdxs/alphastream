@@ -416,7 +416,6 @@ export function useChatStream() {
         console.error('Chat stream error:', e);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 

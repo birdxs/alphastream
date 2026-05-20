@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useAgentStore, type AgentEvent, type AgentEventType } from "@/lib/stores/agent-store";
 import { AgentStatusBadge } from "./agent-status-badge";
-import { ChevronUp, ChevronDown, Bot, Wrench, Brain, CheckCircle2, AlertCircle, Activity, ArrowDownCircle } from "lucide-react";
+import { ChevronUp, ChevronDown, Bot, Wrench, Brain, CheckCircle2, Activity, ArrowDownCircle } from "lucide-react";
 
 // 10个Agent的标准顺序
 const AGENT_ORDER = [

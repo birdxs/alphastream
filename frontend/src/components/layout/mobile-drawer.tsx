@@ -22,20 +22,14 @@ export function MobileDrawer() {
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
   const setMessages = useChatStore(s => s.setMessages);
 
-  const loadConversations = async () => {
-    try {
-      const data = await apiClient.get<{conversations: Conversation[]}>('/api/conversations');
-      setConversations(data.conversations);
-    } catch {
-      setError('加载失败');
-      setTimeout(() => setError(null), 3000);
-    }
-  };
-
   useEffect(() => {
-    if (historyOpen && conversations.length === 0) {
-      loadConversations();
-    }
+    if (!historyOpen || conversations.length > 0) return;
+    apiClient.get<{conversations: Conversation[]}>('/api/conversations')
+      .then((data) => setConversations(data.conversations))
+      .catch(() => {
+        setError('加载失败');
+        setTimeout(() => setError(null), 3000);
+      });
   }, [historyOpen, conversations.length]);
 
   const newConversation = () => {

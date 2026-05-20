@@ -84,7 +84,6 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
     const el = document.getElementById(`artifact-${title}`);
     if (!el) return;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const html2canvas = (await import(/* webpackIgnore: true */ "html2canvas" as string)).default as (el: HTMLElement, opts: Record<string, unknown>) => Promise<HTMLCanvasElement>;
       const canvas = await html2canvas(el, { backgroundColor: "#0A0A1A", scale: 2 });
       const link = document.createElement("a");

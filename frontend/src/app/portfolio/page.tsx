@@ -149,7 +149,7 @@ export default function PortfolioPage() {
             <div className="text-center py-12 space-y-4">
               <Briefcase className="h-12 w-12 text-muted-foreground dark:text-white/15 mx-auto" />
               <p className="text-muted-foreground dark:text-white/40">暂无持仓</p>
-              <p className="text-sm text-muted-foreground dark:text-white/25">点击上方"添加持仓"开始管理您的投资组合</p>
+              <p className="text-sm text-muted-foreground dark:text-white/25">点击上方&ldquo;添加持仓&rdquo;开始管理您的投资组合</p>
             </div>
           ) : (
             holdings.map(h => {

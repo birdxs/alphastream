@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatNumber, formatPrice, formatPercent, formatLargeNumber } from '../utils/format';
+import { formatNumber, formatPrice, formatLargeNumber } from '../utils/format';
 import { isValidAShareCode, inferMarket, inferMarketType, getStockName } from '../utils/stock-code';
 
 // ── formatNumber ─────────────────────────────────────────────────────────────

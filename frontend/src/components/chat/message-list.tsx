@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble } from "./message-bubble";
 import { StreamMarkdown } from "./stream-markdown";
 import { AgentProgressPanel } from "@/components/agent/agent-progress-panel";
-import { Loader2, ArrowDown } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import type { ChatMessage } from "@/lib/types";
 
 /** react-window v2 行渲染组件props类型 */

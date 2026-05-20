@@ -3,7 +3,7 @@
 // Pos: 应用主入口页面
 
 "use client";
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useCallback, useRef } from "react";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ArtifactPanel } from "@/components/chat/artifact-panel";
@@ -32,7 +32,7 @@ function getInitialWidth(): number {
 export default function HomePage() {
   const [mobileTab, setMobileTab] = useState<"chat" | "artifacts">("chat");
   const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(null);
-  const [chatWidthPct, setChatWidthPct] = useState(DEFAULT_WIDTH);
+  const [chatWidthPct, setChatWidthPct] = useState(getInitialWidth);
   const [isDragging, setIsDragging] = useState(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,10 +48,6 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [mobileTab]);
 
-  // 客户端初始化宽度
-  useEffect(() => {
-    setChatWidthPct(getInitialWidth());
-  }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();

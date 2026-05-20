@@ -61,7 +61,9 @@ interface Props {
 
 export const MessageBubble = memo(function MessageBubble({ message, onRegenerate }: Props) {
   const isUser = message.role === "user";
-  const isNew = Date.now() - new Date(message.created_at).getTime() < 2000;
+  // 挂载时捕获时间，避免在渲染期调用 Date.now()（purity 规则）
+  const [mountTime] = useState(() => Date.now());
+  const isNew = mountTime - new Date(message.created_at).getTime() < 2000;
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {

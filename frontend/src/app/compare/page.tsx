@@ -44,7 +44,7 @@ export default function ComparePage() {
         setProfiles(prev => prev[c] ? prev : { ...prev, [c]: { stock_name: getStockName(c) } });
       }
     });
-  }, [codes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [codes]);
 
   const cellValue = (metric: string, code: string): string => {
     const p = profiles[code];

@@ -54,11 +54,8 @@ export function ChatInput({ onSend, onStop }: Props) {
 
   const activeConversationId = useChatStore(s => s.activeConversationId);
 
-  // 检测浏览器是否支持语音识别（延迟到客户端挂载后检测，避免 Hydration mismatch）
-  const [speechSupported, setSpeechSupported] = useState(false);
-  useEffect(() => {
-    setSpeechSupported(getSpeechRecognition() !== null);
-  }, []);
+  // 检测浏览器是否支持语音识别（lazy initializer with SSR guard，避免 Hydration mismatch）
+  const [speechSupported] = useState(() => getSpeechRecognition() !== null);
 
   // 页面加载后自动聚焦
   useEffect(() => {
@@ -142,7 +139,9 @@ export function ChatInput({ onSend, onStop }: Props) {
 
   // 清理 objectURL — 用ref追踪最新attachments，unmount时revoke所有
   const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  });
   useEffect(() => {
     return () => {
       attachmentsRef.current.forEach((a) => {
@@ -277,6 +276,7 @@ export function ChatInput({ onSend, onStop }: Props) {
                 className="relative group flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-foreground/[0.1] dark:border-white/[0.1] bg-foreground/[0.06] dark:bg-white/[0.06] backdrop-blur-xl shadow-sm max-w-[180px]"
               >
                 {att.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- blob URL, Next/Image 不支持 objectURL
                   <img
                     src={att.previewUrl}
                     alt={att.file.name}

@@ -96,7 +96,6 @@ export function InvestorPersonasArtifact({ data }: Props) {
             const meta = INVESTOR_META[key as keyof typeof INVESTOR_META];
             if (!meta || !opinion) return null;
             const conf = Number(opinion.confidence || 0.5);
-            const rec = String(opinion.recommendation || 'HOLD').toUpperCase();
             return (
               <div key={key} className="flex items-center gap-2 text-xs">
                 <span className="w-12 text-right text-muted-foreground truncate">{meta.name}</span>

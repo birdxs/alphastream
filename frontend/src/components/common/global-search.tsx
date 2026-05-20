@@ -66,7 +66,6 @@ export function GlobalSearch() {
     const out: SearchResult[] = [];
 
     /* 股票匹配 */
-    const isStockCode = /^\d{1,6}$/.test(q);
     const stockMatches = Object.entries(COMMON_STOCKS)
       .filter(([code, name]) => code.includes(q) || name.toLowerCase().includes(q))
       .slice(0, 5);

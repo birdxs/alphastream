@@ -5,7 +5,7 @@
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Search } from "lucide-react";
 import { COMMON_STOCKS } from "@/lib/utils/stock-code";
 
@@ -16,30 +16,25 @@ interface Props {
 
 export function StockSearch({ onSelect, placeholder = "搜索股票代码或名称..." }: Props) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Array<{ code: string; name: string }>>([]);
-  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // 搜索逻辑
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
+  // 搜索逻辑（useMemo 计算，避免 set-state-in-effect）
+  const results = useMemo(() => {
+    if (!query.trim()) return [];
     const q = query.toLowerCase();
-    const matched = Object.entries(COMMON_STOCKS)
+    return Object.entries(COMMON_STOCKS)
       .filter(([code, name]) => code.includes(q) || name.toLowerCase().includes(q))
       .map(([code, name]) => ({ code, name }))
       .slice(0, 8);
-    setResults(matched);
-    setIsOpen(matched.length > 0);
   }, [query]);
+  const isOpen = dropdownOpen && results.length > 0;
 
   // 点击外部关闭
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
-        setIsOpen(false);
+        setDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClick);
@@ -53,13 +48,13 @@ export function StockSearch({ onSelect, placeholder = "搜索股票代码或名�
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setDropdownOpen(true); }}
           placeholder={placeholder}
           className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50"
-          onFocus={() => query && setIsOpen(results.length > 0)}
+          onFocus={() => query && setDropdownOpen(true)}
         />
         {query && (
-          <button onClick={() => { setQuery(''); setIsOpen(false); }} className="text-muted-foreground hover:text-foreground">
+          <button onClick={() => { setQuery(''); setDropdownOpen(false); }} className="text-muted-foreground hover:text-foreground">
             ✕
           </button>
         )}
@@ -75,7 +70,7 @@ export function StockSearch({ onSelect, placeholder = "搜索股票代码或名�
               onClick={() => {
                 onSelect(item.code, item.name);
                 setQuery('');
-                setIsOpen(false);
+                setDropdownOpen(false);
               }}
             >
               <span className="font-mono text-primary">{item.code}</span>

@@ -6,7 +6,7 @@
  * 一旦此文件修改，请更新所属文件夹的 md。
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, cleanup, act } from '@testing-library/react';
 
 // mock 依赖 store，避免真实 zustand store 调用副作用
