@@ -4,6 +4,28 @@
 
 ---
 
+## Sprint 3-H 交付记录（commits 4882ed6 + 28b42c9，2026-05-20 17:30 +08:00）
+
+| 条目 | 状态 | 关键实现 |
+|---|---|---|
+| S3-H1 vitest 3 untracked spec 串行收尾 | PASS | error-handler 11/11 + use-count-up 5/5 + format 22/22 = 38 tests PASS |
+| S3-H2 API Cache-Control 防御性 header（Hunt1-M）| PASS | after_request 注入 no-store/Pragma/Expires，白名单：openapi.json(public,max-age=300)、metrics(max-age=10)，已有 Cache-Control 不覆盖 |
+
+铁证：
+- 时间校验：本机 2026-05-20 17:23:03 +08:00 / cloudflare UTC 09:23:16（偏差 < 15s，通过）
+- vitest 串行：3 spec / 38 test cases 全 PASS（无全量调用）
+- tsc --noEmit 零错误
+- pytest 三批：api/ → 180 passed 2 failed（顺序污染，单跑 PASS，与 S3-H 无关）/ unit/ → 453 passed / integration+sse/ → 146 passed
+- import smoke：AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 python -c "from app.web.web_server import app" 成功
+- Cache-Control 单元测试 4/4 PASS（test_cache_control_headers.py）
+- vm_stat free pages 全程 > 5000（最低 8140）
+
+特例登记（CLAUDE.md 附录 C）：
+- [NEW-FILE:#20260520-S3H] frontend/src/lib/api/__tests__/error-handler.test.ts + use-count-up.test.ts + format.test.ts：untracked 单元测试归入版本控制，属白名单 b 项（缺失且必需的最小单元测试）
+- tests/backend/api/test_cache_control_headers.py：S3-H2 Cache-Control 验证测试，属白名单 b 项
+
+---
+
 ## Sprint 3-G 交付记录（commit 372306d，2026-05-20 17:00 +08:00）
 
 | 条目 | 状态 | 关键实现 |
