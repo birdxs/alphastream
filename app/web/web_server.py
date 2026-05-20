@@ -5024,96 +5024,114 @@ def health_basic():
     }), 200
 
 
+# ── S3-K: health_deep check 函数（模块级，便于 patch）─────────────────────────
+def _hd_check_sqlite() -> dict:
+    """SELECT 1 to langgraph checkpoint db（模块级，供 health_deep 调用及测试 patch）"""
+    import sqlite3 as _sq3
+    try:
+        db_dir = os.path.join(os.path.dirname(__file__), '../../data')
+        db_path = os.path.join(db_dir, 'langgraph_checkpoint.db')
+        t0 = time.monotonic()
+        conn = _sq3.connect(db_path, timeout=1.0)
+        conn.execute('SELECT 1')
+        conn.close()
+        return {'ok': True, 'latency_ms': round((time.monotonic() - t0) * 1000, 2)}
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)[:200]}
+
+
+def _hd_check_akshare() -> dict:
+    """AkshareAdapter.health_check 封装（模块级，供 health_deep 调用及测试 patch）"""
+    try:
+        from app.adapters.akshare_adapter import AkshareAdapter
+        adapter = AkshareAdapter()
+        t0 = time.monotonic()
+        result = adapter.health_check()
+        latency = round((time.monotonic() - t0) * 1000, 2)
+        ok = result.get('status') == 'ok' if isinstance(result, dict) else bool(result)
+        info: dict = {'ok': ok, 'latency_ms': latency}
+        if isinstance(result, dict) and 'probe_symbol' in result:
+            info['source'] = result.get('probe_symbol', 'stock_individual_spot_xq')
+        return info
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)[:200]}
+
+
+def _hd_check_llm() -> dict:
+    """LLM 客户端可创建性 check（MOCK_LLM=1 时跳过，模块级）"""
+    if os.getenv('MOCK_LLM', '0') == '1':
+        return {'ok': True, 'skipped': True, 'reason': 'MOCK_LLM=1'}
+    try:
+        from app.core.ai_client import get_ai_client
+        t0 = time.monotonic()
+        _ = get_ai_client()
+        return {'ok': True, 'latency_ms': round((time.monotonic() - t0) * 1000, 2), 'skipped': False}
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)[:200]}
+
+
+def _hd_check_market_cache() -> dict:
+    """market_indices_cache 新鲜度 check（模块级）"""
+    cache_ts = _market_indices_cache.get('ts', 0)
+    ttl = int(os.getenv('INDEX_CACHE_TTL_S', '30'))
+    age_s = round(time.time() - cache_ts, 1) if cache_ts else None
+    has_data = bool(_market_indices_cache.get('data'))
+    ok = has_data and (age_s is not None) and (age_s < ttl)
+    return {'ok': ok, 'age_s': age_s, 'ttl_s': ttl, 'has_data': has_data}
+
+
 @app.route('/api/health/deep', methods=['GET'])
 def health_deep():
     """深度健康检查 — sqlite / akshare / llm / market_indices_cache（S3-G2 Hunt5-M）
     Input: 无必需参数
     Output: JSON {status, uptime_s, version, checks:{sqlite,akshare,llm,market_indices_cache}}
     Pos: 可观测性探针，PUBLIC_PATHS 白名单，总超时 ≤ 3s
-    """
-    import sqlite3 as _sq3
-    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
 
+    S3-K 修复：改为手动管理 pool（shutdown(wait=False)），每个 future 独立 try/except
+    TimeoutError + Exception，确保任何情况下返回 HTTP 200（degraded），不冒泡 500。
+    """
+    from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FutTimeout
+
+    started = time.monotonic()
     checks: dict = {}
-    overall_ok = True
     _DEEP_TIMEOUT = float(os.getenv('HEALTH_DEEP_TIMEOUT_S', '3.0'))
 
-    # ── 1. sqlite check: SELECT 1 to langgraph checkpoint db ──
-    def _check_sqlite() -> dict:
-        try:
-            db_dir = os.path.join(os.path.dirname(__file__), '../../data')
-            db_path = os.path.join(db_dir, 'langgraph_checkpoint.db')
-            t0 = time.monotonic()
-            conn = _sq3.connect(db_path, timeout=1.0)
-            conn.execute('SELECT 1')
-            conn.close()
-            return {'ok': True, 'latency_ms': round((time.monotonic() - t0) * 1000, 2)}
-        except Exception as exc:
-            return {'ok': False, 'error': str(exc)[:200]}
-
-    # ── 2. akshare check: 复用 AkshareAdapter.health_check ──
-    def _check_akshare() -> dict:
-        try:
-            from app.adapters.akshare_adapter import AkshareAdapter
-            adapter = AkshareAdapter()
-            t0 = time.monotonic()
-            result = adapter.health_check()
-            latency = round((time.monotonic() - t0) * 1000, 2)
-            ok = result.get('status') == 'ok' if isinstance(result, dict) else bool(result)
-            info = {'ok': ok, 'latency_ms': latency}
-            if isinstance(result, dict) and 'probe_symbol' in result:
-                info['source'] = result.get('probe_symbol', 'stock_individual_spot_xq')
-            return info
-        except Exception as exc:
-            return {'ok': False, 'error': str(exc)[:200]}
-
-    # ── 3. llm check: MOCK_LLM=1 时跳过 ──
-    def _check_llm() -> dict:
-        if os.getenv('MOCK_LLM', '0') == '1':
-            return {'ok': True, 'skipped': True, 'reason': 'MOCK_LLM=1'}
-        try:
-            from app.core.ai_client import get_ai_client
-            t0 = time.monotonic()
-            client = get_ai_client()
-            # 仅校验客户端可创建，不发送实际请求（避免消耗 token）
-            _ = client  # 创建无异常即 ok
-            return {'ok': True, 'latency_ms': round((time.monotonic() - t0) * 1000, 2), 'skipped': False}
-        except Exception as exc:
-            return {'ok': False, 'error': str(exc)[:200]}
-
-    # ── 4. market_indices_cache check ──
-    def _check_market_cache() -> dict:
-        cache_ts = _market_indices_cache.get('ts', 0)
-        ttl = int(os.getenv('INDEX_CACHE_TTL_S', '30'))
-        age_s = round(time.time() - cache_ts, 1) if cache_ts else None
-        has_data = bool(_market_indices_cache.get('data'))
-        ok = has_data and (age_s is not None) and (age_s < ttl)
-        return {'ok': ok, 'age_s': age_s, 'ttl_s': ttl, 'has_data': has_data}
-
-    # 并行运行所有 check，总超时 _DEEP_TIMEOUT
-    check_fns = {
-        'sqlite': _check_sqlite,
-        'akshare': _check_akshare,
-        'llm': _check_llm,
-        'market_indices_cache': _check_market_cache,
+    check_fns: dict = {
+        'sqlite': _hd_check_sqlite,
+        'akshare': _hd_check_akshare,
+        'llm': _hd_check_llm,
+        'market_indices_cache': _hd_check_market_cache,
     }
 
-    with _TPE(max_workers=4) as ex:
-        futures = {ex.submit(fn): name for name, fn in check_fns.items()}
-        remaining = _DEEP_TIMEOUT
-        for fut in _ac(futures, timeout=remaining):
-            name = futures[fut]
-            try:
-                checks[name] = fut.result(timeout=0.1)
-            except Exception as exc:
-                checks[name] = {'ok': False, 'error': str(exc)[:200]}
+    # 手动管理 pool：避免 with 语句的 __exit__ shutdown(wait=True) 在 TimeoutError 时挂死
+    pool = _TPE(max_workers=4, thread_name_prefix='health_deep')
+    try:
+        futures = {pool.submit(fn): name for name, fn in check_fns.items()}
+        deadline = started + _DEEP_TIMEOUT
 
-    # 填补超时未返回的 check
+        for fut, name in futures.items():
+            remaining = max(0.05, deadline - time.monotonic())
+            try:
+                checks[name] = fut.result(timeout=remaining)
+            except _FutTimeout:
+                checks[name] = {
+                    'ok': False,
+                    'timeout': True,
+                    'message': f'check exceeded {remaining:.2f}s deadline',
+                }
+                fut.cancel()
+            except Exception as exc:
+                checks[name] = {'ok': False, 'error': True, 'message': str(exc)[:200]}
+    finally:
+        # cancel_futures=True 取消排队任务；wait=False 不等待正在执行的线程，确保立即返回
+        pool.shutdown(wait=False, cancel_futures=True)
+
+    # 填补极端情况下未收到结果的 check 项
     for name in check_fns:
         if name not in checks:
-            checks[name] = {'ok': False, 'error': 'check timeout'}
+            checks[name] = {'ok': False, 'timeout': True, 'message': 'overall deadline exceeded'}
 
-    overall_ok = all(c.get('ok', False) for c in checks.values())
+    overall_ok = all(c.get('ok') is True or c.get('skipped') is True for c in checks.values())
     status = 'ok' if overall_ok else 'degraded'
 
     return jsonify({
@@ -5121,6 +5139,7 @@ def health_deep():
         'uptime_s': round(time.time() - START_TIME, 3),
         'version': APP_VERSION,
         'checks': checks,
+        'elapsed_ms': int((time.monotonic() - started) * 1000),
     }), 200
 
 
