@@ -297,6 +297,19 @@ def add_security_and_correlation_headers(resp):
             "frame-ancestors 'none'"
         )
 
+    # ── S3-H2: Cache-Control 防御性 header（API 路由）─────────────────────
+    req_path = request.path
+    if req_path.startswith('/api/'):
+        if not resp.headers.get('Cache-Control'):
+            if req_path == '/api/openapi.json':
+                resp.headers['Cache-Control'] = 'public, max-age=300'
+            elif req_path == '/api/metrics':
+                resp.headers['Cache-Control'] = 'public, max-age=10'
+            else:
+                resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+                resp.headers['Pragma'] = 'no-cache'
+                resp.headers['Expires'] = '0'
+
     # ── S3-G4: 更新 metrics 计数器 ───────────────────────────────────────
     try:
         status_code = resp.status_code
