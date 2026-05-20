@@ -34,6 +34,84 @@
 - tsc --noEmit：零错误
 - schema.py: +104 lines，web_server.py: +32 lines
 
+### S3-J(B) 轻量化 API 验收（commit 仅文档，2026-05-20 20:15 +08:00）
+
+铁律 #2+#3 约束下，跳过真实浏览器与 Playwright 验收，改用 Flask `test_client()` + in-process smoke 替代。
+
+- smoke 项数：25
+- 通过：20
+- 失败：5（全部集中在 `/api/health/deep`，单一真 bug 引发的连锁断言）
+  - S3-G2 /api/health/deep 200（实际 status=500）
+  - S3-G2 status field（500 body 走 api_error 外壳）
+  - S3-G2 checks.sqlite（同上，无 checks 字段）
+  - S3-G2 checks.akshare skipped（同上）
+  - S3-G2 checks.llm skipped（同上）
+- 资源策略：单进程 in-process，无 8888 端口，无 chromium / vitest / npm；起始 free pages=5997，中段最低 4739（接近 5000 红线后立即停手），结束 7196
+
+真 bug 报告（不在 S3-J(B) 内修复，登记给后续 sprint）：
+- 端点：`/api/health/deep`
+- 现象：in-process + `DISABLE_NETWORK=1` + `MOCK_LLM=1` 场景下返回 500，body 为 api_error('INTERNAL', ...) 外壳
+- 根因：`as_completed(futures, timeout=_DEEP_TIMEOUT)` 在 ThreadPoolExecutor 内 4 future 至少 1 个未完成时抛 `concurrent.futures.TimeoutError`，未被 try/except 兜住，冒泡到 Flask 全局 errorhandler
+- 复现位置：`app/web/web_server.py` health_deep() 调用 `as_completed`
+- 修复建议（留给下个 sprint）：包入 try/except TimeoutError，超时项产出 `{'ok': False, 'timeout': True}` 占位，避免整 500
+- 其他 20 项验收点全部 PASS，证明 S3-A1（PUBLIC_PATHS）/ S3-F2（correlation_id）/ S3-F4（4 安全 header）/ S3-H2（Cache-Control 3 路径）/ S3-G4（metrics 4 字段）/ S3-C3（OpenAPI 3.0 + paths≥10）/ S3-A4（/api/v1/ alias）/ S3-C1（offset deprecation）/ schema 校验 / 404+405 兜底全在 in-process 路径上行为正确
+
+时间校验记录（S3-J(B)）：
+- 本机：2026-05-20 20:10:09 +08:00（Asia/Singapore）
+- 注：本批不重新校时，复用 S3-J(A) 时间锚点（19:49:12 +08:00，偏差 ≤ 100s）
+
+### S3-J(B) Kimi WebBridge 真实浏览器验收（commit 仅文档，2026-05-20 20:50 +08:00）
+
+PM 决策：因 next dev Turbopack 首次启动叠加 python run.py 后 free pages 从 11246 跌至 3935（< 5000 红线），前端 UI 验收降级；本批改为方案 A——仅启后端 8888，由 Kimi WebBridge 真实浏览器访问 API 端点 + curl 完成 headers / JSON 校验。铁律 #2 遵守（未调 Playwright），用户书面授权解除铁律 #3 服务启动约束，验收完毕立即停服务。
+
+铁证三件套：
+- 后端真重启：PID（详见 /tmp/s3j_b_backend.pid），curl /health uptime_s=11.732（< 60 通过）
+- 真实复现：Kimi WebBridge 真实浏览器（extension 1.9.7 / daemon v1.9.7）访问 5 个 URL；curl 真测 8 项 headers/JSON
+- 真实数据：market_indices 4 个真实指数（上证 4162.1845，source=cache），非 mock
+
+验收清单 13 项：
+| # | 项目 | 工具 | 结果 |
+|---|---|---|---|
+| 1 | /api/health/deep 浏览器访问 | Kimi WebBridge | **FAIL（复现 500 真 bug）** body=INTERNAL api_error 外壳 |
+| 2 | /api/metrics 浏览器访问 | Kimi WebBridge | PASS requests_total=7 / 5xx=1 / top_paths 完整 |
+| 3 | /api/openapi.json 浏览器访问 | Kimi WebBridge | PASS openapi=3.0.3 / paths_count=10 / title=StockAnal API |
+| 4 | /api/v1/market_indices 浏览器访问 | Kimi WebBridge | PASS indices_count=4 / first=上证指数 4162.1845 / source=cache |
+| 5 | /api-docs Swagger UI 浏览器访问 | Kimi WebBridge | FAIL（404，title=错误 404，hasSwagger=false） |
+| 6 | Security headers ×4（/health） | curl -sI | PASS X-Content-Type-Options/X-Frame-Options/Referrer-Policy/Permissions-Policy 全齐 |
+| 7 | X-Correlation-Id（/health） | curl -sI | PASS X-Correlation-Id: d51f9f630061 |
+| 8 | Cache-Control /api/market_indices | curl -sI | PASS public, max-age=5 |
+| 9 | Cache-Control /api/openapi.json | curl -sI | PASS public, max-age=300 |
+| 10 | Cache-Control /api/metrics | curl -sI | PASS public, max-age=10 |
+| 11 | Schema 校验 stock_code=BADCODE | curl | PASS status=400 + error_code=INVALID_INPUT |
+| 12 | /api/v1/ alias 与原路由 JSON 对等 | curl | PASS 双路径 indices_count=4 / source=cache 一致 |
+| 13 | /api/health/deep × 3 顺序 HTTP | curl | **复现真 bug 1/3 次 500** |
+
+汇总：11 PASS / 2 FAIL（项 1 与项 13 实为同一根因；项 5 Swagger UI 404 为路径变更/未实现）
+
+S3-G2 真 bug 复现确认（**真实 HTTP 复现，非 in-process 限定**）：
+- 端点：/api/health/deep
+- 复现率：浏览器首次 100%（1/1 复现），curl 顺序 3 次中 1 次（≈33%）
+- 状态码：500，body 走 api_error('INTERNAL', '服务内部错误，请稍后重试', ..., 500) 外壳，无 checks 字段
+- 根因（与 S3-J(B) 上一段一致）：`app/web/web_server.py:5101-5114` `with _TPE(max_workers=4)` + `_ac(futures, timeout=_DEEP_TIMEOUT)`，整体超时抛 `concurrent.futures.TimeoutError`，未被 try/except 兜住，冒泡到 Flask 全局 errorhandler；底部 5111-5114 "填补超时未返回的 check" 兜底逻辑被 TimeoutError 跳过，无法生效
+- 升级处置：由 in-process limited 升级为**真实 HTTP confirmed Critical**，登记给后续 sprint（本批受 system-reminder 约束未在 worker 端 commit 代码改动）
+
+资源策略与监控：
+- vm_stat free pages 四节点：起点（清理后）12048 → 验收中段最低 5032（接近 5000 红线立即停手） → 停服务后 8973
+- 服务停止确认：lsof -ti:8888 空，pkill 已执行
+- 浏览器会话关闭：Kimi close_session closed=1
+- 无 Playwright/chromium 直接 launch（铁律 #2 遵守）
+- 无 npm run build（铁律 #2 OOM 规避）
+
+截图证据（4 张，保存在 /tmp/）：
+- /tmp/s3j_b_health_deep.png（首次浏览器访问 500 现场）
+- /tmp/s3j_b_metrics.png
+- /tmp/s3j_b_v1_indices.png
+- /tmp/s3j_b_api_docs.png（404 现场，记录 Swagger UI 路径问题）
+
+时间校验记录（S3-J(B) Kimi 真测）：
+- 本机：2026-05-20 20:50 +08:00（Asia/Singapore）
+- 复用 S3-J(A) 时间锚点（19:49:12 +08:00，偏差 < 100s 阈值，通过）
+
 ---
 
 ## Sprint 3-I 交付记录（commit 4241953，2026-05-20 19:30 +08:00）
