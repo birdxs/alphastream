@@ -4,6 +4,39 @@
 
 ---
 
+## Sprint 3-O/P1 CAGR 排序守卫修复记录（2026-05-21 21:11:38 +08:00）
+
+任务约束：本地开发环境；禁止 push；只改现有文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build。
+
+时间真实性校验：
+- 本机系统时间：2026-05-21 21:11:36 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.google.com` HTTPS Date 头 → `Thu, 21 May 2026 13:11:37 GMT`（+08:00 = 2026-05-21 21:11:37 +08:00）。
+- 时间源 2：`https://www.apple.com` HTTPS Date 头 → `Thu, 21 May 2026 13:11:38 GMT`（+08:00 = 2026-05-21 21:11:38 +08:00）。
+- 最大偏差：2 秒；判定：通过（≤100 秒）。
+
+证据清单：
+- 本地实现：`app/analysis/fundamental_analyzer.py:100-152` 中 `get_growth_data()` 直接使用 AkShare 财务摘要行顺序；`app/analysis/fundamental_analyzer.py:167-188` 中 `_calculate_cagr()` 以 `iloc[0]` 作为最新值。采纳：在 DataFrame 层标准化报告期降序，并在 CAGR 内对日期索引做轻量自守卫。
+- 本地测试：`tests/backend/unit/test_analysis_fundamental.py` 已存在基本面分析单测与 AkShare monkeypatch 模式。采纳：在现有测试文件追加回归用例，不新建测试文件。
+- Pandas 官方 API：`https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html` 与 `https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.sort_values.html`，检索时间 2026-05-21 21:11:38 +08:00；`errors='coerce'` 可安全解析日期，`sort_values` 可按解析日期排序。采纳：仅在日期列存在且至少一个有效日期时排序。
+
+改动摘要：
+- `app/analysis/fundamental_analyzer.py`：新增文件头三行极简注释；`get_growth_data()` 检测 `报告期`、`截止日期`、`日期`、`报告日期`，有效日期按降序排序并 `reset_index(drop=True)`；无有效日期保持原顺序。
+- `app/analysis/fundamental_analyzer.py`：`_calculate_cagr()` 先记录原始 `RangeIndex`，再 `dropna()`；仅非普通 `RangeIndex` 且索引可解析日期时按索引日期降序，不按数值排序。
+- `tests/backend/unit/test_analysis_fundamental.py`：追加 `get_growth_data` 正序报告期回归测试；追加 `_calculate_cagr` DatetimeIndex 正序自守卫测试。
+
+特例登记：
+- 未创建新文件；无需新文件特例审批。
+- 测试追加到现有文件 `tests/backend/unit/test_analysis_fundamental.py`，覆盖正序报告期导致 CAGR 符号错误的回归场景。
+- 回滚方案：删除上述两个新增测试；移除 `get_growth_data()` 报告期排序块；还原 `_calculate_cagr()` 为仅按传入序列位置计算；保留或移除文件头注释均可。
+
+验证记录：
+- 2026-05-21 21:11:38 +08:00 前置/后置内存均执行 `vm_stat | head -5`；最终 Pages free 20319（≥5000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_analysis_fundamental.py -k "cagr or growth_data"` → 8 passed, 11 deselected, 11 warnings in 0.04s。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_analysis_fundamental.py` → 19 passed, 11 warnings in 0.03s。
+- 未启服务、未跑全量、未跑 Playwright、未跑 vitest/npm build；未 push。
+
+---
+
 ## Sprint 3-O `/api-docs` 本地开发兼容修复记录（2026-05-21 20:40:27 +08:00）
 
 任务约束：仅本地开发环境验证，禁止 push；不修改历史提交；优先最小改动；不启服务、不跑全量、不跑 Playwright/npm build。

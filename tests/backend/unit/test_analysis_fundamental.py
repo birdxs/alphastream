@@ -181,6 +181,38 @@ def test_calculate_cagr_zero_earlier_returns_none(fa):
     assert cagr is None
 
 
+def test_get_growth_data_with_ascending_report_period_orders_desc(fa):
+    """S3-O/P1：AkShare 正序报告期应先按日期降序，再按最新/较早语义计算 CAGR。"""
+    df = pd.DataFrame({
+        "报告期": ["2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"],
+        "营业总收入": [100.0, 120.0, 144.0, 172.8, 207.36],
+        "归属母公司股东的净利润": [10.0, 12.0, 14.4, 17.28, 20.736],
+    })
+    with patch("app.analysis.fundamental_analyzer.ak.stock_financial_abstract",
+               return_value=df):
+        result = fa.get_growth_data("600519")
+
+    assert result["revenue_growth_3y"] is not None
+    assert result["profit_growth_3y"] is not None
+    assert result["revenue_growth_3y"] > 0
+    assert result["profit_growth_3y"] > 0
+    assert result["revenue_growth_3y"] == pytest.approx(20.0, rel=1e-6)
+    assert result["profit_growth_3y"] == pytest.approx(20.0, rel=1e-6)
+
+
+def test_calculate_cagr_datetime_index_orders_desc(fa):
+    """S3-O/P1：DatetimeIndex 正序输入时，_calculate_cagr 自守卫按日期降序处理。"""
+    series = pd.Series(
+        [100.0, 120.0, 144.0, 172.8, 207.36],
+        index=pd.to_datetime(["2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"]),
+    )
+    cagr = fa._calculate_cagr(series, years=3)
+
+    assert cagr is not None
+    assert cagr > 0
+    assert cagr == pytest.approx(20.0, rel=1e-6)
+
+
 # ================================================================ Sprint 3-N 新增测试（H3-1 + H3-2）
 # [NEW-FILE:#20260520-S3N] 追加至现有文件
 

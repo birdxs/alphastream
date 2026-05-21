@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# Input  : AkShare 财务摘要数据 / DataProvider 财务指标
+# Output : 基本面指标、成长性 CAGR 与综合评分
+# Pos    : app/analysis/fundamental_analyzer.py 金融正确性敏感分析模块
 """
 智能分析系统（股票） - 股票市场数据分析系统
 开发者：熊猫大侠
@@ -106,6 +109,19 @@ class FundamentalAnalyzer:
                     progress_callback(20, "成长性数据为空")
                 return {}
 
+            # 标准化报告期顺序：AkShare 可能返回正序或乱序；仅在日期列可解析时按报告期降序。
+            for date_col in ['报告期', '截止日期', '日期', '报告日期']:
+                if date_col in financial_data.columns:
+                    parsed_dates = pd.to_datetime(financial_data[date_col], errors='coerce')
+                    if parsed_dates.notna().any():
+                        financial_data = (
+                            financial_data.assign(_parsed_report_date=parsed_dates)
+                            .sort_values('_parsed_report_date', ascending=False, kind='mergesort')
+                            .drop(columns=['_parsed_report_date'])
+                            .reset_index(drop=True)
+                        )
+                    break
+
             # --- 修复：兼容不同的财务字段名 ---
             # 查找营业收入列
             revenue_col = None
@@ -151,8 +167,15 @@ class FundamentalAnalyzer:
     def _calculate_cagr(self, series, years):
         """计算复合年增长率"""
         try:
+            is_plain_range = isinstance(series.index, pd.RangeIndex)
+            series = series.dropna()
             if len(series) < years:
                 return None
+
+            if not is_plain_range:
+                parsed_index = pd.to_datetime(series.index, errors='coerce')
+                if parsed_index.notna().any():
+                    series = series.iloc[parsed_index.argsort()[::-1]]
 
             latest = series.iloc[0]
             earlier = series.iloc[min(years, len(series) - 1)]
