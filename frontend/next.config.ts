@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
     if (process.env.NODE_ENV === 'development') {
       return [
         {
+          source: '/api-docs/:path*',
+          destination: 'http://127.0.0.1:8888/api/docs/',
+        },
+        {
           source: '/api/:path*',
           // B23: 强制 IPv4，避免 localhost→::1 IPv6 TCP timeout（17s 延迟根因）
           destination: 'http://127.0.0.1:8888/api/:path*',

@@ -254,6 +254,7 @@ def global_auth_gate():
     # 静态资源、Swagger UI、页面路由不鉴权
     if (path.startswith('/static')
             or path.startswith('/api/docs')
+            or path.startswith('/api-docs')
             or path in PUBLIC_PATHS
             or any(path.startswith(p) for p in ('/stock_detail/', '/api/docs'))):
         return None
@@ -391,6 +392,14 @@ limiter = Limiter(
 limiter.init_app(app)
 
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+
+
+@app.route('/api-docs', methods=['GET'])
+@app.route('/api-docs/', methods=['GET'])
+@app.route('/api-docs/<path:path>', methods=['GET'])
+def api_docs_compat_redirect(path=None):
+    """兼容历史 /api-docs 入口，保持现有 /api/docs/ Swagger UI 不变。"""
+    return redirect('/api/docs/', code=302)
 
 
 # 确保全局变量在重新加载时不会丢失

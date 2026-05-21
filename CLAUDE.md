@@ -4,6 +4,65 @@
 
 ---
 
+## Sprint 3-O `/api-docs` 本地开发兼容修复记录（2026-05-21 20:40:27 +08:00）
+
+任务约束：仅本地开发环境验证，禁止 push；不修改历史提交；优先最小改动；不启服务、不跑全量、不跑 Playwright/npm build。
+
+时间真实性校验：
+- 本机系统时间：2026-05-21 20:40:26 +0800，时区 Asia/Singapore（+08:00）
+- 时间源 1：`https://www.google.com` HTTPS Date 头 → `Thu, 21 May 2026 12:40:26 GMT`（+08:00 = 2026-05-21 20:40:26 +08:00）
+- 时间源 2：`https://www.apple.com` HTTPS Date 头 → `Thu, 21 May 2026 12:40:27 GMT`（+08:00 = 2026-05-21 20:40:27 +08:00）
+- 最大偏差：1 秒；判定：通过（≤100 秒）
+
+证据清单：
+- 本地/历史：`app/web/web_server.py:199-203` 现有 Swagger UI 注册在 `/api/docs`；`git show 413d43a:app/web/web_server.py` 显示历史同样使用 `/api/docs`，未见 `/api-docs`；S3-J(B) 记录真实浏览器 `/api-docs` 404。采纳：新增兼容入口，不改主路径。
+- 官方 Flask 文档：`https://flask.palletsprojects.com/en/stable/api/#flask.redirect`，检索时间 2026-05-21 20:40:27 +08:00，`redirect(location, code=302)` 为标准跳转能力。采纳：后端 `/api-docs` 返回 302 至 `/api/docs/`。
+- Next.js 文档：`https://nextjs.org/docs/app/api-reference/config/next-config-js/redirects`，检索时间 2026-05-21 20:40:27 +08:00，`redirects()` 支持路径跳转；本项目现有开发代理在 `rewrites()` 中。采纳：按现有 dev rewrite 风格为 3000 端口补 `/api-docs` 代理到后端 `/api/docs/`。
+- Nginx 官方文档：`https://nginx.org/en/docs/http/ngx_http_core_module.html#location`，检索时间 2026-05-21 20:40:27 +08:00，`location = /path` 为精确匹配。采纳：仅加精确匹配 `/api-docs` 302，不扩大 `/api/` 代理面。
+
+改动摘要：
+- `app/web/web_server.py`：新增 `/api-docs`、`/api-docs/`、`/api-docs/<path:path>` 兼容 redirect；AUTH_REQUIRED 白名单同步放行 `path.startswith('/api-docs')`；不改 `/api/docs/`、`/api/openapi.json`、`/api/v1/docs`。
+- `frontend/next.config.ts`：开发环境 rewrites 增加 `/api-docs/:path* -> http://127.0.0.1:8888/api/docs/`，确保 3000 端口开发访问不落到前端 404。
+- `nginx/default.conf`、`nginx/prod.conf`：精确匹配 `/api-docs` 与 `/api-docs/` 返回 302 `/api/docs/`；仅兼容入口，不改现有 `/api/` 与 `/` 代理行为。
+- `tests/backend/api/test_cache_control_headers.py`：追加最小测试，验证 `/api-docs` 非 404 且 `/api/docs/` 未破坏。
+- `nginx/README.md`：同步文件列表与功能说明。
+
+特例登记：
+- 未创建新文件；无需新文件特例审批。
+- 新增测试段位置：`tests/backend/api/test_cache_control_headers.py::test_api_docs_compat_redirect_preserves_swagger_ui`，复用现有 API 测试文件，不创建新测试文件。
+- 触发原因：需要最小回归证明 `/api-docs`、`/api-docs/`、`/api-docs/<path>` 不再 404 且不破坏 `/api/docs/`。
+- 回滚方案：删除上述测试段；移除 `web_server.py` 兼容路由和白名单；移除 `next.config.ts` dev rewrite；移除 nginx 四处精确匹配块；还原 `nginx/README.md`。
+
+验证记录：
+- 2026-05-21 20:40:27 +08:00 前置内存：`vm_stat | head -5` → Pages free 37651（≥5000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_cache_control_headers.py::test_api_docs_compat_redirect_preserves_swagger_ui -q` → 1 passed, 11 warnings in 0.75s。
+- 2026-05-21 20:40:27 +08:00 后置内存：`vm_stat | head -5` → Pages free 7779（≥5000）。
+- 未启服务、未跑全量、未跑 Playwright、未跑 vitest/npm build；未 push。
+
+---
+
+## 本轮前置校时与证据准备（2026-05-21 20:33 +08:00）
+
+- 校验时间：2026-05-21 20:33:27 +08:00 ~ 2026-05-21 20:33:41 +08:00
+- 本机系统时间：2026-05-21 20:33:27 +0800，时区 Asia/Singapore（+08:00）
+- 时间源 1：`date '+%Y-%m-%d %H:%M:%S %z'` → 2026-05-21 20:33:27 +0800
+- 时间源 2：`https://www.timeanddate.com` → Date: Thu, 21 May 2026 12:33:39 GMT
+- 时间源 3：`https://www.cloudflare.com` → Date: Thu, 21 May 2026 12:33:41 GMT
+- 最大偏差：14 秒（本机 vs cloudflare）；判定：通过（≤100 秒）
+- 约束说明：本轮仅做校时与证据准备，未 push、未提交；后续如继续执行，以本段时间戳为基准锚点
+
+### 本轮证据清单（最近 40 个提交回顾）
+
+| 议题 | 证据来源（提交 / 位置） | 摘要 |
+|---|---|---|
+| P0 失败测试 | 39fe389 / 0d3e448 / `app/web/web_server.py:5101-5114` / 本文件 S3-J(B) 段 | `/api/health/deep` 曾在 in-process smoke 中 5/25 失败、真实浏览器首次 500、curl 顺序 1/3 500；根因是 `as_completed(..., timeout=...)` 整体超时未兜住，已在 39fe389 改为逐 future 超时兜底 |
+| `/api-docs` 路径 | 0d3e448 / 本文件 S3-J(B) 段（第 228-233 行附近） | 真实浏览器验收时 `/api-docs` 返回 404，说明 Swagger UI 路径未实现或路径已变更；需与 `/api/openapi.json` 的公开路径区分验证 |
+| vitest deferred | 372306d / 4882ed6 / 本文件 S3-G、S3-H 段 | S3-G3 明确将 3 个 vitest spec 推迟，原因是全量 OOM 风险；后续改为单 spec 串行，S3-H1 已完成收尾 |
+| CAGR / 资金流口径 | 10ffe31 / 本文件 S3-N 段、S3-M(D) 段 | CAGR 假设序列降序需补守卫；资金流口径曾存在元/万元混用与异常分支类型不一致，S3-N 已统一返回契约并修正净利率/ROE 语义混淆 |
+| 最近提交范围 | `git log --oneline -n 40` | 已回顾最近 40 个提交，相关重点包括 7e394a0、10ffe31、39fe389、0d3e448、372306d、4882ed6、4c46b55、e4158e1、4241953、413c588 |
+
+---
+
 ## Sprint 3-N 交付记录（commit 10ffe31，2026-05-20 22:10 +08:00）
 
 D Hunt 暴露 Critical 收尾修复。

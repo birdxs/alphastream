@@ -45,6 +45,22 @@ def test_openapi_json_public_cache(flask_client):
 
 
 # ---------------------------------------------------------------------------
+# /api-docs — 历史 Swagger UI 入口兼容跳转
+# ---------------------------------------------------------------------------
+
+def test_api_docs_compat_redirect_preserves_swagger_ui(flask_client):
+    """/api-docs 应兼容跳转到现有 /api/docs/，且不破坏 Swagger UI 原路径。"""
+    for compat_path in ("/api-docs", "/api-docs/", "/api-docs/index.html"):
+        compat_resp = flask_client.get(compat_path, follow_redirects=False)
+        assert compat_resp.status_code in (301, 302, 308)
+        assert compat_resp.headers["Location"].endswith("/api/docs/")
+
+    docs_resp = flask_client.get("/api/docs/")
+    assert docs_resp.status_code != 404
+    assert docs_resp.status_code < 500
+
+
+# ---------------------------------------------------------------------------
 # /api/market_indices — 若路由已设 Cache-Control，after_request 不覆盖
 # ---------------------------------------------------------------------------
 
