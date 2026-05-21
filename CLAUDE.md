@@ -4,6 +4,37 @@
 
 ---
 
+## Sprint 3-O/P1 OpenAPI 第一批覆盖记录（2026-05-21 21:34:39 +08:00）
+
+任务约束：本地开发环境；禁止 push；只补 `/api/openapi.json` 内容；不改运行时路由行为；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build；不新增文件。
+
+时间真实性校验：
+- 本机系统时间：2026-05-21 21:34:37 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.google.com` HTTPS Date 头 → `Thu, 21 May 2026 13:34:38 GMT`（+08:00 = 2026-05-21 21:34:38 +08:00）。
+- 时间源 2：`https://www.apple.com` HTTPS Date 头 → `Thu, 21 May 2026 13:34:39 GMT`（+08:00 = 2026-05-21 21:34:39 +08:00）。
+- 最大偏差：2 秒；判定：通过（≤100 秒）。
+
+改动摘要：
+- `app/web/openapi_spec.py`：新增保守 schema `GenericObject`、`McpCallRequest`、`McpCallResponse`、`MetricsResponse`、`HealthDeepResponse`；新增 10 个 operation：GET `/api/health/deep`、GET `/api/metrics`、GET `/api/mcp/tools`、POST `/api/mcp/call`、GET `/api/shipping/bdi`、GET `/api/shipping/port/{port}`、GET `/api/esg/{ticker}`、GET `/api/corporate/search`、GET `/api/jobs/search`、GET `/api/jobs/company/{company}`。响应 schema 使用通用对象或轻约束 schema，避免写死动态接口契约。
+- `tests/backend/api/test_cache_control_headers.py`：复用现有测试文件追加 2 个断言用例，覆盖第一批 10 个 path/method 及 `days`、`port+period`、`ticker+source`、`q+limit`、`company`、`mcp_call.requestBody.required` 等关键参数。
+- 未修改 `app/web/web_server.py`、`app/web/schema.py`；未改变运行时路由行为。
+
+特例登记：
+- 未创建新文件；无需新文件特例审批。
+
+验证记录：
+- 验证前磁盘：`df -h /tmp /private/tmp /Users/panda/Downloads/StockAnal_Sys` → 三者同挂载点 `/System/Volumes/Data`，Avail 11Gi，Capacity 94%。
+- 验证前内存：`vm_stat | head -5` → Pages free 12540（≥5000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_cache_control_headers.py` → 7 passed, 11 warnings in 19.86s。
+- 验证后磁盘：`df -h /tmp /private/tmp /Users/panda/Downloads/StockAnal_Sys` → Avail 11Gi，Capacity 94%。
+- 验证后内存：`vm_stat | head -5` → Pages free 4023（<5000）；按铁律停止可选 `tests/backend/api/test_health_deep.py`，未强跑。
+- 未启服务；未运行全量 pytest；未运行 Playwright/vitest/npm build；未 push。
+
+回滚方案：
+- 移除 `openapi_spec.py` 中本批新增 schema 与 10 个 `_PATHS` operation；删除 `test_cache_control_headers.py` 中本批新增 2 个 OpenAPI 断言用例；不涉及数据迁移或运行时状态。
+
+---
+
 ## Sprint 3-O/P1 资金流单位契约修复记录（2026-05-21 21:22:07 +08:00）
 
 任务约束：本地开发环境；禁止 push；只改现有文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build。

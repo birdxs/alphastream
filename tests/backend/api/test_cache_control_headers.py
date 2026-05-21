@@ -44,6 +44,92 @@ def test_openapi_json_public_cache(flask_client):
     assert "no-store" not in cc, f"Cache-Control 不应含 no-store，实际: {cc!r}"
 
 
+def test_openapi_json_includes_first_batch_routes(flask_client):
+    """OpenAPI spec 应包含第一批补齐的 10 个路由及方法。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    expected = {
+        "/api/health/deep": "get",
+        "/api/metrics": "get",
+        "/api/mcp/tools": "get",
+        "/api/mcp/call": "post",
+        "/api/shipping/bdi": "get",
+        "/api/shipping/port/{port}": "get",
+        "/api/esg/{ticker}": "get",
+        "/api/corporate/search": "get",
+        "/api/jobs/search": "get",
+        "/api/jobs/company/{company}": "get",
+    }
+
+    for path, method in expected.items():
+        assert path in paths
+        assert method in paths[path]
+
+
+def _param(operation: dict, name: str, location: str) -> dict:
+    for param in operation.get("parameters", []):
+        if param.get("name") == name and param.get("in") == location:
+            return param
+    raise AssertionError(f"缺少参数: {location} {name}")
+
+
+def test_openapi_json_first_batch_parameters(flask_client):
+    """OpenAPI spec 应声明第一批路由的关键 path/query/body 参数。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    bdi = paths["/api/shipping/bdi"]["get"]
+    days_schema = _param(bdi, "days", "query")["schema"]
+    assert days_schema["type"] == "integer"
+    assert days_schema["minimum"] == 1
+    assert days_schema["maximum"] == 365
+    assert days_schema["default"] == 30
+
+    port_op = paths["/api/shipping/port/{port}"]["get"]
+    assert _param(port_op, "port", "path")["required"] is True
+    period_schema = _param(port_op, "period", "query")["schema"]
+    assert period_schema["enum"] == ["daily", "monthly", "yearly"]
+    assert period_schema["default"] == "monthly"
+
+    esg_op = paths["/api/esg/{ticker}"]["get"]
+    assert _param(esg_op, "ticker", "path")["required"] is True
+    source_schema = _param(esg_op, "source", "query")["schema"]
+    assert source_schema["maxLength"] == 32
+    assert source_schema["default"] == "synthetic"
+
+    corporate_op = paths["/api/corporate/search"]["get"]
+    corporate_q = _param(corporate_op, "q", "query")
+    assert corporate_q["required"] is True
+    assert corporate_q["schema"]["minLength"] == 1
+    assert corporate_q["schema"]["maxLength"] == 100
+    corporate_limit = _param(corporate_op, "limit", "query")["schema"]
+    assert corporate_limit["minimum"] == 1
+    assert corporate_limit["maximum"] == 100
+    assert corporate_limit["default"] == 20
+
+    jobs_op = paths["/api/jobs/search"]["get"]
+    jobs_q = _param(jobs_op, "q", "query")
+    assert jobs_q["required"] is True
+    assert jobs_q["schema"]["minLength"] == 1
+    assert jobs_q["schema"]["maxLength"] == 100
+    jobs_limit = _param(jobs_op, "limit", "query")["schema"]
+    assert jobs_limit["minimum"] == 1
+    assert jobs_limit["maximum"] == 200
+    assert jobs_limit["default"] == 20
+
+    company_op = paths["/api/jobs/company/{company}"]["get"]
+    assert _param(company_op, "company", "path")["required"] is True
+
+    mcp_call = paths["/api/mcp/call"]["post"]
+    assert mcp_call["requestBody"]["required"] is True
+    assert mcp_call["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/McpCallRequest"
+    )
+
+
 # ---------------------------------------------------------------------------
 # /api-docs — 历史 Swagger UI 入口兼容跳转
 # ---------------------------------------------------------------------------

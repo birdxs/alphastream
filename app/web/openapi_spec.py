@@ -3,9 +3,9 @@
 # Pos: API 文档自动生成层，维护核心路由 schema 契约
 # 一旦被修改，请更新本头部注释，以及 app/web/README.md
 """
-OpenAPI 3.0 Spec（S3-C3 Hunt5-Major 2026-05-20）
+OpenAPI 3.0 Spec（S3-C3 Hunt5-Major 2026-05-20，S3-O/P1 第一批覆盖补齐 2026-05-21）
 
-手动维护 10 个核心路由的 OpenAPI 3.0 schema。
+手动维护核心路由的 OpenAPI 3.0 schema。
 暴露为 /api/openapi.json 供 Swagger UI / 前端契约校验使用。
 后续路由逐步通过 spec_add_path() 迁移注册。
 """
@@ -66,6 +66,50 @@ _COMPONENTS: Dict[str, Any] = {
             },
             'required': ['items', 'next_cursor', 'limit'],
         },
+        'GenericObject': {
+            'type': 'object',
+            'additionalProperties': True,
+        },
+        'McpCallRequest': {
+            'type': 'object',
+            'properties': {
+                'tool': {'type': 'string'},
+                'arguments': {
+                    'type': 'object',
+                    'additionalProperties': True,
+                },
+            },
+            'required': ['tool'],
+        },
+        'McpCallResponse': {
+            'type': 'object',
+            'properties': {
+                'result': {
+                    'oneOf': [
+                        {'$ref': '#/components/schemas/GenericObject'},
+                        {'type': 'object', 'additionalProperties': True},
+                    ],
+                },
+            },
+            'additionalProperties': True,
+        },
+        'MetricsResponse': {
+            'type': 'object',
+            'additionalProperties': True,
+        },
+        'HealthDeepResponse': {
+            'type': 'object',
+            'properties': {
+                'status': {'type': 'string'},
+                'uptime_s': {'type': 'number'},
+                'version': {'type': 'string'},
+                'checks': {
+                    'type': 'object',
+                    'additionalProperties': True,
+                },
+                'elapsed_ms': {'type': 'number'},
+            },
+        },
     },
     'securitySchemes': {
         'ApiKeyAuth': {
@@ -98,6 +142,179 @@ _PATHS: Dict[str, Any] = {
                         },
                     }}},
                 },
+            },
+        },
+    },
+    '/api/health/deep': {
+        'get': {
+            'tags': ['System'],
+            'summary': '深度健康检查',
+            'operationId': 'getHealthDeep',
+            'security': [],
+            'responses': {
+                '200': {
+                    'description': '深度健康状态',
+                    'content': {'application/json': {'schema': {
+                        '$ref': '#/components/schemas/HealthDeepResponse',
+                    }}},
+                },
+            },
+        },
+    },
+    '/api/metrics': {
+        'get': {
+            'tags': ['System'],
+            'summary': '基础运行指标',
+            'operationId': 'getMetrics',
+            'security': [],
+            'responses': {
+                '200': {
+                    'description': '运行指标',
+                    'content': {'application/json': {'schema': {
+                        '$ref': '#/components/schemas/MetricsResponse',
+                    }}},
+                },
+            },
+        },
+    },
+    '/api/mcp/tools': {
+        'get': {
+            'tags': ['MCP'],
+            'summary': '列出 MCP 工具',
+            'operationId': 'listMcpTools',
+            'responses': {
+                '200': {
+                    'description': 'MCP 工具列表',
+                    'content': {'application/json': {'schema': {
+                        '$ref': '#/components/schemas/GenericObject',
+                    }}},
+                },
+            },
+        },
+    },
+    '/api/mcp/call': {
+        'post': {
+            'tags': ['MCP'],
+            'summary': '调用 MCP 工具',
+            'operationId': 'callMcpTool',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/McpCallRequest',
+                }}},
+            },
+            'responses': {
+                '200': {
+                    'description': 'MCP 调用结果',
+                    'content': {'application/json': {'schema': {
+                        '$ref': '#/components/schemas/McpCallResponse',
+                    }}},
+                },
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/shipping/bdi': {
+        'get': {
+            'tags': ['Shipping'],
+            'summary': '获取 BDI 航运指数',
+            'operationId': 'getShippingBdi',
+            'parameters': [
+                {'name': 'days', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 365, 'default': 30}},
+            ],
+            'responses': {
+                '200': {'description': 'BDI 数据', 'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/GenericObject',
+                }}}},
+            },
+        },
+    },
+    '/api/shipping/port/{port}': {
+        'get': {
+            'tags': ['Shipping'],
+            'summary': '获取港口吞吐量数据',
+            'operationId': 'getShippingPort',
+            'parameters': [
+                {'name': 'port', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string'}},
+                {'name': 'period', 'in': 'query',
+                 'schema': {'type': 'string', 'enum': ['daily', 'monthly', 'yearly'], 'default': 'monthly'}},
+            ],
+            'responses': {
+                '200': {'description': '港口数据', 'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/GenericObject',
+                }}}},
+            },
+        },
+    },
+    '/api/esg/{ticker}': {
+        'get': {
+            'tags': ['ESG'],
+            'summary': '获取 ESG 评分',
+            'operationId': 'getEsgScore',
+            'parameters': [
+                {'name': 'ticker', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string'}},
+                {'name': 'source', 'in': 'query',
+                 'schema': {'type': 'string', 'maxLength': 32, 'default': 'synthetic'}},
+            ],
+            'responses': {
+                '200': {'description': 'ESG 数据', 'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/GenericObject',
+                }}}},
+            },
+        },
+    },
+    '/api/corporate/search': {
+        'get': {
+            'tags': ['Corporate'],
+            'summary': '企业搜索',
+            'operationId': 'searchCorporate',
+            'parameters': [
+                {'name': 'q', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 100}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 100, 'default': 20}},
+            ],
+            'responses': {
+                '200': {'description': '企业搜索结果', 'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/GenericObject',
+                }}}},
+            },
+        },
+    },
+    '/api/jobs/search': {
+        'get': {
+            'tags': ['Jobs'],
+            'summary': '招聘岗位搜索',
+            'operationId': 'searchJobs',
+            'parameters': [
+                {'name': 'q', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 100}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 200, 'default': 20}},
+            ],
+            'responses': {
+                '200': {'description': '岗位搜索结果', 'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/GenericObject',
+                }}}},
+            },
+        },
+    },
+    '/api/jobs/company/{company}': {
+        'get': {
+            'tags': ['Jobs'],
+            'summary': '按公司获取招聘岗位',
+            'operationId': 'getJobsByCompany',
+            'parameters': [
+                {'name': 'company', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string'}},
+            ],
+            'responses': {
+                '200': {'description': '公司岗位数据', 'content': {'application/json': {'schema': {
+                    '$ref': '#/components/schemas/GenericObject',
+                }}}},
             },
         },
     },
