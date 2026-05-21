@@ -360,8 +360,11 @@ class TestAgentPendingApprovals:
 class TestAgentAnalysisHistory:
     """历史任务列表（line 2691），仅返回 status in [TASK_COMPLETED, TASK_FAILED]。"""
 
-    def test_history_happy_path_includes_completed(self, flask_client):
+    def test_history_happy_path_includes_completed(self, flask_client, monkeypatch, tmp_path):
         from app.web import web_server as ws
+
+        isolated_manager = ws.FileSessionManager(str(tmp_path / 'agent_sessions'))
+        monkeypatch.setattr(ws, 'agent_session_manager', isolated_manager)
 
         task_id_done = f"hist-done-{uuid.uuid4().hex[:8]}"
         task_id_fail = f"hist-fail-{uuid.uuid4().hex[:8]}"

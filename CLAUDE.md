@@ -41,6 +41,38 @@
 
 ---
 
+## Sprint 3-O P0 测试隔离修复记录（2026-05-21 21:00:14 +08:00）
+
+任务约束：仅本地开发环境验证，禁止 push；只改测试，不改业务分页逻辑；不新增文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build；不覆盖既有 Sprint 3-O `/api-docs` 记录。
+
+时间真实性校验：
+- 本机系统时间：2026-05-21 21:00:12 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.google.com` HTTPS Date 头 → `Thu, 21 May 2026 13:00:13 GMT`（+08:00 = 2026-05-21 21:00:13 +08:00）。
+- 时间源 2：`https://www.apple.com` HTTPS Date 头 → `Thu, 21 May 2026 13:00:14 GMT`（+08:00 = 2026-05-21 21:00:14 +08:00）。
+- 最大偏差：2 秒；判定：通过（≤100 秒）。
+
+证据清单：
+- 本地测试根因：`tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisHistory::test_history_happy_path_includes_completed` 原先直接使用 `app.web.web_server.agent_session_manager`，会写入/读取真实 `data/agent_sessions`；history 默认 `limit=200` 时旧时间测试任务可能被真实历史挤出第一页。采纳：仅隔离测试存储。
+- 本地业务边界：按任务要求不修改 `/api/agent_analysis_history` 分页、排序、过滤逻辑；只在测试函数内 monkeypatch 全局 manager。
+- pytest 官方 fixtures 用法：`monkeypatch` 可在测试内临时替换属性，`tmp_path` 提供独立临时目录；检索时间采用本轮基准 2026-05-21 21:00:14 +08:00。采纳：给目标测试新增 `monkeypatch, tmp_path`。
+
+改动摘要：
+- `tests/backend/api/test_agent_async_routes.py`：目标测试函数签名增加 `monkeypatch, tmp_path`；测试前创建 `ws.FileSessionManager(str(tmp_path / 'agent_sessions'))` 并 `monkeypatch.setattr(ws, 'agent_session_manager', isolated_manager)`；保留原测试主体与清理逻辑。
+- `CLAUDE.md`：追加本段 P0 测试隔离修复记录；未覆盖既有 Sprint 3-O `/api-docs`、校时记录。
+
+特例登记：
+- 未创建新文件；无需新文件特例审批。
+- 回滚方案：移除目标测试函数新增的两个 fixture 参数与 isolated manager monkeypatch；删除本记录段。
+
+验证记录：
+- 2026-05-21 21:00:14 +08:00 前置内存：`vm_stat | head -5` → Pages free 31140（≥5000）。
+- `vm_stat | head -5 && AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisHistory::test_history_happy_path_includes_completed -q && vm_stat | head -5` → 1 passed, 11 warnings in 0.84s；命令输出前置 Pages free 5619（≥5000）。
+- `vm_stat | head -5 && AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_agent_async_routes.py -q && vm_stat | head -5` → 16 passed, 11 warnings in 0.95s；命令输出后置 Pages free 37805（≥5000）。
+- 2026-05-21 21:00:14 +08:00 提交前内存复查：`vm_stat | head -5` → Pages free 6011（≥5000）。
+- 验证期间未启服务、未跑全量、未跑 Playwright、未跑 vitest/npm build；未 push。
+
+---
+
 ## 本轮前置校时与证据准备（2026-05-21 20:33 +08:00）
 
 - 校验时间：2026-05-21 20:33:27 +08:00 ~ 2026-05-21 20:33:41 +08:00
