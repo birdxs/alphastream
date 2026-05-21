@@ -61,11 +61,11 @@ export function CapitalFlowArtifact({ data }: Props) {
   // 柱状图数据：兼容两种后端格式
   const chartData =
     data.daily_flow?.map((d) => {
-      // 优先使用 main_net_inflow（新格式），回退到 net_flow（旧格式）
-      const rawValue = d.main_net_inflow ?? d.net_flow ?? 0;
+      // 后端金额字段单位契约为 yuan；图表展示值转换为 wan（万元）
+      const amountYuan = d.main_net_inflow ?? d.net_flow ?? 0;
       return {
         date: d.date.length > 5 ? d.date.slice(5) : d.date, // MM-DD
-        value: rawValue / 10000, // 转万元
+        value: amountYuan / 10000,
       };
     }) || [];
 

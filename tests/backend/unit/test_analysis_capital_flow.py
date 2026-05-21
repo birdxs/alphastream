@@ -59,11 +59,15 @@ def test_individual_fund_flow_happy_path(analyzer):
         result = analyzer.get_individual_fund_flow("600519", market_type="A")
 
     assert result["stock_code"] == "600519"
+    assert result["amount_unit"] == "yuan"
     assert len(result["data"]) == 10
+    assert result["data"][0]["main_net_inflow"] == 1_000_000
     assert "summary" in result
     assert result["summary"]["recent_days"] == 10
     assert result["summary"]["positive_days"] == 5
     assert result["summary"]["negative_days"] == 5
+    assert result["summary"]["total_main_net_inflow"] == 2_500_000
+    assert result["summary"]["amount_unit"] == "yuan"
 
 
 # ---------------------------------------------------------------- 2. akshare 抛异常 → 降级空数据（金融铁律：禁止 mock）
@@ -77,6 +81,7 @@ def test_individual_fund_flow_akshare_exception_fallback(analyzer):
     assert isinstance(result["data"], list)
     assert len(result["data"]) == 0
     assert result.get("source") == "degraded"
+    assert result.get("amount_unit") == "yuan"
 
 
 # ---------------------------------------------------------------- 3. 美股短路（金融铁律：不支持市场返回 unsupported，禁止 mock）
@@ -87,6 +92,7 @@ def test_individual_fund_flow_us_market_short_circuit(analyzer):
     mock_ak.assert_not_called()
     assert result.get("data") == []
     assert result.get("source") == "unsupported"
+    assert result.get("amount_unit") == "yuan"
 
 
 # ---------------------------------------------------------------- 4. 空 DataFrame → 降级空数据（金融铁律：禁止 mock）
@@ -96,6 +102,7 @@ def test_individual_fund_flow_empty_df_fallback(analyzer):
         result = analyzer.get_individual_fund_flow("000001", market_type="A")
     assert result.get("data") == []
     assert result.get("source") == "degraded"
+    assert result.get("amount_unit") == "yuan"
 
 
 # ---------------------------------------------------------------- 5. 计算评分
@@ -175,10 +182,11 @@ def test_get_individual_fund_flow_rank_exception_returns_mock(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
                side_effect=Exception("net err")):
         result = analyzer.get_individual_fund_flow_rank(period="10日")
-    # H2-4 统一契约：异常 → {'data': [], 'error': str, 'count': 0}
+    # H2-4 统一契约：异常 → {'data': [], 'error': str, 'count': 0, 'amount_unit': 'yuan'}
     assert isinstance(result, dict)
     assert result.get("data") == []
     assert result.get("count") == 0
+    assert result.get("amount_unit") == "yuan"
     assert result.get("error") is not None and isinstance(result["error"], str)
 
 
@@ -207,7 +215,7 @@ def test_individual_fund_flow_sz_code_routing(analyzer):
 
 # ---------------------------------------------------------------- S3-N4 成功路径返回 unified schema
 def test_fund_flow_rank_success_returns_unified_schema(analyzer):
-    """H2-4：成功路径应返回 {'data': list, 'error': None, 'count': int}"""
+    """H2-4：成功路径应返回 {'data': list, 'error': None, 'count': int, 'amount_unit': 'yuan'}"""
     import pandas as pd
     # 构造最小可用 DataFrame
     mock_df = pd.DataFrame([{
@@ -235,15 +243,17 @@ def test_fund_flow_rank_success_returns_unified_schema(analyzer):
     assert "data" in result, "缺少 data 字段"
     assert "error" in result, "缺少 error 字段"
     assert "count" in result, "缺少 count 字段"
+    assert "amount_unit" in result, "缺少 amount_unit 字段"
     assert isinstance(result["data"], list), "data 应为 list"
     assert result["error"] is None, f"成功路径 error 应为 None，实际: {result['error']}"
+    assert result["amount_unit"] == "yuan"
     assert result["count"] == len(result["data"]), "count 应等于 data 长度"
     assert result["count"] == 1
 
 
 # ---------------------------------------------------------------- S3-N5 异常路径返回 unified schema
 def test_fund_flow_rank_exception_returns_unified_schema(analyzer):
-    """H2-4：异常路径应返回 {'data': [], 'error': str, 'count': 0}"""
+    """H2-4：异常路径应返回 {'data': [], 'error': str, 'count': 0, 'amount_unit': 'yuan'}"""
     with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
                side_effect=ValueError("mock api error")):
         result = analyzer.get_individual_fund_flow_rank(period="今日")
@@ -253,4 +263,5 @@ def test_fund_flow_rank_exception_returns_unified_schema(analyzer):
     assert "error" in result and result["error"] is not None, "error 应为非 None 字符串"
     assert isinstance(result["error"], str), "error 应为 str 类型"
     assert "count" in result and result["count"] == 0, "count 应为 0"
+    assert "amount_unit" in result and result["amount_unit"] == "yuan", "amount_unit 应为 yuan"
     assert "mock api error" in result["error"], "error 应包含原始异常信息"

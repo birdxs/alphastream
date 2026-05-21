@@ -1,4 +1,6 @@
-# capital_flow_analyzer.py
+# Input  : AkShare 资金流向 DataFrame 与股票代码/周期参数
+# Output : 个股/板块资金流向结构化 dict/list，金额字段单位保持 yuan
+# Pos    : 金融数据单位契约边界，供 API 与前端图表消费
 import logging
 import traceback
 import akshare as ak
@@ -72,8 +74,9 @@ class CapitalFlowAnalyzer:
         """获取个股资金流向排名。
 
         返回统一结构（H2-4 修复）：
-            {'data': list[dict], 'error': str | None, 'count': int}
+            {'data': list[dict], 'error': str | None, 'count': int, 'amount_unit': 'yuan'}
         调用方通过 result['error'] is not None 判断失败，通过 result['data'] 取列表。
+        AkShare 净额字段单位为元，后端保持原始数值不缩放。
         """
         try:
             self.logger.info(f"Getting individual fund flow ranking for period: {period}")
@@ -118,7 +121,7 @@ class CapitalFlowAnalyzer:
                     self.logger.warning(f"Error processing row in individual fund flow rank: {str(e)}")
                     continue
 
-            result = {'data': items, 'error': None, 'count': len(items)}
+            result = {'data': items, 'error': None, 'count': len(items), 'amount_unit': 'yuan'}
             # 缓存结果
             self.data_cache[cache_key] = (now_cn(), result)
 
@@ -126,7 +129,7 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting individual fund flow ranking: {str(e)}")
             self.logger.error(traceback.format_exc())
-            return {'data': [], 'error': str(e), 'count': 0}
+            return {'data': [], 'error': str(e), 'count': 0, 'amount_unit': 'yuan'}
 
     def get_individual_fund_flow(self, stock_code, market_type="", re_date="10日"):
         """获取个股资金流向数据"""
@@ -138,7 +141,7 @@ class CapitalFlowAnalyzer:
             # 非A股直接返回mock, 避免触底爬网.
             if market_type in ('US', 'us', 'HK', 'hk'):
                 self.logger.info(f"非A股市场 {market_type}, 资金流向接口不支持, 返回空数据")
-                return {'data': [], 'source': 'unsupported', 'reason': 'market_type not supported'}
+                return {'data': [], 'source': 'unsupported', 'reason': 'market_type not supported', 'amount_unit': 'yuan'}
 
             # 转换market参数为akshare期望的 'sh'/'sz' 格式
             # 'A'/'a'/None/空字符串 均需根据股票代码自动判断
@@ -173,11 +176,12 @@ class CapitalFlowAnalyzer:
             # [I2-2026-04-15] None/空 guard: 某些股票/市场组合akshare会返回None而非抛异常
             if flow_data is None or (hasattr(flow_data, 'empty') and flow_data.empty):
                 self.logger.warning(f"akshare 返回空数据 stock={stock_code} market={market_type}, 降级为空数据")
-                return {'data': [], 'source': 'degraded', 'reason': 'akshare_empty'}
+                return {'data': [], 'source': 'degraded', 'reason': 'akshare_empty', 'amount_unit': 'yuan'}
 
             # 处理数据
             result = {
                 "stock_code": stock_code,
+                "amount_unit": "yuan",
                 "data": []
             }
 
@@ -214,7 +218,8 @@ class CapitalFlowAnalyzer:
                     "avg_main_net_inflow_percent": np.mean(
                         [item["main_net_inflow_percent"] for item in recent_data]),
                     "positive_days": sum(1 for item in recent_data if item["main_net_inflow"] > 0),
-                    "negative_days": sum(1 for item in recent_data if item["main_net_inflow"] <= 0)
+                    "negative_days": sum(1 for item in recent_data if item["main_net_inflow"] <= 0),
+                    "amount_unit": "yuan"
                 }
 
             # Cache the result
@@ -224,7 +229,7 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting individual fund flow: {str(e)}")
             self.logger.error(traceback.format_exc())
-            return {'data': [], 'source': 'degraded', 'reason': str(e)}
+            return {'data': [], 'source': 'degraded', 'reason': str(e), 'amount_unit': 'yuan'}
 
     def get_sector_stocks(self, sector):
         """获取特定行业的股票"""

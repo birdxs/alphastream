@@ -2744,6 +2744,7 @@ def api_individual_fund_flow_rank():
         # Get individual fund flow ranking data
         # H2-4 统一返回契约：{'data': list, 'error': str|None, 'count': int}
         result = capital_flow_analyzer.get_individual_fund_flow_rank(period)
+        result.setdefault('amount_unit', 'yuan')
 
         if result.get('error') is not None:
             return api_error('INTERNAL', '获取个股资金流向排名失败', details=result['error'])
@@ -2768,10 +2769,14 @@ def api_individual_fund_flow():
 
         # Get individual fund flow data
         result = capital_flow_analyzer.get_individual_fund_flow(stock_code, market_type, re_date)
+        result.setdefault('amount_unit', 'yuan')
+        if isinstance(result.get('summary'), dict):
+            result['summary'].setdefault('amount_unit', result['amount_unit'])
         # B2-5: 完全 degraded（无任何有效数据）→ HTTP 503
         if result.get('source') == 'degraded' and not result.get('data'):
             return jsonify({'success': False, 'error_code': 'DEGRADED',
-                            'message': '资金流向数据源不可用', 'reason': result.get('reason', '')}), 503
+                            'message': '资金流向数据源不可用', 'reason': result.get('reason', ''),
+                            'amount_unit': result.get('amount_unit', 'yuan')}), 503
         return custom_jsonify(result)
     except Exception as e:
         app.logger.error(f"Error getting individual fund flow: {traceback.format_exc()}")

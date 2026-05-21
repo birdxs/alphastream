@@ -4,6 +4,43 @@
 
 ---
 
+## Sprint 3-O/P1 资金流单位契约修复记录（2026-05-21 21:22:07 +08:00）
+
+任务约束：本地开发环境；禁止 push；只改现有文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build。
+
+时间真实性校验：
+- 本机系统时间：2026-05-21 21:22:05 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.google.com` HTTPS Date 头 → `Thu, 21 May 2026 13:22:06 GMT`（+08:00 = 2026-05-21 21:22:06 +08:00）。
+- 时间源 2：`https://www.apple.com` HTTPS Date 头 → `Thu, 21 May 2026 13:22:07 GMT`（+08:00 = 2026-05-21 21:22:07 +08:00）。
+- 最大偏差：2 秒；判定：通过（≤100 秒）。
+
+证据清单：
+- 已知上游调研：AkShare `stock_individual_fund_flow` 与 `stock_individual_fund_flow_rank` 净额字段单位为元；采纳：后端显式声明 `amount_unit='yuan'`，不缩放历史字段。
+- 本地实现：`app/analysis/capital_flow_analyzer.py` 原先直接透传 AkShare 数值；采纳：保留金额字段数值大小，给 rank 与 individual flow 返回 dict 增加单位契约。
+- API 调用层：`app/web/web_server.py` `/api/individual_fund_flow_rank` 与 `/api/individual_fund_flow` 原先直接返回 analyzer 结果；采纳：透传 `amount_unit`，缺省 fallback 为 `yuan`，不改变 `data/daily_flow/summary/source/count` 契约。
+- 前端展示：`frontend/src/components/artifacts/capital-flow-chart.tsx` 原先 `rawValue / 10000`；采纳：仅改注释与变量名，明确输入为 yuan、图表展示为 wan（万元）。
+
+改动摘要：
+- `app/analysis/capital_flow_analyzer.py`：文件头注释更新为单位契约说明；`get_individual_fund_flow_rank()` 成功/异常路径返回 `amount_unit: 'yuan'`；`get_individual_fund_flow()` 成功、unsupported、empty、异常路径返回 `amount_unit: 'yuan'`；`summary['amount_unit']='yuan'`，summary 总额仍为元。
+- `app/web/web_server.py`：两个资金流 API 对 analyzer 结果执行 `setdefault('amount_unit', 'yuan')`；individual flow summary 同步默认单位；degraded 503 响应携带 `amount_unit`。
+- `frontend/src/components/artifacts/capital-flow-chart.tsx`：将 `rawValue` 澄清为 `amountYuan`，注释说明 yuan → wan 转换，未改变图表数值换算。
+- `tests/backend/unit/test_analysis_capital_flow.py`：补充 rank/individual flow 单位断言，验证 `main_net_inflow == 1_000_000` 与 summary total 保持元。
+- `tests/backend/api/test_remaining_routes.py`：复用现有 rank API 用例补 `amount_unit == 'yuan'` 断言。
+
+特例登记：
+- 未创建新文件；无需新文件特例审批。
+- 未新增前端测试文件；仅复用现有后端单测/API 测试。
+- 回滚方案：移除上述 `amount_unit` 字段透传与断言；前端变量名恢复为 `rawValue`；不涉及数据迁移。
+
+验证记录：
+- 2026-05-21 21:22:07 +08:00 前置内存：`vm_stat | head -5` → Pages free 13894（≥5000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_analysis_capital_flow.py` → 15 passed, 11 warnings in 0.05s。
+- 因修改现有 API 测试，执行 `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_remaining_routes.py -k individual_fund_flow` → 2 passed, 211 deselected, 164 warnings in 0.62s。
+- 2026-05-21 21:22:07 +08:00 后置内存：`vm_stat | head -5` → Pages free 11370（≥5000）。
+- 未启服务、未跑全量、未跑 Playwright、未跑 vitest/npm build；禁止 push。
+
+---
+
 ## Sprint 3-O/P1 CAGR 排序守卫修复记录（2026-05-21 21:11:38 +08:00）
 
 任务约束：本地开发环境；禁止 push；只改现有文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build。
