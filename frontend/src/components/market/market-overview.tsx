@@ -16,6 +16,8 @@ interface IndexQuote {
 
 interface MarketIndicesResponse {
   indices: IndexQuote[];
+  degraded?: boolean;
+  status?: string;
 }
 
 const FALLBACK_NAMES = ["上证指数", "深证成指", "创业板指", "沪深300"];
@@ -34,7 +36,17 @@ export function MarketOverview() {
       // B23: 走 Next.js proxy (同 origin)，避免 Playwright/Chromium 冷启动时直连 8888 的 16s IPv6 超时
       // SSE 单独直连 8888（见下方 connectSSE），两者分离互不阻塞连接池
       const rawRes = await fetch('/api/market_indices');
-      if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
+      if (rawRes.status === 503) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[market-overview] market_indices 降级，保留旧数据或占位');
+        }
+        setLoading(false);
+        return false;
+      }
+      if (!rawRes.ok) {
+        console.warn('[market-overview] market_indices HTTP异常:', rawRes.status);
+        return false;
+      }
       const res: MarketIndicesResponse = await rawRes.json();
       if (res?.indices && res.indices.length > 0) {
         // 比较新旧价格，触发flash动画
@@ -60,11 +72,17 @@ export function MarketOverview() {
         return true;
       }
       // B25: degraded(indices=[]) — 不立即报错，等重试或 SSE
+      if (res?.degraded || res?.status === 'DEGRADED' || res?.indices?.length === 0) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[market-overview] market_indices 空响应/降级，保留旧数据或占位');
+        }
+        setLoading(false);
+      }
       return false;
     } catch (e) {
       // B25: 网络/JSON 错误也不立即报错，由调用方决定是否兜底
       // S3-B4: 补 debug log 便于排查（Hunt3 前端 Major）
-      console.error('[market-overview] fetchIndices 失败:', e);
+      if (process.env.NODE_ENV !== 'production') console.debug('[market-overview] fetchIndices 异常:', e);
       return false;
     }
   }, []);

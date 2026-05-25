@@ -40,6 +40,8 @@ interface IndexQuote {
 
 interface MarketIndicesResponse {
   indices: IndexQuote[];
+  degraded?: boolean;
+  status?: string;
 }
 
 interface NewsItem {
@@ -72,6 +74,8 @@ function getGreeting(): { text: string; sub: string } {
   if (h >= 18 && h < 24) return { text: "晚间好", sub: "回顾今日行情" };
   return { text: "夜深了", sub: "注意休息" };
 }
+
+const DEFAULT_GREETING = { text: "您好", sub: "正在同步市场状态" };
 
 /* ---------- 工具函数 ---------- */
 
@@ -107,6 +111,7 @@ export default function DashboardPage() {
 
   // AI分析输入
   const [aiInput, setAiInput] = useState("");
+  const [greeting, setGreeting] = useState(DEFAULT_GREETING);
 
   // 自动刷新计时器
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -122,6 +127,7 @@ export default function DashboardPage() {
   /* ---- 页面标题 ---- */
   useEffect(() => {
     document.title = "投资看板 - AI金融分析";
+    setGreeting(getGreeting());
   }, []);
 
   /* ---- 数据加载函数 ---- */
@@ -130,14 +136,27 @@ export default function DashboardPage() {
     try {
       // B23: 走 Next.js proxy (同 origin)，Node.js proxy 到 8888 连接快（13ms vs 直连 16s 冷启动）
       const rawRes = await fetch('/api/market_indices');
-      if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
+      if (rawRes.status === 503) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[dashboard] market_indices 降级，保留旧数据或占位');
+        }
+        return;
+      }
+      if (!rawRes.ok) {
+        console.warn('[dashboard] market_indices HTTP异常:', rawRes.status);
+        return;
+      }
       const res: MarketIndicesResponse = await rawRes.json();
       if (res?.indices?.length) {
         setIndices(res.indices);
+      } else if (res?.degraded || res?.status === 'DEGRADED' || res?.indices?.length === 0) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[dashboard] market_indices 空响应/降级，保留旧数据或占位');
+        }
       }
     } catch (e) {
-      // S3-B4: 补 error log（Hunt3 前端 Major）— 保留上次数据，但记录错误便于排查
-      console.error('[dashboard] fetchIndices 失败:', e);
+      // S3-B4: 网络/JSON 异常保留上次数据，开发环境保留 debug 线索
+      if (process.env.NODE_ENV !== 'production') console.debug('[dashboard] fetchIndices 异常:', e);
     } finally {
       setIndicesLoading(false);
       setLastRefresh(new Date());
@@ -315,9 +334,9 @@ export default function DashboardPage() {
               Dashboard · 投资看板
             </h1>
             <p className="text-xs text-muted-foreground dark:text-[#8888A0] mt-0.5">
-              <span className="text-[#6B5EE4] font-medium">{getGreeting().text}</span>
+              <span className="text-[#6B5EE4] font-medium">{greeting.text}</span>
               <span className="mx-1.5">·</span>
-              <span>{getGreeting().sub}</span>
+              <span>{greeting.sub}</span>
               <span className="mx-1.5">·</span>
               {lastRefresh
                 ? `最后刷新 ${lastRefresh.toLocaleTimeString("zh-CN")}`

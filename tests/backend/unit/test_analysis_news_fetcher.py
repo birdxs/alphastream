@@ -149,17 +149,32 @@ def test_start_news_scheduler_no_real_thread(monkeypatch):
     关键：用 MagicMock 替换 threading.Thread，避免真起死循环。
     """
     import threading as _t
+    monkeypatch.delenv("DISABLE_NETWORK", raising=False)
     fake_thread_instance = MagicMock()
     fake_thread_cls = MagicMock(return_value=fake_thread_instance)
     monkeypatch.setattr(_t, "Thread", fake_thread_cls)
 
-    nf_mod.start_news_scheduler()
+    result = nf_mod.start_news_scheduler()
 
     # Thread 应被创建并 start 一次
     assert fake_thread_cls.call_count == 1
     fake_thread_instance.start.assert_called_once()
     # daemon 标志应被设置
     assert fake_thread_instance.daemon is True
+    assert result is fake_thread_instance
+
+
+def test_start_news_scheduler_disabled_by_disable_network(monkeypatch):
+    """DISABLE_NETWORK=1 时不创建新闻后台线程。"""
+    import threading as _t
+    monkeypatch.setenv("DISABLE_NETWORK", "1")
+    fake_thread_cls = MagicMock()
+    monkeypatch.setattr(_t, "Thread", fake_thread_cls)
+
+    result = nf_mod.start_news_scheduler()
+
+    assert result is None
+    fake_thread_cls.assert_not_called()
 
 
 def test_get_latest_news_empty(fetcher):

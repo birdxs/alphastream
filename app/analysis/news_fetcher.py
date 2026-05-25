@@ -353,8 +353,18 @@ def fetch_news_task():
     news_fetcher.fetch_and_save()
     logger.info("新闻获取任务完成")
 
+
+def _background_scheduler_enabled():
+    """测试/离线环境不启动真实新闻后台调度；默认开发启动保持开启。"""
+    return os.getenv("DISABLE_NETWORK") != "1"
+
+
 def start_news_scheduler():
     """启动新闻获取定时任务"""
+    if not _background_scheduler_enabled():
+        logger.info("DISABLE_NETWORK=1，跳过新闻获取定时任务启动")
+        return None
+
     import threading
     import time
 
@@ -373,6 +383,7 @@ def start_news_scheduler():
     scheduler_thread.daemon = True
     scheduler_thread.start()
     logger.info("新闻获取定时任务已启动")
+    return scheduler_thread
 
 # 初始获取一次数据
 if __name__ == "__main__":

@@ -24,6 +24,9 @@
 from __future__ import annotations
 
 import json
+import sys
+import time
+import types
 from typing import Any, Dict
 
 import pandas as pd
@@ -134,7 +137,11 @@ class TestStockDataRoute:
 
 class TestStockNameRoute:
     def test_missing_stock_code_returns_400(self, flask_client):
-        resp = flask_client.get("/api/stock_name")
+        from app.web import web_server
+        resp = flask_client.get(
+            "/api/stock_name",
+            headers={"X-API-Key": web_server._get_api_key()},
+        )
         assert resp.status_code == 400
         data = _json(resp)
         assert _has_error(data)  # stock_code required (old: error key, new: error_code key)
@@ -147,7 +154,10 @@ class TestStockNameRoute:
                             {"600000": "浦发银行"})
         monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
 
-        resp = flask_client.get("/api/stock_name?stock_code=600000")
+        resp = flask_client.get(
+            "/api/stock_name?stock_code=600000",
+            headers={"X-API-Key": web_server._get_api_key()},
+        )
         assert resp.status_code == 200
         data = _json(resp)
         assert data["stock_code"] == "600000"
@@ -157,11 +167,41 @@ class TestStockNameRoute:
         from app.web import web_server
         monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
         monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
-        resp = flask_client.get("/api/stock_name?stock_code=999999")
+        resp = flask_client.get(
+            "/api/stock_name?stock_code=999999",
+            headers={"X-API-Key": web_server._get_api_key()},
+        )
         assert resp.status_code == 200
         data = _json(resp)
         # 未命中时回填 code 作为 name
         assert data["stock_name"] == "999999"
+
+    def test_cold_start_timeout_returns_code_without_waiting_worker(self, flask_client, monkeypatch):
+        from app.web import web_server
+
+        monkeypatch.setattr(web_server, "_CACHE_LOADED", False)
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
+        monkeypatch.setenv("STOCK_NAME_CACHE_TIMEOUT_S", "0.05")
+
+        fake_akshare = types.SimpleNamespace(
+            stock_info_a_code_name=lambda: (time.sleep(1.0) or pd.DataFrame(
+                [{"code": "600519", "name": "贵州茅台"}]
+            ))
+        )
+        monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+        start = time.perf_counter()
+        resp = flask_client.get(
+            "/api/stock_name?stock_code=600519",
+            headers={"X-API-Key": web_server._get_api_key()},
+        )
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.5
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data["stock_code"] == "600519"
+        assert data["stock_name"] == "600519"
 
 
 # --------------------------------------------------------------------------- #
@@ -279,7 +319,7 @@ class TestStockNameSearchRoute:
 # --------------------------------------------------------------------------- #
 
 class TestMarketIndicesRoute:
-    def test_happy_path_returns_indices(self, flask_client, monkeypatch):
+    def test_market_indices_happy_path_returns_indices(self, flask_client, monkeypatch):
         from app.web import web_server
         fake = {"indices": [
             {"name": "上证指数", "code": "000001", "price": 3500.0, "change_pct": 1.2},
@@ -292,7 +332,7 @@ class TestMarketIndicesRoute:
         assert "indices" in data and len(data["indices"]) == 2
         assert data["indices"][0]["code"] == "000001"
 
-    def test_empty_when_fetch_fails(self, flask_client, monkeypatch):
+    def test_market_indices_empty_when_fetch_fails(self, flask_client, monkeypatch):
         from app.web import web_server
         monkeypatch.setattr(web_server, "_fetch_market_indices_data",
                             lambda: {"indices": []})
@@ -302,6 +342,27 @@ class TestMarketIndicesRoute:
         # B2-4: 响应现在含 meta.data_quality 字段，只验证核心字段
         assert data["indices"] == []
         assert "data_quality" in data.get("meta", {})
+
+    def test_market_indices_timeout_returns_degraded_without_waiting_worker(self, flask_client, monkeypatch):
+        from app.web import web_server
+
+        monkeypatch.setenv("INDEX_FAST_TIMEOUT_MS", "50")
+
+        def slow_fetch():
+            time.sleep(1.0)
+            return {"indices": [{"code": "000001"}], "source": "slow"}
+
+        monkeypatch.setattr(web_server, "_fetch_market_indices_data", slow_fetch)
+
+        start = time.perf_counter()
+        resp = flask_client.get("/api/market_indices")
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.5
+        assert resp.status_code == 503
+        data = _json(resp)
+        assert data["success"] is False
+        assert data["error_code"] == "DEGRADED"
 
 
 # --------------------------------------------------------------------------- #

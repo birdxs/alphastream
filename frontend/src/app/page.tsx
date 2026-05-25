@@ -3,7 +3,7 @@
 // Pos: 应用主入口页面
 
 "use client";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ArtifactPanel } from "@/components/chat/artifact-panel";
@@ -19,8 +19,7 @@ const DEFAULT_WIDTH = 35;
 const MIN_WIDTH = 20;
 const MAX_WIDTH = 60;
 
-function getInitialWidth(): number {
-  if (typeof window === "undefined") return DEFAULT_WIDTH;
+function readStoredWidth(): number {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     const n = parseFloat(saved);
@@ -32,10 +31,14 @@ function getInitialWidth(): number {
 export default function HomePage() {
   const [mobileTab, setMobileTab] = useState<"chat" | "artifacts">("chat");
   const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(null);
-  const [chatWidthPct, setChatWidthPct] = useState(getInitialWidth);
+  const [chatWidthPct, setChatWidthPct] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    Promise.resolve().then(() => setChatWidthPct(readStoredWidth()));
+  }, []);
 
   // 移动端Tab切换动画
   const handleMobileTabSwitch = useCallback((tab: "chat" | "artifacts") => {

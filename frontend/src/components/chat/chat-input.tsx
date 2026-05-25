@@ -54,11 +54,12 @@ export function ChatInput({ onSend, onStop }: Props) {
 
   const activeConversationId = useChatStore(s => s.activeConversationId);
 
-  // 检测浏览器是否支持语音识别（lazy initializer with SSR guard，避免 Hydration mismatch）
-  const [speechSupported] = useState(() => getSpeechRecognition() !== null);
+  // 首屏固定为不显示语音按钮，挂载后再检测浏览器能力，避免 SSR/CSR 首帧按钮树不一致。
+  const [speechSupported, setSpeechSupported] = useState(false);
 
   // 页面加载后自动聚焦
   useEffect(() => {
+    Promise.resolve().then(() => setSpeechSupported(getSpeechRecognition() !== null));
     textareaRef.current?.focus();
   }, []);
 

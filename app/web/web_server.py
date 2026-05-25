@@ -422,7 +422,14 @@ risk_monitor = RiskMonitor(analyzer)
 index_industry_analyzer = IndexIndustryAnalyzer(analyzer)
 industry_analyzer = IndustryAnalyzer()
 
-start_news_scheduler()
+
+def _startup_background_enabled():
+    """测试/离线环境不启动导入期后台任务；默认开发启动保持开启。"""
+    return os.getenv("DISABLE_NETWORK") != "1"
+
+
+if _startup_background_enabled():
+    start_news_scheduler()
 
 # 线程本地存储
 thread_local = threading.local()
@@ -1544,13 +1551,20 @@ def _load_stock_name_cache():
         try:
             import akshare as ak
             from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
-            with ThreadPoolExecutor(max_workers=1) as _ex:
+            _timeout_s = float(os.getenv('STOCK_NAME_CACHE_TIMEOUT_S', '5'))
+            _ex = ThreadPoolExecutor(max_workers=1)
+            _timed_out = False
+            try:
                 fut = _ex.submit(ak.stock_info_a_code_name)
                 try:
-                    df = fut.result(timeout=5)
+                    df = fut.result(timeout=_timeout_s)
                 except _FTimeout:
-                    app.logger.warning("加载A股名称缓存超时(>5s)，本进程不再重试")
+                    _timed_out = True
+                    fut.cancel()
+                    app.logger.warning(f"加载A股名称缓存超时(>{_timeout_s}s)，本进程不再重试")
                     return
+            finally:
+                _ex.shutdown(wait=not _timed_out, cancel_futures=_timed_out)
             with _STOCK_NAME_CACHE_LOCK:
                 for _, row in df.iterrows():
                     _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
@@ -2450,14 +2464,19 @@ def get_market_indices():
         data = cached
     else:
         # 慢路径：在线程池里调用，限时 _fast_ms
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(_fetch_market_indices_data)
-            try:
-                data = fut.result(timeout=_fast_ms / 1000)
-            except FuturesTimeout:
-                # 超时：先返回 degraded，后台继续等待（锁里的 akshare 还在跑）
-                app.logger.warning(f"get_market_indices 快速超时 {_fast_ms}ms，返回 degraded（后台继续刷新）")
-                data = {'indices': [], 'source': 'degraded'}
+        ex = ThreadPoolExecutor(max_workers=1)
+        fut = ex.submit(_fetch_market_indices_data)
+        _timed_out = False
+        try:
+            data = fut.result(timeout=_fast_ms / 1000)
+        except FuturesTimeout:
+            # ThreadPoolExecutor.__exit__ 会 wait=True；手动关闭避免超时后仍阻塞响应。
+            _timed_out = True
+            fut.cancel()
+            app.logger.warning(f"get_market_indices 快速超时 {_fast_ms}ms，返回 degraded")
+            data = {'indices': [], 'source': 'degraded'}
+        finally:
+            ex.shutdown(wait=not _timed_out, cancel_futures=_timed_out)
 
     source = data.get('source', 'unknown')
 
@@ -3357,7 +3376,9 @@ class FileSessionManager:
         """Clean up stale 'running' tasks that have exceeded a timeout."""
         app.logger.info("开始清理过时的任务...")
         cleaned_count = 0
-        now = now_cn()
+        # updated_at is persisted as a timezone-free '%Y-%m-%d %H:%M:%S' string.
+        # Keep both operands naive to avoid startup cleanup log noise.
+        now = now_cn().replace(tzinfo=None)
         
         tasks = self.get_all_tasks()
         for task in tasks:
@@ -5303,10 +5324,11 @@ def registry_stats():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# 在应用启动时启动清理线程（保持原有代码不变）
-cleaner_thread = threading.Thread(target=run_task_cleaner)
-cleaner_thread.daemon = True
-cleaner_thread.start()
+# 在应用启动时启动清理线程
+if _startup_background_enabled():
+    cleaner_thread = threading.Thread(target=run_task_cleaner)
+    cleaner_thread.daemon = True
+    cleaner_thread.start()
 
 # ── S3-A4 API v1 版本前缀 alias（2026-05-20）────────────────────────────────
 # 批量注册 /api/v1/<path> → /api/<path> 别名，不破坏现有路由
@@ -5351,14 +5373,12 @@ def _register_v1_aliases() -> None:
 _register_v1_aliases()
 
 # 启动时后台预加载A股名称缓存，避免首次请求时名字降级为代码
-_preload_thread = threading.Thread(target=_load_stock_name_cache, daemon=True)
-_preload_thread.start()
+if _startup_background_enabled():
+    _preload_thread = threading.Thread(target=_load_stock_name_cache, daemon=True)
+    _preload_thread.start()
 
 # 预热 /api/stock_profile 常用股票，避免首次访问compare/dashboard时等待baostock
 def _preload_profiles():
-    # [Batch8-FIX 2026-05-19] DISABLE_NETWORK=1 时（测试环境）跳过 baostock 真实连接
-    if os.getenv("DISABLE_NETWORK") == "1":
-        return
     import time as _t
     _t.sleep(3)  # 等A股名称缓存先加载
     common = ['600519', '000858', '300750', '000001', '300059', '688981']
@@ -5370,13 +5390,12 @@ def _preload_profiles():
             app.logger.warning(f"预热profile失败 {code}: {e}")
     app.logger.info(f"profile预热完成: {common}")
 
-threading.Thread(target=_preload_profiles, daemon=True).start()
+if _startup_background_enabled():
+    threading.Thread(target=_preload_profiles, daemon=True).start()
 
 # M1/M2 启动预热 + 定时刷新：每 INDEX_REFRESH_INTERVAL_S 秒刷新一次缓存
 # B23: 从一次性预热改为定时循环刷新，避免缓存 30s TTL 过期后请求出现 17s 延迟
 def _preload_market_indices():
-    if os.getenv("DISABLE_NETWORK") == "1":
-        return
     # 首次等 0.5s 让端口绑定完成
     time.sleep(0.5)
     _refresh_interval = int(os.getenv('INDEX_REFRESH_INTERVAL_S', '25'))
@@ -5394,7 +5413,8 @@ def _preload_market_indices():
         # 等待下次刷新（缓存 TTL 30s，刷新间隔 25s，确保缓存始终有效）
         time.sleep(_refresh_interval)
 
-threading.Thread(target=_preload_market_indices, daemon=True).start()
+if _startup_background_enabled():
+    threading.Thread(target=_preload_market_indices, daemon=True).start()
 
 if __name__ == '__main__':
     # 强制禁用Flask的调试模式，以确保日志配置生效

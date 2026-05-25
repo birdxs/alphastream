@@ -29,14 +29,14 @@ function HighlightText({ text, query }: { text: string; query: string }) {
   );
 }
 
-const groupByDate = (convs: Conversation[]) => {
-  const today = new Date().toDateString();
-  const yesterday = new Date(Date.now() - 86400000).toDateString();
+const groupByDate = (convs: Conversation[], now: Date | null) => {
+  const today = now?.toDateString();
+  const yesterday = now ? new Date(now.getTime() - 86400000).toDateString() : undefined;
   const groups: Record<string, Conversation[]> = {};
 
   convs.forEach(c => {
     const date = new Date(c.updated_at || c.created_at).toDateString();
-    const label = date === today ? '今天' : date === yesterday ? '昨天' : '更早';
+    const label = today && date === today ? '今天' : yesterday && date === yesterday ? '昨天' : '更早';
     (groups[label] ??= []).push(c);
   });
   return groups;
@@ -138,6 +138,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateAnchor, setDateAnchor] = useState<Date | null>(null);
   const activeConversationId = useChatStore(s => s.activeConversationId);
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
   const setMessages = useChatStore(s => s.setMessages);
@@ -151,6 +152,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
 
   // 加载对话列表 — 首次 mount + refreshTick 递增时均触发
   useEffect(() => {
+    setDateAnchor(new Date());
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTick]);
@@ -296,7 +298,7 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
               <p className="text-xs text-muted-foreground dark:text-[#555570] leading-relaxed">{searchQuery ? '无匹配对话' : '开始一段新对话，探索AI金融分析的无限可能'}</p>
             </div>
           ) : (
-            Object.entries(groupByDate(filteredConversations)).map(([label, convs]) => (
+            Object.entries(groupByDate(filteredConversations, dateAnchor)).map(([label, convs]) => (
               <div key={label} className="mb-1" role="list" aria-label={`${label}的对话`}>
                 <div className={`px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase ${
                   label === '今天' ? 'text-[#3737CC] dark:text-[#6B6BFF]' : label === '昨天' ? 'text-muted-foreground dark:text-[#8888A0]/70' : 'text-muted-foreground/70 dark:text-[#555570]'

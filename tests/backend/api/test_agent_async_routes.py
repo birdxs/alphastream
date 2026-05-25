@@ -360,6 +360,30 @@ class TestAgentPendingApprovals:
 class TestAgentAnalysisHistory:
     """历史任务列表（line 2691），仅返回 status in [TASK_COMPLETED, TASK_FAILED]。"""
 
+    def test_cleanup_stale_tasks_handles_naive_timestamp(self, monkeypatch, tmp_path):
+        """启动清理应兼容无时区 updated_at 字符串，不产生日志错误。"""
+        from app.web import web_server as ws
+
+        isolated_manager = ws.FileSessionManager(str(tmp_path / 'agent_sessions_cleanup'))
+        monkeypatch.setattr(ws, 'agent_session_manager', isolated_manager)
+
+        task_id = f"stale-run-{uuid.uuid4().hex[:8]}"
+        ws.agent_session_manager.save_task({
+            'id': task_id,
+            'status': ws.TASK_RUNNING,
+            'progress': 50,
+            'created_at': '2026-05-17 09:00:00',
+            'updated_at': '2026-05-17 09:01:00',
+            'params': {'stock_code': '600001'},
+        })
+
+        ws.agent_session_manager.cleanup_stale_tasks(timeout_hours=2)
+
+        task = ws.agent_session_manager.load_task(task_id)
+        assert task is not None
+        assert task['status'] == ws.TASK_FAILED
+        assert task['error'] == '任务因服务器重启或超时而中止'
+
     def test_history_happy_path_includes_completed(self, flask_client, monkeypatch, tmp_path):
         from app.web import web_server as ws
 

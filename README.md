@@ -1,5 +1,7 @@
 # AI-Native 智能金融分析平台（Dark Glassmorphism）
 
+> 此项目的任何功能、架构更新，必须在结束后同步更新相关文档。这是我们契约的一部分。
+
 [![CI](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/ci.yml/badge.svg)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/ci.yml)
 [![Adapter Smoke (Weekly)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/adapter-smoke-weekly.yml/badge.svg)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/adapter-smoke-weekly.yml)
 

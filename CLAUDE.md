@@ -4,6 +4,108 @@
 
 ---
 
+## Sprint 3-O/P2 前后端连调稳定性验收记录（2026-05-25 14:48:49 +08:00）
+
+任务约束：本地开发环境；禁止 push；本地 `main` 为最新进展；自行启动前后端并连调；发现问题立即处理；证据落盘；本地 git 提交；优先修改现有文件。
+
+时间真实性校验：
+- 校验发起/完成：2026-05-25 14:09:54 +08:00 ~ 2026-05-25 14:10:00 +08:00。
+- 本机系统时间：2026-05-25 14:09:54 +0800 CST，按 Asia/Singapore/Asia/Shanghai +08:00 记录。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头，返回 `Mon, 25 May 2026 06:09:57 GMT`，折算 2026-05-25 14:09:57 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头，返回 `Mon, 25 May 2026 06:09:56 GMT`，折算 2026-05-25 14:09:56 +08:00。
+- 时间源 3：`https://www.apple.com` HTTPS Date 头，返回 `Mon, 25 May 2026 06:10:00 GMT`，折算 2026-05-25 14:10:00 +08:00。
+- 最大偏差：6 秒；判定：通过（≤100 秒）。
+- 备注：后续检索与验证记录使用本锚点之后的绝对时间。
+
+本地进度与约束：
+- 最新提交：`4460f4b docs(api): expand OpenAPI second batch coverage`。
+- 初始未提交项：`app/web/web_server.py`、`tests/backend/api/test_agent_async_routes.py`；未跟踪 `node_modules` 保持未处理。
+- 运行参数：`AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 RATE_LIMIT_ENABLED=false PORT=8888 python3 run.py`；前端 `npm run dev`。
+- 未 push。
+
+Agent team 分工与释放：
+- A7 后端稳定性：修复 `/api/market_indices` `ThreadPoolExecutor` 超时后阻塞；完成并释放。
+- A8 权威证据：收集 Python/Flask/Next/pytest/Playwright 官方资料；完成并释放。
+- A9 浏览器矩阵：给出 `/`、`/dashboard`、`/stock/600519`、`/api-docs/`、health/openapi 验收标准；完成并释放。
+- A10 日志资源：确认 8888/3000 初始未监听，历史日志命中 naive/aware 与 market degraded，资源可继续；完成并释放。
+- A11 后台线程治理：离线测试环境禁用导入期后台线程，消除 pytest closed stream logging error；完成并释放。
+- A12 stock_name 冷启动：修复 `_load_stock_name_cache()` 超时后阻塞；完成并释放。
+- A13 Hydration：修复前端首屏 SSR/CSR 不一致；完成并释放。
+- A14 降级日志：market indices 503 降级不再污染前端 error console；完成并释放。
+
+权威证据清单：
+- Python `concurrent.futures` 官方文档，版本 Python 3.14.5 Documentation，链接 `https://docs.python.org/3.14/library/concurrent.futures.html`，检索时间 2026-05-25 14:11:06 +08:00；采纳：`Executor.shutdown(wait=True)` 会等待，`Future.result(timeout)` 超时抛出，支撑手动 `shutdown(wait=False, cancel_futures=True)`。
+- PEP 3148，Final，链接 `https://peps.python.org/pep-3148/`，检索时间 2026-05-25 14:11:06 +08:00；采纳：Executor/Future 设计背景和超时语义。
+- Flask Testing 官方文档，Flask 3.1.x，链接 `https://flask.palletsprojects.com/en/stable/testing/`，检索时间 2026-05-25 14:11:06 +08:00；采纳：Flask test client 用于 API 回归。
+- Flask API `Flask.test_client`，链接 `https://flask.palletsprojects.com/en/stable/api/#flask.Flask.test_client`，检索时间 2026-05-25 14:11:06 +08:00；采纳：测试上下文与响应检查。
+- Next.js rewrites 官方文档，Latest 16.2.2，最近更新 2026-03-31，链接 `https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites`，检索时间 2026-05-25 14:11:06 +08:00；采纳：前端开发代理依据。
+- Next.js redirects 官方文档，Latest 16.2.2，最近更新 2026-03-31，链接 `https://nextjs.org/docs/app/api-reference/config/next-config-js/redirects`，检索时间 2026-05-25 14:11:06 +08:00；采纳：区分 `/api-docs` redirect/rewrite 行为。
+- Next.js proxy 文件约定，Latest 16.2.2，最近更新 2026-03-31，链接 `https://nextjs.org/docs/app/api-reference/file-conventions/proxy`，检索时间 2026-05-25 14:11:06 +08:00；采纳：Next 16 proxy 术语与行为。
+- pytest monkeypatch 官方文档，stable，链接 `https://docs.pytest.org/en/stable/how-to/monkeypatch.html`，检索时间 2026-05-25 14:11:06 +08:00；采纳：环境变量、属性、模块替换回归测试。
+- Playwright Writing tests / Assertions / Trace Viewer 官方文档，链接 `https://playwright.dev/docs/writing-tests`、`https://playwright.dev/docs/test-assertions`、`https://playwright.dev/docs/trace-viewer`，检索时间 2026-05-25 14:11:06 +08:00；采纳：浏览器验收状态与控制台错误检查依据。
+
+10 个方案量化评估：
+| 方案 | 对齐 | 收益 | 风险 | 成本 | 证据 | Score | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 修复 market_indices executor 超时等待 | 5 | 5 | 1 | 2 | 5 | 3.00 | 采用 |
+| 修复 stock_name cache executor 超时等待 | 5 | 4 | 1 | 2 | 5 | 2.75 | 采用 |
+| 离线测试环境禁用导入期后台线程 | 5 | 4 | 2 | 2 | 4 | 2.25 | 采用 |
+| 修复前端 hydration 首屏动态状态 | 5 | 5 | 2 | 3 | 4 | 2.15 | 采用 |
+| market indices 503 前端安静降级 | 4 | 3 | 1 | 1 | 4 | 2.10 | 采用 |
+| 将 market_indices 降级改为后端 200 | 3 | 3 | 3 | 3 | 3 | 0.75 | 不采用，改变 API 语义 |
+| 启动时强制预热全部缓存 | 2 | 3 | 4 | 4 | 2 | -0.05 | 不采用，离线和冷启动风险高 |
+| 全量重构后台任务管理器 | 3 | 4 | 4 | 5 | 3 | -0.10 | 不采用，超出本轮范围 |
+| 跳过浏览器验收只做 curl | 1 | 1 | 4 | 1 | 2 | -0.25 | 不采用，不满足任务 |
+| 新建端到端测试工程 | 3 | 4 | 3 | 5 | 3 | 0.25 | 暂缓，需要新文件审批且成本高 |
+
+改动摘要：
+- `app/web/web_server.py`：`cleanup_stale_tasks()` 使用 naive `now` 匹配持久化字符串；`/api/market_indices` 和 `_load_stock_name_cache()` 避免 `ThreadPoolExecutor.__exit__ wait=True`；新增离线环境导入期后台任务门控。
+- `app/analysis/news_fetcher.py`：`DISABLE_NETWORK=1` 时 `start_news_scheduler()` 返回 `None`，不启动真实定时线程。
+- `tests/backend/api/test_agent_async_routes.py`、`tests/backend/api/test_stock_data_routes.py`、`tests/backend/unit/test_analysis_news_fetcher.py`：补启动清理、market indices、stock name、news scheduler 回归测试。
+- `frontend/src/components/chat/chat-input.tsx`、`frontend/src/app/page.tsx`、`frontend/src/app/dashboard/page.tsx`、`frontend/src/components/agent/agent-side-panel.tsx`、`frontend/src/components/chat/conversation-sidebar.tsx`：首屏动态状态改为挂载后读取，消除 hydration mismatch。
+- `frontend/src/components/market/market-overview.tsx`、`frontend/src/app/dashboard/page.tsx`：market indices 503/空响应安静降级，保留旧数据或占位。
+- `README.md`：补根目录文档契约声明。
+- `TODO.md`、`CHANGELOG.md`：按任务要求新建最小待办与变更记录。
+
+特例登记：
+- 触发原因：根目录不存在 `TODO.md` 与 `CHANGELOG.md`，但任务结束条件要求同步唯一待办与变更记录。
+- 无法仅修改现有文件论证：没有现存对应文件可承载“唯一 TODO”和 changelog；写入 `CLAUDE.md` 不能替代用户指定文件。
+- 证据清单：本地 `ls` 未发现 `TODO.md`/`CHANGELOG.md`；用户 AGENTS.md 要求同步 `TODO.md` 与 `CHANGELOG`；本轮所有实现均已优先修改现有文件。
+- 新文件信息：`TODO.md` 仅记录本轮完成项与后续待办；`CHANGELOG.md` 仅记录本轮用户可读变更；无运行时接口与导入影响。
+- 回滚方案：删除 `TODO.md`、`CHANGELOG.md`，保留 `CLAUDE.md` 中本轮记录；不涉及数据迁移。
+- Commit 标签：本轮包含新建文档，提交信息带 `[NEW-FILE:#20260525-01]`。
+
+验证记录：
+- 后端聚焦测试：
+  - `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_stock_data_routes.py::TestStockNameRoute` → 4 passed, 11 warnings in 0.96s。
+  - `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_stock_data_routes.py::TestMarketIndicesRoute` → 3 passed, 11 warnings in 0.94s。
+  - `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_agent_async_routes.py::TestAgentAnalysisHistory::test_cleanup_stale_tasks_handles_naive_timestamp` → 1 passed, 11 warnings in 0.89s。
+  - `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_analysis_news_fetcher.py -k 'start_news_scheduler or fetch_news_task'` → 3 passed, 10 deselected, 11 warnings in 0.02s。
+- 前端聚焦 lint：
+  - `npx eslint src/components/market/market-overview.tsx src/app/dashboard/page.tsx src/app/page.tsx src/components/chat/chat-input.tsx src/components/agent/agent-side-panel.tsx src/components/chat/conversation-sidebar.tsx` → 0 error, 1 warning（既有 `conversation-sidebar.tsx` hook dependency）。
+  - `npm run lint` 由 A13 验证仍失败，仅剩既有 `frontend/tests/e2e/p1_alt_data_real.spec.ts` 4 个 `no-explicit-any`，非本轮引入。
+- `git diff --check` → 通过。
+- 服务启动：
+  - 后端 `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 RATE_LIMIT_ENABLED=false PORT=8888 python3 run.py` → 2026-05-25 14:41:47 +08:00 监听 `http://127.0.0.1:8888`；无 naive/aware 错误。
+  - 前端 `npm run dev` → Next.js 16.2.6，2026-05-25 14:41:44 +08:00 后监听 `http://localhost:3000`。
+- curl 连调：
+  - 后端 `/health` 200 0.014s；`/api/health/deep` 200 degraded 3.023s；`/api/openapi.json` 200；`/api-docs` → `/api/docs/` 200；`/api/stock_name` 缺参 400；`/api/stock_name?stock_code=600519` 200 5.023s 降级名称；`/api/market_indices` 503 DEGRADED 1.536s。
+  - 前端 `/api/openapi.json` 200；`/api-docs/` 200；`/api/market_indices` 200 cache 0.129s；`/dashboard` 200 0.194s；`/stock/600519` 200 0.309s；首次 `/` 与 `/health` 受 Turbopack 冷启动超时一次，复测 `/` 200 0.118s、`/health` 200 0.017s。
+- 浏览器复验：
+  - `http://127.0.0.1:3000/`、`/dashboard`、`/stock/600519`、`/api-docs/` 均无全局错误页；筛选 `Hydration failed|server rendered HTML didn't match|market-overview.*失败|dashboard.*fetchIndices|Unhandled Runtime Error|ChunkLoadError|ERR_CONNECTION_REFUSED` → `badLogCount=0`。
+
+遗留风险：
+- 离线模式下 `/api/market_indices` 后端直连仍返回 503 DEGRADED；前端可安静降级或使用缓存，符合本地离线联调预期。
+- `backend_stock_600519` 冷启动仍等待配置阈值 5 秒后降级，不再超过 12 秒；如需更快可调低 `STOCK_NAME_CACHE_TIMEOUT_S`。
+- `node_modules` 未跟踪项为既有本地依赖目录，本轮不纳入提交。
+
+回滚方案：
+- 后端：还原 `app/web/web_server.py` 中 executor 手动 shutdown、后台线程门控和 `cleanup_stale_tasks()` naive now；还原 `app/analysis/news_fetcher.py` scheduler 门控；删除对应测试新增断言。
+- 前端：还原挂载后读取动态状态与 market indices 降级日志处理。
+- 文档：删除 `TODO.md`、`CHANGELOG.md`，移除 README 契约声明和本节记录。
+
+---
+
 ## Sprint 3-O/P1 OpenAPI 第二批覆盖记录（2026-05-25 09:15:48 +08:00）
 
 任务约束：本地开发环境；禁止 push；延续最新本地提交 `b8aadb3 docs(api): expand OpenAPI first batch coverage`；只补 `/api/openapi.json` 静态文档契约；不改运行时路由行为；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build；不新增文件。

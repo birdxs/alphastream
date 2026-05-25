@@ -210,9 +210,7 @@ function TerminalRow({
 
 export function AgentSidePanel() {
   const [mounted, setMounted] = useState(false);
-  const [collapsed, setCollapsed] = useState(
-    () => typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY) === 'true'
-  );
+  const [collapsed, setCollapsed] = useState(false);
   const [now, setNow] = useState<number | null>(null);
   const [cleared, setCleared] = useState(false);
   const events = useAgentStore((s) => s.events);
@@ -225,6 +223,7 @@ export function AgentSidePanel() {
   useEffect(() => {
     Promise.resolve().then(() => {
       const t = Date.now();
+      setCollapsed(localStorage.getItem(STORAGE_KEY) === 'true');
       setStartTime(t);
       setNow(t);
       setMounted(true);
