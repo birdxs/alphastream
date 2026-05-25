@@ -106,6 +106,39 @@ Agent team 分工与释放：
 
 ---
 
+## Sprint 3-O/P2 手动前端测试值守收尾记录（2026-05-25 15:10:37 +08:00）
+
+任务约束：Comdr 手动前端测试暂告段落；将日志发现的问题落本地 git；停止前后端服务；释放项目缓存；本地开发环境禁止 push。
+
+时间真实性校验：
+- 校验发起/完成：2026-05-25 15:10:36 +08:00 ~ 2026-05-25 15:10:37 +08:00。
+- 本机系统时间：2026-05-25 15:10:36 +0800 +08，按 Asia/Singapore/Asia/Shanghai +08:00 记录。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头，返回 `Mon, 25 May 2026 07:10:37 GMT`，折算 2026-05-25 15:10:37 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头，返回 `Mon, 25 May 2026 07:10:29 GMT`，折算 2026-05-25 15:10:29 +08:00。
+- 最大偏差：8 秒；判定：通过（≤100 秒）。
+- 备注：本节日志、提交与停止服务记录使用 2026-05-25 15:10:37 +08:00 作为基准时间锚点。
+
+值守日志发现：
+- 2026-05-25 15:04:35 +08:00 前后，`/api/ai/chat` OPTIONS/POST 返回 200；后端 AI 工具链可进入流式 Function Calling。
+- 2026-05-25 15:04:43 +08:00 与 2026-05-25 15:05:04 +08:00，OneAPI 上游返回 429 后 SDK 自动重试；2026-05-25 15:05:09 +08:00 返回 200，未中断前端手测。
+- 2026-05-25 15:06:22 +08:00 与 2026-05-25 15:06:24 +08:00，`app.analysis.capital_flow_analyzer` 调用 Eastmoney 个股资金流时出现 `ProxyError/RemoteDisconnected`，当前被记录为 `ERROR` 并输出完整 Traceback；后续 2026-05-25 15:07:01 +08:00 流式 Function Calling 完成，共 2 轮、6 个工具。判定：业务链路未崩溃，但预期上游降级不应污染日志为完整错误栈，需后续治理为受控降级日志与可测试返回。
+- 2026-05-25 15:07:11 +08:00、15:07:40 +08:00、15:07:41 +08:00、15:08:11 +08:00，后端 `/health` 均为 200；2026-05-25 15:10:17 +08:00 后端 `/health` 返回 `{"status":"ok","version":"3.1.0"}`，前端 `/dashboard` HEAD 200。
+- 手测期间多次出现 `/api/market_indices` 主路径超时 5 秒后切兜底，属于本轮已识别离线上游降级；前端已安静处理，后续只在真实网络可用性恢复后复核。
+- 手测期间观察到 Recharts 警告：`The width(-1) and height(-1) of chart should be greater than 0`，主要出现在图表容器切换、隐藏或未布局时初始化。判定：用户可见页面未崩溃，但下次前端联调优先定位具体组件并修复容器尺寸保护。
+
+服务与缓存收尾：
+- 已执行：2026-05-25 15:10:17 +08:00 后端 session `58966` 停止前最后 `/health` 200，随后 Ctrl-C 正常退出。
+- 已执行：前端 session `32163` 停止前最后 `HEAD /dashboard` 200，随后 Ctrl-C 正常退出。
+- 已验证：`lsof -nP -iTCP:8888 -sTCP:LISTEN` 与 `lsof -nP -iTCP:3000 -sTCP:LISTEN` 均无输出，端口已释放。
+- 已执行：清理 `frontend/.next`、`.pytest_cache`、`frontend/.turbo`、覆盖率目录与 `__pycache__`；保留 `node_modules`，未 push。
+
+后续待办锚点：
+- P1：治理资金流上游 ProxyError 的日志等级和返回契约，避免预期降级输出完整 Traceback。
+- P1：定位 Recharts `width(-1)/height(-1)` 来源组件，增加隐藏容器或零尺寸容器保护。
+- P2：继续复核 `/api/market_indices` 在真实网络与离线模式下的降级日志边界。
+
+---
+
 ## Sprint 3-O/P1 OpenAPI 第二批覆盖记录（2026-05-25 09:15:48 +08:00）
 
 任务约束：本地开发环境；禁止 push；延续最新本地提交 `b8aadb3 docs(api): expand OpenAPI first batch coverage`；只补 `/api/openapi.json` 静态文档契约；不改运行时路由行为；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build；不新增文件。
