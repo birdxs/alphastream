@@ -4,6 +4,60 @@
 
 ---
 
+## Sprint 3-O/P1 OpenAPI 第二批覆盖记录（2026-05-25 09:15:48 +08:00）
+
+任务约束：本地开发环境；禁止 push；延续最新本地提交 `b8aadb3 docs(api): expand OpenAPI first batch coverage`；只补 `/api/openapi.json` 静态文档契约；不改运行时路由行为；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build；不新增文件。
+
+时间真实性校验：
+- 本机系统时间：2026-05-25 09:15:45 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.cloudflare.com/` HTTPS Date 头 → `Mon, 25 May 2026 01:15:46 GMT`（+08:00 = 2026-05-25 09:15:46 +08:00）。
+- 时间源 2：`https://github.com/` HTTPS Date 头 → `Mon, 25 May 2026 01:15:36 GMT`（+08:00 = 2026-05-25 09:15:36 +08:00）。
+- 时间源 3：`https://www.apple.com/` HTTPS Date 头 → `Mon, 25 May 2026 01:15:48 GMT`（+08:00 = 2026-05-25 09:15:48 +08:00）。
+- 最大偏差：12 秒；判定：通过（≤100 秒）。
+- 故障与纠正：初次第二源 `https://www.google.com/` HEAD 超时；按规则替换为 GitHub 与 Apple 后三源校验通过。
+
+证据清单：
+- 本地进度：`git log --oneline -n 25` 显示最新提交 `b8aadb3` 为 OpenAPI 第一批覆盖；采纳：本轮继续同一方向，避免切换战线。
+- 本地路由与 schema：`app/web/web_server.py` 已有 `/api/stock_name`、`/api/stock_name_search`、`/api/start_market_scan`、`/api/scan_status/<task_id>`、`/api/cancel_scan/<task_id>`、`/api/index_stocks`、`/api/industry_stocks`、`/api/board_stocks`、`/api/concept_fund_flow`、`/api/individual_fund_flow_rank`；`app/web/schema.py` 已有对应 schema。采纳：只补静态 OpenAPI operation，不触碰运行时。
+- 现有测试锚点：`tests/backend/api/test_cache_control_headers.py` 已验证 `/api/openapi.json` 缓存策略与第一批路径/参数。采纳：复用现有文件追加第二批断言，不新建测试文件。
+- OpenAPI 规范：`https://spec.openapis.org/oas/v3.0.3.html`，检索时间 2026-05-25 09:15:48 +08:00；Operation Object、Parameter Object、Request Body Object 支持本轮所需 path/query/body 描述。采纳：按既有手写 spec 风格补路径。
+
+10 个方案量化评估（Score = 0.30 对齐度 + 0.25 收益 - 0.20 风险 - 0.15 成本 + 0.10 证据可信度；5 分制输入）：
+| 方案 | 对齐 | 收益 | 风险 | 成本 | 证据 | Score | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 第二批补已有 schema/test 锚点的 10 个路由 | 5 | 4 | 1 | 1 | 5 | 2.90 | 采用 |
+| 一次性补齐全部剩余路由 | 4 | 5 | 4 | 5 | 3 | 0.45 | 不采用，变更面过大 |
+| 改为自动从 Flask routes 生成 spec | 3 | 5 | 5 | 5 | 3 | -0.30 | 不采用，会改变架构 |
+| 只补 P3 另类数据剩余端点 | 4 | 3 | 2 | 2 | 4 | 1.65 | 暂缓，第一批已覆盖多数 P3 |
+| 优先补 SSE 流式端点 | 3 | 4 | 4 | 4 | 3 | -0.20 | 暂缓，SSE schema 表达需单独设计 |
+| 优先补上传端点 | 3 | 3 | 3 | 3 | 4 | 0.00 | 暂缓，multipart 契约需更细测试 |
+| 只更新文档不加测试 | 2 | 2 | 3 | 1 | 2 | 0.55 | 不采用，缺可复核证据 |
+| 新建 OpenAPI 专项测试文件 | 4 | 4 | 2 | 3 | 4 | 1.75 | 不采用，本轮无必要新文件 |
+| 补 README/API.md 而不补 spec | 2 | 2 | 2 | 2 | 3 | 0.70 | 不采用，用户入口是 `/api/openapi.json` |
+| 暂停编码先做全量审计 | 3 | 2 | 1 | 4 | 3 | 0.90 | 不采用，当前方向已明确 |
+
+改动摘要：
+- `app/web/openapi_spec.py`：新增 10 个 operation：GET `/api/stock_name`、GET `/api/stock_name_search`、POST `/api/start_market_scan`、GET `/api/scan_status/{task_id}`、POST `/api/cancel_scan/{task_id}`、GET `/api/index_stocks`、GET `/api/industry_stocks`、GET `/api/board_stocks`、GET `/api/concept_fund_flow`、GET `/api/individual_fund_flow_rank`；同步补 `Scan`、`Industry`、`FundFlow` 等 tag。
+- `tests/backend/api/test_cache_control_headers.py`：追加 2 个断言用例，覆盖第二批 10 个 path/method 及 `stock_code`、`q/limit`、`stock_list/maxItems`、`task_id`、`index_code enum`、`industry`、`board enum`、`period`、`market` 等关键契约。
+- 未修改 `app/web/web_server.py`、`app/web/schema.py`；未改变运行时路由行为。
+
+特例登记：
+- 未创建新文件；无需新文件特例审批。
+- `tests/backend/api/README.md` 当前不存在；本轮按“不新增文件”约束未创建，仅复用现有测试文件。
+
+验证记录：
+- 前置磁盘：`df -h /tmp /private/tmp /Users/panda/Downloads/StockAnal_Sys` → `/System/Volumes/Data` Avail 44Gi，Capacity 79%。
+- 前置内存：`vm_stat | head -5` → Pages free 11133（≥5000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_cache_control_headers.py` → 9 passed, 11 warnings in 33.00s。
+- 后置内存：`vm_stat | head -5` → Pages free 27604（≥5000）。
+- 静态导入验证：`python3 - <<'PY' ... len(OPENAPI_SPEC['paths']) ... PY` → paths 数量 30，第二批 10 个路径均存在且方法正确。
+- 未启服务；未运行全量 pytest；未运行 Playwright/vitest/npm build；未 push。
+
+回滚方案：
+- 移除 `openapi_spec.py` 中本批新增 10 个 `_PATHS` operation 与新增 tags；删除 `test_cache_control_headers.py` 中本批新增 2 个 OpenAPI 断言用例；不涉及数据迁移或运行时状态。
+
+---
+
 ## Sprint 3-O/P1 OpenAPI 第一批覆盖记录（2026-05-21 21:34:39 +08:00）
 
 任务约束：本地开发环境；禁止 push；只补 `/api/openapi.json` 内容；不改运行时路由行为；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build；不新增文件。

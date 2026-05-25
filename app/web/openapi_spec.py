@@ -3,7 +3,7 @@
 # Pos: API 文档自动生成层，维护核心路由 schema 契约
 # 一旦被修改，请更新本头部注释，以及 app/web/README.md
 """
-OpenAPI 3.0 Spec（S3-C3 Hunt5-Major 2026-05-20，S3-O/P1 第一批覆盖补齐 2026-05-21）
+OpenAPI 3.0 Spec（S3-C3 Hunt5-Major 2026-05-20，S3-O/P1 第一/二批覆盖补齐）
 
 手动维护核心路由的 OpenAPI 3.0 schema。
 暴露为 /api/openapi.json 供 Swagger UI / 前端契约校验使用。
@@ -390,6 +390,169 @@ _PATHS: Dict[str, Any] = {
             },
         },
     },
+    '/api/stock_name': {
+        'get': {
+            'tags': ['Stock'],
+            'summary': '按股票代码查询股票名称',
+            'operationId': 'getStockName',
+            'parameters': [
+                {'name': 'stock_code', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 20, 'example': '600519'}},
+            ],
+            'responses': {
+                '200': {'description': '股票名称'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/stock_name_search': {
+        'get': {
+            'tags': ['Stock'],
+            'summary': '按名称关键词反查股票代码',
+            'operationId': 'searchStockName',
+            'parameters': [
+                {'name': 'q', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 20}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 100, 'default': 10}},
+            ],
+            'responses': {
+                '200': {'description': '股票名称搜索结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/start_market_scan': {
+        'post': {
+            'tags': ['Scan'],
+            'summary': '启动市场扫描任务',
+            'operationId': 'startMarketScan',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_list': {'type': 'array', 'items': {'type': 'string'}, 'maxItems': 500},
+                        'market_type': {'type': 'string', 'default': 'A'},
+                        'min_score': {'type': 'number', 'minimum': 0, 'maximum': 100, 'default': 0},
+                        'max_stocks': {'type': 'integer', 'minimum': 1, 'maximum': 500, 'default': 50},
+                    },
+                }}},
+            },
+            'responses': {
+                '200': {'description': '任务已创建'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/scan_status/{task_id}': {
+        'get': {
+            'tags': ['Scan'],
+            'summary': '获取市场扫描任务状态',
+            'operationId': 'getScanStatus',
+            'parameters': [
+                {'name': 'task_id', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 64}},
+            ],
+            'responses': {
+                '200': {'description': '任务状态'},
+                '404': {'description': '任务不存在'},
+            },
+        },
+    },
+    '/api/cancel_scan/{task_id}': {
+        'post': {
+            'tags': ['Scan'],
+            'summary': '取消市场扫描任务',
+            'operationId': 'cancelScan',
+            'parameters': [
+                {'name': 'task_id', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 64}},
+            ],
+            'responses': {
+                '200': {'description': '取消成功或任务已结束'},
+                '404': {'description': '任务不存在'},
+            },
+        },
+    },
+    '/api/index_stocks': {
+        'get': {
+            'tags': ['Market'],
+            'summary': '获取指数成分股',
+            'operationId': 'getIndexStocks',
+            'parameters': [
+                {'name': 'index_code', 'in': 'query',
+                 'schema': {'type': 'string', 'enum': ['000300', '000905', '000852', '000001'], 'default': '000300'}},
+            ],
+            'responses': {
+                '200': {'description': '指数成分股列表'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/industry_stocks': {
+        'get': {
+            'tags': ['Industry'],
+            'summary': '获取行业成分股',
+            'operationId': 'getIndustryStocks',
+            'parameters': [
+                {'name': 'industry', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 50}},
+            ],
+            'responses': {
+                '200': {'description': '行业成分股列表'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/board_stocks': {
+        'get': {
+            'tags': ['Market'],
+            'summary': '获取板块股票列表',
+            'operationId': 'getBoardStocks',
+            'parameters': [
+                {'name': 'board', 'in': 'query',
+                 'schema': {'type': 'string',
+                            'enum': ['hs300', 'zz500', 'zz1000', 'kc50', 'kc100', 'bj50'],
+                            'default': 'hs300'}},
+            ],
+            'responses': {
+                '200': {'description': '板块股票列表'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/concept_fund_flow': {
+        'get': {
+            'tags': ['FundFlow'],
+            'summary': '获取概念资金流向',
+            'operationId': 'getConceptFundFlow',
+            'parameters': [
+                {'name': 'period', 'in': 'query',
+                 'schema': {'type': 'string', 'maxLength': 20, 'default': '10日排行'}},
+            ],
+            'responses': {
+                '200': {'description': '概念资金流向数据'},
+            },
+        },
+    },
+    '/api/individual_fund_flow_rank': {
+        'get': {
+            'tags': ['FundFlow'],
+            'summary': '获取个股资金流向排名',
+            'operationId': 'getIndividualFundFlowRank',
+            'parameters': [
+                {'name': 'period', 'in': 'query',
+                 'schema': {'type': 'string', 'maxLength': 20, 'default': '今日'}},
+                {'name': 'market', 'in': 'query',
+                 'schema': {'type': 'string', 'maxLength': 10, 'default': ''}},
+            ],
+            'responses': {
+                '200': {'description': '个股资金流向排名'},
+                '500': {'description': '数据源异常'},
+            },
+        },
+    },
     '/api/conversations': {
         'get': {
             'tags': ['Conversation'],
@@ -535,6 +698,14 @@ OPENAPI_SPEC: Dict[str, Any] = {
         {'name': 'Stock', 'description': '股票数据'},
         {'name': 'Conversation', 'description': '对话历史'},
         {'name': 'Agent', 'description': '智能体分析'},
+        {'name': 'Scan', 'description': '市场扫描任务'},
+        {'name': 'Industry', 'description': '行业数据'},
+        {'name': 'FundFlow', 'description': '资金流向'},
+        {'name': 'MCP', 'description': 'MCP 工具'},
+        {'name': 'Shipping', 'description': '航运另类数据'},
+        {'name': 'ESG', 'description': 'ESG 另类数据'},
+        {'name': 'Corporate', 'description': '企业网络另类数据'},
+        {'name': 'Jobs', 'description': '招聘信号另类数据'},
         {'name': 'Security', 'description': '鉴权/CSRF'},
     ],
     'paths': _PATHS,

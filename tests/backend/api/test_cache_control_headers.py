@@ -130,6 +130,86 @@ def test_openapi_json_first_batch_parameters(flask_client):
     )
 
 
+def test_openapi_json_includes_second_batch_routes(flask_client):
+    """OpenAPI spec 应包含第二批补齐的 10 个路由及方法。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    expected = {
+        "/api/stock_name": "get",
+        "/api/stock_name_search": "get",
+        "/api/start_market_scan": "post",
+        "/api/scan_status/{task_id}": "get",
+        "/api/cancel_scan/{task_id}": "post",
+        "/api/index_stocks": "get",
+        "/api/industry_stocks": "get",
+        "/api/board_stocks": "get",
+        "/api/concept_fund_flow": "get",
+        "/api/individual_fund_flow_rank": "get",
+    }
+
+    for path, method in expected.items():
+        assert path in paths
+        assert method in paths[path]
+
+
+def test_openapi_json_second_batch_parameters(flask_client):
+    """OpenAPI spec 应声明第二批路由的关键 path/query/body 参数。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    stock_name = paths["/api/stock_name"]["get"]
+    stock_code = _param(stock_name, "stock_code", "query")
+    assert stock_code["required"] is True
+    assert stock_code["schema"]["maxLength"] == 20
+
+    stock_name_search = paths["/api/stock_name_search"]["get"]
+    q_schema = _param(stock_name_search, "q", "query")["schema"]
+    assert q_schema["minLength"] == 1
+    assert q_schema["maxLength"] == 20
+    search_limit = _param(stock_name_search, "limit", "query")["schema"]
+    assert search_limit["minimum"] == 1
+    assert search_limit["maximum"] == 100
+    assert search_limit["default"] == 10
+
+    scan = paths["/api/start_market_scan"]["post"]
+    scan_schema = scan["requestBody"]["content"]["application/json"]["schema"]
+    assert scan["requestBody"]["required"] is True
+    assert scan_schema["properties"]["stock_list"]["maxItems"] == 500
+    assert scan_schema["properties"]["min_score"]["minimum"] == 0
+    assert scan_schema["properties"]["min_score"]["maximum"] == 100
+
+    scan_status = paths["/api/scan_status/{task_id}"]["get"]
+    assert _param(scan_status, "task_id", "path")["required"] is True
+
+    cancel_scan = paths["/api/cancel_scan/{task_id}"]["post"]
+    assert _param(cancel_scan, "task_id", "path")["schema"]["maxLength"] == 64
+
+    index_op = paths["/api/index_stocks"]["get"]
+    index_schema = _param(index_op, "index_code", "query")["schema"]
+    assert index_schema["enum"] == ["000300", "000905", "000852", "000001"]
+    assert index_schema["default"] == "000300"
+
+    industry_op = paths["/api/industry_stocks"]["get"]
+    industry = _param(industry_op, "industry", "query")
+    assert industry["required"] is True
+    assert industry["schema"]["maxLength"] == 50
+
+    board_schema = _param(paths["/api/board_stocks"]["get"], "board", "query")["schema"]
+    assert board_schema["enum"] == ["hs300", "zz500", "zz1000", "kc50", "kc100", "bj50"]
+    assert board_schema["default"] == "hs300"
+
+    concept_schema = _param(paths["/api/concept_fund_flow"]["get"], "period", "query")["schema"]
+    assert concept_schema["default"] == "10日排行"
+    assert concept_schema["maxLength"] == 20
+
+    rank_op = paths["/api/individual_fund_flow_rank"]["get"]
+    assert _param(rank_op, "period", "query")["schema"]["default"] == "今日"
+    assert _param(rank_op, "market", "query")["schema"]["maxLength"] == 10
+
+
 # ---------------------------------------------------------------------------
 # /api-docs — 历史 Swagger UI 入口兼容跳转
 # ---------------------------------------------------------------------------
