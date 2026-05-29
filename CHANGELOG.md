@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-29 09:32:08 +08:00
+
+- 治理资金流上游网络降级日志：Eastmoney 个股/板块资金流遇到 `ProxyError`、`RemoteDisconnected`、`ConnectionError`、`Timeout` 等网络层异常时，改为 WARNING 级精简日志（"资金流上游降级: ..."），不再输出完整 Traceback；非网络类异常仍保留 ERROR 级完整堆栈，便于排查真实 bug。
+- 返回契约保持不变（`get_individual_fund_flow`/`get_individual_fund_flow_rank`/`get_concept_fund_flow` 的 `data`/`error`/`count`/`source`/`amount_unit` 字段不变），新增单元测试覆盖网络降级与非网络异常分流。
+
 ## 2026-05-25 14:48:49 +08:00
 
 - 修复后端任务清理中 aware `now_cn()` 与无时区 `updated_at` 字符串相减导致的启动日志错误。

@@ -1,6 +1,6 @@
 # Input  : AkShare 资金流向 DataFrame 与股票代码/周期参数
 # Output : 个股/板块资金流向结构化 dict/list，金额字段单位保持 yuan
-# Pos    : 金融数据单位契约边界，供 API 与前端图表消费
+# Pos    : 金融数据单位契约边界，供 API 与前端图表消费；上游网络降级走受控 WARNING 日志
 import logging
 import traceback
 import akshare as ak
@@ -24,6 +24,65 @@ class CapitalFlowAnalyzer:
         # 初始化统一数据层
         from app.core.data_provider import get_data_provider
         self.data_provider = get_data_provider()
+
+    def _log_upstream_failure(self, context, exc):
+        """统一记录上游数据源失败日志。
+
+        预期的网络层降级（Eastmoney ProxyError / RemoteDisconnected /
+        ConnectionError / Timeout 等）属于受控降级，仅以 WARNING 级输出精简
+        消息，不打印完整 Traceback，避免污染日志；非网络类异常仍按 ERROR 级
+        输出完整堆栈，便于排查真实 bug。
+        """
+        is_network = self._is_upstream_network_error(exc)
+
+        if is_network:
+            self.logger.warning(
+                f"资金流上游降级: {context} <{type(exc).__name__}: {str(exc)[:120]}>"
+            )
+        else:
+            self.logger.error(f"Error {context}: {str(exc)}")
+            self.logger.error(traceback.format_exc())
+
+    @staticmethod
+    def _is_upstream_network_error(exc):
+        """判定异常是否为上游网络层降级（受控、可预期）。
+
+        以 isinstance 为主（覆盖 requests.ProxyError 等子类），辅以
+        network_resilience 的名称/关键字分类作为兜底。
+        """
+        network_types = []
+        try:
+            import requests.exceptions as _req_exc
+            network_types.extend([
+                _req_exc.ConnectionError,   # 含 ProxyError 子类
+                _req_exc.Timeout,
+                _req_exc.SSLError,
+                _req_exc.ChunkedEncodingError,
+            ])
+        except Exception:
+            pass
+        try:
+            import http.client as _http_client
+            network_types.append(_http_client.RemoteDisconnected)
+        except Exception:
+            pass
+        try:
+            import urllib3.exceptions as _u3_exc
+            network_types.extend([_u3_exc.ProtocolError, _u3_exc.NewConnectionError])
+        except Exception:
+            pass
+        network_types.extend([
+            ConnectionError, ConnectionResetError,
+            ConnectionAbortedError, ConnectionRefusedError, TimeoutError,
+        ])
+        if network_types and isinstance(exc, tuple(network_types)):
+            return True
+        # 兜底：复用 network_resilience 的名称/关键字分类
+        try:
+            from app.core.network_resilience import _is_retryable_exception
+            return _is_retryable_exception(exc)
+        except Exception:
+            return False
 
     def get_concept_fund_flow(self, period="10日排行"):
         """获取概念/行业资金流向数据"""
@@ -66,8 +125,7 @@ class CapitalFlowAnalyzer:
 
             return result
         except Exception as e:
-            self.logger.error(f"Error getting concept fund flow: {str(e)}")
-            self.logger.error(traceback.format_exc())
+            self._log_upstream_failure("getting concept fund flow", e)
             return {'data': [], 'source': 'degraded', 'reason': str(e)}
 
     def get_individual_fund_flow_rank(self, period="10日"):
@@ -127,8 +185,7 @@ class CapitalFlowAnalyzer:
 
             return result
         except Exception as e:
-            self.logger.error(f"Error getting individual fund flow ranking: {str(e)}")
-            self.logger.error(traceback.format_exc())
+            self._log_upstream_failure("getting individual fund flow ranking", e)
             return {'data': [], 'error': str(e), 'count': 0, 'amount_unit': 'yuan'}
 
     def get_individual_fund_flow(self, stock_code, market_type="", re_date="10日"):
@@ -227,8 +284,7 @@ class CapitalFlowAnalyzer:
 
             return result
         except Exception as e:
-            self.logger.error(f"Error getting individual fund flow: {str(e)}")
-            self.logger.error(traceback.format_exc())
+            self._log_upstream_failure("getting individual fund flow", e)
             return {'data': [], 'source': 'degraded', 'reason': str(e), 'amount_unit': 'yuan'}
 
     def get_sector_stocks(self, sector):

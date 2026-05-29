@@ -14,6 +14,6 @@
 
 - [x] 完成 Comdr 手动前端测试值守日志收尾记录。
 - [x] 停止本地前端 3000 与后端 8888 服务，并释放开发缓存。
-- [ ] 后续治理：资金流 Eastmoney 上游 `ProxyError/RemoteDisconnected` 属预期降级时，不应输出完整 Traceback；需改为受控降级日志与可测试返回。
+- [x] 后续治理：资金流 Eastmoney 上游 `ProxyError/RemoteDisconnected` 属预期降级时，不应输出完整 Traceback；改为受控 WARNING 降级日志与可测试返回（2026-05-29，见 CHANGELOG）。
 - [ ] 后续治理：Recharts 图表容器 `width(-1)/height(-1)` 警告，需定位具体组件并增加隐藏/零尺寸容器保护。
 - [ ] 下次手动测试：继续同步观测前后端日志，重点复核 `/api/ai/chat`、`/api/individual_fund_flow`、`/api/market_indices` 与图表页面切换。

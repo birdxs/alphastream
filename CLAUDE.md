@@ -4,6 +4,39 @@
 
 ---
 
+## P1 资金流上游网络降级日志治理记录（2026-05-29 09:32:08 +08:00）
+
+任务约束：本地开发环境；禁止 push；优先只改现有文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build；仅跑聚焦单测。
+
+时间真实性校验：
+- 本机系统时间：2026-05-29 09:31:58 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头 → `Fri, 29 May 2026 01:32:03 GMT`（+08:00 = 2026-05-29 09:32:03 +08:00）。
+- 时间源 2：`https://github.com` HTTPS Date 头 → `Fri, 29 May 2026 01:32:01 GMT`（+08:00 = 2026-05-29 09:32:01 +08:00）。
+- 时间源 3：`https://www.apple.com` HTTPS Date 头 → `Fri, 29 May 2026 01:32:08 GMT`（+08:00 = 2026-05-29 09:32:08 +08:00）。
+- 最大偏差：10 秒；判定：通过（≤100 秒）。
+
+根因定位：
+- `app/analysis/capital_flow_analyzer.py` 三处对 Eastmoney 个股/板块资金流调用（`ak.stock_fund_flow_concept`、`ak.stock_individual_fund_flow_rank`、`ak.stock_individual_fund_flow`）的外层 `except Exception` 统一走 `self.logger.error(...) + self.logger.error(traceback.format_exc())`，在预期网络降级（ProxyError/RemoteDisconnected/ConnectionError）时仍打印完整 Traceback，污染日志（对应 2026-05-25 15:06 值守日志发现）。
+
+改动文件与行号（修改后）：
+- `app/analysis/capital_flow_analyzer.py`：
+  - 文件头 `Pos` 注释补充“上游网络降级走受控 WARNING 日志”。
+  - 新增 `_log_upstream_failure(self, context, exc)`（约 26-50 行）：网络层异常 → `logger.warning("资金流上游降级: ...")` 不打栈；非网络异常 → 保留 `logger.error` + `traceback.format_exc()`。
+  - 新增 `@staticmethod _is_upstream_network_error(exc)`：以 `isinstance` 覆盖 `requests.exceptions.ConnectionError`（含 `ProxyError` 子类）/`Timeout`/`SSLError`/`ChunkedEncodingError`、`http.client.RemoteDisconnected`、`urllib3` `ProtocolError`/`NewConnectionError` 及内建 `ConnectionError`/`TimeoutError` 等，兜底复用 `network_resilience._is_retryable_exception`。
+  - `get_concept_fund_flow`（约 91-92 行）、`get_individual_fund_flow_rank`（约 152-153 行）、`get_individual_fund_flow`（约 252-253 行）三处外层 except 改调 `self._log_upstream_failure(...)`，返回契约不变。
+- `tests/backend/unit/test_analysis_capital_flow.py`：文件末尾追加第 10 组用例：参数化网络异常受控降级（个股流 4 种异常）、个股排名 ProxyError 降级、板块流 ConnectionError 降级、非网络 ValueError 仍 ERROR；断言不抛异常、降级契约（data/error/count/source/amount_unit）、WARNING 级且无 ERROR/无 Traceback。
+
+特例登记：未创建新文件；测试追加到现有文件，无需新文件特例审批。
+
+验证记录：
+- 前置内存：`vm_stat | head -5` → Pages free 充足；后置 Pages free 27483（≥5000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_analysis_capital_flow.py` → 22 passed, 11 warnings in 0.03s（15 既有 + 新增用例）。
+- 未启服务、未跑全量、未跑 Playwright/vitest/npm build；未 push。
+
+回滚方案：还原 `app/analysis/capital_flow_analyzer.py` 三处 except 为 `logger.error + traceback.format_exc()`，删除 `_log_upstream_failure`/`_is_upstream_network_error` 与文件头注释；删除测试文件末尾本轮追加用例；回退 TODO.md/CHANGELOG.md/CLAUDE.md 对应条目。
+
+---
+
 ## Sprint 3-O/P2 前后端连调稳定性验收记录（2026-05-25 14:48:49 +08:00）
 
 任务约束：本地开发环境；禁止 push；本地 `main` 为最新进展；自行启动前后端并连调；发现问题立即处理；证据落盘；本地 git 提交；优先修改现有文件。

@@ -265,3 +265,92 @@ def test_fund_flow_rank_exception_returns_unified_schema(analyzer):
     assert "count" in result and result["count"] == 0, "count 应为 0"
     assert "amount_unit" in result and result["amount_unit"] == "yuan", "amount_unit 应为 yuan"
     assert "mock api error" in result["error"], "error 应包含原始异常信息"
+
+
+# ---------------------------------------------------------------- 10. 上游网络降级受控日志（P1）
+# P1：Eastmoney 上游 ProxyError/RemoteDisconnected/ConnectionError 在预期降级时
+# 应走 WARNING 级精简日志（不打完整 Traceback），且返回降级契约不抛异常。
+import http.client
+import requests.exceptions as _req_exc
+
+
+@pytest.mark.parametrize("network_exc", [
+    _req_exc.ProxyError("Cannot connect to proxy"),
+    _req_exc.ConnectionError("RemoteDisconnected('Remote end closed connection')"),
+    http.client.RemoteDisconnected("Remote end closed connection without response"),
+    _req_exc.Timeout("Read timed out"),
+])
+def test_individual_fund_flow_network_error_controlled_degradation(analyzer, caplog, network_exc):
+    """个股资金流上游网络异常：不抛异常 + 降级契约 + WARNING 日志（无 Traceback）。"""
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow",
+               side_effect=network_exc):
+        with caplog.at_level("WARNING", logger="app.analysis.capital_flow_analyzer"):
+            result = analyzer.get_individual_fund_flow("600519", market_type="A")
+
+    # 返回契约不变
+    assert isinstance(result, dict)
+    assert result.get("source") == "degraded"
+    assert result.get("amount_unit") == "yuan"
+    assert "data" in result
+
+    # 受控降级：WARNING 级精简消息，无 ERROR、无 Traceback 关键字
+    cf_records = [r for r in caplog.records
+                  if r.name == "app.analysis.capital_flow_analyzer"]
+    assert cf_records, "应至少有一条日志"
+    assert any(r.levelname == "WARNING" and "资金流上游降级" in r.message
+               for r in cf_records), "网络异常应记录受控 WARNING 降级日志"
+    assert not any(r.levelname == "ERROR" for r in cf_records), \
+        "网络层预期降级不应记录 ERROR"
+    assert not any("Traceback" in (r.message or "") for r in cf_records), \
+        "受控降级不应打印完整 Traceback"
+
+
+def test_individual_fund_flow_rank_network_error_controlled_degradation(analyzer, caplog):
+    """个股资金流排名上游 ProxyError：统一契约 + WARNING 降级日志。"""
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow_rank",
+               side_effect=_req_exc.ProxyError("Cannot connect to proxy")):
+        with caplog.at_level("WARNING", logger="app.analysis.capital_flow_analyzer"):
+            result = analyzer.get_individual_fund_flow_rank(period="10日")
+
+    assert isinstance(result, dict)
+    assert result.get("data") == []
+    assert result.get("count") == 0
+    assert result.get("amount_unit") == "yuan"
+    assert isinstance(result.get("error"), str)
+
+    cf_records = [r for r in caplog.records
+                  if r.name == "app.analysis.capital_flow_analyzer"]
+    assert any(r.levelname == "WARNING" and "资金流上游降级" in r.message
+               for r in cf_records)
+    assert not any(r.levelname == "ERROR" for r in cf_records)
+
+
+def test_concept_fund_flow_network_error_controlled_degradation(analyzer, caplog):
+    """板块资金流上游 ConnectionError：降级契约 + WARNING 降级日志。"""
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_concept",
+               side_effect=_req_exc.ConnectionError("RemoteDisconnected")):
+        with caplog.at_level("WARNING", logger="app.analysis.capital_flow_analyzer"):
+            result = analyzer.get_concept_fund_flow(period="10日排行")
+
+    assert isinstance(result, dict)
+    assert result.get("source") == "degraded"
+
+    cf_records = [r for r in caplog.records
+                  if r.name == "app.analysis.capital_flow_analyzer"]
+    assert any(r.levelname == "WARNING" and "资金流上游降级" in r.message
+               for r in cf_records)
+    assert not any(r.levelname == "ERROR" for r in cf_records)
+
+
+def test_non_network_exception_still_logs_error(analyzer, caplog):
+    """非网络类异常（如 ValueError）仍按 ERROR 级输出，便于排查真实 bug。"""
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow",
+               side_effect=ValueError("解析逻辑 bug")):
+        with caplog.at_level("ERROR", logger="app.analysis.capital_flow_analyzer"):
+            result = analyzer.get_individual_fund_flow("600519", market_type="A")
+
+    assert result.get("source") == "degraded"
+    cf_records = [r for r in caplog.records
+                  if r.name == "app.analysis.capital_flow_analyzer"]
+    assert any(r.levelname == "ERROR" for r in cf_records), \
+        "非网络类异常应保留 ERROR 级日志"
