@@ -4,7 +4,8 @@
 
 - [x] P1 离线层底座：`app/core/wind_budget.py`（WindCache + WindQuota S/A/B 硬隔离）、`app/adapters/wind_adapter.py`（WindAdapter MCP HTTP，缓存+配额省积分）、`tests/backend/unit/test_wind_budget.py`（16 mock 单测全绿）、`.env-example` 追加 WIND_* 配置。不接入任何路由/registry/tools。
 - [x] P1.5 加固：失败短时熔断（`WIND_FAIL_COOLDOWN` 默认 300s，进程内表 RLock 保护，冷却窗内不消费额度）、sqlite WAL（WindCache/WindQuota 两引擎）、补 4 单测（并发无超扣/超时降级/AUTH_ERROR 降级/熔断冷却）。pytest 20 passed。
-- [ ] P2 接入与真机验证：将 `WindAdapter` 注册进 `app/adapters/adapter_registry.py`（依赖 `_safe_instantiate` + `health_check`，未配密钥自动摘除）；真机验证 initialize→tools/call 握手连通性与字段映射；按数据域配置 tier。
+- [x] P2a 离线接入降级链：`__init__.py` 导出 WindAdapter；registry 置 `xbrl_financials` 链首（Wind→EDGAR→YFinance→OpenBB），未污染高频行情域；`tools.py get_fundamental_data` 加 Wind 优先源（未配 key 静默回落）。离线零网络，registry 既有测试 104 passed 无回归。
+- [ ] P2b 真机握手验证（待指挥官指令）：配置真实 `WIND_API_KEY` 后验证 initialize→tools/call 连通性、`get_stock_basicinfo`/`get_stock_fundamentals` 字段映射与缓存/配额实际生效。**当前环境 WIND_API_KEY 未配置**，P2b 需先配置密钥。
 - [ ] P2 字段映射细化：`get_stock_basicinfo`/`get_stock_fundamentals` 返回结构与项目 schema 对齐（基本面/财务字段标准化）。
 - [ ] P3 行情与成分股缺口评估：评估 `get_stock_kline` 是否在低频特殊场景启用（当前降级 None 避免烧积分）；成分股缺工具（当前返回 []）寻找替代。
 - [ ] P3 工具层接入：评估在 `app/core/tools.py` 暴露 Wind 取数工具供 Agent Function Calling。

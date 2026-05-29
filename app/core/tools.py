@@ -58,6 +58,18 @@ def get_technical_indicators(stock_code: str, market_type: str = 'A') -> str:
 def get_fundamental_data(stock_code: str) -> str:
     """获取股票基本面数据(PE/PB/ROE/净利润等财务指标)"""
     from app.analysis.fundamental_analyzer import FundamentalAnalyzer
+    # P2a：Wind 优先源——仅当 WindAdapter 启用(已配 WIND_API_KEY)且返回非空时采用；
+    # 未启用/降级返回空时静默回落到原 FundamentalAnalyzer 路径，不改工具签名与返回契约。
+    # 离线环境(无 key)WindAdapter._enabled=False，get_financial_data 直接返回 {}，不触发任何网络调用。
+    try:
+        from app.adapters.wind_adapter import WindAdapter
+        _wind = WindAdapter()
+        if _wind.health_check():  # 仅查 key，不连网
+            _wind_data = _wind.get_financial_data(stock_code)
+            if _wind_data:
+                return str(_wind_data)
+    except Exception:
+        pass  # Wind 任何异常都不影响原路径
     try:
         fa = FundamentalAnalyzer()
         result = fa.get_financial_indicators(stock_code)

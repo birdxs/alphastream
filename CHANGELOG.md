@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-29 12:00:00 +08:00 — Wind P2a 离线接入降级链
+
+- `app/adapters/__init__.py`：导出 `WindAdapter`。
+- `app/adapters/adapter_registry.py`：将 `WindAdapter` 置 `xbrl_financials` 域链首（Wind→EDGAR→YFinance→OpenBB），并加入 module_index 导入；严禁进入高频行情域（a_stock_kline/a_stock_realtime/market_indices）。未配 WIND_API_KEY 时返回空，由 fallback `_is_valid_result` 自动跳过，离线零网络调用。
+- `app/core/tools.py` `get_fundamental_data`：加 Wind 优先源（仅 health_check 为真且返回非空才用，否则静默回落 FundamentalAnalyzer），工具签名/返回契约不变；不动 K线/实时行情工具。
+- 验证（DISABLE_NETWORK=1）：import smoke `ok`；registry 链断言通过（Wind 链首、高频域无 Wind）；`test_wind_budget.py` 20 passed；registry domain 既有测试 104 passed 无回归。WIND_API_KEY 当前未配置。未启服务、未连网、未 push。
+
 ## 2026-05-29 11:40:00 +08:00 — Wind P1.5 加固
 
 - 失败短时熔断（`app/adapters/wind_adapter.py`）：`_call_wind` 新增进程内 `(windcode,tool)→last_fail_ts` 熔断表（RLock 保护，env `WIND_FAIL_COOLDOWN` 默认 300s）。顺序：缓存命中优先返回 → 未命中且在冷却窗内直接降级（不消费额度、不发 HTTP）→ 配额闸门 → HTTP；失败写熔断标记，成功清除。避免对故障标的反复烧额度。

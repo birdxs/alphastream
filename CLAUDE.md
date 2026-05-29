@@ -47,6 +47,14 @@ P1.5 加固追加（2026-05-29，同离线/mock/无服务/未 push 约束，沿�
 - 补 4 个单测（`tests/backend/unit/test_wind_budget.py`）：并发 try_consume（20 线程抢 S 档 7 预算，断言恰好成功 7 次无超扣，验证 RLock 原子性）、`httpx.TimeoutException`→None 且不写缓存、`AUTH_ERROR` 信封→None 且不写缓存、熔断冷却窗内二次调用降级且额度未再消费/无新 HTTP。
 - 验证：import smoke `ok`；`pytest tests/backend/unit/test_wind_budget.py` → **20 passed, 11 warnings in 0.22s**（16→20）。改动前 free pages 15039、后 37392（均 ≥5000）；中途一次采样 6143 接近红线但 ≥5000，谨慎继续。未启服务、未连网、未 push。
 
+P2a 离线接入降级链（2026-05-29，DISABLE_NETWORK=1 全程，0 积分，无服务/未连网/未 push，无新文件）：
+- 范围：把 WindAdapter 接入 registry 与基本面工具，但离线绝不触发真实 Wind 调用。
+- `app/adapters/__init__.py`：新增 `from .wind_adapter import WindAdapter` 并加入 `__all__`（对齐现有导出风格）。
+- `app/adapters/adapter_registry.py`：①DEFAULT_DOMAIN_MAP 中 `xbrl_financials` 链改为 `["WindAdapter", "EDGARAdapter", "YFinanceAdapter", "OpenBBAdapter"]`（Wind 置低频高价值财务域链首），并加注释"严禁进入 a_stock_kline/a_stock_realtime/market_indices 等高频行情域"；②module_index 导入元组追加 `("WindAdapter", "wind_adapter")`；③头部 domain 文档行同步。机制：`_safe_instantiate` 仅构造 `cls()`（不调 health_check），WindAdapter 无 key 时仍被注册，但 `get_financial_data` 返回 `{}`（空），`call_with_fallback` 的 `_is_valid_result` 判空后自动回落 EDGAR→YFinance→OpenBB；离线/无 key 下方法在 `_enabled=False` 立即返回空，永不到达 HTTP。
+- `app/core/tools.py` `get_fundamental_data`（约行 57-80）：在原 `FundamentalAnalyzer` 路径前加 Wind 优先源——`WindAdapter().health_check()`（仅查 key、不连网）为真且 `get_financial_data` 非空才采用，否则静默回落原路径；Wind 任何异常 `pass` 不影响原路径。工具签名/返回契约（str）不变，不动 `get_stock_data`/K线/实时行情工具。
+- `app/adapters/README.md`：wind_adapter 行更新为「P2a 接入」并标注链首位置。
+- 验证（离线）：import smoke `from app.web.web_server import app; from app.adapters.adapter_registry import AdapterRegistry` → `ok`；registry 断言 `xbrl_financials` 链 = `['Wind','sec_edgar','yfinance','openbb']`（Wind 链首）、`a_stock_kline/a_stock_realtime/market_indices` 均无 Wind、WindAdapter 无 key health_check=False、`get_financial_data` 返回 `{}`；`pytest tests/backend/unit/test_wind_budget.py` → 20 passed；`pytest tests/adapters/test_adapter_registry.py test_registry_domains.py test_registry_domains_full_coverage.py` → **104 passed**（无回归）。改动前 free pages 28413/6477、后 10170（均 ≥5000）。`WIND_API_KEY` 当前环境**未配置**（os.getenv → None，len 0）。未启服务、未连真实 Wind API、未 push。
+
 ---
 
 ## P2 Turbopack 冷启动首请求超时配置层缓解记录（2026-05-29 09:55:00 +08:00）

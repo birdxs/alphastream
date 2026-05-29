@@ -29,7 +29,7 @@
 | `corporate_adapter.py` | 产业链工商(P3-D2 2026-04-15) | OpenCorporates v0.4 REST：search_company/details/network(股权+董监高)；api_key 三级(参数>env>匿名)+ 免费层500/月+429退避；交叉源: 国家企业信用公示/EU e-justice [NEW-FILE:#20260415-25] |
 | `jobs_adapter.py` | 招聘信号(P3-D2 2026-04-15) | Arbeitnow 免费 Job Board API 主路径 + 拉勾反爬UA伪装降级；search_jobs 统一入口/get_company_postings 扩张信号；GitHub Jobs 2021已关停剔除 [NEW-FILE:#20260415-26] |
 | `adapter_registry.py` | 注册中心(P2-B4 2026-04-15) | 统一 domain→adapters 映射 + call_with_fallback 自动降级；覆盖11业务域(a_stock_kline/realtime/us/hk/macro_us/cn/global/crypto/news/sentiment_social/xbrl_financials) [NEW-FILE:#20260415-21] |
-| `wind_adapter.py` | 万得付费源(P1 2026-05-29) | Wind MCP over HTTP/JSON-RPC：基本信息(B,7d)/财务(S,30d)；缓存+日配额省积分；行情不走Wind降级None；成分股缺工具返回[]；未配WIND_API_KEY禁用；P1仅底层未注册 [NEW-FILE:#20260529-WIND-02] |
+| `wind_adapter.py` | 万得付费源(P1 2026-05-29 / P2a 接入) | Wind MCP over HTTP/JSON-RPC：基本信息(B,7d)/财务(S,30d)；缓存+日配额省积分+失败熔断；行情不走Wind降级None；成分股缺工具返回[]；未配WIND_API_KEY禁用。P2a 已置 `xbrl_financials` 域链首(Wind→EDGAR→YFinance→OpenBB)，未配 key 时返回空由 fallback 自动跳过；严禁进入高频行情域 [NEW-FILE:#20260529-WIND-02] |
 | `__init__.py` | 导出 | 统一入口 |
 
 ## 约定

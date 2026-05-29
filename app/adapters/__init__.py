@@ -21,6 +21,7 @@ from .shipping_adapter import ShippingAdapter
 from .satellite_adapter import SatelliteAdapter
 from .corporate_adapter import CorporateAdapter
 from .jobs_adapter import JobsAdapter
+from .wind_adapter import WindAdapter
 from .adapter_registry import AdapterRegistry
 
 __all__ = ['BaseAdapter', 'AkshareAdapter', 'BaostockAdapter', 'OpenCLIBridge',
@@ -29,5 +30,5 @@ __all__ = ['BaseAdapter', 'AkshareAdapter', 'BaostockAdapter', 'OpenCLIBridge',
            'RSSNewsAdapter', 'EfinanceAdapter', 'YFinanceAdapter',
            'AshareAdapter', 'EasyquotationAdapter', 'OpenBBAdapter',
            'ESGAdapter', 'ShippingAdapter', 'SatelliteAdapter',
-           'CorporateAdapter', 'JobsAdapter',
+           'CorporateAdapter', 'JobsAdapter', 'WindAdapter',
            'AdapterRegistry']
