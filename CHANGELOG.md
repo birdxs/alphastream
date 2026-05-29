@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-29 14:09:34 +08:00 — Wind P2b→P2d 真机连通修复与交付收尾
+
+- 修复 Wind 数据源在真实网络下的三处连通问题，使其作为后端结构化财务/基本面数据源可用：
+  - SSE 响应解析（commit `8057f0a`）：Wind MCP over HTTP 返回 `text/event-stream`，新增 `_parse_mcp_response` 解析 `data:` 行的 JSON-RPC，修复此前每次真实调用必失败降级空结果的问题。
+  - 业务错误信封降级（commit `a8a741e`）：QUOTA_ERROR/AUTH_ERROR 等业务错误信封识别为失败并降级，不写缓存。
+  - question 入参补全（commit `acdde93`）：按 Wind 官方契约补中文自然语言问句模板（财务/基本档案），修复缺 `question` 必填参导致服务端拒绝；附 2 个离线 mock 单测。
+- 真机验证（今日 Wind 真机共消费 3 积分）：`600036.SH` 拿到真实结构化数据；`tools/list` schema 拉取免费；缓存命中 0 积分；配额扣减生效。
+- 架构结论：保留 WindAdapter 作后端结构化数据源（`xbrl_financials` 链首），Wind 官方 skill 模式（Agent NL 工具层）列为可选 P3 暂缓。
+- 收尾：还原 `.env-example` 中误入的 `WIND_API_KEY=ak_****` 占位值为空（合规，不含敏感样例）。验证（离线）：`test_wind_budget.py` 26 passed、registry 域测试 104 passed 无回归、import smoke ok。未连付费端点、未启服务、未跑 Playwright、未 push。
+
 ## 2026-05-29 12:00:00 +08:00 — Wind P2a 离线接入降级链
 
 - `app/adapters/__init__.py`：导出 `WindAdapter`。

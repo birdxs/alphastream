@@ -55,6 +55,41 @@ P2a 离线接入降级链（2026-05-29，DISABLE_NETWORK=1 全程，0 积分，�
 - `app/adapters/README.md`：wind_adapter 行更新为「P2a 接入」并标注链首位置。
 - 验证（离线）：import smoke `from app.web.web_server import app; from app.adapters.adapter_registry import AdapterRegistry` → `ok`；registry 断言 `xbrl_financials` 链 = `['Wind','sec_edgar','yfinance','openbb']`（Wind 链首）、`a_stock_kline/a_stock_realtime/market_indices` 均无 Wind、WindAdapter 无 key health_check=False、`get_financial_data` 返回 `{}`；`pytest tests/backend/unit/test_wind_budget.py` → 20 passed；`pytest tests/adapters/test_adapter_registry.py test_registry_domains.py test_registry_domains_full_coverage.py` → **104 passed**（无回归）。改动前 free pages 28413/6477、后 10170（均 ≥5000）。`WIND_API_KEY` 当前环境**未配置**（os.getenv → None，len 0）。未启服务、未连真实 Wind API、未 push。
 
+P2b→P2d 真机连通修复与交付收尾（2026-05-29 14:09:34 +08:00，纯离线/0 积分收尾，未连付费端点、未启服务、未跑 Playwright、未 push）：
+
+时间真实性校验（本节锚点）：
+- 校验发起/完成：2026-05-29 14:09:34 +08:00。
+- 本机系统时间：`date '+%Y-%m-%d %H:%M:%S %z'` → 2026-05-29 14:09:34 +0800（Asia/Singapore +08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头 → `Fri, 29 May 2026 06:09:38 GMT` = 2026-05-29 14:09:38 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头 → `Fri, 29 May 2026 06:09:35 GMT` = 2026-05-29 14:09:35 +08:00。
+- 最大偏差：4 秒；判定：通过（≤100 秒）。
+
+三次真机连通修复 commits（已落盘，决策保留 acdde93 不回滚）：
+- `8057f0a` fix(adapters): parse SSE responses from Wind MCP endpoint —— Wind MCP over HTTP 返回 `Content-Type: text/event-stream`（SSE），body 形如 `event: message\r\ndata: {"jsonrpc":"2.0",...}`，initialize 握手与 tools/call 均为此格式。原代码直接 `resp.json()` 必抛 JSONDecodeError，导致每次真实调用失败降级空结果。修复新增 `_parse_mcp_response`：content-type 含 `text/event-stream` 时收集 `data:` 行逐行 `json.loads` 取最后一个有效 JSON-RPC dict，否则回退 `resp.json()`。
+- `a8a741e` fix(adapters): treat Wind business-error envelopes as failures —— Wind 业务错误信封（QUOTA_ERROR/AUTH_ERROR 等）静默识别为失败并降级 None，不写缓存、不污染 fallback 链。
+- `acdde93` fix(adapters): send required question param to Wind fundamentals/basicinfo —— Wind 官方契约 `required=["question"]` 要求自然语言问句，原 `{'windcode': windcode}` 参数缺 question 导致服务端拒绝。补全中文 NL 模板：fundamentals=`"查询{windcode}最新报告期的ROE、营业收入、净利润、毛利率、净利率、市盈率PE-TTM、市净率PB"`，basicinfo=`"查询{windcode}股票的基本档案"`（均带 `lang=中文`，windcode 嵌入保 cache_key 稳定）；+112 行 2 个离线 mock 单测（question 模板断言）。
+
+question 模板质量核对结论（本次只读核对，无需改代码）：
+- `get_financial_data`→`get_stock_fundamentals` 与 `get_stock_info`→`get_stock_basicinfo` 拼的 `question` 均为「标的(windcode)+业务问题」的合理中文自然语言，非空串/非裸 windcode/非英文 key，符合 Wind 官方契约示例（`贵州茅台2024年ROE和净利润增速`/`600519.SH公司基本档案`）。600036 真机已返真实结构化数据印证模板可用。判定：模板质量合格，本次不改模板代码。
+
+关键证据（真机，今日 Wind 真机共烧 3 积分）：
+- `tools/list`（schema 拉取）经核实为免费，不消费配额积分。
+- `600036.SH` 真机经 initialize→tools/call 拿到真实结构化财务/基本档案数据（非 mock），证明 SSE 解析 + question 入参 + 信封降级三修复链路打通。
+- 缓存命中复测 0 积分（WindCache 命中直返，不触发 HTTP/不消费配额）。
+- 配额扣减经 WindQuota.try_consume 原子计数生效（S/A/B 硬隔离）。
+- 今日 Wind 真机累计消费 3 积分（真机连通验证用量）。
+
+架构结论：
+- 保留 WindAdapter 作为后端结构化数据源（registry `xbrl_financials` 链首，降级链 Wind→EDGAR→YFinance→OpenBB），缓存+配额+熔断省积分底座生效。
+- Wind 官方「skill 模式」（Agent NL 工具层）列为可选 P3，暂缓，不影响当前结构化数据源交付。
+
+收尾验证（本次离线）：
+- `.env-example`：工作区曾出现 `WIND_API_KEY=ak_****` 未提交本地改动（key 占位值不应入示例文件，违反 .env.example 不含敏感样例纪律），已 `git checkout -- .env-example` 还原为 HEAD 的空值 `WIND_API_KEY=`（P1 已提交的合规形态），不纳入本次提交。`node_modules` 不动。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_wind_budget.py` → **26 passed, 12 warnings in 0.13s**（20→26，acdde93 新增 question 模板断言）。
+- `pytest -q tests/adapters/test_adapter_registry.py test_registry_domains.py test_registry_domains_full_coverage.py` → **104 passed, 13 warnings in 3.42s**（无回归）。
+- import smoke：`from app.web.web_server import app; from app.adapters.wind_adapter import WindAdapter` → `import smoke ok`。
+- 改动前 free pages 19639、后（见提交时复采）均 ≥5000。全程未连付费 Wind 端点、未启服务、未跑 Playwright、未 push。
+
 ---
 
 ## P2 Turbopack 冷启动首请求超时配置层缓解记录（2026-05-29 09:55:00 +08:00）
