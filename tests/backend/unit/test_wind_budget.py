@@ -395,3 +395,94 @@ def test_adapter_circuit_breaker_cooldown_no_reconsume(tmp_path, monkeypatch):
     assert ad.get_stock_info('600519') == {}
     assert quota.remaining()['B'] == 9  # 额度未再消费
     assert counter['posts'] == posts_after_first  # 无新 HTTP
+
+
+# ─────────────────────── P2c: SSE 响应解析 ───────────────────────
+
+def _sse_resp(jsonrpc_dict, content_type='text/event-stream'):
+    """构造一个 SSE 响应对象：body 为 `event: message\r\ndata: {json}`。"""
+    import json as _json
+
+    class _SseResp:
+        def __init__(self, data, ct):
+            self.headers = {'content-type': ct}
+            self.text = 'event: message\r\ndata: ' + _json.dumps(data, ensure_ascii=False) + '\r\n\r\n'
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            # SSE body 非纯 JSON，模拟真实 httpx 行为：直接 json() 抛错
+            raise ValueError('Expecting value: line 1 column 1 (char 0)')
+
+    return _SseResp(jsonrpc_dict, content_type)
+
+
+def _patch_httpx_sse(monkeypatch, text_payload, counter):
+    """替换 httpx.Client，使 initialize 与 tools/call 均返回 SSE 响应。"""
+    import json as _json
+    import app.adapters.wind_adapter as wa
+
+    init_data = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-03-26"}}
+    call_data = {
+        "jsonrpc": "2.0", "id": 2,
+        "result": {"content": [{"type": "text", "text": _json.dumps(text_payload, ensure_ascii=False)}]},
+    }
+    init_resp = _sse_resp(init_data)
+    call_resp = _sse_resp(call_data)
+
+    def _client_factory(*a, **k):
+        return _FakeClient(init_resp, call_resp, counter)
+
+    monkeypatch.setattr(wa.httpx, 'Client', _client_factory)
+
+
+def test_adapter_sse_response_parsed(tmp_path, monkeypatch):
+    """P2c：Wind MCP 以 text/event-stream（SSE）返回，adapter 应正确解析出内层财务 dict。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_S', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    payload = {'pe_ttm': 20.01, 'pb': 6.11, 'roe': 10.57}
+    _patch_httpx_sse(monkeypatch, payload, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_financial_data('600519')
+
+    # SSE 解析成功 → 拿到非空内层财务 dict
+    assert result == payload
+    assert result  # 非空
+    assert quota.remaining()['S'] == 4  # 消费 1 次
+    assert counter['posts'] == 2  # initialize + tools/call
+
+    # 缓存命中：二次同参不消费额度、不发 HTTP
+    result2 = ad.get_financial_data('600519')
+    assert result2 == result
+    assert quota.remaining()['S'] == 4
+    assert counter['posts'] == 2
+
+
+def test_adapter_plain_json_response_no_regression(tmp_path, monkeypatch):
+    """P2c 回归：非 SSE 的纯 JSON 响应（无 content-type header）仍走 resp.json()，行为不变。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_S', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    payload = {'pe_ttm': 4.89, 'pb': 0.45, 'roe': 2.83}
+    _patch_httpx(monkeypatch, payload, counter)  # 复用原 _Resp（无 headers → fallback json()）
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_financial_data('600519')
+
+    assert result == payload
+    assert result  # 非空
+    assert quota.remaining()['S'] == 4
+    assert counter['posts'] == 2

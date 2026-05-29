@@ -17,7 +17,10 @@ P1 范围说明（不接入任何路由/registry/tools）：
 MCP over HTTP + JSON-RPC 2.0：
 - 端点 https://mcp.wind.com.cn/vserver_{server_type}/mcp/
 - 两步握手：initialize（protocolVersion 2025-03-26，30s）→ tools/call（600s，env WIND_CALL_TIMEOUT）。
-- 响应解析：payload["result"]["content"][0]["text"]，若为 JSON 字符串则二次 json.loads。
+- 传输格式（P2c 真机确认）：Wind MCP 实际以 Content-Type: text/event-stream（SSE）返回，
+  body 形如 `event: message\\r\\ndata: {"jsonrpc":"2.0",...}`。initialize 与 tools/call 两步均为 SSE。
+  故响应统一过 _parse_mcp_response：SSE 时收集 data: 行取最后一条有效 JSON-RPC；否则走 resp.json()。
+- 业务解析：payload["result"]["content"][0]["text"]，若为 JSON 字符串则二次 json.loads。
 """
 import os
 import json
@@ -101,6 +104,44 @@ class WindAdapter(BaseAdapter):
 
     # ============================ 统一取数入口 ============================
 
+    @staticmethod
+    def _parse_mcp_response(resp):
+        """解析 MCP over HTTP 响应为 JSON-RPC dict（P2c）。
+
+        Wind MCP 以 Content-Type: text/event-stream（SSE）返回，body 形如
+        `event: message\\r\\ndata: {"jsonrpc":"2.0",...}`，对 SSE 直接 resp.json()
+        会抛 JSONDecodeError。处理策略：
+          - content-type 含 text/event-stream → 按行收集以 `data:` 开头的载荷，
+            去前缀 strip 后逐条 json.loads，取最后一条可解析的 JSON-RPC dict；
+          - 否则走原 resp.json()。
+        解析失败抛 ValueError（由调用方 _http_call_wind 的 except 统一降级 None）。
+        """
+        content_type = ''
+        try:
+            content_type = (resp.headers.get('content-type', '') or '').lower()
+        except AttributeError:
+            # 测试/兼容场景：响应对象无 headers → 退回 resp.json()
+            content_type = ''
+
+        if 'text/event-stream' in content_type:
+            last = None
+            for line in (resp.text or '').splitlines():
+                if not line.startswith('data:'):
+                    continue
+                chunk = line[len('data:'):].strip()
+                if not chunk:
+                    continue
+                try:
+                    last = json.loads(chunk)
+                except (TypeError, ValueError):
+                    continue
+            if last is None:
+                raise ValueError('SSE 响应无可解析的 data: JSON 载荷')
+            return last
+
+        # 非 SSE：原 JSON 解析路径
+        return resp.json()
+
     def _http_call_wind(self, server_type: str, tool: str, arguments: dict):
         """两步握手 MCP over HTTP；返回解析后的 content 文本（dict/原文）或 None。
 
@@ -128,6 +169,8 @@ class WindAdapter(BaseAdapter):
                 init_resp = client.post(endpoint, headers=headers, json=init_body,
                                         timeout=_WIND_INIT_TIMEOUT)
                 init_resp.raise_for_status()
+                # initialize 同为 SSE：过 _parse_mcp_response 校验握手成功（不取业务数据）
+                self._parse_mcp_response(init_resp)
 
                 # 步骤 2：tools/call
                 call_body = {
@@ -139,7 +182,7 @@ class WindAdapter(BaseAdapter):
                 resp = client.post(endpoint, headers=headers, json=call_body,
                                    timeout=self._call_timeout)
                 resp.raise_for_status()
-                payload = resp.json()
+                payload = self._parse_mcp_response(resp)
         except httpx.TimeoutException as e:
             logger.warning(f"Wind 调用超时 tool={tool}: {type(e).__name__}: {e}")
             return None
