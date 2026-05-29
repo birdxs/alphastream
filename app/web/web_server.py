@@ -1603,9 +1603,19 @@ def _load_stock_name_cache():
 def _get_stock_name_safe(stock_code, market_type='A'):
     """
     安全获取股票名称：
-    1. 优先调用 analyzer.get_stock_info（东方财富，信息最全）
-    2. 失败则降级查全量A股缓存（akshare stock_info_a_code_name）
+    1. 优先调用 analyzer.get_stock_info（东方财富，信息最全，3s 硬超时）
+    2. 失败则降级**只读** A股名称缓存（_STOCK_NAME_CACHE）
     3. 最终降级为股票代码本身
+
+    Input : stock_code 股票代码、market_type 市场类型
+    Output: 股票名称字符串；未命中则返回股票代码本身（兜底不退化为"未知"）
+    Pos   : stock_name 兜底链入口；请求线程关键路径
+
+    [2026-05-29 后台预热] 第 2 步降级路径不再在请求线程同步调用 _load_stock_name_cache()
+        （该函数首发可阻塞至多 STOCK_NAME_CACHE_TIMEOUT_S=15s）。改为只读 _STOCK_NAME_CACHE：
+        缓存命中即返回真名，未命中立即走最终兜底退码。全量加载由启动后台预热线程
+        _preload_stock_names 负责（沿用 _startup_background_enabled 离线/测试门控），
+        后续请求自然命中，请求线程永不被全量加载阻塞。
     """
     # 非A股暂无对应fallback，直接尝试analyzer
     if market_type != 'A':
@@ -1639,8 +1649,7 @@ def _get_stock_name_safe(stock_code, market_type='A'):
     except Exception as e:
         app.logger.warning(f"analyzer.get_stock_info 失败 {stock_code}: {str(e)}")
 
-    # 2. 降级：全量A股缓存
-    _load_stock_name_cache()
+    # 2. 降级：只读全量A股缓存（不在请求线程触发全量加载，由后台预热线程填充）
     with _STOCK_NAME_CACHE_LOCK:
         if stock_code in _STOCK_NAME_CACHE:
             return _STOCK_NAME_CACHE[stock_code]
@@ -1835,9 +1844,10 @@ def api_stock_profile():
     if cached and (now - cached[0] < _PROFILE_TTL):
         return custom_jsonify(cached[1])
 
-    # 名称：直接走预加载缓存，不走analyzer.get_stock_info（该函数在eastmoney阻断时会60s超时）
-    _load_stock_name_cache()
-    name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
+    # 名称：只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞），
+    # 也不走analyzer.get_stock_info（该函数在eastmoney阻断时会60s超时）；未命中退码兜底
+    with _STOCK_NAME_CACHE_LOCK:
+        name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
     # baostock需要 sh./sz. 前缀
     prefix = 'sh.' if stock_code.startswith('6') else 'sz.'
     bs_code = prefix + stock_code
@@ -2075,8 +2085,9 @@ def api_stock_name():
     if not stock_code:
         return custom_jsonify({'error': 'stock_code required'}), 400
     try:
-        _load_stock_name_cache()
-        name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
+        # 只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞）；未命中退码兜底
+        with _STOCK_NAME_CACHE_LOCK:
+            name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
         return custom_jsonify({'stock_code': stock_code, 'stock_name': name})
     except Exception as e:
         app.logger.error(f"获取股票名称出错 {stock_code}: {e}")
@@ -2091,7 +2102,7 @@ def api_stock_name_search():
     if not q:
         return custom_jsonify({'error': 'q required', 'results': []}), 400
     try:
-        _load_stock_name_cache()
+        # 只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞）
         exact = []
         prefix = []
         contains = []
@@ -5400,8 +5411,32 @@ def _register_v1_aliases() -> None:
 _register_v1_aliases()
 
 # 启动时后台预加载A股名称缓存，避免首次请求时名字降级为代码
+# [2026-05-29 后台预热] 由一次性调用改为循环重试预热：首发加载若超时/失败，
+#   _load_stock_name_cache 内部冷却窗会节流；本线程按冷却窗节流轮询直到加载成功即止，
+#   避免常驻烧资源。请求线程已改为只读缓存，全量加载完全交由本后台线程负责。
+def _preload_stock_names():
+    """后台预热线程：循环重试 _load_stock_name_cache() 直到成功，加载成功即退出。
+
+    Input : 无（沿用 _startup_background_enabled 离线/测试门控，DISABLE_NETWORK=1 时不启动）
+    Output: 无返回值；填充 _STOCK_NAME_CACHE，成功后线程自然结束
+    Pos   : 启动期后台预热注册点；接管原请求线程的全量加载职责，使前台永不阻塞
+    """
+    # 首次等少许时间让端口绑定/导入完成（参考 market indices 预热风格）
+    time.sleep(0.5)
+    _cooldown_s = float(os.getenv('STOCK_NAME_CACHE_RETRY_COOLDOWN_S', '60'))
+    while not _CACHE_LOADED:
+        try:
+            _load_stock_name_cache()  # 内部已含超时 + 冷却窗节流 + 成功标记
+        except Exception as e:  # noqa: BLE001 - 后台线程兜底，绝不让异常杀死预热
+            app.logger.warning(f"A股名称缓存后台预热异常: {e}")
+        if _CACHE_LOADED:
+            break
+        # 未加载成功（超时/异常/处于冷却窗）：按冷却窗节流后重试
+        time.sleep(max(1.0, _cooldown_s))
+
+
 if _startup_background_enabled():
-    _preload_thread = threading.Thread(target=_load_stock_name_cache, daemon=True)
+    _preload_thread = threading.Thread(target=_preload_stock_names, daemon=True)
     _preload_thread.start()
 
 # 预热 /api/stock_profile 常用股票，避免首次访问compare/dashboard时等待baostock

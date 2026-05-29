@@ -270,6 +270,102 @@ class TestStockNameRoute:
         assert ws._CACHE_LAST_FAIL_TS != 0.0
         assert ws._STOCK_NAME_CACHE == {}
 
+    def test_request_path_never_calls_full_loader(self, flask_client, monkeypatch):
+        """[2026-05-29 后台预热] 缓存未加载时，/api/stock_name 请求线程绝不调用全量加载函数，
+        且快速返回（<0.5s），退码兜底。全量加载交由后台预热线程。"""
+        from app.web import web_server
+
+        monkeypatch.setattr(web_server, "_CACHE_LOADED", False)
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
+
+        loader_calls = {"n": 0}
+
+        def _spy_loader():
+            loader_calls["n"] += 1
+
+        monkeypatch.setattr(web_server, "_load_stock_name_cache", _spy_loader)
+
+        start = time.perf_counter()
+        resp = flask_client.get(
+            "/api/stock_name?stock_code=600519",
+            headers={"X-API-Key": web_server._get_api_key()},
+        )
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.5
+        assert resp.status_code == 200
+        # 请求线程未触发全量加载
+        assert loader_calls["n"] == 0
+        data = _json(resp)
+        # 未命中时退码兜底（非"未知"）
+        assert data["stock_code"] == "600519"
+        assert data["stock_name"] == "600519"
+
+    def test_get_stock_name_safe_does_not_call_loader_on_request_path(self, monkeypatch):
+        """[2026-05-29 后台预热] _get_stock_name_safe 的降级路径只读缓存，不调用全量加载函数。"""
+        from app.web import web_server
+
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
+
+        loader_calls = {"n": 0}
+        monkeypatch.setattr(
+            web_server, "_load_stock_name_cache",
+            lambda: loader_calls.__setitem__("n", loader_calls["n"] + 1),
+        )
+
+        # analyzer.get_stock_info 失败 → 走只读缓存降级 → 最终退码
+        class _Boom:
+            def get_stock_info(self, *a, **k):
+                raise RuntimeError("eastmoney blocked")
+
+        monkeypatch.setattr(web_server, "get_analyzer", lambda: _Boom())
+
+        name = web_server._get_stock_name_safe("600519", "A")
+        assert name == "600519"  # 退码兜底
+        assert loader_calls["n"] == 0  # 请求线程未触发全量加载
+
+        # 缓存命中时直接返回真名（仍不触发 loader）
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {"600519": "贵州茅台"})
+        name2 = web_server._get_stock_name_safe("600519", "A")
+        assert name2 == "贵州茅台"
+        assert loader_calls["n"] == 0
+
+    def test_preload_stock_names_calls_loader_until_loaded(self, monkeypatch):
+        """[2026-05-29 后台预热] 后台预热线程循环调用 loader，加载成功后停止。"""
+        from app.web import web_server
+
+        monkeypatch.setattr(web_server, "_CACHE_LOADED", False)
+        monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
+        monkeypatch.setenv("STOCK_NAME_CACHE_RETRY_COOLDOWN_S", "0")
+
+        calls = {"n": 0}
+
+        def _fake_loader():
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                # 第二次调用模拟加载成功
+                web_server._CACHE_LOADED = True
+                web_server._STOCK_NAME_CACHE["600519"] = "贵州茅台"
+
+        monkeypatch.setattr(web_server, "_load_stock_name_cache", _fake_loader)
+        # 缩短首次 sleep 与轮询间隔，避免测试拖慢
+        monkeypatch.setattr(web_server.time, "sleep", lambda *_a, **_k: None)
+
+        web_server._preload_stock_names()
+
+        assert web_server._CACHE_LOADED is True
+        assert calls["n"] == 2  # 重试到成功即止
+        assert web_server._STOCK_NAME_CACHE.get("600519") == "贵州茅台"
+
+    def test_preload_disabled_in_offline_mode(self, monkeypatch):
+        """[2026-05-29 后台预热] 离线/测试门控（DISABLE_NETWORK=1）下后台预热线程不启动。"""
+        from app.web import web_server
+
+        monkeypatch.setenv("DISABLE_NETWORK", "1")
+        assert web_server._startup_background_enabled() is False
+        monkeypatch.delenv("DISABLE_NETWORK", raising=False)
+        assert web_server._startup_background_enabled() is True
+
 
 # --------------------------------------------------------------------------- #
 # 3. GET /api/stock_profile
