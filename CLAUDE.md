@@ -41,6 +41,12 @@
 - 改动后内存：`vm_stat | head -5` → Pages free 31349（≥5000）。
 - 全程未启动任何服务、未连真实 Wind API（单测全 mock httpx）、未跑全量 pytest、未跑 Playwright/chromium、未 push。
 
+P1.5 加固追加（2026-05-29，同离线/mock/无服务/未 push 约束，沿用现有文件无新文件）：
+- 失败短时熔断（`app/adapters/wind_adapter.py`）：`__init__` 新增进程内 `self._fail_ts: Dict[(windcode,tool), float]` + `self._fail_lock`(RLock) + `self._fail_cooldown`(env `WIND_FAIL_COOLDOWN` 默认 300s)；新增 `_in_cooldown/_mark_fail/_clear_fail` 三辅助方法。`_call_wind` 顺序改为：①cache.get 命中→返回（熔断不影响缓存命中）②未命中且在冷却窗内→降级 None（不消费额度、不发 HTTP）③try_consume ④HTTP；HTTP 失败→`_mark_fail` 写 last_fail_ts（失败仍不回滚已消费额度），成功→`_clear_fail`。进程重启 dict 清空可接受（注释写明）。引入 `time`/`threading` import。
+- sqlite WAL（`app/core/wind_budget.py` `_build_engine`）：sqlite 方言引擎建立后执行 `PRAGMA journal_mode=WAL`/`synchronous=NORMAL`/`busy_timeout=5000`（对照业务库 S1-C6），PRAGMA 失败 WARNING 降级不阻断；非 sqlite（pgsql）跳过。WindCache 与 WindQuota 两引擎均共用 `_build_engine` 故都生效。
+- 补 4 个单测（`tests/backend/unit/test_wind_budget.py`）：并发 try_consume（20 线程抢 S 档 7 预算，断言恰好成功 7 次无超扣，验证 RLock 原子性）、`httpx.TimeoutException`→None 且不写缓存、`AUTH_ERROR` 信封→None 且不写缓存、熔断冷却窗内二次调用降级且额度未再消费/无新 HTTP。
+- 验证：import smoke `ok`；`pytest tests/backend/unit/test_wind_budget.py` → **20 passed, 11 warnings in 0.22s**（16→20）。改动前 free pages 15039、后 37392（均 ≥5000）；中途一次采样 6143 接近红线但 ≥5000，谨慎继续。未启服务、未连网、未 push。
+
 ---
 
 ## P2 Turbopack 冷启动首请求超时配置层缓解记录（2026-05-29 09:55:00 +08:00）

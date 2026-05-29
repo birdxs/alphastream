@@ -271,3 +271,127 @@ def test_adapter_index_stocks_and_history_degrade(tmp_path, monkeypatch):
     ad = WindAdapter(cache=WindCache(_make_url(tmp_path)), quota=WindQuota(_make_url(tmp_path)))
     assert ad.get_index_stocks('000300.SH') == []
     assert ad.get_stock_history('600519', '2026-01-01', '2026-05-01') is None
+
+
+# ────────────────────── P1.5 加固：并发/超时/鉴权/熔断 ──────────────────────
+
+def test_quota_concurrent_consume_no_overshoot(tmp_path, monkeypatch):
+    """20 线程抢 S 档预算：总成功数不超预算，无超扣（验证 RLock 原子性）。"""
+    import threading as _t
+    monkeypatch.setenv('WIND_QUOTA_S', '7')
+    from app.core.wind_budget import WindQuota
+    q = WindQuota(database_url=_make_url(tmp_path))
+
+    results = []
+    res_lock = _t.Lock()
+    barrier = _t.Barrier(20)
+
+    def worker():
+        barrier.wait()  # 尽量同时起跑，放大竞争
+        ok = q.try_consume('S')
+        with res_lock:
+            results.append(ok)
+
+    threads = [_t.Thread(target=worker) for _ in range(20)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+
+    success = sum(1 for r in results if r)
+    assert success == 7, f"应恰好消费 7 次，实际 {success}"
+    assert results.count(False) == 13
+    assert q.remaining()['S'] == 0
+
+
+def _patch_httpx_raise(monkeypatch, exc, counter):
+    """替换 httpx.Client，使 tools/call（第二次 post）抛指定异常。"""
+    import app.adapters.wind_adapter as wa
+
+    class _RaisingClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, headers=None, json=None, timeout=None):
+            counter['posts'] += 1
+            method = (json or {}).get('method')
+            if method == 'initialize':
+                class _R:
+                    def raise_for_status(self_inner):
+                        return None
+
+                    def json(self_inner):
+                        return {"jsonrpc": "2.0", "id": 1, "result": {}}
+                return _R()
+            raise exc
+
+    monkeypatch.setattr(wa.httpx, 'Client', lambda *a, **k: _RaisingClient())
+
+
+def test_adapter_timeout_returns_none_no_cache(tmp_path, monkeypatch):
+    """httpx.TimeoutException → _call_wind 返回 None 且不写缓存。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_B', '5')
+    import app.adapters.wind_adapter as wa
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    _patch_httpx_raise(monkeypatch, wa.httpx.TimeoutException('timed out'), counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_stock_info('600519')
+    assert result == {}  # 映射降级值
+    assert cache.get('get_stock_basicinfo', '600519.SH', {'windcode': '600519.SH'}) is None
+    assert quota.remaining()['B'] == 4  # 失败仍消耗额度（不回滚）
+
+
+def test_adapter_auth_error_envelope_no_cache(tmp_path, monkeypatch):
+    """AUTH_ERROR 信封 → 返回 None 且不写缓存。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_S', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    _patch_httpx(monkeypatch, {'ok': False, 'error': {'code': 'AUTH_ERROR'}}, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_financial_data('600519')
+    assert result == {}
+    assert cache.get('get_stock_fundamentals', '600519.SH', {'windcode': '600519.SH'}) is None
+    assert quota.remaining()['S'] == 4
+
+
+def test_adapter_circuit_breaker_cooldown_no_reconsume(tmp_path, monkeypatch):
+    """首次失败后冷却窗内二次调用直接降级，且 quota 未再消费、无新 HTTP。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_B', '10')
+    monkeypatch.setenv('WIND_FAIL_COOLDOWN', '300')
+    import app.adapters.wind_adapter as wa
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    _patch_httpx_raise(monkeypatch, wa.httpx.TimeoutException('timed out'), counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+
+    # 首次失败：消耗 1 次额度 + 发 HTTP（initialize + tools/call）
+    assert ad.get_stock_info('600519') == {}
+    posts_after_first = counter['posts']
+    assert quota.remaining()['B'] == 9
+
+    # 冷却窗内二次：直接降级，不消费额度、不发 HTTP
+    assert ad.get_stock_info('600519') == {}
+    assert quota.remaining()['B'] == 9  # 额度未再消费
+    assert counter['posts'] == posts_after_first  # 无新 HTTP

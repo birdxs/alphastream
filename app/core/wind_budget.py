@@ -69,9 +69,22 @@ class WindQuotaRow(_WindBase):
 
 
 def _build_engine(database_url: str):
-    """构造独立引擎；sqlite 需 check_same_thread=False 以便多线程共享连接。"""
+    """构造独立引擎；sqlite 需 check_same_thread=False 以便多线程共享连接。
+
+    P1.5：sqlite 方言开 WAL（对照业务库 S1-C6）——WAL 提升并发读写、
+    synchronous=NORMAL 平衡安全与性能、busy_timeout=5000 缓解多线程锁竞争。
+    非 sqlite（如 pgsql）跳过这些 PRAGMA。WindCache 与 WindQuota 两个引擎都生效。
+    """
     if database_url.startswith('sqlite'):
-        return create_engine(database_url, connect_args={'check_same_thread': False})
+        engine = create_engine(database_url, connect_args={'check_same_thread': False})
+        try:
+            with engine.connect() as conn:
+                conn.exec_driver_sql('PRAGMA journal_mode=WAL')
+                conn.exec_driver_sql('PRAGMA synchronous=NORMAL')
+                conn.exec_driver_sql('PRAGMA busy_timeout=5000')
+        except Exception as e:  # noqa: BLE001 — PRAGMA 失败不应阻断引擎可用
+            logger.warning(f"Wind sqlite PRAGMA 设置失败（降级继续）: {type(e).__name__}: {e}")
+        return engine
     return create_engine(database_url)
 
 

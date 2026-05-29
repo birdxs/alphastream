@@ -21,7 +21,9 @@ MCP over HTTP + JSON-RPC 2.0：
 """
 import os
 import json
+import time
 import logging
+import threading
 from typing import Optional, List, Dict
 
 import pandas as pd
@@ -81,6 +83,12 @@ class WindAdapter(BaseAdapter):
         # 缓存/配额：默认各自独立 sqlite 引擎，可注入（测试用临时库）
         self._cache = cache if cache is not None else WindCache()
         self._quota = quota if quota is not None else WindQuota()
+        # P1.5 失败短时熔断：进程内 {(windcode, tool): last_fail_ts}，RLock 保护。
+        # 冷却窗内对同一 (windcode, tool) 直接降级，不消费额度，避免对故障标的反复烧额度。
+        # 进程重启 dict 清空可接受（熔断仅为短时保护，重启后自然解除）。
+        self._fail_cooldown = float(os.getenv('WIND_FAIL_COOLDOWN', '300'))
+        self._fail_ts: Dict[tuple, float] = {}
+        self._fail_lock = threading.RLock()
         if not self._enabled:
             logger.warning(
                 "WIND_API_KEY 未配置，WindAdapter 已禁用；所有取数返回降级值。"
@@ -180,35 +188,71 @@ class WindAdapter(BaseAdapter):
 
         return parsed
 
+    def _in_cooldown(self, key: tuple) -> bool:
+        """P1.5：判断 (windcode, tool) 是否处于失败冷却窗内。"""
+        with self._fail_lock:
+            ts = self._fail_ts.get(key)
+            if ts is None:
+                return False
+            if time.monotonic() - ts < self._fail_cooldown:
+                return True
+            # 冷却窗已过，清除过期记录
+            self._fail_ts.pop(key, None)
+            return False
+
+    def _mark_fail(self, key: tuple) -> None:
+        with self._fail_lock:
+            self._fail_ts[key] = time.monotonic()
+
+    def _clear_fail(self, key: tuple) -> None:
+        with self._fail_lock:
+            self._fail_ts.pop(key, None)
+
     def _call_wind(self, server_type: str, tool: str, windcode: str,
                    params: dict, tier: str, ttl_seconds: int) -> Optional[dict]:
-        """统一取数：缓存优先 → 配额闸门 → HTTP → 写缓存。
+        """统一取数：缓存优先 → 失败熔断 → 配额闸门 → HTTP → 写缓存。
 
         额度权衡（P1）：HTTP 调用失败不回滚已消费额度——失败已实际消耗 1 次尝试，
         若回滚会导致网络抖动下对同一标的无限重试持续烧额度，故宁可记 WARNING 计入消耗。
+
+        失败短时熔断（P1.5）：缓存命中仍优先返回（0 积分）；缓存未命中时，若该
+        (windcode, tool) 在冷却窗（WIND_FAIL_COOLDOWN，默认 300s）内，直接降级 None，
+        不消费额度、不发 HTTP；HTTP 失败写入 last_fail_ts，成功则清除该键。
         """
         if not self._enabled:
             return None
 
-        # 1) 缓存优先（0 积分）
+        # 1) 缓存优先（0 积分）—— 始终最先，熔断不影响缓存命中
         cached = self._cache.get(tool, windcode, params)
         if cached is not None:
             return cached
 
-        # 2) 配额闸门
+        fail_key = (windcode, tool)
+
+        # 2) 失败熔断：缓存未命中且在冷却窗内 → 降级，不消费额度
+        if self._in_cooldown(fail_key):
+            logger.warning(
+                f"Wind 熔断冷却中降级（不消费额度）tier={tier} tool={tool} windcode={windcode}"
+            )
+            return None
+
+        # 3) 配额闸门
         if not self._quota.try_consume(tier):
             logger.warning(f"Wind 日额度耗尽降级 tier={tier} tool={tool} windcode={windcode}")
             return None
 
-        # 3) HTTP 调用（失败不回滚额度，见 docstring）
+        # 4) HTTP 调用（失败不回滚额度，见 docstring）
         result = self._http_call_wind(server_type, tool, params)
         if result is None:
+            self._mark_fail(fail_key)
             logger.warning(
-                f"Wind 调用失败但已消耗 1 次 {tier} 档额度 tool={tool} windcode={windcode}"
+                f"Wind 调用失败但已消耗 1 次 {tier} 档额度，进入熔断冷却 "
+                f"tool={tool} windcode={windcode}"
             )
             return None
 
-        # 4) 写缓存
+        # 5) 成功：清除熔断标记 + 写缓存
+        self._clear_fail(fail_key)
         self._cache.set(tool, windcode, params, result, ttl_seconds, tier)
         return result
 

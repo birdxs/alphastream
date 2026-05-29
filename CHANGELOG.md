@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-29 11:40:00 +08:00 — Wind P1.5 加固
+
+- 失败短时熔断（`app/adapters/wind_adapter.py`）：`_call_wind` 新增进程内 `(windcode,tool)→last_fail_ts` 熔断表（RLock 保护，env `WIND_FAIL_COOLDOWN` 默认 300s）。顺序：缓存命中优先返回 → 未命中且在冷却窗内直接降级（不消费额度、不发 HTTP）→ 配额闸门 → HTTP；失败写熔断标记，成功清除。避免对故障标的反复烧额度。
+- sqlite WAL（`app/core/wind_budget.py` `_build_engine`）：sqlite 引擎开 `journal_mode=WAL`/`synchronous=NORMAL`/`busy_timeout=5000`（对照业务库 S1-C6），非 sqlite 跳过；WindCache/WindQuota 两引擎均生效。
+- 补 4 个单测（`tests/backend/unit/test_wind_budget.py`）：并发 try_consume 无超扣、httpx 超时降级不写缓存、AUTH_ERROR 信封降级不写缓存、熔断冷却窗内二次降级且额度未再消费。
+- 验证：import smoke `ok`；`pytest tests/backend/unit/test_wind_budget.py` → 20 passed（16→20）；未启服务、未连网、未 push。
+
 ## 2026-05-29 11:21:02 +08:00
 
 - 新增 Wind(万得/aifinmarket) 金融数据源 P1 离线层（仅底座，不接入路由/registry/tools）：
