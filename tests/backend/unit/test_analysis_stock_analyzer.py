@@ -153,10 +153,58 @@ class TestGetStockInfo:
         assert info["股票名称"] == "Foo"
         assert info["行业"] == "Tech"
 
-    def test_get_stock_info_exception_returns_unknown(self, analyzer):
+    def test_get_stock_info_exception_returns_code(self, analyzer):
+        # 异常兜底：名称退回股票代码本身（铁律#1，不用'未知'假值）
         analyzer.data_provider.get_stock_info.side_effect = RuntimeError("net err")
         info = analyzer.get_stock_info("000004")
-        assert info == {"股票名称": "未知", "行业": "未知", "地区": "未知"}
+        assert info == {"股票名称": "000004", "行业": "未知", "地区": "未知"}
+
+    # --- 真实 adapter 键名归一化回归（bug: 解析层只认 name，漏 股票简称/code_name 等） ---
+    def test_get_stock_info_akshare_em_key(self, analyzer):
+        # 东财 stock_individual_info_em: 名称键为 '股票简称'
+        analyzer.data_provider.get_stock_info.return_value = {
+            "股票简称": "平安银行", "行业": "银行"
+        }
+        info = analyzer.get_stock_info("000001")
+        assert info["股票名称"] == "平安银行"
+
+    def test_get_stock_info_baostock_key(self, analyzer):
+        # baostock query_stock_basic: 名称键为 'code_name'
+        analyzer.data_provider.get_stock_info.return_value = {"code_name": "平安银行"}
+        info = analyzer.get_stock_info("000001")
+        assert info["股票名称"] == "平安银行"
+
+    def test_get_stock_info_yfinance_shortname_key(self, analyzer):
+        # yfinance info: 名称键为 'shortName'
+        analyzer.data_provider.get_stock_info.return_value = {"shortName": "Apple Inc."}
+        info = analyzer.get_stock_info("AAPL")
+        assert info["股票名称"] == "Apple Inc."
+
+    def test_get_stock_info_xueqiu_key(self, analyzer):
+        # 雪球: 名称键为 'org_short_name_cn'
+        analyzer.data_provider.get_stock_info.return_value = {"org_short_name_cn": "贵州茅台"}
+        info = analyzer.get_stock_info("600519")
+        assert info["股票名称"] == "贵州茅台"
+
+    def test_get_stock_info_name_priority_over_longname(self, analyzer):
+        # 优先级：股票简称 优先于 longName
+        analyzer.data_provider.get_stock_info.return_value = {
+            "股票简称": "苹果", "longName": "Apple Inc."
+        }
+        info = analyzer.get_stock_info("AAPL")
+        assert info["股票名称"] == "苹果"
+
+    def test_get_stock_info_all_keys_miss_returns_code(self, analyzer):
+        # 候选名称键全 miss → 兜底退回股票代码本身（铁律#1，不用'未知'）
+        analyzer.data_provider.get_stock_info.return_value = {"some_other_field": "x"}
+        info = analyzer.get_stock_info("000999")
+        assert info["股票名称"] == "000999"
+
+    def test_get_stock_info_skips_unknown_literal(self, analyzer):
+        # 名称键值恰为 '未知' 字面量时视为 miss，退回股票代码
+        analyzer.data_provider.get_stock_info.return_value = {"name": "未知"}
+        info = analyzer.get_stock_info("000888")
+        assert info["股票名称"] == "000888"
 
 
 # ============================================================
@@ -370,8 +418,8 @@ class TestQuickAnalyze:
         with patch("app.adapters.market_data_adapter.get_kline", return_value=raw):
             analyzer.data_provider.get_stock_info.side_effect = RuntimeError("info err")
             report = analyzer.quick_analyze_stock("000005", market_type="A")
-        # info 异常被 get_stock_info 内部兜底为 "未知"
-        assert report["stock_name"] in ("未知", "")
+        # info 异常被 get_stock_info 内部兜底为股票代码（铁律#1，不用'未知'）
+        assert report["stock_name"] in ("000005", "")
 
 
 # ============================================================

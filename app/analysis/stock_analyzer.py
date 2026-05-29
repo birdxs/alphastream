@@ -1266,31 +1266,65 @@ class StockAnalyzer:
 
     # ======================== 新增功能 ========================#
 
+    # 各数据源(adapter)返回的"名称"键名各不相同，需按优先级归一化：
+    #   股票名称(已归一) / 股票简称(akshare东财) / code_name(baostock)
+    #   shortName,longName(yfinance) / org_short_name_cn,org_name_cn(雪球) / name(通用)
+    _STOCK_NAME_KEYS = (
+        '股票名称', '股票简称', 'code_name',
+        'shortName', 'longName', 'org_short_name_cn', 'org_name_cn', 'name',
+    )
+    # 各数据源"行业"键名候选
+    _STOCK_INDUSTRY_KEYS = ('行业', 'industry', 'industryName', 'affiliate_industry')
+
+    @staticmethod
+    def _pick_first_value(info_dict, keys):
+        """按优先级从候选键取第一个非空且非'未知'的值；全 miss 返回 None。"""
+        for key in keys:
+            value = info_dict.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text and text != '未知':
+                return text
+        return None
+
     def get_stock_info(self, stock_code):
-        """获取股票基本信息 - 使用DataProvider统一数据层"""
+        """获取股票基本信息 - 使用DataProvider统一数据层
+
+        Input: stock_code 股票代码
+        Output: dict，含归一化的 股票名称/行业/地区 等字段
+        Pos: app/analysis层，解析多数据源(adapter)异构返回键名，统一为中文契约字段
+        说明: 各 adapter 名称键不同(股票简称/code_name/shortName/org_short_name_cn 等)，
+              此处按优先级归一化；候选全 miss 时兜底退回股票代码本身(铁律#1，不用'未知'假值)。
+        """
         cache_key = f"{stock_code}_info"
         if cache_key in self.data_cache:
             return self.data_cache[cache_key]
 
         try:
             # 使用DataProvider获取股票信息（自动故障转移）
-            info_dict = self.data_provider.get_stock_info(stock_code)
+            info_dict = self.data_provider.get_stock_info(stock_code) or {}
 
-            # 确保基本字段存在
-            if '股票名称' not in info_dict:
-                info_dict['股票名称'] = info_dict.get('name', '未知')
-            if '行业' not in info_dict:
-                info_dict['行业'] = info_dict.get('industry', '未知')
+            # 名称：按真实 adapter 键名优先级归一化，全 miss 退回股票代码（不用'未知'假值）
+            resolved_name = self._pick_first_value(info_dict, self._STOCK_NAME_KEYS)
+            info_dict['股票名称'] = resolved_name if resolved_name else str(stock_code)
+
+            # 行业：同样按候选键归一化，全 miss 退回'未知'（行业非金融数值，可保留'未知'）
+            if not (info_dict.get('行业') and str(info_dict.get('行业')).strip() != '未知'):
+                resolved_industry = self._pick_first_value(info_dict, self._STOCK_INDUSTRY_KEYS)
+                info_dict['行业'] = resolved_industry if resolved_industry else '未知'
+
             if '地区' not in info_dict:
                 info_dict['地区'] = "未知"
 
-            self.logger.info(f"获取到股票信息: 名称={info_dict.get('股票名称', '未知')}, 行业={info_dict.get('行业', '未知')}")
+            self.logger.info(f"获取到股票信息: 名称={info_dict.get('股票名称')}, 行业={info_dict.get('行业')}")
 
             self.data_cache[cache_key] = info_dict
             return info_dict
         except Exception as e:
             self.logger.error(f"获取股票信息失败: {str(e)}")
-            return {"股票名称": "未知", "行业": "未知", "地区": "未知"}
+            # 异常兜底：名称退回股票代码本身（铁律#1，避免'未知'误导）
+            return {"股票名称": str(stock_code), "行业": "未知", "地区": "未知"}
 
     def identify_support_resistance(self, df):
         """识别支撑位和压力位"""
