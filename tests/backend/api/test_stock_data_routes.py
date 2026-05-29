@@ -313,21 +313,36 @@ class TestStockNameRoute:
             lambda: loader_calls.__setitem__("n", loader_calls["n"] + 1),
         )
 
-        # analyzer.get_stock_info 失败 → 走只读缓存降级 → 最终退码
-        class _Boom:
+        # _get_stock_name_safe 的 A股主路径用的是模块级全局 analyzer（非 get_analyzer()），
+        # 故必须 patch web_server.analyzer 让注入真正生效。
+        # stub 返回无名结果（无 股票名称/name 字段）→ 主路径不返回 → 走只读缓存降级，
+        # 不抛异常、不产生 analyzer akshare 失败日志噪声。
+        class _NoNameAnalyzer:
             def get_stock_info(self, *a, **k):
-                raise RuntimeError("eastmoney blocked")
+                return {}
 
-        monkeypatch.setattr(web_server, "get_analyzer", lambda: _Boom())
+        monkeypatch.setattr(web_server, "analyzer", _NoNameAnalyzer())
 
+        # 缓存为空 → 只读缓存未命中 → 最终退码兜底
         name = web_server._get_stock_name_safe("600519", "A")
         assert name == "600519"  # 退码兜底
         assert loader_calls["n"] == 0  # 请求线程未触发全量加载
 
-        # 缓存命中时直接返回真名（仍不触发 loader）
+        # 缓存命中时直接返回真名（仍不触发 loader，analyzer 仍无名）
         monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {"600519": "贵州茅台"})
         name2 = web_server._get_stock_name_safe("600519", "A")
         assert name2 == "贵州茅台"
+        assert loader_calls["n"] == 0
+
+        # analyzer 抛错场景：注入真正生效（patch 全局 analyzer），
+        # 异常被内层 except 捕获 → 走只读缓存命中 → 返真名，loader 仍不被调用
+        class _BoomAnalyzer:
+            def get_stock_info(self, *a, **k):
+                raise RuntimeError("eastmoney blocked")
+
+        monkeypatch.setattr(web_server, "analyzer", _BoomAnalyzer())
+        name3 = web_server._get_stock_name_safe("600519", "A")
+        assert name3 == "贵州茅台"
         assert loader_calls["n"] == 0
 
     def test_preload_stock_names_calls_loader_until_loaded(self, monkeypatch):
