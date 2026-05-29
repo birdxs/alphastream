@@ -13,7 +13,30 @@
 
 import { test, expect, Page } from '@playwright/test';
 
-async function verifyStockPageAndAltApi(page: Page, ticker: string, screenshotName: string) {
+// /api/alt_data 响应体的最小契约描述: 仅声明本 spec 实际断言到的字段,
+// 其余字段以可索引签名保留, 避免使用 any 又不约束过窄.
+interface AltApiBody {
+  success?: boolean;
+  details?: unknown;
+  artifact?: {
+    type?: string;
+    stock_name?: string;
+    data?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+// 浏览器内 fetch 的判别联合结果: 成功携带 status+body, 失败携带 error.
+type AltApiResult =
+  | { ok: true; status: number; body: AltApiBody }
+  | { ok: false; error: string };
+
+async function verifyStockPageAndAltApi(
+  page: Page,
+  ticker: string,
+  screenshotName: string,
+): Promise<AltApiResult> {
   const consoleErrors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'error' && !m.text().includes('webpack-hmr')) {
@@ -36,7 +59,7 @@ async function verifyStockPageAndAltApi(page: Page, ticker: string, screenshotNa
 
   // Step4: 浏览器内直连后端 fetch (绕过 Next proxy 的超时/5xx吞掉问题,
   //        因 alt_data 跨域聚合~30-40s, Next dev proxy 会截断为 500)
-  const apiResult = await page.evaluate(async (t) => {
+  const apiResult: AltApiResult = await page.evaluate(async (t): Promise<AltApiResult> => {
     try {
       const r = await fetch(`http://127.0.0.1:8888/api/alt_data/${encodeURIComponent(t)}`);
       const status = r.status;
@@ -44,7 +67,7 @@ async function verifyStockPageAndAltApi(page: Page, ticker: string, screenshotNa
       const sanitized = text.replace(/\bNaN\b/g, 'null').replace(/\b-?Infinity\b/g, 'null');
       const body = JSON.parse(sanitized);
       return { ok: true, status, body };
-    } catch (e: any) {
+    } catch (e: unknown) {
       return { ok: false, error: String(e) };
     }
   }, ticker);
@@ -56,7 +79,7 @@ async function verifyStockPageAndAltApi(page: Page, ticker: string, screenshotNa
   });
 
   // Step6: 断言 API 链路正常
-  expect(apiResult.ok, `浏览器内 fetch /api/alt_data/${ticker} 应成功. err=${(apiResult as any).error}`).toBeTruthy();
+  expect(apiResult.ok, `浏览器内 fetch /api/alt_data/${ticker} 应成功. err=${apiResult.ok ? '' : apiResult.error}`).toBeTruthy();
   if (apiResult.ok) {
     expect(apiResult.status).toBeLessThan(500);
     expect(apiResult.body).toHaveProperty('success');
@@ -75,7 +98,9 @@ async function verifyStockPageAndAltApi(page: Page, ticker: string, screenshotNa
 
 test.describe('P1 AltData 真浏览器 E2E', () => {
   test('A股 600519: 页面渲染 + /api/alt_data 代理链路可通', async ({ page }) => {
-    const r: any = await verifyStockPageAndAltApi(page, '600519', 'p1_600519.png');
+    const r = await verifyStockPageAndAltApi(page, '600519', 'p1_600519.png');
+    expect(r.ok, '浏览器内 fetch 应成功返回 body').toBeTruthy();
+    if (!r.ok) return;
     expect(r.body).toHaveProperty('success');
     // 真实后端: 期望 success=true 且含 artifact
     if (r.body.success) {
@@ -88,7 +113,9 @@ test.describe('P1 AltData 真浏览器 E2E', () => {
   });
 
   test('美股 AAPL: 页面渲染 + alt_data API 返回(ESG/domain)', async ({ page }) => {
-    const r: any = await verifyStockPageAndAltApi(page, 'AAPL', 'p1_aapl.png');
+    const r = await verifyStockPageAndAltApi(page, 'AAPL', 'p1_aapl.png');
+    expect(r.ok, '浏览器内 fetch 应成功返回 body').toBeTruthy();
+    if (!r.ok) return;
     expect(r.body).toHaveProperty('success');
     if (r.body.success && r.body.artifact?.data) {
       const dataKeys = Object.keys(r.body.artifact.data);

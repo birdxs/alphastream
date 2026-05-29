@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-29 09:50:00 +08:00
+
+- 治理 `frontend/tests/e2e/p1_alt_data_real.spec.ts` 中既有的 4 个 `@typescript-eslint/no-explicit-any` 告警（行 47/59/78/91），零 `eslint-disable`、不改断言逻辑与覆盖范围。
+- 新增局部类型 `AltApiBody`（`/api/alt_data` 响应体最小契约 + 可索引签名）与判别联合 `AltApiResult`（`{ ok: true; status; body }` | `{ ok: false; error }`）。
+- `catch (e: any)` → `catch (e: unknown)`；`page.evaluate` 回调标注返回 `Promise<AltApiResult>`；`(apiResult as any).error` → 判别联合收窄后的 `apiResult.ok ? '' : apiResult.error`。
+- 两个 test 块的 `const r: any` → 由返回值推断 `AltApiResult`，新增 `if (!r.ok) return;` 守卫使 TS 自动收窄到成功态后访问 `r.body`，类型安全且失败时仍中止测试。
+- 验证：`tsc --noEmit` 退出 0 零错误；`eslint` 目标文件退出 0、0 error 0 warning。
+
 ## 2026-05-29 09:43:00 +08:00
 
 - 治理前端 Recharts `The width(-1) and height(-1) of chart should be greater than 0` 警告：新增统一封装 `frontend/src/components/charts/safe-responsive-container.tsx`，用 `ResizeObserver` 实测容器渲染宽高，仅在宽高均 >0 时挂载 Recharts `ResponsiveContainer`，容器被隐藏（`display:none`）、切换或布局未完成（实测尺寸 ≤0）时渲染 `Skeleton` 占位，待尺寸有效后再渲染图表。

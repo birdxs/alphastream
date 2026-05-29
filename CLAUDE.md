@@ -4,6 +4,41 @@
 
 ---
 
+## P2 e2e spec no-explicit-any 治理记录（2026-05-29 09:50:00 +08:00）
+
+任务约束：本地开发环境；禁止 push；优先只改现有文件、最小变更；禁用 `eslint-disable`；不改测试断言逻辑与覆盖范围；不启服务、不跑全量 vitest、不跑 Playwright/chromium；验证仅用本地 tsc + eslint；改动前后 `vm_stat` 监控，free pages <5000 立即停手。
+
+时间真实性校验：
+- 校验发起/完成：2026-05-29 09:49:34 +08:00。
+- 本机系统时间：2026-05-29 09:49:34 +0800，按 Asia/Singapore +08:00 记录。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头，返回 `Fri, 29 May 2026 01:49:38 GMT`，折算 2026-05-29 09:49:38 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头，返回 `Fri, 29 May 2026 01:49:42 GMT`，折算 2026-05-29 09:49:42 +08:00。
+- 时间源 3：`https://www.apple.com` HTTPS Date 头，返回 `Fri, 29 May 2026 01:49:44 GMT`，折算 2026-05-29 09:49:44 +08:00。
+- 最大偏差：10 秒；判定：通过（≤100 秒）。
+
+检索证据：
+- `npx eslint tests/e2e/p1_alt_data_real.spec.ts`（frontend 目录）确认 4 处 `@typescript-eslint/no-explicit-any`：行 47:17 `catch (e: any)`、行 59:85 `(apiResult as any).error`、行 78:14 / 91:14 `const r: any`（测试体已被读取确认 r 后续访问 `r.body`/`r.body.artifact?.data`）。
+- 该文件为合法 Playwright E2E 测试，验证 A 股 600519 与美股 AAPL 的页面渲染及 `/api/alt_data` 代理链路；非恶意代码。
+
+改动摘要（仅 `frontend/tests/e2e/p1_alt_data_real.spec.ts`）：
+- 新增局部类型 `AltApiBody`（声明本 spec 实际断言到的 `success`/`details`/`artifact.{type,stock_name,data}` 字段 + 可索引签名 `[key: string]: unknown`，避免 any 又不过窄）与判别联合 `AltApiResult = { ok: true; status; body } | { ok: false; error }`。
+- 行 47 `catch (e: any)` → `catch (e: unknown)`（`String(e)` 对 unknown 安全）。
+- `verifyStockPageAndAltApi` 返回类型显式标注 `Promise<AltApiResult>`；`page.evaluate` 回调标注 `Promise<AltApiResult>`（类型注解编译期擦除，不影响浏览器序列化）。
+- 行 59 `(apiResult as any).error` → `apiResult.ok ? '' : apiResult.error`（判别联合收窄后类型安全）。
+- 行 78/91 `const r: any` → `const r`（推断为 `AltApiResult`），各新增一行 `expect(r.ok, ...).toBeTruthy(); if (!r.ok) return;` 守卫使 TS 收窄到成功态后访问 `r.body`；失败态本就应使测试失败，断言覆盖范围不变。
+
+验证记录：
+- 改动前 eslint：4 errors（47/59/78/91 no-explicit-any）。
+- `node node_modules/typescript/bin/tsc --noEmit`（frontend 目录）→ 退出码 0，零类型错误。
+- `npx eslint tests/e2e/p1_alt_data_real.spec.ts`（frontend 目录）→ 退出码 0，0 error 0 warning。
+- `vm_stat`：起始 free pages 4352（后回升），eslint/tsc 后 26098/26884，全程未启服务、未跑全量 vitest、未跑 Playwright。
+
+特例登记：未创建新文件；无需新文件特例审批。
+
+回滚方案：还原 `frontend/tests/e2e/p1_alt_data_real.spec.ts`——删除 `AltApiBody`/`AltApiResult` 类型，恢复 `catch (e: any)`、`(apiResult as any).error`、`const r: any` 与移除两处 `if (!r.ok) return;` 守卫；删除本节及 CHANGELOG/TODO 对应条目。不涉及运行时与数据迁移。
+
+---
+
 ## P1 前端 Recharts width(-1)/height(-1) 警告治理记录（2026-05-29 09:43:00 +08:00）
 
 任务约束：本地开发环境；禁止 push；优先只改现有文件、最小变更；不启服务（`next dev`/`npm run dev`/`npm run build`）、不跑全量 vitest、不跑 Playwright/chromium；验证仅用本地 tsc + eslint；改动前后 `vm_stat` 监控，free pages <5000 立即停手。
