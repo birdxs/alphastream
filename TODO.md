@@ -1,5 +1,16 @@
 # TODO
 
+## 2026-05-29 17:39:14 +08:00 — 股票名称显示修复轮（analyzer 真实键名 + 可重试缓存 + 后台预热）
+
+- [x] `5fb8734` analyzer 真实键名归一化：`stock_analyzer.get_stock_info` 解析层按 8 候选键（股票名称/股票简称/code_name/shortName/longName/org_short_name_cn/org_name_cn/name）优先级取名，"未知"视为无效，全 miss 兜底退股票代码（合规铁律 #1）；+7 正向单测，改 2 旧 bug 断言。
+- [x] `1f71c10` 可重试 A 股名称缓存 + 雪球结构守卫：超时 5s→15s；失败改记 `_CACHE_LAST_FAIL_TS` + 冷却窗 `STOCK_NAME_CACHE_RETRY_COOLDOWN_S`(60s) 可重试，仅成功才永久标记已加载，双重检查锁定防风暴；雪球路径补 df 非空+首行 dict 守卫（行为不变）；+5 离线单测。
+- [x] `94e8c5f` 名称加载移后台预热：前台 4 处请求路径只读缓存不阻塞（去掉最多 15s 同步等待），未命中退股票代码；新增 `_preload_stock_names` 后台线程（`_startup_background_enabled()` 门控，`DISABLE_NETWORK=1` 不启，失败 sleep 节流、成功即退、异常不杀线程）；+4 单测。
+- [x] `b1fad03` 修测试瑕疵：name-safe 测试改 patch 全局 `analyzer`（原 patch `get_analyzer` 为死代码），注入真正生效；class 耗时 6.58s→0.62s。
+- [x] 复核与回归：4 commit 各经独立 fresh-eyes 复核通过；`TestStockNameRoute` 10 passed、`TestAkshareXueqiuSchemaGuard` 3 passed、`test_analysis_stock_analyzer.py` 59 passed。
+- [ ] 4 个 commit 均未 push，待 Comdr 测试后决定是否 push。
+- [ ] 联调剩余项待 Comdr 本地或高配环境补完：前端代理、美股链路、openapi、首页。
+- [ ] backlog 备注：issue #35 本轮已解可关闭；#33/#30 非代码项；PR #37 暂忽略。
+
 ## 2026-05-29 11:21:02 +08:00 — Wind(万得) 数据源集成
 
 - [x] P1 离线层底座：`app/core/wind_budget.py`（WindCache + WindQuota S/A/B 硬隔离）、`app/adapters/wind_adapter.py`（WindAdapter MCP HTTP，缓存+配额省积分）、`tests/backend/unit/test_wind_budget.py`（16 mock 单测全绿）、`.env-example` 追加 WIND_* 配置。不接入任何路由/registry/tools。

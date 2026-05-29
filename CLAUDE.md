@@ -4,6 +4,55 @@
 
 ---
 
+## 股票名称显示修复轮交付记录（analyzer 真实键名 + 可重试缓存 + 后台预热，2026-05-29 17:39:14 +08:00）
+
+任务约束：本地开发环境；禁止 push；不启动任何服务；本轮纯文档（不跑测试）；优先改现有文件。本轮 4 个代码 commit 已先期落地并经独立 fresh-eyes 复核通过，本节为文档同步记录。
+
+时间真实性校验（本节锚点）：
+- 校验发起/完成：2026-05-29 17:39:10 +08:00 ~ 2026-05-29 17:39:14 +08:00。
+- 本机系统时间：`date '+%Y-%m-%d %H:%M:%S %z'` → 2026-05-29 17:39:10 +0800（Asia/Singapore +08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头 → `Fri, 29 May 2026 09:39:14 GMT` = 2026-05-29 17:39:14 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头 → `Fri, 29 May 2026 09:39:10 GMT` = 2026-05-29 17:39:10 +08:00。
+- 最大偏差：4 秒；判定：通过（≤100 秒）。
+
+联调取证（催生本轮修复）：2026-05-29 真机联调日志实证股票名称三重上游降级——A 股名称缓存 5s 超时、雪球 `KeyError: 'data'`、baostock 超时——名称即便上游成功也被 default 成"未知"。market_indices 真实行情无假值（铁律 #1 守住）。
+
+四个代码 commit（均已落盘、未 push、各经独立 fresh-eyes 复核通过）：
+
+- `5fb8734` fix(analyzer): resolve stock name from real adapter keys to fix "未知" display
+  - 根因：`app/analysis/stock_analyzer.py` `get_stock_info` 解析层只用 `.get('name','未知')` 兜底名称，但真实 adapter 都不返 `name`/`股票名称`——东财返 `股票简称`、baostock 返 `code_name`、yfinance 返 `shortName`/`longName`、雪球返 `org_short_name_cn`/`org_name_cn`，导致即便上游成功名称也被 default 成"未知"；旧单测直接 mock `{"股票名称":...}` 绕过真实键名才全绿，掩盖了 bug。
+  - 修复：解析层按 8 个候选键优先级归一化名称（股票名称→股票简称→code_name→shortName→longName→org_short_name_cn→org_name_cn→name），"未知"字面量视为无效继续取；全 miss/异常兜底由"未知"改退股票代码本身（合规铁律 #1，不造假值）。+7 正向回归单测，改 2 个旧断言（原断言锁死的是旧 bug 行为）。
+
+- `1f71c10` fix(resilience): retryable A-share name cache + xueqiu schema guard
+  - A 股名称缓存（`app/web/web_server.py` `_load_stock_name_cache`）：超时 `STOCK_NAME_CACHE_TIMEOUT_S` 5s→15s；失败不再永久标记 `_CACHE_LOADED`，改记 `_CACHE_LAST_FAIL_TS`（单调时钟）+ 冷却窗 `STOCK_NAME_CACHE_RETRY_COOLDOWN_S`（default 60s）可重试，仅成功填充才置永久已加载；双重检查锁定防重试风暴、请求线程不长阻塞、`_STOCK_NAME_CACHE_LOCK` 线程安全。
+  - 雪球守卫（`app/adapters/akshare_adapter.py` `get_stock_info` 雪球路径）：查明 `KeyError: 'data'` 本就被现有 except 兜住降级成 `{}` 未冒泡，仅补显式结构守卫（df 非空 + 首行为 dict 才返回）做防御纵深，行为/契约不变。
+  - +5 离线单测（冷却窗节流/窗后重试/KeyError 受控降级/空 DF/正常路径）。
+
+- `94e8c5f` perf(name-cache): move A-share name loading to background prewarm, never block request thread
+  - 前台 4 处请求路径（`_get_stock_name_safe` ~1653 / `api_stock_profile` ~1849 / `/api/stock_name` ~2089 / `/api/stock_name_search` ~2109）去掉对 `_load_stock_name_cache` 的同步调用（原最多等 15s），改为只读 `_STOCK_NAME_CACHE`（锁内），未命中即退股票代码。
+  - 新增后台预热线程 `_preload_stock_names`（注册点约 5420-5422，`_startup_background_enabled()` 门控，`DISABLE_NETWORK=1` 不启）：循环调 loader，失败按冷却窗 sleep 节流（不空转），加载成功即 break 退出（不常驻），异常兜底不杀线程。
+  - +4 单测（请求路径 loader 计数=0 且 <0.5s 不阻塞 / analyzer 失败只读缓存 / 预热重试到成功即止 / 离线门控不启）。
+
+- `b1fad03` test(name-cache): fix analyzer mock target in name-safe tests
+  - 修测试瑕疵：原误 patch `web_server.get_analyzer`，但 `_get_stock_name_safe` 用模块全局 `analyzer`，注入是死代码；改为 patch 全局 `analyzer`（stub 返回 `{}` / 抛错），使注入真正生效；akshare 日志噪声归零，class 耗时 6.58s→0.62s。
+
+复核与测试证据（先期由各代码 commit 的执行/复核 worker 落实，本节文档轮不再重跑）：
+- 独立 fresh-eyes 逐项复核通过：键名覆盖 / 边界 / 冷却窗防风暴 / 前台不阻塞 / 后台线程 sleep 节流不空转且成功退出 / 门控 / 线程安全 / 单测真覆盖。
+- `tests/backend/api/test_stock_data_routes.py::TestStockNameRoute` → 10 passed。
+- `tests/backend/unit/test_market_adapters.py::TestAkshareXueqiuSchemaGuard` → 3 passed。
+- `tests/backend/unit/test_analysis_stock_analyzer.py` → 59 passed。
+
+本节文档轮验证记录：
+- 改动前内存：`vm_stat | head -5` → Pages free 一度 3751/3787（<5000，按红线停手取证；`memory_pressure -Q` 系统空闲 33% 无真实压力），等待回升后复采 → 32135（≥5000，方开始改动）。
+- 本轮仅追加/编辑 `CLAUDE.md`、`TODO.md`、`CHANGELOG.md` 三文档；未启服务、未连网取数、未跑测试、未跑 Playwright、未 push。
+- 改动后内存：见本节提交时复采（≥5000）。
+
+回滚方案：
+- 代码层（如 Comdr 测试后决定不保留）：`git revert` 或回退 `b1fad03`/`94e8c5f`/`1f71c10`/`5fb8734` 四 commit（按逆序）。
+- 文档层：删除本节、TODO.md 与 CHANGELOG.md 对应本轮条目，以及本轮文档 commit。不涉及数据迁移与运行时状态。
+
+---
+
 ## 🚨 错题集 / 永久记忆：WeChat MCP 投递通道 + "未实证就下死结论"误判（2026-05-29 14:30:45 +08:00）
 
 背景：协调者（Panda Code orchestrator）会话误判"WeChat 无法投递消息"，宣布"彻底定论、只能走终端"。Comdr 贴出另一新会话实例（worker 成功调用 reply 工具投递）后，协调者派 worker 实测，25 秒打通。
