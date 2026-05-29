@@ -23,12 +23,9 @@ const nextConfig: NextConfig = {
           // B23: 强制 IPv4，避免 localhost→::1 IPv6 TCP timeout（17s 延迟根因）
           destination: 'http://127.0.0.1:8888/api/:path*',
         },
-        // FIX-E4: /health 探针也要代理到后端，否则前端永远 404 → 错误显示"后端不可达"
-        {
-          source: '/health',
-          // B23: 同上，强制 IPv4
-          destination: 'http://127.0.0.1:8888/health',
-        },
+        // P2: /health 探针改由 src/app/health/route.ts Route Handler 代理。
+        // 原 rewrite 是 runtime lazy-eval，首次请求触发 Turbopack JIT 编译偶发超时；
+        // Route Handler 在 dev server 启动时即编译，消除冷启动首请求延迟（同 market_indices）。
       ];
     }
     return [];
@@ -45,12 +42,7 @@ const nextConfig: NextConfig = {
             { key: 'Connection', value: 'keep-alive' },
           ],
         },
-        {
-          source: '/health',
-          headers: [
-            { key: 'Connection', value: 'keep-alive' },
-          ],
-        },
+        // P2: /health 的 keep-alive 头由 src/app/health/route.ts Route Handler 自行设置。
       ];
     }
     return [];

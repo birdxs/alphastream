@@ -42,6 +42,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           避免 Playwright headless 首次 fetch 的 17s 延迟 */}
       <head>
         <link rel="prefetch" href="/api/market_indices" as="fetch" crossOrigin="anonymous" />
+        {/* P2: 预热 /health Route Handler，让浏览器在 NetworkStatus 探针发起前完成后端冷启动连接 */}
+        <link rel="prefetch" href="/health" as="fetch" crossOrigin="anonymous" />
       </head>
       <body className={`${inter.className} antialiased`}>
         <a

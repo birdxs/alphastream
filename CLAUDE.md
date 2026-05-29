@@ -4,6 +4,61 @@
 
 ---
 
+## P2 Turbopack 冷启动首请求超时配置层缓解记录（2026-05-29 09:55:00 +08:00）
+
+任务约束：本地开发环境；禁止 push；只做只读根因分析 + 配置/文档层缓解，最小变更，优先改现有文件；**禁止启动 `npm run dev`/`next dev`/`npm run build`/任何服务（资源铁律 #3）**；不通过实际启动服务验证；改动只用本地 tsc + eslint 验证；`vm_stat` 监控 free pages <5000 立即停手。
+
+时间真实性校验：
+- 校验发起/完成：2026-05-29 09:49:37 +08:00。
+- 本机系统时间：`date` → 2026-05-29 09:49:37 +0800（Asia/Singapore +08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头 → `Fri, 29 May 2026 01:49:40 GMT` = 2026-05-29 09:49:40 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头 → `Fri, 29 May 2026 01:49:42 GMT` = 2026-05-29 09:49:42 +08:00。
+- 时间源 3：`https://www.apple.com` HTTPS Date 头 → `Fri, 29 May 2026 01:49:45 GMT` = 2026-05-29 09:49:45 +08:00。
+- 最大偏差：8 秒；判定：通过（≤100 秒）。
+- 备注：本节后续记录使用本锚点。
+
+根因分析（只读定位）：
+- 现象（CLAUDE.md 2026-05-25 14:48:49 与 15:10:37 记录）：dev 模式 Turbopack 冷启动时 `/` 与 `/health` 首次请求偶发超时，热身后即通过。
+- `/health` 路径：原由 `frontend/next.config.ts` `rewrites()`（旧第 26-31 行 `source:'/health' → http://127.0.0.1:8888/health`）代理。Next.js 16 dev 模式下 rewrites 为 **runtime lazy-eval**，首次命中才触发 Turbopack JIT 编译该代理模块，叠加后端冷启动连接，构成首请求偶发超时。这与既有 `frontend/src/app/api/market_indices/route.ts` 头注释（B23）记录的 17s JIT 延迟根因同源。
+- `/` 根路径：根 `page.tsx`（Client Component 含 `MarketOverview` 等）在 dev 模式按 on-demand entries **首次访问才编译**（`onDemandEntries.maxInactiveAge` 默认 25s，超时后从内存回收，下次再编译）。这是 Next.js dev 固有行为，无法仅靠 config 在不启服务前提下消除或验证。
+- Turbopack FS 缓存：`turbopackFileSystemCacheForDev` 自 Next.js v16.1.0 起默认启用（当前 16.2.6 已默认开启），可跨 dev session 复用编译产物。但 2026-05-25 15:10:37 收尾记录显式清理了 `frontend/.next`，会销毁该缓存 → 下次启动必付一次冷编译代价。
+- Route Handler 编译时机：Turbopack 在 dev server **启动时即编译所有 Route Handler**（非 lazy），因此把 `/health` 从 rewrite 改为 Route Handler 可消除其首请求 JIT 延迟（已被 `market_indices` 验证的成熟方案）。
+
+证据清单（权威来源）：
+- Next.js `rewrites` 官方文档，版本 16.2.6（本地 `node_modules/next` 同版本在线页），链接 `https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites`，检索时间 2026-05-29 09:52:00 +08:00；采纳：rewrites 在 dev 为运行时求值，首次请求触发编译。
+- Next.js `turbopackFileSystemCache` 官方文档，链接 `https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopackFileSystemCache`，检索时间 2026-05-29 09:52:00 +08:00；采纳：`turbopackFileSystemCacheForDev` 自 v16.1.0 默认启用，跨 session 复用 dev 编译缓存。
+- 本地 Next.js 文档 `frontend/node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/onDemandEntries.md`，检索时间 2026-05-29 09:51:00 +08:00；采纳：dev 按需保留/回收已编译页面，`maxInactiveAge` 默认 25s、`pagesBufferLength` 默认 2。
+- 本地 Next.js 文档 `frontend/node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/turbopackFileSystemCache.md`，检索时间 2026-05-29 09:51:00 +08:00；采纳：dev FS 缓存默认开启的版本依据。
+- 本地实现 `frontend/src/app/api/market_indices/route.ts` 头注释（B23），检索时间 2026-05-29 09:50:00 +08:00；采纳：Route Handler 启动即编译、rewrite runtime lazy-eval 的同源结论与既验证方案。
+- 本机版本核对：`node -e "require('next/package.json').version"` → 16.2.6，检索时间 2026-05-29 09:50:30 +08:00。
+
+改动摘要（最小变更，零运行时新依赖）：
+- 新增 `frontend/src/app/health/route.ts`：`GET` Route Handler，等价代理后端 `127.0.0.1:8888/health`（`NEXT_PUBLIC_API_URL` 优先，强制 IPv4 兜底），透传上游状态/Content-Type，显式 `Connection: keep-alive`、`Cache-Control: no-cache`，传播 `req.signal`。镜像 `api/market_indices/route.ts`。
+- `frontend/next.config.ts`：移除 `rewrites()` 中 `/health` 条目（现由 Route Handler 接管，route 文件对该路径优先于 rewrite）与 `headers()` 中 `/health` keep-alive 条目；保留 `/api/:path*` 代理与其 keep-alive 头不变；保留注释说明。
+- `frontend/src/app/layout.tsx`：`<head>` 新增 `<link rel="prefetch" href="/health" as="fetch" crossOrigin="anonymous" />`，在 NetworkStatus 探针发起前预热路由与后端连接。
+
+特例登记（附录 C）：
+- 触发原因：Next.js App Router 的 Route Handler 必须以 `src/app/<path>/route.ts` 文件约定存在，无法在现有文件内实现 `/health` 的启动期编译代理。
+- 无法仅改现有文件论证：rewrite 改 Route Handler 是消除首请求 JIT 延迟的唯一受支持方式（官方约定 + 既有 market_indices 验证），不存在可复用的现有 `/health` route 文件。
+- 证据清单：见本节"证据清单"（≥3 权威来源）；既有 `api/market_indices/route.ts` 为同模式先例。
+- 新文件信息：`frontend/src/app/health/route.ts`，纯代理，无新依赖，影响面仅同源 `/health` 路径；与原 rewrite 行为等价。
+- 回滚方案：删除 `frontend/src/app/health/route.ts`；还原 `next.config.ts` 的 `/health` rewrite 与 headers 条目；移除 `layout.tsx` 的 `/health` prefetch。无数据迁移。
+- Commit 标签：本轮含新建文件，提交信息带 `[NEW-FILE:#20260529-01]`。
+
+验证记录：
+- 改动前内存：`vm_stat | head -5` → Pages free 由 4887 回升至 6059（≥5000 后才开始改动）。
+- `cd frontend && node node_modules/typescript/bin/tsc --noEmit` → `tsc_exit=0`（零错误）。
+- `cd frontend && npx eslint src/app/health/route.ts src/app/layout.tsx next.config.ts` → `eslint_exit=0`，0 error 0 warning（无输出）。
+- 全程未启动 `next dev`/`npm run dev`/`npm run build`/任何服务；未跑 Playwright/chromium/全量 vitest。
+- 验证后内存：`vm_stat | head -5` → Pages free 30033（≥5000）。
+
+处置建议：
+- `/health` 首请求超时：本轮配置层改动（Route Handler + prefetch）属低风险、已被 market_indices 同模式验证，建议**接受为修复**，待下次真机启动联调时复测确认（首请求耗时应从偶发超时降至 ~30ms 量级，对齐 market_indices）。
+- `/` 根页面首请求慢：属 Next.js dev on-demand 编译固有行为，**降级为文档说明**；如需进一步缓解可考虑保留 `.next`/Turbopack FS 缓存不清理（避免每次冷编译）、或调大 `onDemandEntries.maxInactiveAge`，但收益需真机验证，本轮不擅自改动。
+- 后续真机验证项：启动前后端后，curl/浏览器复测 `/health` 与 `/` 首请求耗时，确认 Route Handler 在 dev 启动即编译且 prefetch 生效。
+
+---
+
 ## P2 e2e spec no-explicit-any 治理记录（2026-05-29 09:50:00 +08:00）
 
 任务约束：本地开发环境；禁止 push；优先只改现有文件、最小变更；禁用 `eslint-disable`；不改测试断言逻辑与覆盖范围；不启服务、不跑全量 vitest、不跑 Playwright/chromium；验证仅用本地 tsc + eslint；改动前后 `vm_stat` 监控，free pages <5000 立即停手。

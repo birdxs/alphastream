@@ -8,7 +8,7 @@
 - [x] 治理离线测试环境导入期后台线程，消除 pytest 结束期 closed stream logging error。
 - [x] 修复前端 hydration mismatch，并将 market indices 离线降级改为安静处理。
 - [x] 后续治理：`npm run lint` 中既有 `frontend/tests/e2e/p1_alt_data_real.spec.ts` 4 个 `no-explicit-any`（2026-05-29，见 CHANGELOG，已用判别联合类型 `AltApiResult` + `AltApiBody` 替换，零 `eslint-disable`）。
-- [ ] 后续治理：开发模式首次 Turbopack 冷启动偶发首页/health 超时，热身后已复测通过。
+- [x] 后续治理：开发模式首次 Turbopack 冷启动偶发首页/health 超时（2026-05-29，见 CHANGELOG）。配置层缓解：`/health` 改由 `src/app/health/route.ts` Route Handler 代理（dev 启动即编译，替代 runtime lazy-eval 的 rewrite），并在 `layout.tsx` 补 `/health` prefetch 预热。`/` 根页面在 dev 模式仍按 on-demand 首次编译，属 Next.js dev 固有行为，需后续真机启动复测确认收益。
 
 ## 2026-05-25 15:10:37 +08:00
 

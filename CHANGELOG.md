@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-29 09:55:00 +08:00
+
+- 配置层缓解开发模式 Turbopack 冷启动首次 `/health` 请求偶发超时：新增 `frontend/src/app/health/route.ts` Route Handler，等价代理后端 `127.0.0.1:8888/health`（强制 IPv4，设 `Connection: keep-alive`/`Cache-Control: no-cache`），镜像既有 `api/market_indices/route.ts` 方案。
+- 根因：Next.js 16 dev 模式下 `next.config.ts` 的 `rewrites()` 为 runtime lazy-eval，首次请求触发 Turbopack JIT 编译（偶发超时）；而 Route Handler 在 dev server 启动时即编译，消除该路径冷启动首请求延迟。
+- `frontend/next.config.ts`：移除现已由 Route Handler 接管的 `/health` rewrite 与对应 `headers()` 条目（`/api/:path*` 代理与 keep-alive 头不变）。
+- `frontend/src/app/layout.tsx`：新增 `<link rel="prefetch" href="/health" as="fetch" />`，在 NetworkStatus 探针发起前预热该路由。
+- 说明：`/` 根页面在 dev 模式仍按 on-demand 首次编译，属 Next.js dev 固有行为，无法在不启服务前提下安全验证收益；本轮仅做零运行时风险的配置层改动，`tsc --noEmit` 退出 0、`eslint` 目标文件退出 0（0 error 0 warning），未启动任何服务。
+
 ## 2026-05-29 09:50:00 +08:00
 
 - 治理 `frontend/tests/e2e/p1_alt_data_real.spec.ts` 中既有的 4 个 `@typescript-eslint/no-explicit-any` 告警（行 47/59/78/91），零 `eslint-disable`、不改断言逻辑与覆盖范围。
