@@ -231,6 +231,20 @@ class WindAdapter(BaseAdapter):
 
         return parsed
 
+    @staticmethod
+    def _is_business_error(payload) -> bool:
+        """P2d：判断内层业务 dict 是否为失败信封（不应缓存、应降级）。
+
+        Wind 工具层可能返回 200 + SSE，但内层业务 payload 形如
+        {'data': None, 'error': {'code':'invalid_param_name', ...}}。
+        这类响应不是协议层 error（JSON-RPC error）也不是 ok:False 信封，
+        若按成功缓存会污染缓存且使 registry 误判有效、不触发回落。
+        判失败：dict 且含 truthy error 字段（error 为 None/空视为无错误）。
+        """
+        if not isinstance(payload, dict):
+            return False
+        return bool(payload.get('error'))
+
     def _in_cooldown(self, key: tuple) -> bool:
         """P1.5：判断 (windcode, tool) 是否处于失败冷却窗内。"""
         with self._fail_lock:
@@ -294,7 +308,19 @@ class WindAdapter(BaseAdapter):
             )
             return None
 
-        # 5) 成功：清除熔断标记 + 写缓存
+        # 5) 业务层失败信封（P2d）：内层 dict 含 truthy error，例如缺失必填参数。
+        #    视为失败：不写缓存（避免污染）、返回 None（registry 判无效自动回落）、
+        #    进熔断冷却（param 错误是持久错误，冷却避免反复烧额度）。
+        #    已消费额度不回滚（沿用 P1 权衡，HTTP 已实际发出）。
+        if self._is_business_error(result):
+            self._mark_fail(fail_key)
+            logger.warning(
+                f"Wind 业务失败信封，不缓存并进入熔断冷却 "
+                f"tool={tool} windcode={windcode} error={result.get('error')}"
+            )
+            return None
+
+        # 6) 成功：清除熔断标记 + 写缓存
         self._clear_fail(fail_key)
         self._cache.set(tool, windcode, params, result, ttl_seconds, tier)
         return result

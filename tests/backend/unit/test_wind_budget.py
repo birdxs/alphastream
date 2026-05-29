@@ -486,3 +486,51 @@ def test_adapter_plain_json_response_no_regression(tmp_path, monkeypatch):
     assert result  # 非空
     assert quota.remaining()['S'] == 4
     assert counter['posts'] == 2
+
+
+# ─────────────────────── P2d: 业务失败信封不缓存 + 降级 ───────────────────────
+
+def test_adapter_business_error_envelope_not_cached(tmp_path, monkeypatch):
+    """P2d：内层业务 payload 为 {'data':None,'error':{...}} 时视为失败：
+    返回 {}（空 → registry 判无效回落）、不写缓存、配额仍被消费（不回滚）。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_S', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    err_envelope = {'data': None, 'error': {'code': 'invalid_param_name',
+                                            'message': '缺少必填参数: question'}}
+    _patch_httpx_sse(monkeypatch, err_envelope, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    windcode = '000001.SZ'
+    result = ad.get_financial_data('000001')
+
+    # 1) 降级为空 dict（registry 判无效自动回落）
+    assert result == {}
+    # 2) 缓存未写入（污染防护）
+    assert cache.get('get_stock_fundamentals', windcode, {'windcode': windcode}) is None
+    # 3) 配额仍被消费一次（HTTP 已实际发出，不回滚）
+    assert quota.remaining()['S'] == 4
+    assert counter['posts'] == 2  # initialize + tools/call
+
+    # 4) 持久 param 错误 → 进熔断冷却：二次调用不再消费额度、不发 HTTP
+    result2 = ad.get_financial_data('000001')
+    assert result2 == {}
+    assert quota.remaining()['S'] == 4  # 未再扣
+    assert counter['posts'] == 2  # 无新 HTTP
+
+
+def test_is_business_error_classification():
+    """P2d：_is_business_error 边界——失败信封识别为 True，正常数据为 False。"""
+    from app.adapters.wind_adapter import WindAdapter
+    f = WindAdapter._is_business_error
+    assert f({'data': None, 'error': {'code': 'x'}}) is True   # data=None+error
+    assert f({'data': [1, 2], 'error': {'code': 'x'}}) is True  # truthy error
+    assert f({'data': None, 'error': None}) is False            # error 为 None → 无错误
+    assert f({'data': [1, 2], 'error': None}) is False          # 正常成功
+    assert f({'pe_ttm': 20.0, 'pb': 6.1}) is False              # 普通财务 dict
+    assert f([1, 2, 3]) is False                                # 非 dict
