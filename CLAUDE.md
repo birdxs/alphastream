@@ -4,6 +4,45 @@
 
 ---
 
+## Wind(万得) 数据源集成 P1 离线层交付记录（2026-05-29 11:21:02 +08:00）
+
+任务约束：本地开发环境；禁止 push；禁止启动任何服务（run.py/flask/next dev/build/Playwright/chromium）；P1 不连真实 Wind API、单测全 mock HTTP；pytest 只跑本任务新增文件；改动前后 `vm_stat` 监控，free pages <5000 立即停手；优先最小变更，新建文件带审批标签。P1 范围：仅建底层，不接入任何路由/registry/tools/__init__。
+
+时间真实性校验：
+- 校验发起/完成：2026-05-29 11:21:02 +08:00。
+- 本机系统时间：`date '+%Y-%m-%d %H:%M:%S %z'` → 2026-05-29 11:21:02 +0800（Asia/Singapore +08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头 → `Fri, 29 May 2026 03:21:06 GMT` = 2026-05-29 11:21:06 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头 → `Fri, 29 May 2026 03:21:06 GMT` = 2026-05-29 11:21:06 +08:00。
+- 时间源 3：`https://www.apple.com` HTTPS Date 头 → `Fri, 29 May 2026 03:21:15 GMT` = 2026-05-29 11:21:15 +08:00。
+- 最大偏差：13 秒；判定：通过（≤100 秒）。
+
+改动摘要（2 核心新文件 + 1 测试新文件 + 1 配置 + 2 README）：
+- 新增 `app/core/wind_budget.py` [NEW-FILE:#20260529-WIND-01]：
+  - `WindCache`（持久化缓存）：独立引擎 `WIND_DATABASE_URL`（默认 `sqlite:///data/wind_cache.db`，sqlite 加 `check_same_thread=False`），SQLAlchemy 写法对齐 `app/core/database.py`（`declarative_base`/`create_engine`/`sessionmaker`，2.0.23 下 `sqlalchemy.ext.declarative.declarative_base` 仍兼容）。表 `wind_cache`(id/cache_key 唯一索引/tool/windcode/params_json/payload_json/tier/fetched_at/expires_at)。`cache_key=sha256(tool|windcode|sorted(params))`，payload 不入 key。`get` 命中且 `expires_at>now` 才返回解析 payload；`set` upsert。`threading.RLock` 保护，session 用完即关，时间 +08:00 感知。
+  - `WindQuota`（日配额闸门）：表 `wind_quota`(day PK +08:00 自然日/used_s/used_a/used_b)。预算 env `WIND_QUOTA_S=50`/`A=30`/`B=20`。`try_consume(tier)` 原子读改写：当日已用<预算则 +1 持久化返回 True 否则 False；S/A/B 硬隔离（低档不可借高档）；day 变更按新 day 计数。`remaining()` 返回各档剩余。RLock 保护。
+- 新增 `app/adapters/wind_adapter.py` [NEW-FILE:#20260529-WIND-02]：
+  - `WindAdapter(BaseAdapter)`，httpx 直连 MCP over HTTP/JSON-RPC 2.0。端点 `https://mcp.wind.com.cn/vserver_{server_type}/mcp/`，两步握手 `initialize`(protocolVersion 2025-03-26，30s)→`tools/call`(env `WIND_CALL_TIMEOUT` 默认 600s)，Headers Bearer/Content-Type/Accept(含 event-stream)。响应取 `result.content[0].text`，JSON 串二次 `json.loads`。
+  - 统一入口 `_call_wind`：①WindCache.get 命中(0积分)直返 ②未命中→WindQuota.try_consume，False→WARNING 降级 None ③HTTP 调用成功→WindCache.set；失败→返回 None。权衡：调用失败不回滚已消费额度（已实际消耗 1 次尝试，回滚会导致网络抖动下无限重试烧额度），注释已写明。
+  - 6 方法：`name`→"Wind"；`health_check`→仅查 `WIND_API_KEY`（不连网不烧积分，真实连通性留 P2）；`get_stock_info`(B 档,7d)→`get_stock_basicinfo`；`get_financial_data`(S 档,30d)→`get_stock_fundamentals`；`get_index_stocks`→[]（Wind 无成分股工具，缺口注释）；`get_stock_history`→None（行情不走 Wind 避免烧积分，注释标注不应注册高频行情域，P3 评估）。`_to_windcode`：6xxxxx→.SH、0/3xxxxx→.SZ、已含 . 原样。构造未配密钥 `self._enabled=False`，取数全降级。QUOTA_ERROR/AUTH_ERROR 信封静默降级 None。
+- 新增 `tests/backend/unit/test_wind_budget.py` [NEW-FILE:#20260529-WIND-03]：16 个全 mock 单测，临时 sqlite（tmp_path）不污染 data/，monkeypatch 替换 `httpx.Client` 返回构造 MCP 信封。
+- 改 `.env-example`（实际文件名为连字符 `.env-example`，非任务描述的 `.env.example`；按实际存在文件追加，未新建）：追加 `WIND_API_KEY=`/`WIND_DATABASE_URL`/`WIND_QUOTA_S|A|B`/`WIND_CALL_TIMEOUT`，无真实密钥值。
+- 同步 `app/adapters/README.md`、`app/core/README.md` 领地标记。
+
+特例登记（附录 C 四项佐证）：
+- 触发原因：Wind 为全新付费数据源，项目无任何 Wind 相关缓存/配额/适配器实现；BaseAdapter 约定每个数据源为独立 `*_adapter.py` 文件，省积分底座（缓存+配额）需独立模块被适配器 import。
+- 无法仅改现有文件论证：缓存/配额逻辑职责独立且需独立 sqlite 引擎（不能复用业务库 database.py，避免触碰休眠 USE_DATABASE 开关）；适配器须继承 BaseAdapter 单独成文件；测试须新文件覆盖（unit 目录无可追加的 Wind 测试）。三者无现有文件可承载。
+- 证据清单：`app/core/database.py`（SQLAlchemy 写法范式）、`app/adapters/base_adapter.py`（6 方法契约）、`app/core/ai_client.py`（httpx 用法）、`app/adapters/fred_adapter.py`（adapter 降级范例）、本机 `sqlalchemy 2.0.23`/`httpx 0.28.1` 版本核对。
+- 最小化方案+回滚+TTL：白名单 e 项（全新模块）+ b 项（最小单测）。回滚：删除 `app/core/wind_budget.py`、`app/adapters/wind_adapter.py`、`tests/backend/unit/test_wind_budget.py`；还原 `.env-example`/两 README/本记录/TODO/CHANGELOG 对应条目；删除运行期生成的 `data/wind_cache.db`（若有）。无数据迁移、无运行时副作用（未注册 registry，import 不触发网络/服务）。非临时补丁，无 TTL。
+
+验证记录：
+- 改动前内存：`vm_stat | head -5` → Pages free 33128 / 22842（两次采样，均 ≥5000）。
+- import smoke：`AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 python3 -c "from app.core.wind_budget import WindCache, WindQuota; from app.adapters.wind_adapter import WindAdapter; print('ok')"` → 输出 `ok`（伴随既有 openbb/pydantic Deprecation 与 Ashare 未装降级 warning，均为预存在）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_wind_budget.py` → **16 passed, 11 warnings in 0.21s**。
+- 改动后内存：`vm_stat | head -5` → Pages free 31349（≥5000）。
+- 全程未启动任何服务、未连真实 Wind API（单测全 mock httpx）、未跑全量 pytest、未跑 Playwright/chromium、未 push。
+
+---
+
 ## P2 Turbopack 冷启动首请求超时配置层缓解记录（2026-05-29 09:55:00 +08:00）
 
 任务约束：本地开发环境；禁止 push；只做只读根因分析 + 配置/文档层缓解，最小变更，优先改现有文件；**禁止启动 `npm run dev`/`next dev`/`npm run build`/任何服务（资源铁律 #3）**；不通过实际启动服务验证；改动只用本地 tsc + eslint 验证；`vm_stat` 监控 free pages <5000 立即停手。

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-05-29 11:21:02 +08:00
+
+- 新增 Wind(万得/aifinmarket) 金融数据源 P1 离线层（仅底座，不接入路由/registry/tools）：
+  - `app/core/wind_budget.py` [NEW-FILE:#20260529-WIND-01]：`WindCache`（持久化缓存，sha256 cache_key，TTL 过期判定）+ `WindQuota`（日配额闸门 S/A/B 三档硬隔离，按 +08:00 自然日重置，落 sqlite 跨重启不丢）。独立引擎 `WIND_DATABASE_URL`（默认 `sqlite:///data/wind_cache.db`），与业务库 `USE_DATABASE` 完全隔离。
+  - `app/adapters/wind_adapter.py` [NEW-FILE:#20260529-WIND-02]：`WindAdapter(BaseAdapter)`，MCP over HTTP/JSON-RPC 2.0 两步握手（initialize→tools/call）。统一入口 `_call_wind`：缓存优先(0积分)→配额闸门→HTTP→写缓存。`health_check` 仅查 `WIND_API_KEY`（不连网不烧积分）；基本信息(B,7d)/财务(S,30d)；行情不走 Wind 降级 None；成分股无工具返回 []；QUOTA/AUTH 错误静默降级 None。
+  - `tests/backend/unit/test_wind_budget.py` [NEW-FILE:#20260529-WIND-03]：16 个全 mock 单测（缓存命中/过期/参数 key、配额内/超额/硬隔离/跨日、adapter 缓存命中不复消费额度、QUOTA_ERROR 降级、未配密钥禁用、`_to_windcode` 分支）。
+  - `.env-example`：追加 `WIND_API_KEY`/`WIND_DATABASE_URL`/`WIND_QUOTA_S|A|B`/`WIND_CALL_TIMEOUT`（无真实密钥值）。
+  - 验证：import smoke `ok`；`pytest tests/backend/unit/test_wind_budget.py` → 16 passed；全程未启服务、未连网、未 push。
+
 ## 2026-05-29 09:55:00 +08:00
 
 - 配置层缓解开发模式 Turbopack 冷启动首次 `/health` 请求偶发超时：新增 `frontend/src/app/health/route.ts` Route Handler，等价代理后端 `127.0.0.1:8888/health`（强制 IPv4，设 `Connection: keep-alive`/`Cache-Control: no-cache`），镜像既有 `api/market_indices/route.ts` 方案。
