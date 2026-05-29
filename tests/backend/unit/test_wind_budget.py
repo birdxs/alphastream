@@ -534,3 +534,115 @@ def test_is_business_error_classification():
     assert f({'data': [1, 2], 'error': None}) is False          # 正常成功
     assert f({'pe_ttm': 20.0, 'pb': 6.1}) is False              # 普通财务 dict
     assert f([1, 2, 3]) is False                                # 非 dict
+
+
+# ─────────────────────── P2d-B: question 入参构造 + 成功解析 ───────────────────────
+
+class _CapturingClient:
+    """记录 tools/call 的 arguments，用于断言入参构造正确。"""
+
+    def __init__(self, init_resp, call_resp, counter, captured):
+        self._init = init_resp
+        self._call = call_resp
+        self._counter = counter
+        self._captured = captured
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def post(self, url, headers=None, json=None, timeout=None):
+        self._counter['posts'] += 1
+        method = (json or {}).get('method')
+        if method == 'initialize':
+            return self._init
+        # 记录 tools/call 的 name + arguments
+        params = (json or {}).get('params', {})
+        self._captured['name'] = params.get('name')
+        self._captured['arguments'] = params.get('arguments')
+        return self._call
+
+
+def _patch_httpx_capturing(monkeypatch, text_payload, counter, captured):
+    import json as _json
+    import app.adapters.wind_adapter as wa
+    init_data = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-03-26"}}
+    call_data = {
+        "jsonrpc": "2.0", "id": 2,
+        "result": {"content": [{"type": "text", "text": _json.dumps(text_payload, ensure_ascii=False)}]},
+    }
+    init_resp = _sse_resp(init_data)
+    call_resp = _sse_resp(call_data)
+
+    def _factory(*a, **k):
+        return _CapturingClient(init_resp, call_resp, counter, captured)
+
+    monkeypatch.setattr(wa.httpx, 'Client', _factory)
+
+
+def test_fundamentals_params_include_required_question(tmp_path, monkeypatch):
+    """P2d-B：get_financial_data 按 schema 传 required 参数 question（嵌入 windcode）+ lang，
+    成功 SSE 响应解析出非空财务 data 并写缓存。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_S', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    captured = {}
+    payload = {'data': {'ROE': 10.57, '营业收入': 1.2e11, '净利润': 3.4e10}, 'error': None}
+    _patch_httpx_capturing(monkeypatch, payload, counter, captured)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_financial_data('600519')
+
+    # 入参断言：tool 名 + 必填 question 含 windcode + lang
+    assert captured['name'] == 'get_stock_fundamentals'
+    args = captured['arguments']
+    assert 'question' in args and args['question']            # required 参数已传
+    assert '600519.SH' in args['question']                    # 嵌入 windcode → cache_key 稳定
+    assert args.get('lang') == '中文'
+
+    # 成功解析：非空、error 为 None、data 非空 → 写缓存
+    assert result == payload
+    assert result.get('error') is None
+    assert result.get('data')
+    assert quota.remaining()['S'] == 4
+    assert cache.get('get_stock_fundamentals', '600519.SH', args) == payload
+
+    # 缓存命中：二次同参不消费额度、不发 HTTP
+    posts_after = counter['posts']
+    r2 = ad.get_financial_data('600519')
+    assert r2 == result
+    assert quota.remaining()['S'] == 4
+    assert counter['posts'] == posts_after
+
+
+def test_basicinfo_params_include_required_question(tmp_path, monkeypatch):
+    """P2d-B：get_stock_info 同样按 schema 传 required question + lang。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_B', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    captured = {}
+    payload = {'data': {'name': '招商银行', 'industry': '银行'}, 'error': None}
+    _patch_httpx_capturing(monkeypatch, payload, counter, captured)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_stock_info('600036')
+
+    assert captured['name'] == 'get_stock_basicinfo'
+    args = captured['arguments']
+    assert 'question' in args and args['question']
+    assert '600036.SH' in args['question']
+    assert args.get('lang') == '中文'
+    assert result == payload
+    assert quota.remaining()['B'] == 4

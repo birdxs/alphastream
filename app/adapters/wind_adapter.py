@@ -21,6 +21,10 @@ MCP over HTTP + JSON-RPC 2.0：
   body 形如 `event: message\\r\\ndata: {"jsonrpc":"2.0",...}`。initialize 与 tools/call 两步均为 SSE。
   故响应统一过 _parse_mcp_response：SSE 时收集 data: 行取最后一条有效 JSON-RPC；否则走 resp.json()。
 - 业务解析：payload["result"]["content"][0]["text"]，若为 JSON 字符串则二次 json.loads。
+- 入参（P2d-B 真机 tools/list 确认）：get_stock_fundamentals / get_stock_basicinfo 的
+  inputSchema 仅 required=["question"]（自然语言查询，无结构化 windcode/indicators 参数），
+  另有可选 lang（enum English/中文）。故按确定性模板构造 question（嵌入 windcode 保证
+  cache_key 稳定、不随机），见 _FUNDAMENTALS_Q_TMPL / _BASICINFO_Q_TMPL / _WIND_LANG。
 """
 import os
 import json
@@ -49,6 +53,18 @@ _TTL_30D = 30 * 24 * 3600
 # 视为「配额/鉴权」类错误码（静默降级，不抛穿透）
 _QUOTA_ERROR_CODES = {'QUOTA_ERROR', 'QPS_LIMIT', 'BALANCE_INSUFFICIENT', 'RATE_LIMITED'}
 _AUTH_ERROR_CODES = {'AUTH_ERROR', 'UNAUTHORIZED', 'INVALID_API_KEY'}
+
+# P2d-B：Wind get_stock_fundamentals / get_stock_basicinfo 的真实 inputSchema 仅
+# required=["question"]（自然语言查询），无结构化 windcode/indicators 参数。
+# 故按 schema 用确定性 question 模板传参（嵌入 windcode 保证 cache_key 稳定，不随机）。
+# 语言固定中文（schema enum: English/中文，default 中文）。
+_WIND_LANG = "中文"
+# 财务：覆盖核心盈利/规模/估值指标（ROE/营收/净利润/毛利率/净利率/PE/PB）。
+_FUNDAMENTALS_Q_TMPL = (
+    "查询{windcode}最新报告期的ROE、营业收入、净利润、毛利率、净利率、市盈率PE-TTM、市净率PB"
+)
+# 基本档案：标准档案查询。
+_BASICINFO_Q_TMPL = "查询{windcode}股票的基本档案"
 
 
 def _to_windcode(code: str) -> str:
@@ -337,18 +353,26 @@ class WindAdapter(BaseAdapter):
     def get_stock_info(self, code: str) -> Dict:
         """股票基本信息（B 档，TTL 7 天）。未启用/降级时返回 {}。"""
         windcode = _to_windcode(code)
+        params = {
+            'question': _BASICINFO_Q_TMPL.format(windcode=windcode),
+            'lang': _WIND_LANG,
+        }
         result = self._call_wind(
             'stock_data', 'get_stock_basicinfo', windcode,
-            {'windcode': windcode}, tier='B', ttl_seconds=_TTL_7D,
+            params, tier='B', ttl_seconds=_TTL_7D,
         )
         return result if isinstance(result, dict) else {}
 
     def get_financial_data(self, code: str) -> Dict:
         """财务数据（S 档，TTL 30 天）。未启用/降级时返回 {}。"""
         windcode = _to_windcode(code)
+        params = {
+            'question': _FUNDAMENTALS_Q_TMPL.format(windcode=windcode),
+            'lang': _WIND_LANG,
+        }
         result = self._call_wind(
             'stock_data', 'get_stock_fundamentals', windcode,
-            {'windcode': windcode}, tier='S', ttl_seconds=_TTL_30D,
+            params, tier='S', ttl_seconds=_TTL_30D,
         )
         return result if isinstance(result, dict) else {}
 
