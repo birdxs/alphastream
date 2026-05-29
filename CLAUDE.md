@@ -4,6 +4,30 @@
 
 ---
 
+## 🚨 错题集 / 永久记忆：WeChat MCP 投递通道 + "未实证就下死结论"误判（2026-05-29 14:30:45 +08:00）
+
+背景：协调者（Panda Code orchestrator）会话误判"WeChat 无法投递消息"，宣布"彻底定论、只能走终端"。Comdr 贴出另一新会话实例（worker 成功调用 reply 工具投递）后，协调者派 worker 实测，25 秒打通。
+
+【正确投递通道（已实证）】
+- 协调者 persona 工具集是硬编码三件套（Agent / SendMessage / TaskStop），不挂载 MCP 工具；协调者自己调 reply 返回 "No such tool available"——此点为真。
+- 但 worker（subagent_type=worker，Tools: *）能加载 MCP transport 并成功调用 `mcp__plugin_wechat_wechat__reply`，实测返回 `sent 1 chunk(s)`，投递成功。
+- 固定投递方式：协调者派一个 worker 调用 `mcp__plugin_wechat_wechat__reply`，参数 user_id="o9cq800HPQWNG1uSMOTbzux7HTmw@im.wechat"，context_token 可省略（服务端使用该用户最近缓存的 token）。
+
+【误判根因（主责在协调者推理，非纯文档问题）】
+1. 客观诱因：wechat 的 MCP server instructions 含错误断言——"Sub-agents spawned via the Task tool cannot call MCP tools directly — they have no MCP transport handle"。该断言在本环境不成立（worker 实测可调）。
+2. 主责（协调者）：把"我自己调不了"+"文档说子 agent 调不了"两个事实，外推成"整条链路都死了，只能走终端"，且未做最低成本实证（派 1 个 worker 实测仅需约 25 秒）就宣布"彻底定论""不再试了"。违反 Comdr 纪律：禁止虚构/想当然，先校验后定论。
+
+【纠正机制（强制）】
+- 任何"某能力不可用/不可能"的结论，必须先实证（派 worker 实测）再下定论；禁止仅凭文档断言 + 单点失败就外推为全链路不可用。
+- WeChat 汇报固定走：协调者 → 派 worker → 调 `mcp__plugin_wechat_wechat__reply`。
+- 备注：wechat MCP server instructions 中"sub-agents cannot call MCP tools"一句在本环境为误导，不可作为依据。
+
+【MCP instruction 错误断言的处置（2026-05-29 14:30:45 +08:00 核实）】
+- 该错误断言位于 `/Users/panda/.pandacc/plugins/marketplaces/lc2panda-plugins/channels/wechat/server.ts` 第 767 行（构建 MCP server instructions 字符串数组中）。
+- 该文件属插件分发文件（位于 marketplace git 仓库 `lc2panda-plugins` 内，插件 wechat 2.1.4），插件升级会覆盖该文件，直接修改会被覆盖且可能破坏插件，故**未直接修改源码**。以本 CLAUDE.md 条目为权威修正记录。
+
+---
+
 ## Wind(万得) 数据源集成 P1 离线层交付记录（2026-05-29 11:21:02 +08:00）
 
 任务约束：本地开发环境；禁止 push；禁止启动任何服务（run.py/flask/next dev/build/Playwright/chromium）；P1 不连真实 Wind API、单测全 mock HTTP；pytest 只跑本任务新增文件；改动前后 `vm_stat` 监控，free pages <5000 立即停手；优先最小变更，新建文件带审批标签。P1 范围：仅建底层，不接入任何路由/registry/tools/__init__。
