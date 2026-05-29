@@ -4,7 +4,8 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { useThemeStore } from "@/lib/stores/theme-store";
 
 interface Props {
@@ -22,7 +23,7 @@ export function BaseBarChart({ data, height = 200, color = "#3b82f6", showSign =
   const downColor = stockColorScheme === 'cn' ? '#22c55e' : '#ef4444';
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <SafeResponsiveContainer width="100%" height={height}>
       <BarChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: textColor }} />
@@ -34,6 +35,6 @@ export function BaseBarChart({ data, height = 200, color = "#3b82f6", showSign =
           )) : data.map((_, i) => <Cell key={i} fill={color} />)}
         </Bar>
       </BarChart>
-    </ResponsiveContainer>
+    </SafeResponsiveContainer>
   );
 }

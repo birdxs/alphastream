@@ -6,8 +6,9 @@
 
 "use client";
 import {
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
 } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { Badge } from "@/components/ui/badge";
 import { Leaf, Users2, Scale, FileText } from "lucide-react";
 
@@ -119,14 +120,14 @@ export function ESGScorecardArtifact({ data }: Props) {
           <Leaf className="h-3 w-3 text-[#46BEA3]" /> E/S/G 三维
         </div>
         <div style={{ height: 200 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <SafeResponsiveContainer width="100%" height="100%">
             <RadarChart data={radarData} margin={{ top: 10, right: 20, left: 20, bottom: 0 }}>
               <PolarGrid stroke="rgba(255,255,255,0.08)" />
               <PolarAngleAxis dataKey="dim" tick={{ fontSize: 11, fill: "#8888A0" }} />
               <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 9, fill: "#555570" }} axisLine={false} />
               <Radar dataKey="score" stroke="#6B5EE4" fill="#6B5EE4" fillOpacity={0.35} />
             </RadarChart>
-          </ResponsiveContainer>
+          </SafeResponsiveContainer>
         </div>
         <div className="grid grid-cols-3 gap-2 mt-1">
           {[{ k: "E", v: e, cls: "text-[#46BEA3]", icon: Leaf }, { k: "S", v: s, cls: "text-[#6B5EE4]", icon: Users2 }, { k: "G", v: g, cls: "text-[#F59E0B]", icon: Scale }].map(it => (

@@ -7,9 +7,10 @@
 "use client";
 import { useMemo } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { Briefcase, TrendingUp, AlertCircle } from "lucide-react";
 
 interface JobItem {
@@ -143,7 +144,7 @@ export function HiringSignalArtifact({ data }: Props) {
       <div>
         <div className="text-xs font-medium text-muted-foreground mb-1.5">招聘数量月度趋势</div>
         <div style={{ height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <SafeResponsiveContainer width="100%" height="100%">
             <LineChart data={effective.monthly_trend || []} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#8888A0" }} axisLine={false} tickLine={false} />
@@ -155,7 +156,7 @@ export function HiringSignalArtifact({ data }: Props) {
               />
               <Line type="monotone" dataKey="count" stroke="#6B5EE4" strokeWidth={2} dot={{ r: 3, fill: "#6B5EE4" }} activeDot={{ r: 5 }} />
             </LineChart>
-          </ResponsiveContainer>
+          </SafeResponsiveContainer>
         </div>
       </div>
 
@@ -164,7 +165,7 @@ export function HiringSignalArtifact({ data }: Props) {
         <div>
           <div className="text-xs font-medium text-muted-foreground mb-1.5">按技能分布</div>
           <div style={{ height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <SafeResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={effective.skill_distribution}
@@ -192,7 +193,7 @@ export function HiringSignalArtifact({ data }: Props) {
                   labelStyle={{ color: "#F0F0F5" }}
                 />
               </PieChart>
-            </ResponsiveContainer>
+            </SafeResponsiveContainer>
           </div>
         </div>
       )}

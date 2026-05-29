@@ -4,7 +4,8 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { useThemeStore } from "@/lib/stores/theme-store";
 
 interface Props {
@@ -20,7 +21,7 @@ export function BaseLineChart({ data, height = 200, color = "#3b82f6", dataKey =
   const textColor = theme === 'dark' ? '#9ca3af' : '#4b5563';
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <SafeResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: textColor }} />
@@ -28,6 +29,6 @@ export function BaseLineChart({ data, height = 200, color = "#3b82f6", dataKey =
         <Tooltip contentStyle={{ background: theme === 'dark' ? '#1f2937' : '#fff', border: 'none', borderRadius: 8, fontSize: 12 }} />
         <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} />
       </LineChart>
-    </ResponsiveContainer>
+    </SafeResponsiveContainer>
   );
 }

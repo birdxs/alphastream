@@ -4,6 +4,46 @@
 
 ---
 
+## P1 前端 Recharts width(-1)/height(-1) 警告治理记录（2026-05-29 09:43:00 +08:00）
+
+任务约束：本地开发环境；禁止 push；优先只改现有文件、最小变更；不启服务（`next dev`/`npm run dev`/`npm run build`）、不跑全量 vitest、不跑 Playwright/chromium；验证仅用本地 tsc + eslint；改动前后 `vm_stat` 监控，free pages <5000 立即停手。
+
+时间真实性校验：
+- 校验发起/完成：2026-05-29 09:31:55 +08:00 ~ 2026-05-29 09:32:04 +08:00。
+- 本机系统时间：2026-05-29 09:31:55 +0800，时区 Asia/Singapore（+08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头，返回 `Fri, 29 May 2026 01:31:59 GMT`，折算 2026-05-29 09:31:59 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头，返回 `Fri, 29 May 2026 01:32:01 GMT`，折算 2026-05-29 09:32:01 +08:00。
+- 时间源 3：`https://www.apple.com` HTTPS Date 头，返回 `Fri, 29 May 2026 01:32:04 GMT`，折算 2026-05-29 09:32:04 +08:00。
+- 最大偏差：9 秒；判定：通过（≤100 秒）。
+
+根因定位：
+- `grep <ResponsiveContainer> frontend/src` 命中 9 处（8 个文件）：`charts/base-line-chart.tsx:23`、`charts/base-bar-chart.tsx:25`、`charts/base-pie-chart.tsx:18`、`artifacts/capital-flow-chart.tsx:140`、`artifacts/score-radar.tsx:63`、`artifacts/esg-scorecard.tsx:122`、`artifacts/shipping-chart.tsx:134`、`artifacts/hiring-signal.tsx:146/167`。
+- 共同根因：当宿主容器被隐藏（`display:none`，如 Tab 切换、折叠面板、Artifact 卡片未展开）或首屏布局尚未完成时，Recharts `ResponsiveContainer` 内部测得 `offsetWidth/offsetHeight` 为 0，扣除 padding 后得 `-1`，触发控制台警告 `The width(-1) and height(-1) of chart should be greater than 0`。
+- `charts/chart-container.tsx` 仅是 Card 加载/错误态外壳，不包裹 `ResponsiveContainer`，故各图表自行直挂 `ResponsiveContainer`，无法靠它统一守卫。
+
+保护方案（最小变更，优先现有文件 + 单一新封装）：
+- 新增 `frontend/src/components/charts/safe-responsive-container.tsx`（`SafeResponsiveContainer`）：用 `ResizeObserver` 实测外层 div 渲染宽高，仅当宽高均 >0 才挂载 Recharts `ResponsiveContainer`；尺寸 ≤0 时渲染 `Skeleton` 占位（铁律 #1：不显示任何看起来像真实金融数据的假值）。SSR 守卫：初始状态为未就绪（渲染 Skeleton），`ResizeObserver` 与测量仅在 `useEffect`+`requestAnimationFrame` 客户端执行；外层 div 继承传入 width/height 保证布局占位与原 `ResponsiveContainer` 一致；保留 `aria-label` 透传。
+- 将 9 处 `ResponsiveContainer` 替换为 `SafeResponsiveContainer`（同名 `width`/`height`/`children`/`aria-label` 接口，drop-in）；移除对应文件 recharts import 中的 `ResponsiveContainer`。
+- 同步更新 `charts/README.md` 文件列表与功能说明（领地标记）。
+
+为何能消除警告：发出 `width(-1)/height(-1)` 的正是 Recharts 的 `ResponsiveContainer` —— 仅当其父节点实测尺寸为 0/负时才会打印。封装在 `ResizeObserver` 确认宽高均 >0 之前不挂载 `ResponsiveContainer`，Recharts 永远不会在 -1 尺寸下被实例化，故警告不再产生；容器恢复正尺寸（Tab 切回/布局完成）时 `ResizeObserver` 回调再放行渲染。
+
+特例登记：
+- 触发原因：8 个图表组件各自直挂 `ResponsiveContainer`，无现成统一封装可承载尺寸守卫；在每个文件内联 ResizeObserver 逻辑会大量重复、违反去重纪律。
+- 无法仅修改现有文件论证：`chart-container.tsx` 不包裹图表本体，无法在其内统一守卫；需要一个被多组件 import 的独立封装。
+- 新文件信息：`frontend/src/components/charts/safe-responsive-container.tsx`，纯展示封装，无运行时副作用、无网络/数据依赖。
+- 白名单类别：e 项（全新最小复用模块）。
+- Commit 标签：[NEW-FILE:#20260529-01]。
+- 回滚方案：将 9 处 `SafeResponsiveContainer` 改回 `ResponsiveContainer` 并恢复 recharts import；删除 `safe-responsive-container.tsx`；还原 `charts/README.md`、本节、TODO/CHANGELOG 对应条目。
+
+验证记录：
+- 改动前 `vm_stat`：Pages free 28985（≥5000）；tsc 前一刻 4099，tsc 后回升 38289，最终 36168。
+- 本地 tsc：`node frontend/node_modules/typescript/bin/tsc --noEmit`（frontend 目录）→ exit 0，零类型错误。
+- eslint：`npx eslint <9 改动文件 + 新封装>` → exit 0，零 error/零 warning（首轮 `safe-responsive-container.tsx:63` 触发 `react-hooks/set-state-in-effect`，已改为 `requestAnimationFrame(measure)` 延迟测量后清零）。
+- 未启服务、未跑全量 vitest、未跑 Playwright/chromium、未跑 npm build；未 push。
+
+---
+
 ## P1 资金流上游网络降级日志治理记录（2026-05-29 09:32:08 +08:00）
 
 任务约束：本地开发环境；禁止 push；优先只改现有文件；不启服务、不跑全量、不跑 Playwright/vitest/npm build；仅跑聚焦单测。

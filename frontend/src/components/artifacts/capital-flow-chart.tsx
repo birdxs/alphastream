@@ -11,9 +11,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { formatLargeNumber } from "@/lib/utils/format";
 import { TrendingDown } from "lucide-react";
@@ -137,7 +137,7 @@ export function CapitalFlowArtifact({ data }: Props) {
 
       {/* 柱状图 */}
       {chartData.length > 0 && (
-        <ResponsiveContainer width="100%" height={200}>
+        <SafeResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData}>
             <CartesianGrid
               strokeDasharray="3 3"
@@ -180,7 +180,7 @@ export function CapitalFlowArtifact({ data }: Props) {
               ))}
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </SafeResponsiveContainer>
       )}
 
       {/* 无数据提示 */}

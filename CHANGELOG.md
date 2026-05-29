@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-05-29 09:43:00 +08:00
+
+- 治理前端 Recharts `The width(-1) and height(-1) of chart should be greater than 0` 警告：新增统一封装 `frontend/src/components/charts/safe-responsive-container.tsx`，用 `ResizeObserver` 实测容器渲染宽高，仅在宽高均 >0 时挂载 Recharts `ResponsiveContainer`，容器被隐藏（`display:none`）、切换或布局未完成（实测尺寸 ≤0）时渲染 `Skeleton` 占位，待尺寸有效后再渲染图表。
+- 将 9 处直接使用 `ResponsiveContainer` 的图表替换为 `SafeResponsiveContainer`：`charts/base-line-chart.tsx`、`charts/base-bar-chart.tsx`、`charts/base-pie-chart.tsx`、`artifacts/capital-flow-chart.tsx`、`artifacts/score-radar.tsx`、`artifacts/esg-scorecard.tsx`、`artifacts/shipping-chart.tsx`、`artifacts/hiring-signal.tsx`（折线+饼图两处）。
+- 遵守铁律 #1：占位仅为 `Skeleton` 骨架，不渲染任何看起来像真实金融数据的假值。
+
 ## 2026-05-29 09:32:08 +08:00
 
 - 治理资金流上游网络降级日志：Eastmoney 个股/板块资金流遇到 `ProxyError`、`RemoteDisconnected`、`ConnectionError`、`Timeout` 等网络层异常时，改为 WARNING 级精简日志（"资金流上游降级: ..."），不再输出完整 Traceback；非网络类异常仍保留 ERROR 级完整堆栈，便于排查真实 bug。

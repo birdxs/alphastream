@@ -8,8 +8,9 @@
 import { useEffect, useRef } from "react";
 import { createChart, ColorType, LineSeries, type IChartApi, type ISeriesApi, type LineData, type UTCTimestamp } from "lightweight-charts";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { Ship, Anchor, Waves } from "lucide-react";
 
 interface BDIPoint { date: string; value: number; indicator?: string; source?: string }
@@ -131,7 +132,7 @@ export function ShippingChartArtifact({ data }: Props) {
       <div>
         <div className="text-xs font-medium text-muted-foreground mb-1.5">主要港口月度吞吐量</div>
         <div style={{ height: 160 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <SafeResponsiveContainer width="100%" height="100%">
             <BarChart data={portThroughput} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="port" tick={{ fontSize: 10, fill: "#8888A0" }} axisLine={false} tickLine={false} />
@@ -157,7 +158,7 @@ export function ShippingChartArtifact({ data }: Props) {
                 </linearGradient>
               </defs>
             </BarChart>
-          </ResponsiveContainer>
+          </SafeResponsiveContainer>
         </div>
       </div>
     </div>

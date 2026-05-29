@@ -11,8 +11,8 @@ import {
   PolarRadiusAxis,
   Radar,
   Tooltip,
-  ResponsiveContainer,
 } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { useThemeStore } from "@/lib/stores/theme-store";
 
 interface Props {
@@ -60,7 +60,7 @@ export function ScoreRadarArtifact({ data }: Props) {
           {avgScore}
         </span>
       </div>
-      <ResponsiveContainer width="100%" height={300} aria-label="多维度评分雷达图">
+      <SafeResponsiveContainer width="100%" height={300} aria-label="多维度评分雷达图">
         <RadarChart data={radarData}>
           <PolarGrid
             stroke={theme === "dark" ? "rgba(255,255,255,0.08)" : "#e5e7eb"}
@@ -100,7 +100,7 @@ export function ScoreRadarArtifact({ data }: Props) {
             fillOpacity={0.25}
           />
         </RadarChart>
-      </ResponsiveContainer>
+      </SafeResponsiveContainer>
       <div className="grid grid-cols-3 gap-1 px-1">
         {radarData.map((d) => (
           <div key={d.subject} className="flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08]">

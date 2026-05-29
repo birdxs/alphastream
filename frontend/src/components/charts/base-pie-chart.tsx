@@ -4,7 +4,8 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
+import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 
 interface Props {
   data: Array<{ name: string; value: number; color?: string }>;
@@ -15,7 +16,7 @@ const COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4'
 
 export function BasePieChart({ data, height = 200 }: Props) {
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <SafeResponsiveContainer width="100%" height={height}>
       <PieChart>
         <Pie data={data} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
           {data.map((entry, i) => (
@@ -24,6 +25,6 @@ export function BasePieChart({ data, height = 200 }: Props) {
         </Pie>
         <Tooltip />
       </PieChart>
-    </ResponsiveContainer>
+    </SafeResponsiveContainer>
   );
 }
