@@ -1532,26 +1532,44 @@ def handle_rate_limit(e):
 # 解决东方财富接口偶发失败导致stock_name降级为股票代码的问题
 _STOCK_NAME_CACHE = {}
 _CACHE_LOADED = False
+_CACHE_LAST_FAIL_TS = 0.0  # 上次加载失败（超时/异常）的单调时钟时间戳；0 表示从未失败
 _CACHE_LOCK = threading.Lock()
 _STOCK_NAME_CACHE_LOCK = threading.RLock()  # S1-C4: 并发读写保护（启动期循环写与请求读并发）
 
 
 def _load_stock_name_cache():
     """首次调用时加载全量A股代码->名称映射（~5000条）到进程级缓存
-    [REAL-01 2026-05-18] 上游 bse.cn 经常被代理 RST 阻塞 30s+，加 5s 硬超时 + 永久标记，避免反复重试拖垮 stock_quote_batch
+
+    Input : 无（隐式调用 ak.stock_info_a_code_name，受 env 配置约束）
+    Output: 无返回值；成功时填充 _STOCK_NAME_CACHE 并永久标记 _CACHE_LOADED=True
+    Pos   : stock_name 兜底链入口，被 _get_stock_name_safe 等非阻塞调用
+
+    [REAL-01 2026-05-18] 上游 bse.cn 经常被代理 RST 阻塞，加硬超时避免反复重试拖垮 stock_quote_batch。
+    [2026-05-29 修复] 原实现在 try 前无条件置 _CACHE_LOADED=True，超时/异常后永久不再重试，
+        真实网络下 5s 拉不完全量名称表即导致本进程名称长期退化为代码。改为：
+        - 仅在成功填充后才永久标记 _CACHE_LOADED=True；
+        - 失败（超时/异常）记录 _CACHE_LAST_FAIL_TS，并在冷却窗（STOCK_NAME_CACHE_RETRY_COOLDOWN_S，
+          default 60s）内节流后续重试，避免每请求都打满上游；冷却窗过后允许再次尝试。
+        - 默认超时由 5s 提升至 15s（env STOCK_NAME_CACHE_TIMEOUT_S 可覆盖）。
+        线程安全：失败/成功标记均在 _CACHE_LOCK 内更新；缓存写入在 _STOCK_NAME_CACHE_LOCK 内。
     """
-    global _CACHE_LOADED
+    global _CACHE_LOADED, _CACHE_LAST_FAIL_TS
     if _CACHE_LOADED:
+        return
+    _cooldown_s = float(os.getenv('STOCK_NAME_CACHE_RETRY_COOLDOWN_S', '60'))
+    # 锁外快速冷却窗检查：上次失败后在冷却窗内则直接放行（不阻塞请求线程、不打满上游）
+    if _CACHE_LAST_FAIL_TS and (time.monotonic() - _CACHE_LAST_FAIL_TS) < _cooldown_s:
         return
     with _CACHE_LOCK:
         if _CACHE_LOADED:
             return
-        # 永久置真：即使本次失败，下次也不再重试（进程内 1 次成本封顶），由 _get_stock_name_safe 兜底降级到 stock_code
-        _CACHE_LOADED = True
+        # 锁内复检冷却窗：避免多个线程同时穿过锁外检查后串行重复尝试
+        if _CACHE_LAST_FAIL_TS and (time.monotonic() - _CACHE_LAST_FAIL_TS) < _cooldown_s:
+            return
         try:
             import akshare as ak
             from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
-            _timeout_s = float(os.getenv('STOCK_NAME_CACHE_TIMEOUT_S', '5'))
+            _timeout_s = float(os.getenv('STOCK_NAME_CACHE_TIMEOUT_S', '15'))
             _ex = ThreadPoolExecutor(max_workers=1)
             _timed_out = False
             try:
@@ -1561,16 +1579,25 @@ def _load_stock_name_cache():
                 except _FTimeout:
                     _timed_out = True
                     fut.cancel()
-                    app.logger.warning(f"加载A股名称缓存超时(>{_timeout_s}s)，本进程不再重试")
+                    # 不永久标记已加载：记录失败时间戳，冷却窗后允许重试
+                    _CACHE_LAST_FAIL_TS = time.monotonic()
+                    app.logger.warning(
+                        f"加载A股名称缓存超时(>{_timeout_s}s)，{_cooldown_s}s 冷却后允许重试")
                     return
             finally:
                 _ex.shutdown(wait=not _timed_out, cancel_futures=_timed_out)
             with _STOCK_NAME_CACHE_LOCK:
                 for _, row in df.iterrows():
                     _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
+            # 仅成功填充后永久标记，并清除失败时间戳
+            _CACHE_LOADED = True
+            _CACHE_LAST_FAIL_TS = 0.0
             app.logger.info(f"A股名称缓存加载完成，共 {len(_STOCK_NAME_CACHE)} 条")
         except Exception as e:
-            app.logger.warning(f"加载A股名称缓存失败: {str(e)}")
+            # 不永久标记已加载：记录失败时间戳，冷却窗后允许重试
+            _CACHE_LAST_FAIL_TS = time.monotonic()
+            app.logger.warning(
+                f"加载A股名称缓存失败: {str(e)}，{_cooldown_s}s 冷却后允许重试")
 
 
 def _get_stock_name_safe(stock_code, market_type='A'):

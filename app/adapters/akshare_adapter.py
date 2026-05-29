@@ -249,10 +249,18 @@ class AkshareAdapter(BaseAdapter):
             logger.warning(f"akshare东财个股信息失败(symbol={code}): {type(e).__name__}: {e}")
 
         # 雪球
+        # [2026-05-29 schema 守卫] 雪球上游 schema 变化时，ak.stock_individual_basic_info_xq
+        # 内部解析会抛 KeyError: 'data'（缺 'data' 键）；外层 try/except 已兜住该异常，
+        # 此处对返回结果再做结构校验（DataFrame 非空且形如表格），缺失/异常时受控降级返回 {} + WARNING，
+        # 不让任何 KeyError/结构异常冒泡，契约不变。
         try:
             df = ak.stock_individual_basic_info_xq(symbol=code)
-            if df is not None and not df.empty:
-                return df.to_dict('records')[0] if len(df) > 0 else {}
+            records = df.to_dict('records') if (df is not None and not df.empty) else []
+            if records:
+                first = records[0]
+                if isinstance(first, dict):
+                    return first
+                logger.warning(f"akshare雪球个股信息结构异常(symbol={code}): 首行非映射类型")
         except Exception as e:
             logger.warning(f"akshare雪球个股信息失败(symbol={code}): {type(e).__name__}: {e}")
 

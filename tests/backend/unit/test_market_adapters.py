@@ -170,3 +170,67 @@ class TestADelegate:
             df = get_kline('000001', 'A', start_date='20260515', end_date='20260516')
         assert not df.empty
         assert df.iloc[-1]['close'] == 10.8
+
+
+# ===== AkshareAdapter 雪球 schema 守卫（2026-05-29 Bug2）=====
+
+class TestAkshareXueqiuSchemaGuard:
+    """雪球上游 schema 变化导致 KeyError: 'data' 时，get_stock_info 受控降级返回 {}，不冒泡。"""
+
+    def test_xueqiu_keyerror_data_contained_returns_empty(self, caplog):
+        import logging
+        from app.adapters import akshare_adapter as aka
+
+        def _em_empty(symbol):
+            return pd.DataFrame()  # 东财空 → 落到雪球
+
+        def _xq_keyerror(symbol):
+            raise KeyError('data')  # 雪球上游 schema 变化
+
+        fake_ak = MagicMock()
+        fake_ak.stock_individual_info_em.side_effect = _em_empty
+        fake_ak.stock_individual_basic_info_xq.side_effect = _xq_keyerror
+
+        with patch.object(aka, 'ak', fake_ak):
+            with caplog.at_level(logging.WARNING):
+                result = aka.AkshareAdapter().get_stock_info('600519')
+
+        assert result == {}
+        assert any('雪球个股信息失败' in r.message and 'KeyError' in r.message
+                   for r in caplog.records)
+
+    def test_xueqiu_missing_columns_dataframe_contained(self):
+        from app.adapters import akshare_adapter as aka
+
+        def _em_empty(symbol):
+            return pd.DataFrame()
+
+        def _xq_empty_df(symbol):
+            return pd.DataFrame()  # 缺列/空 DataFrame，不应抛异常
+
+        fake_ak = MagicMock()
+        fake_ak.stock_individual_info_em.side_effect = _em_empty
+        fake_ak.stock_individual_basic_info_xq.side_effect = _xq_empty_df
+
+        with patch.object(aka, 'ak', fake_ak):
+            result = aka.AkshareAdapter().get_stock_info('600519')
+
+        assert result == {}
+
+    def test_xueqiu_valid_records_returned(self):
+        from app.adapters import akshare_adapter as aka
+
+        def _em_empty(symbol):
+            return pd.DataFrame()
+
+        def _xq_ok(symbol):
+            return pd.DataFrame([{'item': '总市值', 'value': 16553.89}])
+
+        fake_ak = MagicMock()
+        fake_ak.stock_individual_info_em.side_effect = _em_empty
+        fake_ak.stock_individual_basic_info_xq.side_effect = _xq_ok
+
+        with patch.object(aka, 'ak', fake_ak):
+            result = aka.AkshareAdapter().get_stock_info('600519')
+
+        assert result.get('item') == '总市值'

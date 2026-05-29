@@ -203,6 +203,73 @@ class TestStockNameRoute:
         assert data["stock_code"] == "600519"
         assert data["stock_name"] == "600519"
 
+    def test_load_cache_timeout_not_permanently_marked_and_retries_after_cooldown(
+        self, monkeypatch
+    ):
+        """[2026-05-29 Bug1] 加载超时后不得永久标记已加载；冷却窗内节流、冷却窗后允许重试并成功填充。"""
+        import app.web.web_server as ws
+
+        monkeypatch.setattr(ws, "_CACHE_LOADED", False)
+        monkeypatch.setattr(ws, "_CACHE_LAST_FAIL_TS", 0.0)
+        monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
+        monkeypatch.setenv("STOCK_NAME_CACHE_TIMEOUT_S", "0.05")
+        monkeypatch.setenv("STOCK_NAME_CACHE_RETRY_COOLDOWN_S", "60")
+
+        calls = {"n": 0}
+
+        def _fake_code_name_first_slow_then_fast():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                time.sleep(1.0)  # 首次超过 0.05s 超时
+                return pd.DataFrame([{"code": "600519", "name": "贵州茅台"}])
+            return pd.DataFrame([{"code": "600519", "name": "贵州茅台"}])
+
+        fake_akshare = types.SimpleNamespace(
+            stock_info_a_code_name=_fake_code_name_first_slow_then_fast
+        )
+        monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+        # 第一次：超时 → 未永久标记，记录失败时间戳，请求线程不被长阻塞
+        start = time.perf_counter()
+        ws._load_stock_name_cache()
+        elapsed = time.perf_counter() - start
+        assert elapsed < 0.6  # 不阻塞等待慢 worker
+        assert ws._CACHE_LOADED is False
+        assert ws._CACHE_LAST_FAIL_TS != 0.0
+        assert ws._STOCK_NAME_CACHE == {}
+
+        # 冷却窗内（60s）再调：被节流，不触发 worker（calls 不增）
+        ws._load_stock_name_cache()
+        assert calls["n"] == 1
+        assert ws._CACHE_LOADED is False
+
+        # 模拟冷却窗已过：把上次失败时间戳推到很久以前 → 允许重试且成功填充
+        monkeypatch.setattr(ws, "_CACHE_LAST_FAIL_TS", time.monotonic() - 999.0)
+        ws._load_stock_name_cache()
+        assert calls["n"] == 2
+        assert ws._CACHE_LOADED is True
+        assert ws._CACHE_LAST_FAIL_TS == 0.0
+        assert ws._STOCK_NAME_CACHE.get("600519") == "贵州茅台"
+
+    def test_load_cache_exception_not_permanently_marked(self, monkeypatch):
+        """[2026-05-29 Bug1] 加载抛异常后不得永久标记已加载；记录失败时间戳供冷却后重试。"""
+        import app.web.web_server as ws
+
+        monkeypatch.setattr(ws, "_CACHE_LOADED", False)
+        monkeypatch.setattr(ws, "_CACHE_LAST_FAIL_TS", 0.0)
+        monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
+
+        def _boom():
+            raise RuntimeError("upstream RST")
+
+        fake_akshare = types.SimpleNamespace(stock_info_a_code_name=_boom)
+        monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+        ws._load_stock_name_cache()
+        assert ws._CACHE_LOADED is False
+        assert ws._CACHE_LAST_FAIL_TS != 0.0
+        assert ws._STOCK_NAME_CACHE == {}
+
 
 # --------------------------------------------------------------------------- #
 # 3. GET /api/stock_profile
