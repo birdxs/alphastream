@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-02 14:53:38 +08:00 — 前后端连调真测：基本面 tab 400 与 agent 工具挂死两处治本修复
+
+- 修复个股基本面 tab 打不开（`2f7828f`）：`/api/stock_profile` 的 `StockProfileSchema` 缺 `market_type` 字段，marshmallow 默认 `unknown=RAISE` 把前端传入的 `market_type=A` 当作"未知字段"直接拒绝，返回 0.002s 即时 400，导致 PE/PB/ROE 基本面 tab 无法加载（路由本身并不读该字段）。补 `market_type = fields.String(load_default='A', validate=mv.OneOf(['A','HK','US','B']))`（对齐同文件 `StockDataSchema`）。属自 Sprint 3-C 引入的既有缺陷，非回归。
+- 修复 AI 对话 agent 工具挂死（`a6a3a12`）：agent 工具 `get_stock_data` 的数据拉取链全程无 per-call 超时（`fallback_manager` 裸阻塞 + akshare 无 socket timeout），网络停顿时永久阻塞，唯一兜底为 30min 的 `AGENT_GRAPH_TIMEOUT`（等同无超时），SSE 停在 0% 前端永久"分析中"。为 `FallbackManager` 单次 adapter 调用引入 `ThreadPoolExecutor` 硬超时（env `FALLBACK_PER_CALL_TIMEOUT`，默认 30s，`finally cancel_futures` 防线程泄漏），超时抛 `TimeoutError` 落入现有 except 自动切下一 adapter。未用 `resilient_call`（其自带 3 次重试会与 `max_retries=2` 叠加成 6 次重试风暴）。属设计遗漏，非回归。
+- 真测覆盖（Kimi WebBridge 真实浏览器，禁 Playwright）：首页 SSE 真实指数 + 503 降级 "---" 占位无假数据；仪表盘真实名称/行情；个股 600519 名称修复生效（无"未知"）；AI 对话真实 LLM + Function Calling 前半段正常。本机连不上 A 股实时源（eastmoney 不可达），K 线/基本面/agent 多端点降级属真实网络限制非代码缺陷。
+- 验证：profile 修复离线 16 passed + 真重启（PID 5040）从 Unknown field 变 OneOf 校验；fallback 修复 71 passed + 3 新超时用例（adapter sleep 30s 测试亚秒完成）0 回归 + 真重启（PID 5835）日志实证超时切 adapter、stock_data 200/17.9s 返真实 K 线。本轮文档同步未启服务、未连付费端点、未跑测试、未 push。
+
 ## 2026-05-29 17:39:14 +08:00 — 修复股票名称显示为"未知" + 名称加载稳定性增强
 
 - 修复股票名称显示为"未知"：此前即便上游数据源成功返回，名称仍被错误兜底成"未知"。根因是解析层只认 `name`/`股票名称` 字段，而真实数据源用的是各自的字段名（东财 `股票简称`、baostock `code_name`、雪球 `org_short_name_cn`/`org_name_cn`、yfinance `shortName`/`longName`）。现按多候选键归一化取名，并将全部取不到时的兜底由"未知"改为显示股票代码本身（不展示假名称，遵守金融数据零假值铁律）。

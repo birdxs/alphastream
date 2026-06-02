@@ -4,6 +4,51 @@
 
 ---
 
+## 前后端连调 + Kimi 真测前端能力交付记录（含 2 个治本修复，2026-06-02 14:53:38 +08:00）
+
+任务约束：本地开发环境；Comdr 授权启动前后端；Kimi WebBridge 真实浏览器逐一真测前端能力，发现问题即治本，auto 推进；禁止 push。本轮 2 个代码 commit 已各自验证过（含真重启铁证），本节为文档同步记录（纯文档轮，不跑测试）。优先改现有文件。
+
+时间真实性校验（本节锚点）：
+- 校验发起/完成：2026-06-02 14:53:31 +08:00 ~ 2026-06-02 14:53:38 +08:00。
+- 本机系统时间：`date '+%Y-%m-%d %H:%M:%S %z'` → 2026-06-02 14:53:31 +0800（Asia/Singapore +08:00）。
+- 时间源 1：`https://www.cloudflare.com` HTTPS Date 头 → `Tue, 02 Jun 2026 06:53:37 GMT` = 2026-06-02 14:53:37 +08:00。
+- 时间源 2：`https://github.com` HTTPS Date 头 → `Tue, 02 Jun 2026 06:53:38 GMT` = 2026-06-02 14:53:38 +08:00。
+- 最大偏差：7 秒（本机 vs GitHub）；判定：通过（≤100 秒）。
+
+测试覆盖与结果（Kimi WebBridge 真测，禁 Playwright，守铁律 #2）：
+1. 首页行情：SSE `market_stream` 推真实指数（上证 4057.74 / 深证 15340.36 / 创业板 3950.94 / 沪深300 4844.26）；REST `market_indices` 503 降级瞬间显 "---" 占位，守铁律 #1 无假数据；无 Hydration mismatch。
+2. 仪表盘：自选股/持仓显示真实名称（腾景科技 688195 等）；`stock_quote_batch` 真实数据（688195=220.71 / -5.64%）与 UI 一致，无假数据。
+3. 个股详情（600519）：股票名称修复完全生效（贵州茅台等，无"未知"）。K 线 `stock_data` 受本机网络限制（连不上 eastmoney）降级，前端显"点击重试"占位合规。
+4. AI 对话：真实 LLM（mimo-v2.5-pro）+ SSE + Function Calling 前半段正常；触发 `get_stock_data` 工具卡死（根因见下），已治本。
+
+两个治本修复（已 commit，未 push，各经真重启验证）：
+
+- `2f7828f` fix(schema): StockProfileSchema 补 market_type 字段
+  - 根因：`StockProfileSchema` 自 Sprint 3-C 引入起只声明 `stock_code`，缺 `market_type`，marshmallow 默认 `unknown=RAISE` 把前端传的 `market_type=A` 当"未知字段"拒绝 → 0.002s 即时 400，基本面 tab（PE/PB/ROE）打不开；而路由根本不读 `market_type`。既有缺陷，非本轮回归。
+  - 修复：补 `market_type = fields.String(load_default='A', validate=mv.OneOf(['A','HK','US','B']))`（照抄同文件 `StockDataSchema` 写法）。
+  - 验证：离线单测 16 passed；真重启（PID 5040，uptime 35s）铁证——旧进程返 400 "Unknown field"，新进程穿透 schema 进业务层，`market_type=XX` 返 "Must be one of" 的 OneOf 校验（非 Unknown field），证明字段已被 schema 接受。
+
+- `a6a3a12` fix(data): FallbackManager 引入 per-call 超时防 agent 工具挂死
+  - 根因：agent 工具 `get_stock_data` 数据拉取链（`tools.py:26` → data_provider → `fallback_manager.py:70` 裸阻塞 → akshare 无 socket timeout）全程无 per-call 超时，网络停顿时永久阻塞；唯一兜底 `AGENT_GRAPH_TIMEOUT` 30min（等同无超时），SSE 停在 0% 前端永久"分析中"。REST 路径有 `ThreadPoolExecutor`+50s 超时能 504，agent 路径缺这层。设计遗漏，非本轮回归。
+  - 修复决策：`resilient_call` 自带 3 次重试会与 `FallbackManager.max_retries=2` 叠加成 6 次重试风暴，故改用 `ThreadPoolExecutor` 单次硬超时（env `FALLBACK_PER_CALL_TIMEOUT`，default 30，`finally cancel_futures` 防线程泄漏），超时即抛 `TimeoutError` 落入现有 except → 切下一 adapter 而非挂死。
+  - 验证：71 passed + 3 新超时用例（adapter 设 sleep 30s，测试亚秒完成证明超时真触发），0 回归；真重启（PID 5835，uptime 18.8s）后日志实证 `[fallback_manager] adapter单次调用超过30.0s超时` + `adapter call timeout after 30.0s`，`stock_data` 200 / 17.9s 返真实 K 线不挂起。
+
+环境大背景：本机连不上 A 股实时源（eastmoney 不可达，baostock/akshare 时好时坏），K 线/基本面/agent 工具多数据端点降级，属真实网络环境限制非代码缺陷；市场指数靠新浪兜底。
+
+资源：全程 `vm_stat` 监控，瞬时低谷 4046 / 4373 曾跌破 5000 红线即停手取证待回升，无 OOM。Kimi WebBridge 真测（禁 Playwright，守铁律 #2）。
+
+未完成（改天续测）：
+- 剩余前端页面 对比（`/compare`）/ 组合（`/portfolio`）/ 市场扫描 / `api-docs` 的 Kimi 真测未完成（对比页测试因内存紧 + UI 交互超时中止）。
+- C 方案（`a6a3a12`）修复的 AI 对话 agent 路径 UI 层真测验证待补（后端日志已实证 per-call 超时生效）。
+- `profile`/`stock_data` 真实数据需可联网环境复测。
+
+回滚方案：
+- profile：删 `StockProfileSchema` 的 `market_type` 行。
+- C 方案：回退 `a6a3a12`（FallbackManager 改动 + 测试用例）。
+- 文档：删本节及 TODO.md / CHANGELOG.md 对应条目，以及本轮文档 commit。不涉及数据迁移与运行时状态。
+
+---
+
 ## 股票名称显示修复轮交付记录（analyzer 真实键名 + 可重试缓存 + 后台预热，2026-05-29 17:39:14 +08:00）
 
 任务约束：本地开发环境；禁止 push；不启动任何服务；本轮纯文档（不跑测试）；优先改现有文件。本轮 4 个代码 commit 已先期落地并经独立 fresh-eyes 复核通过，本节为文档同步记录。

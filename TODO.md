@@ -1,5 +1,18 @@
 # TODO
 
+## 2026-06-02 14:53:38 +08:00 — 前后端连调 + Kimi 真测前端能力（含 2 个治本修复）
+
+- [x] 首页行情真测：SSE `market_stream` 推真实指数（上证 4057.74/深证 15340.36/创业板 3950.94/沪深300 4844.26）；REST 503 降级显 "---" 占位，无假数据、无 Hydration。
+- [x] 仪表盘真测：自选股/持仓真实名称（腾景科技 688195 等）、`stock_quote_batch` 真实数据（688195=220.71/-5.64%）与 UI 一致。
+- [x] 个股详情（600519）真测：股票名称修复完全生效（贵州茅台，无"未知"）；K 线降级（本机连不上 eastmoney）显"点击重试"占位合规。
+- [x] AI 对话真测：真实 LLM（mimo-v2.5-pro）+ SSE + Function Calling 前半段正常；`get_stock_data` 工具卡死根因已治本。
+- [x] `2f7828f` 治本：`StockProfileSchema` 补 `market_type` 字段（marshmallow `unknown=RAISE` 把前端 `market_type=A` 当未知字段拒绝→即时 400，基本面 tab 打不开）。离线 16 passed；真重启（PID 5040）铁证从 Unknown field 变 OneOf 校验。
+- [x] `a6a3a12` 治本：`FallbackManager` 引入 per-call 硬超时（env `FALLBACK_PER_CALL_TIMEOUT` default 30，ThreadPoolExecutor 单次超时防 agent 工具永久挂死）。71 passed + 3 新超时用例，0 回归；真重启（PID 5835）日志实证超时切 adapter，stock_data 200/17.9s 返真实 K 线。
+- [ ] 2 个 commit 均未 push，待 Comdr 决定是否 push。
+- [ ] 改天续测：对比（`/compare`）/组合（`/portfolio`）/市场扫描/`api-docs` 的 Kimi 真测（对比页因内存紧+UI 超时中止）。
+- [ ] 改天续测：C 方案 AI 对话 agent 路径 UI 层真测验证（后端日志已实证 per-call 超时生效）。
+- [ ] 改天续测：`profile`/`stock_data` 真实数据需可联网环境复测（本机连不上 A 股实时源）。
+
 ## 2026-05-29 17:39:14 +08:00 — 股票名称显示修复轮（analyzer 真实键名 + 可重试缓存 + 后台预热）
 
 - [x] `5fb8734` analyzer 真实键名归一化：`stock_analyzer.get_stock_info` 解析层按 8 候选键（股票名称/股票简称/code_name/shortName/longName/org_short_name_cn/org_name_cn/name）优先级取名，"未知"视为无效，全 miss 兜底退股票代码（合规铁律 #1）；+7 正向单测，改 2 旧 bug 断言。
