@@ -69,6 +69,8 @@ class StockDataSchema(Schema):
 class StockProfileSchema(Schema):
     """GET /api/stock_profile"""
     stock_code = StockCodeField(required=True)
+    # market_type: A / HK / US（路由不读该字段，仅为接受前端传参，避免 unknown=RAISE 误拒）
+    market_type = fields.String(load_default='A', validate=mv.OneOf(['A', 'HK', 'US', 'B']))
 
 
 class MarketIndicesSchema(Schema):
