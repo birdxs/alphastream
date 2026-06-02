@@ -8,6 +8,8 @@ Pos   : tests/backend/unit/test_core_fallback_manager.py - BE-03c Core #4
 """
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 import pytest
 
@@ -134,3 +136,73 @@ def test_invalid_result_triggers_fallback():
     assert not out.empty
     assert a1.call_count == 1
     assert a2.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# per-call 超时治本修复回归（FALLBACK_PER_CALL_TIMEOUT / _call_with_timeout）
+# ---------------------------------------------------------------------------
+
+class SlowAdapter:
+    """模拟 akshare 网络停顿永久阻塞的 adapter：get_data 长时间 sleep。"""
+
+    def __init__(self, name: str, sleep_s: float):
+        self.name = name
+        self._sleep_s = sleep_s
+        self.call_count = 0
+
+    def get_data(self, *args, **kwargs):
+        self.call_count += 1
+        time.sleep(self._sleep_s)
+        return {"slow": True}
+
+
+def test_per_call_timeout_default_from_env(monkeypatch):
+    """未显式传入时，per_call_timeout 取 env FALLBACK_PER_CALL_TIMEOUT。"""
+    import importlib
+    import app.core.fallback_manager as fm_mod
+    monkeypatch.setenv("FALLBACK_PER_CALL_TIMEOUT", "7")
+    importlib.reload(fm_mod)
+    try:
+        fm = fm_mod.FallbackManager([])
+        assert fm._per_call_timeout == 7.0
+        # 显式参数优先于 env
+        fm2 = fm_mod.FallbackManager([], per_call_timeout=3.5)
+        assert fm2._per_call_timeout == 3.5
+    finally:
+        monkeypatch.delenv("FALLBACK_PER_CALL_TIMEOUT", raising=False)
+        importlib.reload(fm_mod)
+
+
+def test_timeout_falls_back_to_next_adapter():
+    """首选 adapter 超时挂死时，应在 per_call_timeout 内切换到下一 adapter。"""
+    slow = SlowAdapter("slow", sleep_s=30)  # 远超下方 0.3s 超时
+    fast = FakeAdapter("fast", result={"ok": True})
+    fm = FallbackManager([slow, fast], max_retries=1, retry_delay=0.001,
+                         per_call_timeout=0.3)
+
+    start = time.monotonic()
+    out = fm.execute("get_data")
+    elapsed = time.monotonic() - start
+
+    assert out == {"ok": True}
+    assert slow.call_count == 1
+    assert fast.call_count == 1
+    # 不挂死：总耗时应接近一次超时窗，远小于 slow 的 30s
+    assert elapsed < 5, f"超时未生效，elapsed={elapsed}"
+
+
+def test_all_adapters_timeout_raises_not_hang():
+    """所有 adapter 都超时时按现有语义抛最终异常，且不无限挂起。"""
+    s1 = SlowAdapter("s1", sleep_s=30)
+    s2 = SlowAdapter("s2", sleep_s=30)
+    fm = FallbackManager([s1, s2], max_retries=1, retry_delay=0.001,
+                         per_call_timeout=0.3)
+
+    start = time.monotonic()
+    with pytest.raises(Exception, match="所有数据源均不可用"):
+        fm.execute("get_data")
+    elapsed = time.monotonic() - start
+
+    assert s1.call_count == 1
+    assert s2.call_count == 1
+    assert elapsed < 5, f"超时未生效，elapsed={elapsed}"
