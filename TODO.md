@@ -1,5 +1,50 @@
 # TODO
 
+## 2026-06-15 13:48:26 +08:00 — 4 议题审查裁决 + OpenAPI 第三~六批文档化 + deps 维护
+
+- [x] 4 议题审查裁决：A2A RPC 撤销（不立项）、前端 useState/use client 关闭（不改）、OpenAPI 立项、npm lockfile 修复。
+- [x] OpenAPI 第三批文档化（`73bfc36`，+8）：`/api/openapi.json` 新增 8 个端点 operation。
+- [x] OpenAPI 第四批文档化（`2258f04`，+10）：再新增 10 个端点 operation。
+- [x] OpenAPI 第六批文档化（`c9ced74`，+7）：再新增 7 个端点 operation。
+- [x] OpenAPI 第五批补做（`0f114f8`，+9）：补齐 9 个端点 operation（伪交付纠偏后补做，见下）。
+- [x] deps 维护：移除 `jotai` 死依赖 + `next` 16.2.6→16.2.9（`7734ed8`）；`package-lock.json` 漂移同步消除 `next` high 假阳性（`535973b`）。
+- [x] 收口：OpenAPI `paths` 30→64，`/api/*` 业务路由基本收口。
+- [!] 质量事件：第五批一度伪交付（声称 commit `8f29c0e` 实际不存在），经 `git` 实证拦截，补做为真实 commit `0f114f8`。后续凡声称 commit 必须 `git cat-file -e <hash>` 自证存在。
+- [~] 待办：SSE `/api/market_stream` 专项文档化（进行中，有意保留的特例）。
+- [ ] 待办：A2A 协议端点文档化（评估中，有意保留的特例）。
+
+### 2026-06-15 作战时间线（甘特图存档）
+
+```mermaid
+gantt
+    title StockAnal_Sys 2026-06-15 作战时间线
+    dateFormat HH:mm
+    axisFormat %H:%M
+    section 诊断与回顾
+    进度回顾 :done, a1, 13:28, 6m
+    内存根因诊断(非泄漏) :done, a2, 13:34, 12m
+    section 审查阶段(并行)
+    校时+git基线 :done, b1, 13:46, 4m
+    OpenAPI覆盖审查 :done, b2, 13:46, 4m
+    npm漏洞审查 :done, b3, 13:46, 6m
+    A2A RPC审查(撤销) :done, b4, 13:46, 5m
+    前端状态审查(关闭) :done, b5, 13:46, 5m
+    总裁决 :milestone, m1, 13:56, 0m
+    section deps修复
+    npm联网复核 :done, c1, 13:54, 6m
+    lockfile漂移同步 535973b :done, c2, 14:05, 4m
+    jotai移除+next16.2.9 7734ed8 :done, c3, 14:12, 5m
+    section OpenAPI文档化
+    第三批 73bfc36 +8 :done, d1, 14:00, 7m
+    第四批 2258f04 +10 :done, d2, 14:30, 6m
+    内存瞬时低谷复核 :active, d3, 14:43, 9m
+    第六批 c9ced74 +7 :done, d4, 14:52, 6m
+    section 质量纠偏
+    git核查发现伪交付 :crit, done, e1, 15:00, 3m
+    第五批补做 0f114f8 +9 :crit, done, e2, 15:05, 8m
+    收官汇报 :milestone, m2, 15:15, 0m
+```
+
 ## 2026-06-02 14:53:38 +08:00 — 前后端连调 + Kimi 真测前端能力（含 2 个治本修复）
 
 - [x] 首页行情真测：SSE `market_stream` 推真实指数（上证 4057.74/深证 15340.36/创业板 3950.94/沪深300 4844.26）；REST 503 降级显 "---" 占位，无假数据、无 Hydration。

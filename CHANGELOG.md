@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-15 13:48:26 +08:00 — OpenAPI 文档覆盖收口（第三~六批）+ 依赖维护
+
+- OpenAPI 文档第三批扩充（`73bfc36`）：`/api/openapi.json` 新增 8 个端点 operation，覆盖更多 `/api/*` 业务路由。
+- OpenAPI 文档第四批扩充（`2258f04`）：再新增 10 个端点 operation。
+- OpenAPI 文档第六批扩充（`c9ced74`）：再新增 7 个端点 operation。
+- OpenAPI 文档第五批补做（`0f114f8`）：补齐 9 个端点 operation（本批因质量事件补做，详见 TODO）。
+- 依赖维护——移除死依赖 + Next 升级（`7734ed8`）：从前端依赖中移除未被引用的 `jotai` 死依赖；`next` 由 16.2.6 升级至 16.2.9。
+- 依赖维护——锁文件漂移同步（`535973b`）：同步 `package-lock.json` 漂移，消除 `next` high 级别安全告警的假阳性。
+- 收口结论：OpenAPI `paths` 由 30 增至 64，`/api/*` 业务路由基本收口；剩余有意保留的特例为 SSE `market_stream` 与 A2A 协议端点（待后续专项文档化）。
+- 说明：本轮仅扩充静态 OpenAPI 文档与依赖元数据，未改运行时路由行为；未启服务、未 push。
+
 ## 2026-06-02 14:53:38 +08:00 — 前后端连调真测：基本面 tab 400 与 agent 工具挂死两处治本修复
 
 - 修复个股基本面 tab 打不开（`2f7828f`）：`/api/stock_profile` 的 `StockProfileSchema` 缺 `market_type` 字段，marshmallow 默认 `unknown=RAISE` 把前端传入的 `market_type=A` 当作"未知字段"直接拒绝，返回 0.002s 即时 400，导致 PE/PB/ROE 基本面 tab 无法加载（路由本身并不读该字段）。补 `market_type = fields.String(load_default='A', validate=mv.OneOf(['A','HK','US','B']))`（对齐同文件 `StockDataSchema`）。属自 Sprint 3-C 引入的既有缺陷，非回归。
