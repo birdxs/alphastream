@@ -4,6 +4,55 @@
 
 ---
 
+## 首页指数栏滚动 + AI 工作区文案修复记录（2026-06-15 17:25:55 +08:00）
+
+任务约束：前端修复（工作目录 `frontend`）；本地开发环境；禁止 push；只用 Bash/读改文件，不调 Sleep/WebFetch/WebSearch（联网用 `curl --noproxy '*'`）；本轮服务已停，布局视觉正确性留待 Comdr 浏览器复验。基准时间锚点 2026-06-15 17:25:55 +08:00。
+
+时间锚点：2026-06-15 17:25:55 +08:00（由本任务下达方提供，作为本节记录基准）。
+
+### 问题② 指数栏滚动丢失（治本 + 防御）
+
+根因：首页 `frontend/src/app/page.tsx:85` 用 `h-full overflow-hidden` 锁页面滚动，依赖 `layout.tsx → <main> → <body> → <html>` 高度链。核查发现两处缺环：
+- `frontend/src/app/globals.css` 中 `<html>`/`<body>` 均无 `height:100%`，下游 `h-full(height:100%)` 缺确定父高，某环退化为 auto 时整页产生 body 级滚动，把顶部指数栏 ticker（`market-overview.tsx`，原无 sticky/fixed）推出视口。
+- `frontend/src/app/layout.tsx:64` 的 `<main className="flex-1 min-h-0">` 无 `overflow-y-auto`；多条依赖页面级滚动的路由（settings/portfolio/compare/watchlist/stock/screener，根容器为 `max-w-* mx-auto p-* space-y-*` 或 `min-h-screen`，无内部滚动容器）实际靠 body 级滚动 —— 若直接给 body 加 `overflow:hidden` 会裁剪这些页面内容（任务预警的负面影响）。
+
+治本方案（统一固定外壳 + main 作全站滚动容器，规避全站裁剪风险）：
+- `frontend/src/app/globals.css` `@layer base`：新增 `html, body { height: 100% }`，并给 `body` 加 `overflow: hidden`（仅在 main 接管滚动后才安全）。
+- `frontend/src/app/layout.tsx:64`（改后约 65）：`<main>` 由 `flex-1 min-h-0` 改为 `flex-1 min-h-0 overflow-y-auto overscroll-contain`，成为全站统一滚动容器。首页 `page.tsx` 的 `h-full+overflow-hidden` 内部布局在 main 内恰好占满不滚动 → 指数栏自然居顶；其它路由改为在 main 内部滚动，行为等价且不被 body `overflow:hidden` 裁剪。
+
+防御加固（即使高度链遗漏也吸顶可见）：
+- `frontend/src/components/market/market-overview.tsx`：loading 态 ticker 容器（约 196 行）与正常态 ticker 容器（约 212 行）均加 `sticky top-0 z-20`。两容器原已有 `bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm` 半透明背景 + 模糊，作为 sticky 不透明背景足够，避免滚动内容透视。
+- sticky 生效前提核对：MDN（`https://developer.mozilla.org/en-US/docs/Web/CSS/position`，HTTP 200，`curl --noproxy '*'` 拉取，检索 2026-06-15 17:25:55 +08:00）确认 `position:sticky` 相对「最近的滚动祖先（nearest scrolling ancestor）」定位。本修复后 `<main>` 为 `overflow-y-auto` 即该滚动祖先 → ticker 的 `sticky top-0` 有效。
+
+### 问题③ 文案
+
+`frontend/src/components/chat/artifact-panel.tsx:58`：`<span ...>分析结果</span>` → `结果`。全仓 grep 确认仅此 1 处含「分析结果」，未改其它。
+
+### 验证
+
+- `node node_modules/typescript/bin/tsc --noEmit` → `tsc_exit=0`，零类型错误。
+- `npx eslint src/app/layout.tsx src/components/market/market-overview.tsx src/components/chat/artifact-panel.tsx` → `ESLINT_EXIT=0`，0 error 0 warning（globals.css 为 CSS，非 eslint 目标）。
+- 未跑 npm build；未启服务；未调 Playwright/vitest。
+- 内存：tsc 前 Pages free 4801（瞬时低，未硬停，按要求 vm_stat 仅监控不硬停），eslint 后回升 33326。
+- 待 Comdr 浏览器复验项：首页指数栏在内容滚动时保持可见；dashboard/settings/portfolio/compare/watchlist/stock/screener 各路由内部滚动正常、无内容被裁剪。
+
+### 改动 file:line 清单
+
+- `frontend/src/app/globals.css` `@layer base`：新增 `html, body { height:100% }` 与 `body { overflow:hidden }`。
+- `frontend/src/app/layout.tsx`（约 65 行）：`<main>` 增加 `overflow-y-auto overscroll-contain`。
+- `frontend/src/components/market/market-overview.tsx`（约 196、212 行）：两处 ticker 容器加 `sticky top-0 z-20`。
+- `frontend/src/components/chat/artifact-panel.tsx:58`：`分析结果` → `结果`。
+
+### 回滚方案
+
+- `globals.css`：删除新增的 `html, body { height:100% }` 与 `body` 的 `overflow:hidden`。
+- `layout.tsx`：`<main>` 移除 `overflow-y-auto overscroll-contain`，还原 `flex-1 min-h-0`。
+- `market-overview.tsx`：两处 ticker 容器移除 `sticky top-0 z-20`。
+- `artifact-panel.tsx:58`：`结果` 还原为 `分析结果`。
+- 不涉及数据迁移与运行时状态。
+
+---
+
 ## OpenAPI SSE market_stream 专项文档化记录（2026-06-15 13:48:26 +08:00）
 
 任务约束：本地开发环境；禁止 push；只改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md` 三文件；禁改 web_server.py/schema.py；禁新建文件；禁启服务；禁全量 pytest。基准时间锚点 2026-06-15 13:48:26 +08:00。

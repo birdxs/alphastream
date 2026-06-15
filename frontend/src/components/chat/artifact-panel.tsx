@@ -55,7 +55,7 @@ export function ArtifactPanel() {
         {isStreaming && (
           <div className="progress-indeterminate absolute bottom-0 left-0 right-0" />
         )}
-        <span className="text-xs font-medium text-foreground/80">分析结果</span>
+        <span className="text-xs font-medium text-foreground/80">结果</span>
         <div className="flex items-center gap-1">
           {artifacts.length > 0 && (
             <>

@@ -208,8 +208,16 @@
     @apply border-border outline-ring/50;
     font-variant-numeric: tabular-nums;
   }
+  /* 高度链根锚点：html/body 全程占满视口高度，使下游 h-full(height:100%) 链路有确定父高，
+     避免某环缺失时退化为 auto 产生 body 级滚动，把首页顶部指数栏推出视口。
+     仅设高度+防 body 级滚动，不影响各路由内部 overflow-y-auto 容器自身滚动。 */
+  html,
+  body {
+    height: 100%;
+  }
   body {
     @apply bg-background text-foreground;
+    overflow: hidden;
   }
   .dark body {
     background: #0A0A1A;

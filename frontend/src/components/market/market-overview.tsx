@@ -193,7 +193,7 @@ export function MarketOverview() {
   // 加载中或错误时显示占位
   if (loading) {
     return (
-      <div className="flex items-center gap-3 px-3 h-7 bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm border-b border-foreground/[0.06] dark:border-white/[0.06] text-[11px] shrink-0">
+      <div className="sticky top-0 z-20 flex items-center gap-3 px-3 h-7 bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm border-b border-foreground/[0.06] dark:border-white/[0.06] text-[11px] shrink-0">
         {FALLBACK_NAMES.map((name) => (
           <div key={name} className="flex items-center gap-1 shrink-0">
             <span className="text-muted-foreground dark:text-[#8888A0]">{name}</span>
@@ -209,7 +209,7 @@ export function MarketOverview() {
     : quotes.map((q) => ({ ...q, isError: false }));
 
   return (
-    <div className="flex items-center gap-3 px-3 h-7 bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm border-b border-foreground/[0.06] dark:border-white/[0.06] text-[11px] shrink-0 overflow-x-auto">
+    <div className="sticky top-0 z-20 flex items-center gap-3 px-3 h-7 bg-background/80 dark:bg-[#06060F]/80 backdrop-blur-sm border-b border-foreground/[0.06] dark:border-white/[0.06] text-[11px] shrink-0 overflow-x-auto">
       {displayItems.map((q, i) => (
         <div key={q.name} className={`flex items-center gap-1 shrink-0 ${!q.isError && flashMap[q.name] === 'up' ? 'flash-up' : ''} ${!q.isError && flashMap[q.name] === 'down' ? 'flash-down' : ''}`}>
           <span className="text-muted-foreground dark:text-[#8888A0]">{q.name}</span>

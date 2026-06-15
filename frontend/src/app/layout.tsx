@@ -61,7 +61,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="flex flex-col" style={{ height: '100dvh' }}>
               <Navbar />
               <NetworkStatus />
-              <main id="main-content" className="flex-1 min-h-0">
+              {/* main 作为全站统一滚动容器：flex-1 min-h-0 取得确定高度，overflow-y-auto 让
+                  内容超出时在此处滚动（而非冒泡到 body 产生页面级滚动把顶部指数栏推出视口）。
+                  首页 page.tsx 自带 h-full+overflow-hidden 的内部布局在此恰好占满不滚动；
+                  其它依赖页面级滚动的路由（settings/portfolio/compare/watchlist/stock/screener）
+                  改为在 main 内部滚动，行为等价且不被 body overflow:hidden 裁剪。 */}
+              <main id="main-content" className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                 {children}
               </main>
             </div>
