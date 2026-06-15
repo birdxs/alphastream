@@ -792,6 +792,212 @@ _PATHS: Dict[str, Any] = {
             },
         },
     },
+    # ─────────────────────────────────────────────
+    # S3-O/P1 第四批覆盖（2026-06-15）
+    # 基本面/资金/风险/场景/QA/指数/行业分析域
+    # ─────────────────────────────────────────────
+    '/api/fundamental_analysis': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '基本面分析评分',
+            'operationId': 'fundamentalAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                    },
+                    'required': ['stock_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '基本面分析结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/capital_flow': {
+        'post': {
+            'tags': ['FundFlow'],
+            'summary': '资金流向评分',
+            'operationId': 'capitalFlow',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': ''},
+                    },
+                    'required': ['stock_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '资金流向评分结果'},
+                '400': {'description': '参数错误'},
+                '503': {'description': '资金流向数据源不可用'},
+            },
+        },
+    },
+    '/api/scenario_predict': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '情景预测',
+            'operationId': 'scenarioPredict',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': 'A'},
+                        'days': {'type': 'integer', 'minimum': 1, 'maximum': 365, 'default': 60},
+                    },
+                    'required': ['stock_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '情景预测结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/qa': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '智能问答',
+            'operationId': 'stockQa',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'question': {'type': 'string', 'minLength': 1, 'maxLength': 1000},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': 'A'},
+                    },
+                    'required': ['stock_code', 'question'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '智能问答结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/risk_analysis': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '个股风险分析',
+            'operationId': 'riskAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': 'A'},
+                    },
+                    'required': ['stock_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '风险分析结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/portfolio_risk': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '投资组合风险分析',
+            'operationId': 'portfolioRisk',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'portfolio': {
+                            'type': 'array',
+                            'items': {'type': 'object', 'additionalProperties': True},
+                            'minItems': 1,
+                            'maxItems': 100,
+                        },
+                    },
+                    'required': ['portfolio'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '投资组合风险分析结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/index_analysis': {
+        'get': {
+            'tags': ['Market'],
+            'summary': '指数分析',
+            'operationId': 'indexAnalysis',
+            'parameters': [
+                {'name': 'index_code', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 20}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 500, 'default': 30}},
+            ],
+            'responses': {
+                '200': {'description': '指数分析结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/industry_analysis': {
+        'get': {
+            'tags': ['Industry'],
+            'summary': '行业分析',
+            'operationId': 'industryAnalysis',
+            'parameters': [
+                {'name': 'industry', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 50}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 500, 'default': 30}},
+            ],
+            'responses': {
+                '200': {'description': '行业分析结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/industry_fund_flow': {
+        'get': {
+            'tags': ['Industry'],
+            'summary': '行业资金流向',
+            'operationId': 'industryFundFlow',
+            'parameters': [
+                {'name': 'symbol', 'in': 'query',
+                 'schema': {'type': 'string', 'maxLength': 20, 'default': '即时'}},
+            ],
+            'responses': {
+                '200': {'description': '行业资金流向数据'},
+            },
+        },
+    },
+    '/api/industry_detail': {
+        'get': {
+            'tags': ['Industry'],
+            'summary': '行业详细信息',
+            'operationId': 'industryDetail',
+            'parameters': [
+                {'name': 'industry', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 50}},
+            ],
+            'responses': {
+                '200': {'description': '行业详细信息'},
+                '400': {'description': '参数错误'},
+                '404': {'description': '未找到行业'},
+            },
+        },
+    },
     '/api/csrf_token': {
         'get': {
             'tags': ['Security'],

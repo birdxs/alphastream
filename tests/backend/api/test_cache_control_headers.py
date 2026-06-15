@@ -280,6 +280,97 @@ def test_openapi_json_third_batch_parameters(flask_client):
     assert max_codes_schema["maximum"] == 100
 
 
+def test_openapi_json_includes_fourth_batch_routes(flask_client):
+    """OpenAPI spec 应包含第四批补齐的 10 个路由及方法。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    expected = {
+        "/api/fundamental_analysis": "post",
+        "/api/capital_flow": "post",
+        "/api/scenario_predict": "post",
+        "/api/qa": "post",
+        "/api/risk_analysis": "post",
+        "/api/portfolio_risk": "post",
+        "/api/index_analysis": "get",
+        "/api/industry_analysis": "get",
+        "/api/industry_fund_flow": "get",
+        "/api/industry_detail": "get",
+    }
+
+    for path, method in expected.items():
+        assert path in paths
+        assert method in paths[path]
+
+
+def test_openapi_json_fourth_batch_parameters(flask_client):
+    """OpenAPI spec 应声明第四批路由的关键 path/query/body 参数。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    fundamental = paths["/api/fundamental_analysis"]["post"]
+    fundamental_schema = fundamental["requestBody"]["content"]["application/json"]["schema"]
+    assert fundamental["requestBody"]["required"] is True
+    assert fundamental_schema["required"] == ["stock_code"]
+    assert fundamental_schema["properties"]["stock_code"]["maxLength"] == 20
+
+    capital = paths["/api/capital_flow"]["post"]
+    capital_schema = capital["requestBody"]["content"]["application/json"]["schema"]
+    assert capital_schema["required"] == ["stock_code"]
+    assert capital_schema["properties"]["market_type"]["maxLength"] == 10
+
+    scenario = paths["/api/scenario_predict"]["post"]
+    scenario_schema = scenario["requestBody"]["content"]["application/json"]["schema"]
+    assert scenario_schema["required"] == ["stock_code"]
+    assert scenario_schema["properties"]["days"]["minimum"] == 1
+    assert scenario_schema["properties"]["days"]["maximum"] == 365
+    assert scenario_schema["properties"]["days"]["default"] == 60
+
+    qa = paths["/api/qa"]["post"]
+    qa_schema = qa["requestBody"]["content"]["application/json"]["schema"]
+    assert qa_schema["required"] == ["stock_code", "question"]
+    assert qa_schema["properties"]["question"]["minLength"] == 1
+    assert qa_schema["properties"]["question"]["maxLength"] == 1000
+
+    risk = paths["/api/risk_analysis"]["post"]
+    risk_schema = risk["requestBody"]["content"]["application/json"]["schema"]
+    assert risk_schema["required"] == ["stock_code"]
+    assert risk_schema["properties"]["market_type"]["default"] == "A"
+
+    portfolio = paths["/api/portfolio_risk"]["post"]
+    portfolio_schema = portfolio["requestBody"]["content"]["application/json"]["schema"]
+    assert portfolio["requestBody"]["required"] is True
+    assert portfolio_schema["required"] == ["portfolio"]
+    assert portfolio_schema["properties"]["portfolio"]["minItems"] == 1
+    assert portfolio_schema["properties"]["portfolio"]["maxItems"] == 100
+
+    index_op = paths["/api/index_analysis"]["get"]
+    index_code = _param(index_op, "index_code", "query")
+    assert index_code["required"] is True
+    assert index_code["schema"]["maxLength"] == 20
+    index_limit = _param(index_op, "limit", "query")["schema"]
+    assert index_limit["minimum"] == 1
+    assert index_limit["maximum"] == 500
+    assert index_limit["default"] == 30
+
+    industry_op = paths["/api/industry_analysis"]["get"]
+    industry = _param(industry_op, "industry", "query")
+    assert industry["required"] is True
+    assert industry["schema"]["maxLength"] == 50
+
+    fund_flow_op = paths["/api/industry_fund_flow"]["get"]
+    symbol_schema = _param(fund_flow_op, "symbol", "query")["schema"]
+    assert symbol_schema["maxLength"] == 20
+    assert symbol_schema["default"] == "即时"
+
+    detail_op = paths["/api/industry_detail"]["get"]
+    detail_industry = _param(detail_op, "industry", "query")
+    assert detail_industry["required"] is True
+    assert detail_industry["schema"]["maxLength"] == 50
+
+
 # ---------------------------------------------------------------------------
 # /api-docs — 历史 Swagger UI 入口兼容跳转
 # ---------------------------------------------------------------------------

@@ -4,6 +4,36 @@
 
 ---
 
+## OpenAPI 第四批覆盖记录（2026-06-15 13:48:26 +08:00）
+
+任务约束：本地开发环境；禁止 push；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md`；禁止改 `app/web/web_server.py`/`app/web/schema.py`（只读权威）；禁止新建文件、启动服务、跑全量 pytest、Playwright/vitest/npm；内存红线 free pages <5000 立即停手。时间锚点 2026-06-15 13:48:26 +08:00。
+
+重复核查：开工时 `OPENAPI_SPEC['paths']` 基线 38，本批 10 路由（fundamental_analysis/capital_flow/scenario_predict/qa/risk_analysis/portfolio_risk/index_analysis/industry_analysis/industry_fund_flow/industry_detail）逐一比对现有 `_PATHS`，**全部未覆盖**，净新增 = 10（无误列）。
+
+改动摘要（仅手写 static spec dict + 测试断言，未触运行时路由）：
+- `app/web/openapi_spec.py` `_PATHS` 在第三批块后、`/api/csrf_token` 前插入 10 个 operation，字段以 `schema.py` 既有 *Schema 为权威逐条翻译：
+  - POST `/api/fundamental_analysis`（FundamentalAnalysisSchema）：body stock_code(req,1-20)。
+  - POST `/api/capital_flow`（CapitalFlowSchema）：body stock_code(req), market_type(max10, def '')；含 503。
+  - POST `/api/scenario_predict`（ScenarioPredictSchema）：body stock_code(req), market_type(def A), days(1-365 def60)。
+  - POST `/api/qa`（QASchema）：body stock_code(req), question(req,1-1000), market_type(def A)。
+  - POST `/api/risk_analysis`（RiskAnalysisSchema）：body stock_code(req), market_type(def A)。
+  - POST `/api/portfolio_risk`（PortfolioRiskSchema）：body portfolio(req, array 1-100)。
+  - GET `/api/index_analysis`（IndexAnalysisSchema）：query index_code(req,1-20), limit(1-500 def30)。
+  - GET `/api/industry_analysis`（IndustryAnalysisApiSchema）：query industry(req,1-50), limit(1-500 def30)。
+  - GET `/api/industry_fund_flow`（IndustryFundFlowSchema）：query symbol(max20, def '即时')。
+  - GET `/api/industry_detail`（IndustryDetailSchema）：query industry(req,1-50)；含 404。
+- `tests/backend/api/test_cache_control_headers.py`：追加 2 个用例 `test_openapi_json_includes_fourth_batch_routes`（10 path+method 存在性）、`test_openapi_json_fourth_batch_parameters`（required/enum/range/body 字段关键约束），复用现有 `_param` helper。
+
+验证记录：
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_cache_control_headers.py` → **13 passed, 12 warnings in 2.04s**（11 既有 + 2 新增）。
+- import-smoke：`len(OPENAPI_SPEC['paths'])` = **48**（38 → 48，+10）。
+- 内存：开工 57206 → 测试前 23085 → 测试后 64053，全程 ≥5000（首次采样 906 为瞬时低谷，经 Comdr 复核确认健康后恢复）。
+- 未启服务、未跑全量、未 Playwright/vitest/npm、未 push。
+
+回滚方案：移除 `openapi_spec.py` `_PATHS` 中本批 10 个 operation；删除 `test_cache_control_headers.py` 中本批 2 个用例；删除本节及对应文档 commit。无数据迁移、无运行时副作用。
+
+---
+
 ## jotai 清理 + next 16.2.9 升级记录（2026-06-15 13:48:26 +08:00）
 
 任务约束：本地开发环境；禁止 push；禁止 `npm run build/dev`、禁止 vitest、禁止启动服务（铁律 #3）；仅允许无参 `npm install`（清代理），绝不 `--force`/`audit fix`/`update`；动作前后 `vm_stat` 监控，free pages <5000 立即停手；开工内存闸门 ≥8000 才执行 npm install。两项 deps housekeeping 合并一次提交。
