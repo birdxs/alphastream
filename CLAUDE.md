@@ -4,6 +4,47 @@
 
 ---
 
+## OpenAPI 第五批（补做）覆盖记录（2026-06-15 13:48:26 +08:00）
+
+**伪交付背景（本次为真实补做）**：第五批 9 路由此前被某 worker 声称已提交（commit `8f29c0e`），但经 git 实证该 commit 根本不存在于 object 库、9 路由 0/9 命中 `openapi_spec.py` —— 属伪交付。本次为真实补做，提交前/后均以 git object 库与 `OPENAPI_SPEC` 实测自证落盘。
+
+任务约束：本地开发环境；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md`；禁改 `web_server.py`/`schema.py`（只读权威）；禁新建文件、禁启服务、禁全量 pytest、禁 push；仅补静态 `/api/openapi.json` 文档契约，不改运行时路由行为。
+
+时间真实性校验（本节锚点，沿用任务下达基准）：
+- 基准时间锚点：2026-06-15 13:48:26 +08:00（Asia/Singapore +08:00）。
+
+内存闸门：开工 `vm_stat | head -5` → Pages free 135088（≫8000），单次即通过，无需重采。
+
+补做范围（9 路由，行号见 web_server.py，参数以 schema.py 既有 *Schema 为权威翻译，response 用保守 `GenericObject`；逐条比对 `_PATHS` 确认确未覆盖后补入）：
+| # | 方法 | 路径 | 权威 schema | 关键约束 |
+|---|---|---|---|---|
+| 1 | GET | `/api/industry_compare` | IndustryCompareSchema | limit 1-500（default 10）|
+| 2 | GET | `/api/history_analysis` | HistoryAnalysisSchema | stock_code required；limit 1-500 |
+| 3 | GET | `/api/latest_news` | LatestNewsSchema | days 1-30；limit 1-500；important enum[0,1]；type enum[all,hotspot] |
+| 4 | GET | `/api/news_sentiment` | NewsSentimentSchema | days 1-30 |
+| 5 | GET | `/api/agent_analysis_status/{task_id}` | AgentAnalysisStatusSchema | task_id path required |
+| 6 | POST | `/api/delete_agent_analysis` | DeleteAgentAnalysisSchema | task_ids required，array minItems1 maxItems200 |
+| 7 | GET | `/api/agent_pending_approvals` | AgentPendingApprovalsSchema（无必填） | 无参 |
+| 8 | POST | `/api/agent_submit_approval` | AgentSubmitApprovalSchema | task_id required；approved default false；feedback maxLen2000 |
+| 9 | POST | `/api/ai/chat` | AiChatStreamSchema | message required 1-5000；research_depth 1-5（default 3）；SSE 流式响应 |
+
+改动摘要：
+- `app/web/openapi_spec.py`：`_PATHS` 末尾追加上述 9 个 operation（GET×5/POST×4）；新增 `News`、`AI` 两个 tag（其余 Industry/Stock/Agent/System 复用已有）。
+- `tests/backend/api/test_cache_control_headers.py`：复用现有文件追加 2 个用例 `test_openapi_json_includes_fifth_batch_routes`（9 路由 path+method 存在性）与 `test_openapi_json_fifth_batch_parameters`（关键参数/requestBody 约束断言）。
+- 未修改 `app/web/web_server.py`、`app/web/schema.py`；未改变运行时路由行为。
+
+特例登记：未创建新文件；无需新文件特例审批。
+
+验证记录（落盘自证）：
+- paths 总数：55 → 64（+9）；9 路由实测全部 `in OPENAPI_SPEC['paths']` 为 True。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_cache_control_headers.py` → **17 passed, 12 warnings in 2.05s**（15 既有 + 2 新增）。
+- 内存：改动前 free pages 135088（≥8000），全程未启服务、未跑全量 pytest、未跑 Playwright、未 push。
+
+回滚方案：
+- 移除 `openapi_spec.py` 中本批新增 9 个 `_PATHS` operation 与 `News`/`AI` 两个 tag；删除 `test_cache_control_headers.py` 中本批新增 2 个用例；删除本节及对应提交。不涉及数据迁移或运行时状态。
+
+---
+
 ## OpenAPI 第六批（最终批）覆盖记录（2026-06-15 13:48:26 +08:00）
 
 任务约束：本地开发环境；禁止 push；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md`；禁止改 `app/web/web_server.py`/`app/web/schema.py`（只读权威）；禁止新建文件、启动服务、跑全量 pytest、Playwright/vitest/npm；内存红线 free pages <5000 立即停手（改进闸门：首采 <8000 时隔 4s 重采 3 次取较高/中位 + `memory_pressure -Q` 空闲 ≥30% 即通过，仅 3 次全 <5000 且空闲 <30% 才停手）。时间锚点 2026-06-15 13:48:26 +08:00。

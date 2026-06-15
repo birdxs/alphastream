@@ -436,6 +436,97 @@ def test_openapi_json_sixth_batch_parameters(flask_client):
 
 
 # ---------------------------------------------------------------------------
+# 第五批（补做）：行业对比 / 历史分析 / 新闻 / Agent 状态与审批 / AI 对话
+# 注：第五批此前被某 worker 声称 commit 8f29c0e 提交但 git 实证不存在（伪交付），
+# 本组断言为真实补做，验证 9 路由 path+method 存在性与关键参数约束。
+# ---------------------------------------------------------------------------
+
+def test_openapi_json_includes_fifth_batch_routes(flask_client):
+    """OpenAPI spec 应包含第五批（补做）9 个真正未覆盖路由及方法。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    expected = {
+        "/api/industry_compare": "get",
+        "/api/history_analysis": "get",
+        "/api/latest_news": "get",
+        "/api/news_sentiment": "get",
+        "/api/agent_analysis_status/{task_id}": "get",
+        "/api/delete_agent_analysis": "post",
+        "/api/agent_pending_approvals": "get",
+        "/api/agent_submit_approval": "post",
+        "/api/ai/chat": "post",
+    }
+
+    for path, method in expected.items():
+        assert path in paths
+        assert method in paths[path]
+
+
+def test_openapi_json_fifth_batch_parameters(flask_client):
+    """OpenAPI spec 应声明第五批路由的关键 path/query/body 参数约束。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    industry_compare = paths["/api/industry_compare"]["get"]
+    ic_limit = _param(industry_compare, "limit", "query")
+    assert ic_limit["schema"]["minimum"] == 1
+    assert ic_limit["schema"]["maximum"] == 500
+
+    history = paths["/api/history_analysis"]["get"]
+    hist_code = _param(history, "stock_code", "query")
+    assert hist_code["required"] is True
+    hist_limit = _param(history, "limit", "query")
+    assert hist_limit["schema"]["maximum"] == 500
+
+    latest_news = paths["/api/latest_news"]["get"]
+    days = _param(latest_news, "days", "query")
+    assert days["schema"]["minimum"] == 1
+    assert days["schema"]["maximum"] == 30
+    important = _param(latest_news, "important", "query")
+    assert important["schema"]["enum"] == ["0", "1"]
+
+    sentiment = paths["/api/news_sentiment"]["get"]
+    sent_days = _param(sentiment, "days", "query")
+    assert sent_days["schema"]["maximum"] == 30
+
+    agent_status = paths["/api/agent_analysis_status/{task_id}"]["get"]
+    task_id = _param(agent_status, "task_id", "path")
+    assert task_id["required"] is True
+
+    delete_agent = paths["/api/delete_agent_analysis"]["post"]
+    del_schema = delete_agent["requestBody"]["content"]["application/json"]["schema"]
+    assert delete_agent["requestBody"]["required"] is True
+    assert del_schema["required"] == ["task_ids"]
+    assert del_schema["properties"]["task_ids"]["minItems"] == 1
+    assert del_schema["properties"]["task_ids"]["maxItems"] == 200
+
+    pending = paths["/api/agent_pending_approvals"]["get"]
+    assert "responses" in pending
+    assert "200" in pending["responses"]
+
+    submit = paths["/api/agent_submit_approval"]["post"]
+    sub_schema = submit["requestBody"]["content"]["application/json"]["schema"]
+    assert submit["requestBody"]["required"] is True
+    assert sub_schema["required"] == ["task_id"]
+    assert sub_schema["properties"]["task_id"]["maxLength"] == 100
+    assert sub_schema["properties"]["approved"]["default"] is False
+    assert sub_schema["properties"]["feedback"]["maxLength"] == 2000
+
+    chat = paths["/api/ai/chat"]["post"]
+    chat_schema = chat["requestBody"]["content"]["application/json"]["schema"]
+    assert chat["requestBody"]["required"] is True
+    assert chat_schema["required"] == ["message"]
+    assert chat_schema["properties"]["message"]["minLength"] == 1
+    assert chat_schema["properties"]["message"]["maxLength"] == 5000
+    assert chat_schema["properties"]["research_depth"]["minimum"] == 1
+    assert chat_schema["properties"]["research_depth"]["maximum"] == 5
+    assert chat_schema["properties"]["research_depth"]["default"] == 3
+
+
+# ---------------------------------------------------------------------------
 # /api-docs — 历史 Swagger UI 入口兼容跳转
 # ---------------------------------------------------------------------------
 

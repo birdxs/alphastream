@@ -1135,6 +1135,179 @@ _PATHS: Dict[str, Any] = {
             },
         },
     },
+    # ── 第五批（补做）：行业对比 / 历史分析 / 新闻 / Agent 状态与审批 / AI 对话 ──
+    '/api/industry_compare': {
+        'get': {
+            'tags': ['Industry'],
+            'summary': '行业横向对比',
+            'operationId': 'getIndustryCompare',
+            'parameters': [
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'default': 10, 'minimum': 1, 'maximum': 500}},
+            ],
+            'responses': {
+                '200': {'description': '行业对比结果',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
+    '/api/history_analysis': {
+        'get': {
+            'tags': ['Stock'],
+            'summary': '历史分析记录',
+            'operationId': 'getHistoryAnalysis',
+            'parameters': [
+                {'name': 'stock_code', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'example': '600519'}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'default': 10, 'minimum': 1, 'maximum': 500}},
+            ],
+            'responses': {
+                '200': {'description': '历史分析列表',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '400': {'description': '参数校验失败'},
+            },
+        },
+    },
+    '/api/latest_news': {
+        'get': {
+            'tags': ['News'],
+            'summary': '最新财经新闻',
+            'operationId': 'getLatestNews',
+            'parameters': [
+                {'name': 'days', 'in': 'query',
+                 'schema': {'type': 'integer', 'default': 1, 'minimum': 1, 'maximum': 30}},
+                {'name': 'limit', 'in': 'query',
+                 'schema': {'type': 'integer', 'default': 500, 'minimum': 1, 'maximum': 500}},
+                {'name': 'important', 'in': 'query',
+                 'schema': {'type': 'string', 'default': '0', 'enum': ['0', '1']}},
+                {'name': 'type', 'in': 'query',
+                 'schema': {'type': 'string', 'default': 'all', 'enum': ['all', 'hotspot']}},
+            ],
+            'responses': {
+                '200': {'description': '新闻列表',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
+    '/api/news_sentiment': {
+        'get': {
+            'tags': ['News'],
+            'summary': '新闻情绪分析',
+            'operationId': 'getNewsSentiment',
+            'parameters': [
+                {'name': 'days', 'in': 'query',
+                 'schema': {'type': 'integer', 'default': 1, 'minimum': 1, 'maximum': 30}},
+            ],
+            'responses': {
+                '200': {'description': '新闻情绪结果',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
+    '/api/agent_analysis_status/{task_id}': {
+        'get': {
+            'tags': ['Agent'],
+            'summary': '查询智能体分析任务状态',
+            'operationId': 'getAgentAnalysisStatus',
+            'parameters': [
+                {'name': 'task_id', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string'}},
+            ],
+            'responses': {
+                '200': {'description': '任务状态',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '404': {'description': '任务不存在'},
+            },
+        },
+    },
+    '/api/delete_agent_analysis': {
+        'post': {
+            'tags': ['Agent'],
+            'summary': '批量删除智能体分析记录',
+            'operationId': 'deleteAgentAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'required': ['task_ids'],
+                    'properties': {
+                        'task_ids': {
+                            'type': 'array',
+                            'items': {'type': 'string', 'minLength': 1, 'maxLength': 100},
+                            'minItems': 1, 'maxItems': 200,
+                        },
+                    },
+                }}},
+            },
+            'responses': {
+                '200': {'description': '删除结果',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '400': {'description': '参数校验失败'},
+            },
+        },
+    },
+    '/api/agent_pending_approvals': {
+        'get': {
+            'tags': ['Agent'],
+            'summary': '列出待审批的智能体任务',
+            'operationId': 'getAgentPendingApprovals',
+            'responses': {
+                '200': {'description': '待审批任务列表',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
+    '/api/agent_submit_approval': {
+        'post': {
+            'tags': ['Agent'],
+            'summary': '提交智能体任务审批结果',
+            'operationId': 'submitAgentApproval',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'required': ['task_id'],
+                    'properties': {
+                        'task_id': {'type': 'string', 'minLength': 1, 'maxLength': 100},
+                        'approved': {'type': 'boolean', 'default': False},
+                        'feedback': {'type': 'string', 'default': '', 'maxLength': 2000},
+                    },
+                }}},
+            },
+            'responses': {
+                '200': {'description': '审批提交结果',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '400': {'description': '参数校验失败'},
+            },
+        },
+    },
+    '/api/ai/chat': {
+        'post': {
+            'tags': ['AI'],
+            'summary': 'AI 对话（SSE 流式响应）',
+            'operationId': 'postAiChat',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'required': ['message'],
+                    'properties': {
+                        'message': {'type': 'string', 'minLength': 1, 'maxLength': 5000},
+                        'conversation_id': {'type': 'string', 'default': '', 'maxLength': 100},
+                        'stock_code': {'type': 'string', 'default': '', 'maxLength': 20},
+                        'market_type': {'type': 'string', 'default': 'A', 'maxLength': 10},
+                        'research_depth': {'type': 'integer', 'default': 3, 'minimum': 1, 'maximum': 5},
+                    },
+                }}},
+            },
+            'responses': {
+                '200': {'description': 'SSE 事件流（text/event-stream）',
+                        'content': {'text/event-stream': {'schema': {'type': 'string'}}}},
+                '400': {'description': '参数校验失败'},
+            },
+        },
+    },
 }
 
 # ─────────────────────────────────────────────
@@ -1163,6 +1336,8 @@ OPENAPI_SPEC: Dict[str, Any] = {
         {'name': 'Agent', 'description': '智能体分析'},
         {'name': 'Scan', 'description': '市场扫描任务'},
         {'name': 'Industry', 'description': '行业数据'},
+        {'name': 'News', 'description': '财经新闻/情绪'},
+        {'name': 'AI', 'description': 'AI 对话'},
         {'name': 'FundFlow', 'description': '资金流向'},
         {'name': 'MCP', 'description': 'MCP 工具'},
         {'name': 'Shipping', 'description': '航运另类数据'},
