@@ -998,6 +998,117 @@ _PATHS: Dict[str, Any] = {
             },
         },
     },
+    # ─────────────────────────────────────────────
+    # S3-O/P1 第六批（最终批）覆盖（2026-06-15）
+    # P3 另类数据 + 运维 + AI 分析域
+    # ─────────────────────────────────────────────
+    '/api/ai/agent-analyze': {
+        'post': {
+            'tags': ['Agent'],
+            'summary': 'AI 智能体分析',
+            'operationId': 'aiAgentAnalyze',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': 'A'},
+                        'research_depth': {'type': 'integer', 'minimum': 1, 'maximum': 5, 'default': 3},
+                        'conversation_id': {'type': 'string', 'maxLength': 100, 'default': ''},
+                        'user_message': {'type': 'string', 'maxLength': 5000, 'default': ''},
+                        'message': {'type': 'string', 'maxLength': 5000, 'default': ''},
+                    },
+                    'required': ['stock_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': 'AI 智能体分析结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/esg/climate/{cik}': {
+        'get': {
+            'tags': ['ESG'],
+            'summary': 'EDGAR 气候披露',
+            'operationId': 'esgClimate',
+            'parameters': [
+                {'name': 'cik', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string'}},
+            ],
+            'responses': {
+                '200': {'description': '气候披露数据'},
+                '400': {'description': 'cik 不能为空'},
+            },
+        },
+    },
+    '/api/corporate/{company_id}/network': {
+        'get': {
+            'tags': ['Corporate'],
+            'summary': '企业关系网络',
+            'operationId': 'corporateNetwork',
+            'parameters': [
+                {'name': 'company_id', 'in': 'path', 'required': True,
+                 'description': '允许内含斜杠（如 us_ca/SAMPLEID）',
+                 'schema': {'type': 'string'}},
+            ],
+            'responses': {
+                '200': {'description': '企业关系网络数据'},
+                '400': {'description': 'company_id 非法'},
+            },
+        },
+    },
+    '/api/satellite/search': {
+        'get': {
+            'tags': ['Satellite'],
+            'summary': '卫星另类数据检索',
+            'operationId': 'satelliteSearch',
+            'parameters': [
+                {'name': 'q', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 200}},
+            ],
+            'responses': {
+                '200': {'description': '卫星数据检索结果'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/alt_data/{ticker}': {
+        'get': {
+            'tags': ['AltData'],
+            'summary': '聚合另类数据（shipping/esg/hiring/corporate）',
+            'operationId': 'altData',
+            'parameters': [
+                {'name': 'ticker', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string', 'maxLength': 20}},
+            ],
+            'responses': {
+                '200': {'description': '聚合另类数据结果（部分失败不阻断）'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/adapters/status': {
+        'get': {
+            'tags': ['Ops'],
+            'summary': '数据源适配器健康状态',
+            'operationId': 'adaptersStatus',
+            'responses': {
+                '200': {'description': '各适配器健康状态'},
+            },
+        },
+    },
+    '/api/registry/stats': {
+        'get': {
+            'tags': ['Ops'],
+            'summary': '适配器注册表统计',
+            'operationId': 'registryStats',
+            'responses': {
+                '200': {'description': '注册表统计信息'},
+            },
+        },
+    },
     '/api/csrf_token': {
         'get': {
             'tags': ['Security'],
@@ -1058,6 +1169,9 @@ OPENAPI_SPEC: Dict[str, Any] = {
         {'name': 'ESG', 'description': 'ESG 另类数据'},
         {'name': 'Corporate', 'description': '企业网络另类数据'},
         {'name': 'Jobs', 'description': '招聘信号另类数据'},
+        {'name': 'Satellite', 'description': '卫星另类数据'},
+        {'name': 'AltData', 'description': '聚合另类数据'},
+        {'name': 'Ops', 'description': '运维/适配器注册表'},
         {'name': 'Security', 'description': '鉴权/CSRF'},
     ],
     'paths': _PATHS,

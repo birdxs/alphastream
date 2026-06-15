@@ -371,6 +371,70 @@ def test_openapi_json_fourth_batch_parameters(flask_client):
     assert detail_industry["schema"]["maxLength"] == 50
 
 
+def test_openapi_json_includes_sixth_batch_routes(flask_client):
+    """OpenAPI spec 应包含第六批（最终批）补齐的 7 个真正未覆盖路由及方法。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    expected = {
+        "/api/ai/agent-analyze": "post",
+        "/api/esg/climate/{cik}": "get",
+        "/api/corporate/{company_id}/network": "get",
+        "/api/satellite/search": "get",
+        "/api/alt_data/{ticker}": "get",
+        "/api/adapters/status": "get",
+        "/api/registry/stats": "get",
+    }
+
+    for path, method in expected.items():
+        assert path in paths
+        assert method in paths[path]
+
+
+def test_openapi_json_sixth_batch_parameters(flask_client):
+    """OpenAPI spec 应声明第六批路由的关键 path/query/body 参数约束。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    agent = paths["/api/ai/agent-analyze"]["post"]
+    agent_schema = agent["requestBody"]["content"]["application/json"]["schema"]
+    assert agent["requestBody"]["required"] is True
+    assert agent_schema["required"] == ["stock_code"]
+    assert agent_schema["properties"]["stock_code"]["maxLength"] == 20
+    assert agent_schema["properties"]["research_depth"]["minimum"] == 1
+    assert agent_schema["properties"]["research_depth"]["maximum"] == 5
+    assert agent_schema["properties"]["research_depth"]["default"] == 3
+
+    climate = paths["/api/esg/climate/{cik}"]["get"]
+    cik = _param(climate, "cik", "path")
+    assert cik["required"] is True
+
+    network = paths["/api/corporate/{company_id}/network"]["get"]
+    company_id = _param(network, "company_id", "path")
+    assert company_id["required"] is True
+
+    satellite = paths["/api/satellite/search"]["get"]
+    sat_q = _param(satellite, "q", "query")
+    assert sat_q["required"] is True
+    assert sat_q["schema"]["minLength"] == 1
+    assert sat_q["schema"]["maxLength"] == 200
+
+    alt = paths["/api/alt_data/{ticker}"]["get"]
+    ticker = _param(alt, "ticker", "path")
+    assert ticker["required"] is True
+    assert ticker["schema"]["maxLength"] == 20
+
+    adapters = paths["/api/adapters/status"]["get"]
+    assert "responses" in adapters
+    assert "200" in adapters["responses"]
+
+    registry = paths["/api/registry/stats"]["get"]
+    assert "responses" in registry
+    assert "200" in registry["responses"]
+
+
 # ---------------------------------------------------------------------------
 # /api-docs — 历史 Swagger UI 入口兼容跳转
 # ---------------------------------------------------------------------------

@@ -4,6 +4,45 @@
 
 ---
 
+## OpenAPI 第六批（最终批）覆盖记录（2026-06-15 13:48:26 +08:00）
+
+任务约束：本地开发环境；禁止 push；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md`；禁止改 `app/web/web_server.py`/`app/web/schema.py`（只读权威）；禁止新建文件、启动服务、跑全量 pytest、Playwright/vitest/npm；内存红线 free pages <5000 立即停手（改进闸门：首采 <8000 时隔 4s 重采 3 次取较高/中位 + `memory_pressure -Q` 空闲 ≥30% 即通过，仅 3 次全 <5000 且空闲 <30% 才停手）。时间锚点 2026-06-15 13:48:26 +08:00。
+
+基线澄清：本批下达时口径为 paths 基线 57，但本仓库 HEAD 实际停在第四批 `2258f04`（第五批未在本仓库落地），import-smoke 实测开工基线 = **48**。故本批以 48 为真实基线，净新增后 = **55**（48 → 55，+7）。
+
+重复核查（逐条比对现有 `_PATHS`，grep 确认）：清单 8 条中——
+- 1 `/api/ai/agent-analyze`、2 `/api/esg/climate/{cik}`、3 `/api/corporate/{company_id}/network`、4 `/api/satellite/search`、5 `/api/alt_data/{ticker}`、6 `/api/adapters/status`、7 `/api/registry/stats`：**全部未覆盖**，做。
+- 8 `/api/csrf_token`：**已被前批覆盖**（openapi_spec.py 既有 `'/api/csrf_token'` operation），剔除不重复。
+- **净新增 = 7**。
+
+改动摘要（仅手写 static spec dict + 测试断言，未触运行时路由）：
+- `app/web/openapi_spec.py` `_PATHS` 在第三/四批块后、`/api/csrf_token` 前插入 7 个 operation，字段以 `schema.py` 既有 *Schema 为权威逐条翻译；无 schema 的路径参数按路由实际读取保守描述：
+  - POST `/api/ai/agent-analyze`（AiAgentAnalyzeSchema）：body stock_code(req,1-20), market_type(max10 def A), research_depth(1-5 def3), conversation_id(max100), user_message/message(max5000)。
+  - GET `/api/esg/climate/{cik}`（无 schema，cik 路径参 req）。
+  - GET `/api/corporate/{company_id}/network`（无 schema，company_id 路径参 req，`<path:>` 允许斜杠）。
+  - GET `/api/satellite/search`（SatelliteSearchSchema）：query q(req,1-200)。
+  - GET `/api/alt_data/{ticker}`（无 schema，ticker 路径参 req,max20）。
+  - GET `/api/adapters/status`（AdaptersStatusSchema，无参）。
+  - GET `/api/registry/stats`（RegistryStatsSchema，无参）。
+- 新增 3 个 tag：`Satellite`/`AltData`/`Ops`；复用 Agent/ESG/Corporate。
+- `tests/backend/api/test_cache_control_headers.py`：追加 2 个用例 `test_openapi_json_includes_sixth_batch_routes`（7 path+method 存在性）、`test_openapi_json_sixth_batch_parameters`（required/range/length/path 参关键约束），复用现有 `_param` helper。
+
+特例/未纳入项说明：
+- SSE 端点 `/api/market_stream`（web_server.py:2553）跳过——SSE（text/event-stream 流式）的 OpenAPI 表达需单独设计 `content: text/event-stream` + 事件 schema，非本批一行 dict 可覆盖，留作后续专项说明项。
+- A2A 协议端点 `/.well-known/agent-card.json`、`/.well-known/agent.json`、`/a2a/v1`：**不纳入**本 OpenAPI spec。理由：这三者属 A2A（Agent-to-Agent）协议约定的发现/通信端点，由 A2A 协议规范自描述（agent-card 本身即机器可读能力清单），与面向人类/前端的业务 REST API 属不同契约层；混入 `/api/openapi.json` 会污染业务 API 文档语义，且 `/.well-known/*` 不在 `/api/` 前缀下。建议如需文档化另起 A2A 专项说明，不并入本 spec。
+
+验证记录：
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_cache_control_headers.py` → **15 passed, 12 warnings in 2.11s**（13 既有 + 2 新增）。
+- import-smoke：`len(OPENAPI_SPEC['paths'])` = **55**（48 → 55，+7）；`git stash` 验证基线确为 48。
+- 内存：开工首采 4816（瞬时低谷）→ 改进闸门三采 21863/23838/4413 + 空闲 50% 判定通过 → 测试前 12736 → 测试后 21464，全程主体 ≥8000。
+- 未启服务、未跑全量、未 Playwright/vitest/npm、未 push。
+
+全项目 /api/* 覆盖收口：经第一~四 + 六批累计，业务 REST `/api/*` 路由已基本全覆盖（paths=55）。剩余未文档化的仅特例：① SSE 流式 `/api/market_stream`（需 text/event-stream 专项 schema）；② A2A 协议端点 `/.well-known/*` 与 `/a2a/v1`（协议自描述，不属业务 API 层）。这些为有意保留的特例，非遗漏。
+
+回滚方案：移除 `openapi_spec.py` `_PATHS` 中本批 7 个 operation 与 3 个新 tag；删除 `test_cache_control_headers.py` 中本批 2 个用例；删除本节及对应文档 commit。无数据迁移、无运行时副作用。
+
+---
+
 ## OpenAPI 第四批覆盖记录（2026-06-15 13:48:26 +08:00）
 
 任务约束：本地开发环境；禁止 push；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md`；禁止改 `app/web/web_server.py`/`app/web/schema.py`（只读权威）；禁止新建文件、启动服务、跑全量 pytest、Playwright/vitest/npm；内存红线 free pages <5000 立即停手。时间锚点 2026-06-15 13:48:26 +08:00。
