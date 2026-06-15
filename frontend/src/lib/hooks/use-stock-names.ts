@@ -20,9 +20,12 @@ async function fetchName(code: string): Promise<string | undefined> {
     try {
       const r = await apiClient.get<{ stock_name?: string }>("/api/stock_name", { stock_code: code });
       stockNameEndpointAvailable = true;
-      if (r.stock_name) {
-        nameCache[code] = r.stock_name;
-        return r.stock_name;
+      // 仅当返回的是真名（非空白、且不等于代码本身）才视为有效名缓存并返回；
+      // 否则（如离线/缺名时后端回退 stock_name=code）不缓存 code，继续走 stock_data 兜底。
+      const sn = r.stock_name?.trim();
+      if (sn && sn !== code) {
+        nameCache[code] = sn;
+        return sn;
       }
     } catch {
       stockNameEndpointAvailable = false;
@@ -33,7 +36,7 @@ async function fetchName(code: string): Promise<string | undefined> {
     const r = await apiClient.get<{ stock_name?: string }>("/api/stock_data", {
       stock_code: code, market_type: inferMarketType(code), period: "1y",
     });
-    if (r.stock_name && r.stock_name !== code) {
+    if (r.stock_name && r.stock_name.trim() && r.stock_name !== code) {
       nameCache[code] = r.stock_name;
       return r.stock_name;
     }

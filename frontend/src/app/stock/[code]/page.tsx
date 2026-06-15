@@ -362,7 +362,8 @@ export default function StockDetailPage({
     if (isWatched) {
       removeItem(code);
     } else {
-      addItem(code, stockName || code);
+      // 不把 code 当 name 传入；无真名时传空串，由 store 守卫处理（避免 code 污染）
+      addItem(code, stockName);
     }
   };
 

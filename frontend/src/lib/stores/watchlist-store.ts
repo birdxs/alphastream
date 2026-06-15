@@ -15,6 +15,7 @@ export interface WatchItem {
 interface WatchlistState {
   items: WatchItem[];
   addItem: (code: string, name?: string) => void;
+  setName: (code: string, name: string) => void;
   removeItem: (code: string) => void;
   hasItem: (code: string) => boolean;
 }
@@ -24,16 +25,34 @@ export const useWatchlistStore = create<WatchlistState>()(
     (set, get) => ({
       items: [],
       addItem: (code, name) => set((s) => ({
+        // 无真名（缺省或等于代码）时存空串，禁止把 code 当 name 持久化（铁律 #1）
         items: s.items.some(i => i.code === code) ? s.items : [
           ...s.items,
-          { code, name: name || code, addedAt: new Date().toISOString() }
+          { code, name: name && name !== code ? name : '', addedAt: new Date().toISOString() }
         ]
+      })),
+      setName: (code, name) => set((s) => ({
+        // 拿到真名后回填；忽略空名或等于代码的无效名
+        items: (name && name !== code)
+          ? s.items.map(i => i.code === code ? { ...i, name } : i)
+          : s.items
       })),
       removeItem: (code) => set((s) => ({
         items: s.items.filter(i => i.code !== code)
       })),
       hasItem: (code) => get().items.some(i => i.code === code),
     }),
-    { name: 'watchlist-storage' }
+    {
+      name: 'watchlist-storage',
+      version: 1,
+      // 兼容清洗：旧版本把 code 误存为 name，迁移时清空 name===code 的脏数据
+      migrate: (persisted: unknown) => {
+        const state = persisted as { items?: WatchItem[] } | undefined;
+        if (state?.items) {
+          state.items = state.items.map(i => i.name === i.code ? { ...i, name: '' } : i);
+        }
+        return state as WatchlistState;
+      },
+    }
   )
 );

@@ -35,6 +35,16 @@ export const usePortfolioStore = create<PortfolioState>()(
         holdings: s.holdings.map(h => h.code === code ? { ...h, ...updates } : h)
       })),
     }),
-    { name: 'portfolio-storage' }
+    { name: 'portfolio-storage',
+      version: 1,
+      // 兼容清洗：旧版本把 code 误存为 name，迁移时清空 name===code 的脏数据
+      migrate: (persisted: unknown) => {
+        const state = persisted as { holdings?: Holding[] } | undefined;
+        if (state?.holdings) {
+          state.holdings = state.holdings.map(h => h.name === h.code ? { ...h, name: '' } : h);
+        }
+        return state as PortfolioState;
+      },
+    }
   )
 );

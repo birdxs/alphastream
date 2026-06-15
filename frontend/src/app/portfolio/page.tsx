@@ -49,7 +49,8 @@ export default function PortfolioPage() {
     }
     addHolding({
       code: newCode,
-      name: newName || newCode,
+      // 不把 code 当 name 持久化；无真名时存空串，由 useStockNames 解析占位
+      name: newName && newName !== newCode ? newName : "",
       shares: Number(newShares),
       costPrice: Number(newCost),
       currentPrice: Number(newCost),

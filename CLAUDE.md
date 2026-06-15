@@ -4,6 +4,37 @@
 
 ---
 
+## 前端股票名称 code 污染修复（B1/B3）记录（2026-06-15 17:25:55 +08:00）
+
+时间锚点：2026-06-15 17:25:55 +08:00（由协调者下发，本任务沿用）。约束：工作目录 `frontend`；禁止 push；仅 Bash/读改文件；不跑 build/服务；vm_stat 不硬停。
+
+根因（前端 2 个真实 bug，后端 B2 缺名返 null 由另一 worker 修）：
+- **B1**：`src/lib/hooks/use-stock-names.ts` 调 `/api/stock_name` 后只要 `stock_name` 截断 truthy 就 `nameCache[code]=stock_name` 并 return。离线/缺名时后端回退 `stock_name=code`，于是把 **code 当名缓存**，且永不进入后续 `/api/stock_data` 兜底（该兜底虽有 `!== code` 守卫，但被前一步 return 短路）。
+- **B3**：多处 store/页面把 `name || code` 持久化，无真名时把 **code 写成 name** 污染 zustand persist 的 localStorage，污染后即便后端能给真名也被旧脏值覆盖显示。
+
+改动 file:line：
+- `frontend/src/lib/hooks/use-stock-names.ts`：`/api/stock_name` 采纳前增加守卫——仅当 `sn = r.stock_name?.trim()` 且 `sn && sn !== code` 才缓存并 return；否则**不写 code 进 nameCache**，继续 `/api/stock_data` 兜底；兜底守卫同步加 `.trim()` 空白判定。
+- `frontend/src/lib/stores/watchlist-store.ts`：`addItem` 由 `name: name || code` 改为 `name && name !== code ? name : ''`（无真名存空串，不存 code）；新增 `setName(code,name)` 回填方法（拿到真名后更新 store，忽略空名/等于 code 的无效名）；persist 加 `version:1 + migrate`，把旧 localStorage 中 `name===code` 脏数据清空为 `''`。
+- `frontend/src/app/stock/[code]/page.tsx:365`：`addItem(code, stockName || code)` 改为 `addItem(code, stockName)`（无真名 stockName 为 `''`，由 store 守卫处理）。
+- `frontend/src/app/portfolio/page.tsx:52`：`name: newName || newCode` 改为 `name: newName && newName !== newCode ? newName : ''`。
+- `frontend/src/lib/stores/portfolio-store.ts`：persist 加 `version:1 + migrate`，同样清洗 `name===code` 脏 holdings。
+
+设计权衡：`WatchItem.name`/`Holding.name` 保留为必填 `string`，以**空串 `''`** 作"无真名"哨兵（而非 `undefined`），避免触动 `getName(code, name: string)`/`displayName(code, name: string)`/`Object.fromEntries → Record<string,string>` 等多处 `string` 类型签名（类型零改动、零回归）。所有消费方均已有 `name && name !== code` 守卫，`''` 为 falsy 自动退到 `resolvedNames[code] || code` 占位。
+
+需后端 B2 配合：本前端修复使"缺名"不再被 code 污染、能干净退回占位并接受真名回填；但**只有后端 B2 让 `/api/stock_name` 在缺名时返回 null（而非回退 code）**，前端 B1 守卫才能完整生效（否则后端仍返 code 时，前端正确跳过缓存但 `/api/stock_data` 兜底若也返 code 则最终仍显示 code 占位，符合"无名退占位"预期，不再污染持久化）。
+
+已知遗留（兼容清洗已覆盖）：旧 localStorage 中 `name===code` 脏数据由两 store 的 persist `migrate` 自动清洗，用户无需手动清缓存。
+
+验证：
+- `node node_modules/typescript/bin/tsc --noEmit` → 退出 0（`TSC_OK_EXIT_0`）。
+- `npx eslint <5 改动文件>` → 退出 0，0 error。
+- 未跑 build/服务（视觉/运行态由后端 worker 完成后统一浏览器复验）。
+- 内存：改动前 `vm_stat` Pages free 13516（page size 16384B）。
+
+回滚：还原上述 5 文件本轮改动（恢复 `name || code` 与 hook 旧 truthy 缓存；删除两 store 的 `setName`/`version`/`migrate`）；删除本节及对应 commit。persist `migrate` 仅清洗 `name===code`，回滚后旧脏数据不会自动恢复（可接受，属修复目标）。
+
+---
+
 ## 首页指数栏滚动 + AI 工作区文案修复记录（2026-06-15 17:25:55 +08:00）
 
 任务约束：前端修复（工作目录 `frontend`）；本地开发环境；禁止 push；只用 Bash/读改文件，不调 Sleep/WebFetch/WebSearch（联网用 `curl --noproxy '*'`）；本轮服务已停，布局视觉正确性留待 Comdr 浏览器复验。基准时间锚点 2026-06-15 17:25:55 +08:00。
