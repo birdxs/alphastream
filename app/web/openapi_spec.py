@@ -46,6 +46,23 @@ _COMPONENTS: Dict[str, Any] = {
                 'timestamp': {'type': 'string', 'format': 'date-time'},
             },
         },
+        'MarketStreamEvent': {
+            'type': 'object',
+            'description': (
+                'SSE 单条事件 data 负载（市场指数实时流）。每条事件形如 '
+                '`data: {json}\\n\\n`，json 即本 schema 描述的对象。'
+            ),
+            'properties': {
+                'indices': {
+                    'type': 'array',
+                    'description': '主要市场指数实时快照（上证/深证/创业板/沪深300）',
+                    'items': {'$ref': '#/components/schemas/MarketIndex'},
+                },
+                'source': {'type': 'string', 'example': 'eastmoney'},
+            },
+            # 实时流字段随上游数据源动态扩展，保守用 additionalProperties 兜底，不写死动态契约
+            'additionalProperties': True,
+        },
         'ConversationSummary': {
             'type': 'object',
             'properties': {
@@ -345,6 +362,29 @@ _PATHS: Dict[str, Any] = {
                             'cache': {'type': 'string', 'example': 'HIT'},
                         },
                     }}},
+                },
+            },
+        },
+    },
+    '/api/market_stream': {
+        'get': {
+            'tags': ['Market'],
+            'summary': '市场指数实时数据流（Server-Sent Events）',
+            'operationId': 'streamMarketIndices',
+            'description': (
+                '持续的 Server-Sent Events 流，约每 10 秒推送一次市场主要指数实时快照。'
+                '响应 Content-Type 为 `text/event-stream`，每条事件格式为 `data: {json}\\n\\n`，'
+                '其中 json 为 MarketStreamEvent 对象。客户端应使用 EventSource（或等价 SSE 客户端）消费，'
+                '连接保持长开直至客户端断开；上游异常时会推送 `{"indices": []}` 降级事件。'
+            ),
+            'responses': {
+                '200': {
+                    'description': 'SSE 事件流，每条 data 为一个 MarketStreamEvent JSON 对象',
+                    'content': {
+                        'text/event-stream': {
+                            'schema': {'$ref': '#/components/schemas/MarketStreamEvent'},
+                        },
+                    },
                 },
             },
         },

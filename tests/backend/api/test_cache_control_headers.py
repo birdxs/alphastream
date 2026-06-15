@@ -507,6 +507,23 @@ def test_openapi_json_fifth_batch_parameters(flask_client):
     assert "responses" in pending
     assert "200" in pending["responses"]
 
+
+def test_openapi_json_includes_market_stream_sse(flask_client):
+    """OpenAPI spec 应包含 SSE 端点 /api/market_stream（GET，text/event-stream）。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    assert "/api/market_stream" in paths
+    stream = paths["/api/market_stream"]
+    assert "get" in stream
+
+    op = stream["get"]
+    assert op["tags"] == ["Market"]
+    content = op["responses"]["200"]["content"]
+    assert "text/event-stream" in content
+    assert content["text/event-stream"]["schema"]["$ref"].endswith("MarketStreamEvent")
+
     submit = paths["/api/agent_submit_approval"]["post"]
     sub_schema = submit["requestBody"]["content"]["application/json"]["schema"]
     assert submit["requestBody"]["required"] is True

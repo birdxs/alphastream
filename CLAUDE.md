@@ -4,6 +4,37 @@
 
 ---
 
+## OpenAPI SSE market_stream 专项文档化记录（2026-06-15 13:48:26 +08:00）
+
+任务约束：本地开发环境；禁止 push；只改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md` 三文件；禁改 web_server.py/schema.py；禁新建文件；禁启服务；禁全量 pytest。基准时间锚点 2026-06-15 13:48:26 +08:00。
+
+基线核实：
+- HEAD：`6d23695 docs: archive 2026-06-15 audit+openapi closure round (gantt + ledger)`。
+- 改动前 `OPENAPI_SPEC['paths']` total=64，`/api/market_stream` 不存在（False）。
+
+根因/背景：`/api/market_stream`（web_server.py 约 2553 行）是 OpenAPI 文档中最后一个未覆盖的业务端点。该路由为 GET SSE，`mimetype='text/event-stream'`，约每 10 秒调 `_fetch_market_indices_data()` 推送一次市场指数实时快照，格式 `data: {json}\n\n`，上游异常时推 `{"indices": []}` 降级事件。
+
+改动摘要：
+- `app/web/openapi_spec.py`：
+  - 新增保守 schema `MarketStreamEvent`（`components.schemas`）：描述单条 SSE data 的 JSON 负载，`indices` 数组复用 `#/components/schemas/MarketIndex`（name/code/price/change_pct 等），`source` 字符串；实时流字段随上游动态扩展，故 `additionalProperties: True` 兜底，不写死动态契约。
+  - 新增 operation GET `/api/market_stream`（tag 复用 `Market`，operationId `streamMarketIndices`）：response 200 content 用 `text/event-stream`，schema `$ref` 指向 `MarketStreamEvent`；description 说明 SSE 持续流、`data: {json}\n\n` 格式、客户端用 EventSource 消费、降级事件行为。
+- `tests/backend/api/test_cache_control_headers.py`：追加 `test_openapi_json_includes_market_stream_sse`，断言 `/api/market_stream` GET 存在、tag=Market、200 response 含 `text/event-stream` content 且 schema `$ref` 指向 `MarketStreamEvent`。
+
+收口结论：
+- 至此 `/api/*` 业务路由 OpenAPI 文档化收口（total 64→65）。
+- A2A 协议端点按既有裁决不纳入 OpenAPI（非面向外部业务消费的协议层端点）。
+
+验证记录：
+- 改动前内存：`vm_stat` free pages 8211（≥8000，闸门通过）。
+- spec 加载：`OPENAPI_SPEC['paths']` total=65、`/api/market_stream` True、tag=['Market']、content=['text/event-stream']、`MarketStreamEvent` in schemas。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_cache_control_headers.py` → **18 passed, 12 warnings in 2.05s**（17 既有 + 1 新增）。
+- 改动后内存：`vm_stat` free pages 29094（≥8000）。
+- 未启服务、未跑全量 pytest、未跑 Playwright、未 push。
+
+回滚方案：删除 `openapi_spec.py` 中 `MarketStreamEvent` schema 与 `/api/market_stream` operation；删除测试 `test_openapi_json_includes_market_stream_sse`；删除本节及 commit。不涉及数据迁移与运行时状态。
+
+---
+
 ## OpenAPI 第五批（补做）覆盖记录（2026-06-15 13:48:26 +08:00）
 
 **伪交付背景（本次为真实补做）**：第五批 9 路由此前被某 worker 声称已提交（commit `8f29c0e`），但经 git 实证该 commit 根本不存在于 object 库、9 路由 0/9 命中 `openapi_spec.py` —— 属伪交付。本次为真实补做，提交前/后均以 git object 库与 `OPENAPI_SPEC` 实测自证落盘。
