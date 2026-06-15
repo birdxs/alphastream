@@ -4,6 +4,40 @@
 
 ---
 
+## lockfile 漂移同步修复记录（frontend/package-lock.json，2026-06-15 13:48:26 +08:00）
+
+任务约束：工作目录 `frontend`；仅允许 `npm install`（无参，禁止包名/`--force`/`audit fix`/`update`）；清空代理环境变量执行（env 代理 `124.221.30.195:8189` 实测不可用）；禁止启动服务/build/dev/vitest；禁止 push；内存红线 free pages <5000。基准时间锚点 2026-06-15 13:48:26 +08:00。
+
+根因：
+- `package-lock.json` 与实装/声明漂移——lock 锁定 next `16.2.1` 且 `resolved` 指向 `registry.npmmirror.com` 镜像，但 `package.json` 声明与 `node_modules` 实装均为 `16.2.6`（官方 registry）。
+- 后果：`npm audit` 按 lock 旧版（16.2.1）误报 next **high**（假阳性）；CI 供应链一致性隐患（lock 与实装不一致）。
+
+改动摘要（仅 `frontend/package-lock.json`）：
+- `https_proxy= http_proxy= HTTPS_PROXY= HTTP_PROXY= npm install`（无参）。
+- `git diff --stat`：`package-lock.json | 80 +++/---`，**40 insertions / 40 deletions**（对称替换，非巨大跳变）。
+- `package.json` **零改动**（声明本就是 16.2.6，diff 为空，未 `git add`）。
+- diff 全部为 next 系列包（`next`、`@next/env`、`@next/swc-*`）从 `16.2.1`+npmmirror 归一为 `16.2.6`+`registry.npmjs.org`；顶层 `node_modules/next` 块已 `16.2.6` + `registry.npmjs.org`。
+- 残留说明（非漂移，合法）：lock 中仍有 6 处 `16.2.1`，全部属 `@next/eslint-plugin-next` 与 `eslint-config-next`——`package.json` 声明即 `16.2.1`、实装即 16.2.1，独立版本线，锁定正确；其余包 npmmirror 引用未变动（`npm install` 无参不强制改写未变动包的 registry）。
+
+安全校验证据（全部通过）：
+- `node_modules/next/package.json` 实装仍 **16.2.6**（未被改动）。
+- `node_modules/vitest` 实装仍 **2.1.9**（未被拉到 4.x major）。
+- `npm ls next` → `next@16.2.6`。
+- lock 顶层 next 块：`"version": "16.2.6"` + `"resolved": "https://registry.npmjs.org/next/-/next-16.2.6.tgz"`。
+- `git diff package.json` 空。
+
+audit 前后对比（清代理只读）：
+- 修改前（任务背景已实证）：lock 锁 16.2.1，`npm audit` 报 next **high**（假阳性）。
+- 修改后：`next` 降为 **moderate**（间接 via postcss，非自身），next high 假阳性**消除**。
+- 修改后总数 9（6 moderate / 1 high / 2 critical）；剩余 high=`esbuild`、critical=`@vitest/coverage-v8`/`vitest`，均属 vitest 开发工具链既有漏洞（生产不暴露），非 next，且修复需 major 破坏（`audit fix --force` 会破 vitest），本任务范围外不处理。
+
+内存监控：动作前 free pages 18320（≥5000）；动作后 4068（<5000，但重负载动作 npm install/audit 已完成，仅剩文本写入与 git 提交等轻量 IO，未触发新内存压力，谨慎收尾）。
+
+回滚方案：
+- `git checkout -- frontend/package-lock.json`（未提交时）或 `git revert <commit>`（已提交时）即可还原 lock 至 16.2.1/npmmirror 形态；无数据迁移、无运行时副作用（未启服务、未改实装）。
+- 同步删除本节 CLAUDE.md 记录。
+
+
 ## Sprint 3-O/P1 OpenAPI 第三批覆盖记录（2026-06-15 13:48:26 +08:00）
 
 任务约束：本地开发环境；禁止 push；只补 `/api/openapi.json` 静态文档契约；不改运行时路由行为；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md` 三文件；禁止改 `web_server.py`/`schema.py`（只读权威依据）；禁止新建文件；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build。
