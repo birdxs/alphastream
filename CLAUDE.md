@@ -4,6 +4,42 @@
 
 ---
 
+## Sprint 3-O/P1 OpenAPI 第三批覆盖记录（2026-06-15 13:48:26 +08:00）
+
+任务约束：本地开发环境；禁止 push；只补 `/api/openapi.json` 静态文档契约；不改运行时路由行为；只允许改 `app/web/openapi_spec.py`、`tests/backend/api/test_cache_control_headers.py`、`CLAUDE.md` 三文件；禁止改 `web_server.py`/`schema.py`（只读权威依据）；禁止新建文件；不启服务、不跑全量 pytest、不跑 Playwright/vitest/npm build。
+
+时间真实性校验：
+- 基准时间锚点：2026-06-15 13:48:26 +08:00（按任务指令复用，本轮未重新校时）。
+
+改动摘要（仅新增静态 operation，不触运行时）：
+- `app/web/openapi_spec.py`：新增 8 个 net-new operation。任务清单中 `/api/active_tasks`（GET）、`/api/conversations/{conversation_id}`（GET+DELETE）此前第二批已覆盖，本轮不重复。新增：
+  - GET `/api/analysis_status/{task_id}`（Stock，path task_id 1-64）
+  - POST `/api/cancel_analysis/{task_id}`（Stock，path task_id 1-64）
+  - POST `/api/enhanced_analysis`（Stock，body stock_code required + market_type + research_depth 1-5，源 `EnhancedAnalysisSchema`）
+  - POST `/api/start_etf_analysis`（Stock，body etf_code required + market_type + research_depth 1-5，源 `StartEtfAnalysisSchema`）
+  - GET `/api/etf_analysis_status/{task_id}`（Stock，path task_id 1-64）
+  - GET `/api/sector_stocks`（Market，query sector required 1-50，源 `SectorStocksSchema`）
+  - GET `/api/individual_fund_flow`（FundFlow，query stock_code required + market_type，源 `IndividualFundFlowSchema`）
+  - GET `/api/stock_quote_batch`（Stock，query codes required 1-2000 + market_type enum[A,HK,US,B] + max_codes 1-100，源 `StockQuoteBatchSchema`）
+  - 字段名/类型/约束（OneOf/Range/Length/required）逐条以 `schema.py` 既有 *Schema 为权威依据翻译；response 侧保守描述，不写死动态契约。
+- `tests/backend/api/test_cache_control_headers.py`：复用现有 `_param` helper 风格追加 2 个用例 `test_openapi_json_includes_third_batch_routes`（8 个 path+method 存在性）、`test_openapi_json_third_batch_parameters`（task_id 路径参数 / enhanced+etf required body / sector required / fund_flow stock_code required / quote_batch enum+Range 等关键约束）。
+- 未修改 `app/web/web_server.py`、`app/web/schema.py`；未改变运行时路由行为。
+
+特例登记：未创建新文件；无需新文件特例审批。
+
+验证记录：
+- 前置内存：`vm_stat | head -5` → Pages free 46984（≥8000）。
+- import smoke：`python3 -c "from app.web.openapi_spec import OPENAPI_SPEC; print(len(OPENAPI_SPEC['paths']))"` → paths 总数 30 → **38**（+8），第三批 8 路径全部存在。
+- pytest 前内存：Pages free 12722（≥8000）。
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest tests/backend/api/test_cache_control_headers.py` → **11 passed, 12 warnings in 1.91s**（9→11，第三批新增 2 用例）。teardown 处出现 atexit 后台线程 join 噪声与 baostock "you don't login" 提示，属预存在环境产物，不在测试 session 内、不影响断言结果。
+- 后置内存：`vm_stat | head -2` → Pages free 106082（≥5000）。
+- 未启服务；未运行全量 pytest；未运行 Playwright/vitest/npm build；未 push。
+
+回滚方案：
+- 移除 `openapi_spec.py` 中本批新增 8 个 operation（`/api/analysis_status/{task_id}`、`/api/cancel_analysis/{task_id}`、`/api/enhanced_analysis`、`/api/start_etf_analysis`、`/api/etf_analysis_status/{task_id}`、`/api/sector_stocks`、`/api/individual_fund_flow`、`/api/stock_quote_batch`）；删除 `test_cache_control_headers.py` 中本批新增 2 个用例；删除本节及 CHANGELOG/TODO 对应条目。不涉及数据迁移或运行时状态。
+
+---
+
 ## 前后端连调 + Kimi 真测前端能力交付记录（含 2 个治本修复，2026-06-02 14:53:38 +08:00）
 
 任务约束：本地开发环境；Comdr 授权启动前后端；Kimi WebBridge 真实浏览器逐一真测前端能力，发现问题即治本，auto 推进；禁止 push。本轮 2 个代码 commit 已各自验证过（含真重启铁证），本节为文档同步记录（纯文档轮，不跑测试）。优先改现有文件。

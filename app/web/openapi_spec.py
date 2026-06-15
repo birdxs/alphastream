@@ -646,6 +646,152 @@ _PATHS: Dict[str, Any] = {
             },
         },
     },
+    # ─────────────────────────────────────────────
+    # S3-O/P1 第三批覆盖（2026-06-15）
+    # ─────────────────────────────────────────────
+    '/api/analysis_status/{task_id}': {
+        'get': {
+            'tags': ['Stock'],
+            'summary': '获取个股分析任务状态',
+            'operationId': 'getAnalysisStatus',
+            'parameters': [
+                {'name': 'task_id', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 64}},
+            ],
+            'responses': {
+                '200': {'description': '任务状态'},
+                '404': {'description': '任务不存在'},
+            },
+        },
+    },
+    '/api/cancel_analysis/{task_id}': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '取消个股分析任务',
+            'operationId': 'cancelAnalysis',
+            'parameters': [
+                {'name': 'task_id', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 64}},
+            ],
+            'responses': {
+                '200': {'description': '取消成功或任务已结束'},
+                '404': {'description': '任务不存在'},
+            },
+        },
+    },
+    '/api/enhanced_analysis': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '启动增强分析',
+            'operationId': 'enhancedAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'stock_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': 'A'},
+                        'research_depth': {'type': 'integer', 'minimum': 1, 'maximum': 5, 'default': 3},
+                    },
+                    'required': ['stock_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '分析结果或任务已创建'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/start_etf_analysis': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '启动 ETF 分析任务',
+            'operationId': 'startEtfAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'etf_code': {'type': 'string', 'minLength': 1, 'maxLength': 20},
+                        'market_type': {'type': 'string', 'maxLength': 10, 'default': 'A'},
+                        'research_depth': {'type': 'integer', 'minimum': 1, 'maximum': 5, 'default': 3},
+                    },
+                    'required': ['etf_code'],
+                }}},
+            },
+            'responses': {
+                '200': {'description': '任务已创建'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/etf_analysis_status/{task_id}': {
+        'get': {
+            'tags': ['Stock'],
+            'summary': '获取 ETF 分析任务状态',
+            'operationId': 'getEtfAnalysisStatus',
+            'parameters': [
+                {'name': 'task_id', 'in': 'path', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 64}},
+            ],
+            'responses': {
+                '200': {'description': '任务状态'},
+                '404': {'description': '任务不存在'},
+            },
+        },
+    },
+    '/api/sector_stocks': {
+        'get': {
+            'tags': ['Market'],
+            'summary': '获取板块/行业成分股',
+            'operationId': 'getSectorStocks',
+            'parameters': [
+                {'name': 'sector', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 50}},
+            ],
+            'responses': {
+                '200': {'description': '板块成分股列表'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/individual_fund_flow': {
+        'get': {
+            'tags': ['FundFlow'],
+            'summary': '获取个股资金流向',
+            'operationId': 'getIndividualFundFlow',
+            'parameters': [
+                {'name': 'stock_code', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 20}},
+                {'name': 'market_type', 'in': 'query',
+                 'schema': {'type': 'string', 'maxLength': 10, 'default': ''}},
+            ],
+            'responses': {
+                '200': {'description': '个股资金流向数据'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
+    '/api/stock_quote_batch': {
+        'get': {
+            'tags': ['Stock'],
+            'summary': '批量获取股票实时报价',
+            'operationId': 'getStockQuoteBatch',
+            'parameters': [
+                {'name': 'codes', 'in': 'query', 'required': True,
+                 'schema': {'type': 'string', 'minLength': 1, 'maxLength': 2000},
+                 'description': '逗号分隔的股票代码列表'},
+                {'name': 'market_type', 'in': 'query',
+                 'schema': {'type': 'string', 'enum': ['A', 'HK', 'US', 'B'], 'default': 'A'}},
+                {'name': 'max_codes', 'in': 'query',
+                 'schema': {'type': 'integer', 'minimum': 1, 'maximum': 100, 'default': 100}},
+            ],
+            'responses': {
+                '200': {'description': '批量报价数据'},
+                '400': {'description': '参数错误'},
+            },
+        },
+    },
     '/api/csrf_token': {
         'get': {
             'tags': ['Security'],

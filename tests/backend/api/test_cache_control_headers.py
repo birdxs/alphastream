@@ -210,6 +210,76 @@ def test_openapi_json_second_batch_parameters(flask_client):
     assert _param(rank_op, "market", "query")["schema"]["maxLength"] == 10
 
 
+def test_openapi_json_includes_third_batch_routes(flask_client):
+    """OpenAPI spec 应包含第三批补齐的 8 个路由及方法。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    expected = {
+        "/api/analysis_status/{task_id}": "get",
+        "/api/cancel_analysis/{task_id}": "post",
+        "/api/enhanced_analysis": "post",
+        "/api/start_etf_analysis": "post",
+        "/api/etf_analysis_status/{task_id}": "get",
+        "/api/sector_stocks": "get",
+        "/api/individual_fund_flow": "get",
+        "/api/stock_quote_batch": "get",
+    }
+
+    for path, method in expected.items():
+        assert path in paths
+        assert method in paths[path]
+
+
+def test_openapi_json_third_batch_parameters(flask_client):
+    """OpenAPI spec 应声明第三批路由的关键 path/query/body 参数。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    analysis_status = paths["/api/analysis_status/{task_id}"]["get"]
+    task_id = _param(analysis_status, "task_id", "path")
+    assert task_id["required"] is True
+    assert task_id["schema"]["maxLength"] == 64
+
+    cancel = paths["/api/cancel_analysis/{task_id}"]["post"]
+    assert _param(cancel, "task_id", "path")["schema"]["maxLength"] == 64
+
+    enhanced = paths["/api/enhanced_analysis"]["post"]
+    enhanced_schema = enhanced["requestBody"]["content"]["application/json"]["schema"]
+    assert enhanced["requestBody"]["required"] is True
+    assert enhanced_schema["required"] == ["stock_code"]
+    assert enhanced_schema["properties"]["research_depth"]["minimum"] == 1
+    assert enhanced_schema["properties"]["research_depth"]["maximum"] == 5
+
+    etf = paths["/api/start_etf_analysis"]["post"]
+    etf_schema = etf["requestBody"]["content"]["application/json"]["schema"]
+    assert etf_schema["required"] == ["etf_code"]
+    assert etf_schema["properties"]["etf_code"]["maxLength"] == 20
+
+    etf_status = paths["/api/etf_analysis_status/{task_id}"]["get"]
+    assert _param(etf_status, "task_id", "path")["required"] is True
+
+    sector = paths["/api/sector_stocks"]["get"]
+    sector_param = _param(sector, "sector", "query")
+    assert sector_param["required"] is True
+    assert sector_param["schema"]["maxLength"] == 50
+
+    fund_flow = paths["/api/individual_fund_flow"]["get"]
+    assert _param(fund_flow, "stock_code", "query")["required"] is True
+
+    quote_batch = paths["/api/stock_quote_batch"]["get"]
+    codes = _param(quote_batch, "codes", "query")
+    assert codes["required"] is True
+    assert codes["schema"]["maxLength"] == 2000
+    market_schema = _param(quote_batch, "market_type", "query")["schema"]
+    assert market_schema["enum"] == ["A", "HK", "US", "B"]
+    max_codes_schema = _param(quote_batch, "max_codes", "query")["schema"]
+    assert max_codes_schema["minimum"] == 1
+    assert max_codes_schema["maximum"] == 100
+
+
 # ---------------------------------------------------------------------------
 # /api-docs — 历史 Swagger UI 入口兼容跳转
 # ---------------------------------------------------------------------------
