@@ -4,6 +4,43 @@
 
 ---
 
+## jotai 清理 + next 16.2.9 升级记录（2026-06-15 13:48:26 +08:00）
+
+任务约束：本地开发环境；禁止 push；禁止 `npm run build/dev`、禁止 vitest、禁止启动服务（铁律 #3）；仅允许无参 `npm install`（清代理），绝不 `--force`/`audit fix`/`update`；动作前后 `vm_stat` 监控，free pages <5000 立即停手；开工内存闸门 ≥8000 才执行 npm install。两项 deps housekeeping 合并一次提交。
+
+时间锚点：2026-06-15 13:48:26 +08:00（基准）。
+
+改动摘要（仅 `frontend/package.json` + `frontend/package-lock.json`）：
+- A) 移除死依赖 `jotai`：`frontend/package.json` 删除 `"jotai": "^2.19.0"` 行。实证 `grep jotai src/` 命中 0（Grep count 0 occurrences），代码零引用。
+- B) 升级 `next`：`frontend/package.json` `16.2.6` → `16.2.9`（同 16.x 纯补丁，非破坏）。
+- `npm install` 结果：removed 1 package（jotai），changed 10 packages（next + 平台相关 @next/swc 二进制），audited 1224 packages。
+
+内存闸门与监控：
+- 开工 `vm_stat | head -5` → Pages free 10609（≥8000，闸门通过）。
+- npm install 前 → Pages free 9838（≥8000）。
+- audit 时复采 → Pages free 90841（充足）。
+- 全程未跌破 5000 红线。
+
+安全校验证据（全部通过）：
+- `node_modules/next/package.json` 实装 = **16.2.9**。
+- `ls node_modules/jotai` → No such file（已移除）。
+- `node_modules/vitest/package.json` 实装 = **2.1.9**（未被意外拉到 4.x major）。
+- `npm ls next` → `next@16.2.9`；`npm ls jotai` → `(empty)`。
+- lock diff 范围干净：`git diff --stat` 2 文件 +41/-72；version 变更仅 next 16.2.6→16.2.9（含 @next/swc 各平台二进制）与 jotai 2.19.0 移除，无非预期大规模版本跳变。
+
+类型验证（不启服务、不 build）：
+- `node node_modules/typescript/bin/tsc --noEmit` → **exit 0，0 错误**。next 升级未引入类型错误。
+
+audit 对比（只读，清代理）：
+- 升级后 `npm audit` → **9 vulnerabilities（6 moderate, 1 high, 2 critical）**，与 npm install 末尾报告的总数一致，未因本轮改动新增。
+- 漏洞来源均为既有传导依赖（esbuild/vite/vitest 开发链、next 内嵌 postcss、qs），与 Sprint 3-D 记录的残余漏洞同源；`next` 自身无 own-package 漏洞（仅经其 bundled postcss 出现）。本轮按约束未执行 `npm audit fix`。
+
+回滚方案：
+- `cd frontend && git checkout -- package.json package-lock.json` 还原 jotai 依赖与 next 16.2.6；如需还原 node_modules 再跑一次无参 `npm install`。
+- 文档层：删除本节及对应文档 commit。无数据迁移、无运行时状态副作用。
+
+---
+
 ## lockfile 漂移同步修复记录（frontend/package-lock.json，2026-06-15 13:48:26 +08:00）
 
 任务约束：工作目录 `frontend`；仅允许 `npm install`（无参，禁止包名/`--force`/`audit fix`/`update`）；清空代理环境变量执行（env 代理 `124.221.30.195:8189` 实测不可用）；禁止启动服务/build/dev/vitest；禁止 push；内存红线 free pages <5000。基准时间锚点 2026-06-15 13:48:26 +08:00。
