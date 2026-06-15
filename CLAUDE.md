@@ -4,6 +4,75 @@
 
 ---
 
+## 后端股票名称 B2 + 本地名称字典交付记录（2026-06-15 17:25:55 +08:00 锚点）
+
+任务约束：本地开发环境；禁止 push；工具仅 Bash/python3/读改文件；联网绕代理（`os.environ.pop('https_proxy',...)`）。前端 B1/B3 已修（不再把 code 当名缓存/持久化）。本任务修后端两部分。
+
+时间真实性校验（本节锚点）：基准 2026-06-15 17:25:55 +08:00（由 Comdr 下达）；本机执行时段 `date` → 2026-06-15 18:2x:xx +0800（Asia/Singapore +08:00），与锚点同日同时段一致。
+
+### 名称源探测真实结果（关键，未虚构）
+
+绕代理临时脚本 `import akshare as ak; ak.stock_info_a_code_name()` 真机执行：
+- **第一次探测**：`OK rows=5528 elapsed=11.5s`，columns=['code','name']，样例 `000001 平安银行 / 000002 万科Ａ / 600519（后续）贵州茅台`。
+- **生成快照**：`ak.stock_info_a_code_name()` 第二次取数 5528 行，落盘 `data/stock_names.json`（141KB，UTF-8，code→name，原子写）；样例 600519=贵州茅台、000001=平安银行、600036=招商银行。
+- 结论：**本机可真取到全量 A 股名称表**，已据此生成首份离线快照，实现本地字典治本。
+
+### 第一部分 B2（契约变更：缺名 code→null）
+
+根因：多处 stock_name 兜底链在缺名时回填 stock_code（把代码当名），前端无法区分"无名"与"真名"。
+
+改动 file:line（`app/web/web_server.py`）：
+- `_get_stock_name_safe`（约 1668-1735）：非 A 股兜底 `return stock_code` → `return None`；最终降级 `return stock_code` → `return None`；docstring 同步。影响其 3 个调用方：`/api/stock_name`、`/api/stock_data`（1812）`stock_name`、`/api/stock_quote_batch`（5116）`name`，缺名均为 `null`。
+- `/api/stock_name`（约 2155-2164）：`_STOCK_NAME_CACHE.get(stock_code, stock_code)` → `.get(stock_code)`（缺名 `stock_name=null`）；异常兜底 `stock_name: stock_code` → `stock_name: None`。
+- `api_stock_profile` 名称读取（约 1916-1918）：`.get(stock_code, stock_code)` → `.get(stock_code)`（缺名 `null`）。
+- `api_stock_profile` 降级 `_fb`（约 2106）：`.get(stock_code) or stock_code` → `.get(stock_code)`（缺名 `null`）。
+- `/api/stock_name_search`：核查仅返回命中的真实名称（无 code 兜底），无需改动。
+
+测试同步（`tests/backend/api/test_stock_data_routes.py`）：
+- `test_unknown_code_returns_code_as_name` 改名 `test_unknown_code_returns_null_name`，断言 `stock_name is None`。
+- `test_cold_start_*`/`_get_stock_name_safe` 两处 `== "600519"` 断言改 `is None`。
+- 两处冷却/异常语义测试加 `monkeypatch.setattr(ws, "_load_stock_name_snapshot", lambda: {})` 隔离快照回退（仅验证标记语义）。
+- 补 `import os`。
+
+### 第二部分 本地名称字典（治本，离线显真名）
+
+改动 file:line（`app/web/web_server.py`）：
+- 新增常量 `_STOCK_NAME_SNAPSHOT_PATH = <repo>/data/stock_names.json`（约 1539-1541）。
+- 新增 `_persist_stock_name_snapshot(mapping)`（约 1544-1571）：联网成功后原子落盘（复用 `atomic_write_json`）；**防御阈值** `STOCK_NAME_SNAPSHOT_MIN_ROWS`（默认 500）——条目数不足时跳过落盘，避免上游降级/残缺数据覆写已有完整快照（铁律 #1）。
+- 新增 `_load_stock_name_snapshot()`（约 1574-1590）：从快照读 code→name dict，无文件/解析失败返回 `{}`。
+- `_load_stock_name_cache`（约 1640-1665）：成功路径在永久标记后落盘快照；超时/异常两条失败路径调 `_load_stock_name_snapshot()` 回退填充 `_STOCK_NAME_CACHE`（不永久标记，联网恢复仍重试刷新）。
+
+测试新增（`tests/backend/api/test_stock_data_routes.py`）：
+- `test_load_cache_success_persists_local_snapshot`：成功路径落盘快照可解析（tmp_path 隔离，MIN_ROWS=1）。
+- `test_load_cache_failure_falls_back_to_local_snapshot`：联网失败时从快照回退填充缓存。
+
+### 验证记录（真实）
+
+- 名称源探测：`OK rows=5528 elapsed=11.5s`（真机，非虚构）。
+- B2 pytest：`AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_stock_data_routes.py -k "name or Name"` → **14 passed, 19 deselected**。
+- 全文件回归：`pytest -q tests/backend/api/test_stock_data_routes.py` → **33 passed**。
+- import smoke：`... python3 -c "from app.web.web_server import app; print('ok')"` → `ok` / `import_smoke ok`。
+- 离线字典回退：模拟 akshare 不可达，loader 从 `data/stock_names.json` 回退填充 **5528 条**，600519→贵州茅台、000001→平安银行、600036→招商银行。
+- 内存：vm_stat Pages free 全程 13828→29955（≥5000）。
+
+### [NEW-FILE:#20260615-NAMEDICT] data/stock_names.json
+
+- 触发原因：离线/上游不可达时 A 股名称源缺失，纯靠运行时联网无法保证离线显真名；需一份随仓库分发的全量名称快照作离线回退。无现有文件可承载（runtime 数据，非源码）。
+- 性质：**runtime 数据快照**（code→name，5528 条，141KB，UTF-8）；由本机真机 `ak.stock_info_a_code_name()` 生成，非造假数据（铁律 #1 合规）。
+- 位置：`data/`（被 `.gitignore` 第 52 行整目录忽略），本次按任务要求 `git add -f` 强制纳入，供离线分发。
+- 回滚：`git rm --cached data/stock_names.json` 并删文件；快照失效不影响联网路径（loader 仍优先联网）。
+- 刷新：联网环境重跑 loader 成功即自动覆写刷新（受 MIN_ROWS 阈值保护）。
+
+### 回滚方案
+
+- 代码：还原 `_get_stock_name_safe` 两处 `return None`→`return stock_code`、`/api/stock_name`/`api_stock_profile` 四处 `.get(stock_code)`→`.get(stock_code, stock_code)`/`or stock_code`；删 `_STOCK_NAME_SNAPSHOT_PATH`/`_persist_stock_name_snapshot`/`_load_stock_name_snapshot` 及 loader 内快照落盘/回退块。
+- 测试：还原断言为 `== code`，删两个快照新测、删快照隔离 monkeypatch、删 `import os`。
+- 数据：`git rm --cached data/stock_names.json`。
+- 文档：删本节及对应 commit。
+
+---
+
+
 ## 前端股票名称 code 污染修复（B1/B3）记录（2026-06-15 17:25:55 +08:00）
 
 时间锚点：2026-06-15 17:25:55 +08:00（由协调者下发，本任务沿用）。约束：工作目录 `frontend`；禁止 push；仅 Bash/读改文件；不跑 build/服务；vm_stat 不硬停。

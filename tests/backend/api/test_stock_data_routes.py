@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import types
@@ -163,7 +164,7 @@ class TestStockNameRoute:
         assert data["stock_code"] == "600000"
         assert data["stock_name"] == "浦发银行"
 
-    def test_unknown_code_returns_code_as_name(self, flask_client, monkeypatch):
+    def test_unknown_code_returns_null_name(self, flask_client, monkeypatch):
         from app.web import web_server
         monkeypatch.setattr(web_server, "_STOCK_NAME_CACHE", {})
         monkeypatch.setattr(web_server, "_load_stock_name_cache", lambda: None)
@@ -173,8 +174,8 @@ class TestStockNameRoute:
         )
         assert resp.status_code == 200
         data = _json(resp)
-        # 未命中时回填 code 作为 name
-        assert data["stock_name"] == "999999"
+        # B2 2026-06-15：未命中返回 stock_name=None（JSON null），不再回填 code
+        assert data["stock_name"] is None
 
     def test_cold_start_timeout_returns_code_without_waiting_worker(self, flask_client, monkeypatch):
         from app.web import web_server
@@ -201,7 +202,8 @@ class TestStockNameRoute:
         assert resp.status_code == 200
         data = _json(resp)
         assert data["stock_code"] == "600519"
-        assert data["stock_name"] == "600519"
+        # B2 2026-06-15：缓存未命中 → stock_name=None（不回填 code）
+        assert data["stock_name"] is None
 
     def test_load_cache_timeout_not_permanently_marked_and_retries_after_cooldown(
         self, monkeypatch
@@ -214,6 +216,8 @@ class TestStockNameRoute:
         monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
         monkeypatch.setenv("STOCK_NAME_CACHE_TIMEOUT_S", "0.05")
         monkeypatch.setenv("STOCK_NAME_CACHE_RETRY_COOLDOWN_S", "60")
+        # 隔离本地快照回退（本测试只验证冷却/标记语义，不验证快照填充）
+        monkeypatch.setattr(ws, "_load_stock_name_snapshot", lambda: {})
 
         calls = {"n": 0}
 
@@ -258,6 +262,8 @@ class TestStockNameRoute:
         monkeypatch.setattr(ws, "_CACHE_LOADED", False)
         monkeypatch.setattr(ws, "_CACHE_LAST_FAIL_TS", 0.0)
         monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
+        # 隔离本地快照回退（本测试只验证异常后不永久标记，不验证快照填充）
+        monkeypatch.setattr(ws, "_load_stock_name_snapshot", lambda: {})
 
         def _boom():
             raise RuntimeError("upstream RST")
@@ -270,9 +276,64 @@ class TestStockNameRoute:
         assert ws._CACHE_LAST_FAIL_TS != 0.0
         assert ws._STOCK_NAME_CACHE == {}
 
+    def test_load_cache_success_persists_local_snapshot(self, monkeypatch, tmp_path):
+        """[B2 本地字典 2026-06-15] 联网成功后将名称表落盘为 data/stock_names.json 快照。"""
+        import sys
+        import types
+        import pandas as pd
+        from app.web import web_server as ws
+
+        snap_path = str(tmp_path / "stock_names.json")
+        monkeypatch.setattr(ws, "_STOCK_NAME_SNAPSHOT_PATH", snap_path)
+        monkeypatch.setenv("STOCK_NAME_SNAPSHOT_MIN_ROWS", "1")  # 测试用小阈值
+        monkeypatch.setattr(ws, "_CACHE_LOADED", False)
+        monkeypatch.setattr(ws, "_CACHE_LAST_FAIL_TS", 0.0)
+        monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
+
+        df = pd.DataFrame({"code": ["600519", "000001"], "name": ["贵州茅台", "平安银行"]})
+        fake_akshare = types.SimpleNamespace(stock_info_a_code_name=lambda: df)
+        monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+        ws._load_stock_name_cache()
+        assert ws._CACHE_LOADED is True
+        assert ws._STOCK_NAME_CACHE.get("600519") == "贵州茅台"
+        # 快照已落盘且可解析
+        assert os.path.exists(snap_path)
+        with open(snap_path, "r", encoding="utf-8") as f:
+            snap = json.load(f)
+        assert snap.get("600519") == "贵州茅台"
+        assert snap.get("000001") == "平安银行"
+
+    def test_load_cache_failure_falls_back_to_local_snapshot(self, monkeypatch, tmp_path):
+        """[B2 本地字典 2026-06-15] 联网失败时从 data/stock_names.json 快照回退填充缓存。"""
+        import sys
+        import types
+        from app.web import web_server as ws
+
+        snap_path = str(tmp_path / "stock_names.json")
+        with open(snap_path, "w", encoding="utf-8") as f:
+            json.dump({"600519": "贵州茅台", "000001": "平安银行"}, f, ensure_ascii=False)
+        monkeypatch.setattr(ws, "_STOCK_NAME_SNAPSHOT_PATH", snap_path)
+        monkeypatch.setattr(ws, "_CACHE_LOADED", False)
+        monkeypatch.setattr(ws, "_CACHE_LAST_FAIL_TS", 0.0)
+        monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
+
+        def _boom():
+            raise RuntimeError("upstream RST")
+
+        fake_akshare = types.SimpleNamespace(stock_info_a_code_name=_boom)
+        monkeypatch.setitem(sys.modules, "akshare", fake_akshare)
+
+        ws._load_stock_name_cache()
+        # 联网失败：不永久标记，但用本地快照回退填充了缓存
+        assert ws._CACHE_LOADED is False
+        assert ws._CACHE_LAST_FAIL_TS != 0.0
+        assert ws._STOCK_NAME_CACHE.get("600519") == "贵州茅台"
+        assert ws._STOCK_NAME_CACHE.get("000001") == "平安银行"
+
     def test_request_path_never_calls_full_loader(self, flask_client, monkeypatch):
         """[2026-05-29 后台预热] 缓存未加载时，/api/stock_name 请求线程绝不调用全量加载函数，
-        且快速返回（<0.5s），退码兜底。全量加载交由后台预热线程。"""
+        且快速返回（<0.5s），缺名返回 null（B2 2026-06-15）。全量加载交由后台预热线程。"""
         from app.web import web_server
 
         monkeypatch.setattr(web_server, "_CACHE_LOADED", False)
@@ -297,9 +358,9 @@ class TestStockNameRoute:
         # 请求线程未触发全量加载
         assert loader_calls["n"] == 0
         data = _json(resp)
-        # 未命中时退码兜底（非"未知"）
+        # 未命中时返回 null（B2 2026-06-15：不回填 code，前端按占位处理）
         assert data["stock_code"] == "600519"
-        assert data["stock_name"] == "600519"
+        assert data["stock_name"] is None
 
     def test_get_stock_name_safe_does_not_call_loader_on_request_path(self, monkeypatch):
         """[2026-05-29 后台预热] _get_stock_name_safe 的降级路径只读缓存，不调用全量加载函数。"""
@@ -323,9 +384,9 @@ class TestStockNameRoute:
 
         monkeypatch.setattr(web_server, "analyzer", _NoNameAnalyzer())
 
-        # 缓存为空 → 只读缓存未命中 → 最终退码兜底
+        # 缓存为空 → 只读缓存未命中 → 最终返回 None（B2 2026-06-15：不回填 code）
         name = web_server._get_stock_name_safe("600519", "A")
-        assert name == "600519"  # 退码兜底
+        assert name is None  # 缺名返回 None
         assert loader_calls["n"] == 0  # 请求线程未触发全量加载
 
         # 缓存命中时直接返回真名（仍不触发 loader，analyzer 仍无名）

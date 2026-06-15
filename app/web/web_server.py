@@ -1536,6 +1536,58 @@ _CACHE_LAST_FAIL_TS = 0.0  # 上次加载失败（超时/异常）的单调时�
 _CACHE_LOCK = threading.Lock()
 _STOCK_NAME_CACHE_LOCK = threading.RLock()  # S1-C4: 并发读写保护（启动期循环写与请求读并发）
 
+# [2026-06-15 本地名称字典] 联网成功后将全量 A 股名称表落盘为 runtime 快照，
+# 离线/上游不可达时回退读取该快照填充缓存，消除"离线必退码"的结构性缺口。
+_STOCK_NAME_SNAPSHOT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'data', 'stock_names.json')
+
+
+def _persist_stock_name_snapshot(mapping):
+    """将 code->name 映射原子落盘到 data/stock_names.json（runtime 数据，非源码）。
+
+    Input : mapping 全量 A 股 code->name dict
+    Output: 无；成功落盘则离线可复用
+    Pos   : _load_stock_name_cache 联网成功后调用
+
+    防御：仅在条目数达到合理阈值（默认 500）时落盘，避免上游只返回少量/降级数据时
+    覆写已有完整快照（铁律 #1：不以残缺数据污染离线名称源）。
+    """
+    if not mapping:
+        return
+    _min_rows = int(os.getenv('STOCK_NAME_SNAPSHOT_MIN_ROWS', '500'))
+    if len(mapping) < _min_rows:
+        app.logger.info(
+            f"A股名称表仅 {len(mapping)} 条(<{_min_rows})，跳过快照落盘以保护已有完整快照")
+        return
+    try:
+        os.makedirs(os.path.dirname(_STOCK_NAME_SNAPSHOT_PATH), exist_ok=True)
+        # 复用项目已有原子写工具，避免半写文件
+        atomic_write_json(_STOCK_NAME_SNAPSHOT_PATH, mapping)
+        app.logger.info(
+            f"A股名称本地快照已落盘: {_STOCK_NAME_SNAPSHOT_PATH}（{len(mapping)} 条）")
+    except Exception as e:
+        app.logger.warning(f"A股名称本地快照落盘失败: {str(e)}")
+
+
+def _load_stock_name_snapshot():
+    """从 data/stock_names.json 读取本地名称快照（离线回退）。
+
+    Input : 无（读 _STOCK_NAME_SNAPSHOT_PATH）
+    Output: code->name dict（无快照/解析失败返回 {}）
+    Pos   : _load_stock_name_cache 联网失败时的离线回退源
+    """
+    try:
+        if not os.path.exists(_STOCK_NAME_SNAPSHOT_PATH):
+            return {}
+        with open(_STOCK_NAME_SNAPSHOT_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items() if v}
+    except Exception as e:
+        app.logger.warning(f"A股名称本地快照读取失败: {str(e)}")
+    return {}
+
 
 def _load_stock_name_cache():
     """首次调用时加载全量A股代码->名称映射（~5000条）到进程级缓存
@@ -1583,6 +1635,13 @@ def _load_stock_name_cache():
                     _CACHE_LAST_FAIL_TS = time.monotonic()
                     app.logger.warning(
                         f"加载A股名称缓存超时(>{_timeout_s}s)，{_cooldown_s}s 冷却后允许重试")
+                    # 离线/超时回退：尝试用本地快照填充（不永久标记，联网恢复后仍会重试刷新）
+                    _snap = _load_stock_name_snapshot()
+                    if _snap:
+                        with _STOCK_NAME_CACHE_LOCK:
+                            _STOCK_NAME_CACHE.update(_snap)
+                        app.logger.info(
+                            f"A股名称缓存超时，已用本地快照回退填充 {len(_snap)} 条")
                     return
             finally:
                 _ex.shutdown(wait=not _timed_out, cancel_futures=_timed_out)
@@ -1593,11 +1652,25 @@ def _load_stock_name_cache():
             _CACHE_LOADED = True
             _CACHE_LAST_FAIL_TS = 0.0
             app.logger.info(f"A股名称缓存加载完成，共 {len(_STOCK_NAME_CACHE)} 条")
+            # 联网成功：刷新本地快照，供下次离线回退（在锁外读取快照副本落盘）
+            with _STOCK_NAME_CACHE_LOCK:
+                _snapshot = dict(_STOCK_NAME_CACHE)
+            _persist_stock_name_snapshot(_snapshot)
         except Exception as e:
             # 不永久标记已加载：记录失败时间戳，冷却窗后允许重试
             _CACHE_LAST_FAIL_TS = time.monotonic()
             app.logger.warning(
                 f"加载A股名称缓存失败: {str(e)}，{_cooldown_s}s 冷却后允许重试")
+            # 离线/异常回退：尝试用本地快照填充（不永久标记，联网恢复后仍会重试刷新）
+            try:
+                _snap = _load_stock_name_snapshot()
+                if _snap:
+                    with _STOCK_NAME_CACHE_LOCK:
+                        _STOCK_NAME_CACHE.update(_snap)
+                    app.logger.info(
+                        f"A股名称缓存加载失败，已用本地快照回退填充 {len(_snap)} 条")
+            except Exception:
+                pass
 
 
 def _get_stock_name_safe(stock_code, market_type='A'):
@@ -1605,10 +1678,11 @@ def _get_stock_name_safe(stock_code, market_type='A'):
     安全获取股票名称：
     1. 优先调用 analyzer.get_stock_info（东方财富，信息最全，3s 硬超时）
     2. 失败则降级**只读** A股名称缓存（_STOCK_NAME_CACHE）
-    3. 最终降级为股票代码本身
+    3. 最终降级返回 None（缺名，不回填 code）
 
     Input : stock_code 股票代码、market_type 市场类型
-    Output: 股票名称字符串；未命中则返回股票代码本身（兜底不退化为"未知"）
+    Output: 股票名称字符串；未命中则返回 None（B2 2026-06-15：不再退化为 code，
+            交由调用方/前端按占位处理，区分"无名"与"真名"）
     Pos   : stock_name 兜底链入口；请求线程关键路径
 
     [2026-05-29 后台预热] 第 2 步降级路径不再在请求线程同步调用 _load_stock_name_cache()
@@ -1627,7 +1701,7 @@ def _get_stock_name_safe(stock_code, market_type='A'):
                     return name
         except Exception:
             pass
-        return stock_code
+        return None
 
     # 1. 先试主路径 [REAL-01 2026-05-18] 加 3s 硬超时 + shutdown(wait=False)，
     # 避免 with __exit__ 等阻塞 future 真完成（上游 ProxyError 可阻塞 30s+）
@@ -1654,8 +1728,9 @@ def _get_stock_name_safe(stock_code, market_type='A'):
         if stock_code in _STOCK_NAME_CACHE:
             return _STOCK_NAME_CACHE[stock_code]
 
-    # 3. 最终降级
-    return stock_code
+    # 3. 最终降级：缺名返回 None（B2 2026-06-15：不再把 code 当名回填，
+    #    让前端区分"无名"与"真名"并按占位处理；与前端 B1 守卫配套）
+    return None
 
 
 # Update the get_stock_data function in web_server.py to handle date formatting properly
@@ -1845,9 +1920,10 @@ def api_stock_profile():
         return custom_jsonify(cached[1])
 
     # 名称：只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞），
-    # 也不走analyzer.get_stock_info（该函数在eastmoney阻断时会60s超时）；未命中退码兜底
+    # 也不走analyzer.get_stock_info（该函数在eastmoney阻断时会60s超时）；
+    # B2 2026-06-15：缺名 name=None（不回填 code），前端按占位处理
     with _STOCK_NAME_CACHE_LOCK:
-        name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
+        name = _STOCK_NAME_CACHE.get(stock_code)
     # baostock需要 sh./sz. 前缀
     prefix = 'sh.' if stock_code.startswith('6') else 'sz.'
     bs_code = prefix + stock_code
@@ -2036,7 +2112,7 @@ def api_stock_profile():
             app.logger.warning(f"baostock overall_timeout ({stock_code})，进入 akshare-only 兜底")
             _fb = {
                 'stock_code': stock_code,
-                'stock_name': _STOCK_NAME_CACHE.get(stock_code) or stock_code,
+                'stock_name': _STOCK_NAME_CACHE.get(stock_code),  # B2: 缺名返回 None，不回填 code
                 'industry': None, 'market_cap': None,
                 'pe_ttm': None, 'pb': None, 'roe': None,
             }
@@ -2085,13 +2161,15 @@ def api_stock_name():
     if not stock_code:
         return custom_jsonify({'error': 'stock_code required'}), 400
     try:
-        # 只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞）；未命中退码兜底
+        # 只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞）
+        # B2 2026-06-15：缺名返回 stock_name=None（JSON null），不再回填 code，
+        # 让前端区分"无名"与"真名"并按占位处理（与前端 B1 守卫配套）。
         with _STOCK_NAME_CACHE_LOCK:
-            name = _STOCK_NAME_CACHE.get(stock_code, stock_code)
+            name = _STOCK_NAME_CACHE.get(stock_code)
         return custom_jsonify({'stock_code': stock_code, 'stock_name': name})
     except Exception as e:
         app.logger.error(f"获取股票名称出错 {stock_code}: {e}")
-        return custom_jsonify({'stock_code': stock_code, 'stock_name': stock_code})
+        return custom_jsonify({'stock_code': stock_code, 'stock_name': None})
 
 
 # 股票名称反查接口 — 根据名称关键词搜索代码（FE意图路由用）
