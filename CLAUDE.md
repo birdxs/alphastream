@@ -1764,6 +1764,209 @@ S3-B2/S3-B3 文档化（全部已合规，无需修改）：
 
 ---
 
+## Context Engineering（项目全托管指引，2026-07-08 建立）
+
+本节为 Agent 提供结构化项目上下文，回答"项目是什么、边界在哪、什么能做什么不能做"。
+
+### 1. 架构拓扑速查
+
+```
+StockAnal_Sys/
+├── app/                          # 后端核心 (46 个 .py 文件)
+│   ├── adapters/                 # 数据适配器层 (15 个)
+│   │   ├── base_adapter.py       # 基类契约
+│   │   ├── akshare_adapter.py    # A股主数据源
+│   │   ├── wind_adapter.py       # Wind 付费高端数据
+│   │   └── adapter_registry.py   # 动态注册 + 降级链
+│   ├── analysis/                 # 金融分析引擎 (8 个)
+│   │   ├── stock_analyzer.py     # K线/指标/MA-SMA
+│   │   ├── fundamental_analyzer.py # 财务三表 CAGR
+│   │   └── capital_flow_analyzer.py # 资金流元/万元契约
+│   ├── agents/                   # LangGraph Agent (4 个)
+│   │   ├── coordinator.py        # 主协调图
+│   │   └── graph_tools.py        # 工具集
+│   ├── core/                     # 基础设施 (9 个)
+│   │   ├── ai_client.py          # LLM 统一客户端
+│   │   ├── database.py           # SQLite (USE_DATABASE 开关)
+│   │   ├── wind_budget.py        # Wind 缓存 + 配额
+│   │   └── network_resilience.py # 重试 + 熔断
+│   └── web/                      # HTTP 层 (4 个)
+│       ├── web_server.py         # Flask 5400+ 行路由
+│       ├── openapi_spec.py       # OpenAPI 3.0 spec
+│       └── schema.py             # marshmallow 校验
+├── frontend/                     # Next.js 16.2.9 (106 个 .tsx/.ts)
+│   ├── src/
+│   │   ├── app/                  # App Router 页面 (20 个)
+│   │   ├── components/           # React 组件 (68 个)
+│   │   │   ├── charts/           # Recharts 封装
+│   │   │   ├── market/           # 市场概览 SSE
+│   │   │   └── artifacts/        # Agent 可视化产物
+│   │   └── lib/                  # 工具 + 状态 (18 个)
+│   │       ├── api/              # fetch 封装
+│   │       ├── hooks/            # React hooks
+│   │       └── stores/           # Zustand 状态
+├── tests/                        # pytest 777 passed (82 个)
+│   ├── backend/api/              # API 集成 184 个
+│   ├── backend/unit/             # 单元 453 个
+│   └── backend/integration/      # E2E 146 个
+├── data/                         # 运行时持久化
+│   ├── stock_names.json          # A 股名称快照 (5528 条)
+│   └── *.db                      # SQLite (agent_sessions / wind_cache)
+└── nginx/                        # 生产代理配置
+```
+
+**文件数统计（实测）**：
+- Python: 82 个 (.py)
+- TypeScript/React: 106 个 (.tsx/.ts)
+- 测试: 82 个 spec
+- 配置: 15+ 个 (package.json / next.config.ts / requirements.txt / .env-example)
+- 总代码量: ~48,000 行 (不含 node_modules / .venv)
+
+### 2. 依赖关系图谱
+
+**Top 20 高频依赖（按调用方数量排序）**
+
+| 依赖模块 | 调用方数 | 典型调用方 | 职责 |
+|---|---:|---|---|
+| `app.web.web_server` | 82 | tests/backend/api/* 全部 | Flask 路由注册 + 全局中间件 |
+| `app.adapters.adapter_registry` | 15 | tools.py / fundamental_analyzer / capital_flow | 数据源降级链协调 |
+| `app.core.ai_client` | 8 | coordinator / stock_analyzer / qa | LLM 调用统一入口 |
+| `app.analysis.stock_analyzer` | 12 | web_server / tools / agent | K 线指标计算 |
+| `app.core.database` | 7 | web_server / coordinator / session_manager | SQLite 连接池 |
+| `app.adapters.akshare_adapter` | 18 | registry / fallback_manager / 各 analyzer | A 股主数据源 |
+| `frontend/src/lib/api/client.ts` | 52 | 所有前端页面/组件 | HTTP 封装 + 重试 |
+| `frontend/src/lib/stores/*-store.ts` | 35 | dashboard / watchlist / portfolio | Zustand 状态持久化 |
+| `app.core.network_resilience` | 9 | adapter 层 / fallback_manager | 重试 + 熔断 + 降级 |
+| `app.agents.coordinator` | 4 | web_server / agent_async_routes | LangGraph 主协调图 |
+| `recharts` | 12 | frontend charts/* / artifacts/* | 图表库 |
+| `marshmallow` | 15 | schema.py / web_server | 路由参数校验 |
+| `@tanstack/react-query` (SWR) | 48 | 前端所有数据 hooks | 缓存 + 重试 |
+| `threading` | 23 | web_server / adapters / 缓存模块 | 线程安全锁 |
+| `pandas` | 27 | 所有 analyzer 模块 | 金融数据处理 |
+| `httpx` | 8 | ai_client / wind_adapter / mcp | 异步 HTTP 客户端 |
+| `langgraph` | 4 | coordinator / graph_tools | Agent 流程编排 |
+| `sqlalchemy` | 6 | database / wind_budget / session | ORM 层 |
+| `next/link` | 89 | 所有前端路由跳转 | Next.js 客户端导航 |
+| `pytest` | 82 | 所有测试文件 | 测试框架 |
+
+**关键传导链**：
+- 数据流：akshare → adapter_registry → fallback_manager → analyzer → web_server → frontend client.ts
+- Agent 流：web_server → coordinator → graph_tools → ai_client → LLM
+- 状态流：frontend hooks → zustand stores → localStorage persist
+- 缓存流：内存 cache (RLock) → SQLite (wind/sessions) → data/stock_names.json
+
+### 3. 状态管理清单
+
+**后端缓存（模块级 dict + 线程安全）**
+
+| 变量 | 锁 | TTL | 位置 | 用途 |
+|---|---|---|---|---|
+| `_STOCK_NAME_CACHE` | `_STOCK_NAME_CACHE_LOCK` | 启动期批量填充 | web_server.py | A 股代码→名称映射 (5528 条) |
+| `_PROFILE_CACHE` | `_PROFILE_CACHE_LOCK` | 永久 (手动 evict) | web_server.py | 股票档案 (PE/PB/ROE) |
+| `_market_indices_cache` | `_market_indices_lock` | 30s | web_server.py | 市场指数实时快照 (上证/深证/创业板/沪深300) |
+| `_INDEX_CACHE` | (无，单线程预热) | 永久 | web_server.py | 指数成分股 |
+| `_AKSHARE_HC_CACHE` | `_AKSHARE_HC_CACHE_LOCK` | 60s (env) | akshare_adapter.py | health_check 快速探针 |
+
+**SQLite 持久化（WAL 模式 + busy_timeout=5000）**
+
+| 表 | 引擎 | 位置 | 用途 |
+|---|---|---|---|
+| `agent_sessions` | `app.core.database` | data/agent_sessions.db | Agent 任务状态 (task_id → JSON payload) |
+| `wind_cache` | `wind_budget.WindCache` | data/wind_cache.db | Wind API 响应缓存 (cache_key → payload + tier + expires_at) |
+| `wind_quota` | `wind_budget.WindQuota` | 同上 | Wind 日配额闸门 (day → used_s/used_a/used_b) |
+| `langgraph_checkpoints` | `SqliteSaver` | data/agent_checkpoints.db | LangGraph 断点续传 (thread_id → state) |
+
+**前端 Zustand 持久化（localStorage + version + migrate）**
+
+| Store | persist 版本 | 清洗逻辑 | 用途 |
+|---|---:|---|---|
+| `watchlist-store` | 1 | `name===code` 清空为 `''` | 自选股列表 |
+| `portfolio-store` | 1 | 同上 | 持仓组合 |
+| `global-search-store` | - | 无 persist | 全局搜索历史 |
+
+**SWR 缓存（前端 @tanstack/react-query）**
+
+- `market_indices`: 5s TTL, staleTime=2s
+- `stock_data`: 60s TTL
+- `stock_profile`: 永久，按 code 分区
+- `conversations`: 10s TTL
+
+### 4. 边界约束铁律
+
+**铁律 #1：金融数据零假值（最高优先级）**
+- **触发**：B27 claude-fable-5 真测发现 dashboard 10s 显示 mock 数据 1174.06 / 4384.17
+- **约束**：
+  - 禁止 `useState(MOCK_DATA)` 含具体数值
+  - 禁止 SWR `fallbackData` / `initialData` 含具体数值
+  - 禁止 localStorage 旧 schema 返回旧值
+  - 数据未到位只允许：`<Skeleton />` / "—" / "加载中" / `null`
+  - 禁止任何看起来像真实金融数据的占位
+- **测试义务**：claude-fable-5 WebBridge 多时间窗采样 (5s/10s/15s/20s/30s)
+- **违反处理**：发现假数据 = Blocker 级立即修
+
+**铁律 #2：禁用 Playwright，统一 claude-fable-5 WebBridge（最高优先级）**
+- **触发**：S1-A → S3-A 期间 Playwright headless chromium 叠加 6 batch 进程触发 OOM（2026-05-20 01:00 +08:00）
+- **约束**：
+  - 禁止 `playwright` Python package / `@playwright/test` npm
+  - 禁止 `chromium.launch()` / `browser.newPage()` headless 调用
+  - 禁止 `frontend/b*-*.js` / 根目录 `b*-*.js` Playwright 脚本
+  - 统一改用 claude-fable-5 WebBridge 真实浏览器
+- **铁证三件套**（与铁律 #3 衔接）：
+  - 进程指纹：真重启 uptime_s < 60
+  - 真实复现：claude-fable-5 WebBridge 截图前后对比（不再使用 Playwright）
+  - 真实数据：curl 真返回 + Kimi WebBridge DOM 抓取
+
+**铁律 #3：worker 资源策略硬约束（最高优先级）**
+- **触发**：S3-G 第一次派发时 worker 跑 vitest 全量 + pytest 全量 + chromium 残留三重叠加，触发 macOS OOM 两次（14:21 / 16:47）
+- **约束**：
+  1. **vitest 严禁全量 / watch**：只允许 `npm run test -- --run <specific/path.test.ts>` 单 spec，多 spec 必须串行
+  2. **pytest 必须分批**：api/ / unit/ / integration+sse/ 三批，每批 < 500 case
+  3. **环境监控**：每批前后 `vm_stat | head -5` 检查 free pages < 5000 立即停手
+  4. **绝禁服务启动**：`python run.py` / `next dev` / `npm run build` / chromium / playwright
+  5. **工具选型**：tsc 用 `node node_modules/typescript/bin/tsc --noEmit`，不走 npx
+  6. **崩溃取证**：`log show --predicate 'eventMessage CONTAINS "memorystatus"' --last 30m`
+- **违反处理**：worker 触发服务启动 / 全量 vitest = 任务失败重做
+
+**特例白名单（新文件审批，附录 C）**
+- **a. 数据库/存储迁移脚本**：必须缺失且不可复用既有脚本
+- **b. 缺失且必需的最小单元测试**：覆盖现有模块关键逻辑/回归缺陷
+- **c. 安全/合规必需配置样例**：如 `.env.example`，不得含敏感信息
+- **d. 紧急热补丁的临时分离文件**：72 小时内必须并回原模块或替换旧实现
+- **e. 其他必要新文件**：如全新模块需求，经评估无法融入现有文件
+
+**已知技术坑（生产环境验证）**
+- **Turbopack JIT 延迟**：`next.config.ts` rewrite 首次请求 ~17s（已修：Route Handler 启动期编译）
+- **akshare 竞争**：并发调用 `stock_zh_index_spot_em()` 16s 延迟（已修：`_market_indices_lock` 双检锁）
+- **baostock 超时**：`query_stock_basic` 22s 超时（已修：PROFILE_BAOSTOCK_TIMEOUT_S=8）
+- **SqliteSaver commit retry**：高并发 `database is locked`（已修：3 次指数退避 + WAL）
+- **Hydration mismatch**：SSR/CSR 动态状态不一致（已修：挂载后读取）
+- **CAGR 假设降序**：未守卫导致符号错误（已修：DataFrame 报告期排序 + index 自守卫）
+
+### 5. 测试覆盖盲区
+
+**Top 10 未测/欠测模块（按风险排序）**
+
+| Rank | 模块 | 文件数 | 现有测试 | 盲区描述 | 风险等级 |
+|---:|---|---:|---|---|---|
+| 1 | Wind 付费数据源 | 2 | 26 offline mock | 真实 API 积分消耗路径、熔断冷却窗、缓存 TTL 过期刷新、配额硬隔离 | **Critical** |
+| 2 | LangGraph Agent 多轮对话 | 4 | 16 单步 | 跨 checkpoint 断点续传、多 analyst 并发冲突、tool_call_id 污染 (#7845 虽不受影响但未覆盖) | **High** |
+| 3 | 前端 SSE 重连 + 心跳 | 3 | 0 | EventSource 断线重连、120s 心跳超时、多标签页竞争、内存泄漏 | **High** |
+| 4 | SQLite WAL 并发写 | 3 | 2 happy path | 50+ 并发 agent session 写冲突、busy_timeout 触发、journal_mode 降级 | **High** |
+| 5 | 资金流元/万元契约边界 | 2 | 15 正向 | 上游残缺响应、amount_unit 缺失降级、前端单位解析错误 | **Medium** |
+| 6 | 市场指数三级兜底链 | 1 | 3 主路径 | 东财超时→新浪超时→历史日线超时→stale_cache 全链路降级、source 标记正确性 | **Medium** |
+| 7 | /api/health/deep TimeoutError | 1 | 3 专项 | 4 check 中 2+ 个同时超时、pool.shutdown 挂死、remaining 负数 | **Medium** |
+| 8 | 前端 ErrorBoundary 捕获 | 4 | 0 | MarketOverview / CandlestickChart / CapitalFlowChart 运行时异常、降级 UI、日志上报 | **Medium** |
+| 9 | A 股名称快照刷新 | 1 | 2 load/persist | STOCK_NAME_SNAPSHOT_MIN_ROWS 阈值触发、残缺数据覆写保护、离线→联网自动刷新 | **Low** |
+| 10 | cursor 分页 vs offset 兼容 | 2 | 4 正向 | 旧客户端 offset 参数触发 Deprecation header、cursor 边界游标失效 | **Low** |
+
+**重点遗漏场景（按业务影响）**
+- **金融计算边界**：PE/PB/ROE 为 0 或负数时显示逻辑（已有 `default=None` 守卫，但未测前端 "—" 降级）
+- **跨时区一致性**：naive/aware datetime 混用（已统一 `now_cn()`，但未测 `clean_old_tasks()` strptime 兼容）
+- **缓存穿透**：`_STOCK_NAME_CACHE` 冷启动 5s 超时后并发请求风暴（已有 `_CACHE_LAST_FAIL_TS` 冷却窗，但未测高并发）
+- **前端路由预取**：`<link rel=prefetch>` 触发时机、Route Handler warmup 有效性（仅有浏览器截图验证，无自动化回归）
+
+---
+
 ## 工作纪律：杜绝伪修复（最高优先级，2026-05-18 入永久记忆）
 
 **触发背景**：前一 worker 宣称 6 类问题全 PASS，实际后端 PID uptime=2418s（40min），证明旧进程从未真重启、代码改动未生效。属虚假汇报，严重失职。
@@ -1819,8 +2022,6 @@ pkill -9 -f "next dev" 2>/dev/null
 sleep 5
 # 启动后立刻 curl /health 校验 uptime_s < 60
 ```
-
----
 
 ## 市场指数 17s 延迟修复记录（commit 2ef5473，2026-05-19 21:05 +08:00）
 
