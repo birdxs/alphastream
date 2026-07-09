@@ -120,7 +120,8 @@ class IndustryAnalyzer:
             if pd.isna(value):
                 return 0.0
             return float(value)
-        except:
+        except (ValueError, TypeError) as e:
+            logger.debug(f"_safe_float 转换失败: {value}, {e}")
             return 0.0
 
     def _safe_int(self, value):
@@ -129,7 +130,8 @@ class IndustryAnalyzer:
             if pd.isna(value):
                 return 0
             return int(value)
-        except:
+        except (ValueError, TypeError) as e:
+            logger.debug(f"_safe_int 转换失败: {value}, {e}")
             return 0
 
     def _safe_percent(self, value):
@@ -144,7 +146,8 @@ class IndustryAnalyzer:
 
             # 如果是数值，直接转换成字符串
             return str(float(value))
-        except:
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"_safe_percent 转换失败: {value}, {e}")
             return "0.00"
 
     def _get_industry_code(self, industry_name):

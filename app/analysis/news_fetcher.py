@@ -356,7 +356,7 @@ def fetch_news_task():
 
 def _background_scheduler_enabled():
     """测试/离线环境不启动真实新闻后台调度；默认开发启动保持开启。"""
-    return os.getenv("DISABLE_NETWORK") != "1"
+    return os.getenv("DISABLE_NETWORK", "0") != "1"
 
 
 def start_news_scheduler():

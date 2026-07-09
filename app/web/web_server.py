@@ -12,6 +12,10 @@ import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, g
 from app.analysis.stock_analyzer import StockAnalyzer
 from app.analysis.us_stock_service import USStockService
+from app.web.utils import (
+    now_cn, quantize_finance, safe_change_pct, validate_stock_code,
+    generate_task_id, convert_numpy_types, convert_messages_to_dict, custom_jsonify
+)
 import threading
 import logging
 from logging.handlers import RotatingFileHandler
@@ -224,7 +228,7 @@ _METRICS: dict = {
 # ── 安全配置 ────────────────────────────────────────────────────────────────
 # SECRET_KEY：Flask session / CSRF 签名所需；生产必须通过 SECRET_KEY env 设置
 import secrets as _secrets
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or _secrets.token_hex(32)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', None) or _secrets.token_hex(32)
 app.config['WTF_CSRF_TIME_LIMIT'] = int(os.getenv('WTF_CSRF_TIME_LIMIT', '3600'))
 # WTF_CSRF_CHECK_DEFAULT=False：允许我们仅对 SPA 路由做 CSRF exempt（API key 路由已鉴权）
 app.config['WTF_CSRF_CHECK_DEFAULT'] = False
@@ -368,10 +372,10 @@ cache_config = {
 }
 
 # 如果配置了Redis，使用Redis作为缓存后端
-if os.getenv('USE_REDIS_CACHE', 'False').lower() == 'true' and os.getenv('REDIS_URL'):
+if os.getenv('USE_REDIS_CACHE', 'False').lower() == 'true' and os.getenv('REDIS_URL', None):
     cache_config = {
         'CACHE_TYPE': 'RedisCache',
-        'CACHE_REDIS_URL': os.getenv('REDIS_URL'),
+        'CACHE_REDIS_URL': os.getenv('REDIS_URL', None),
         'CACHE_DEFAULT_TIMEOUT': 300
     }
 
@@ -416,8 +420,8 @@ if 'analyzer' not in globals():
 # 初始化模块实例
 fundamental_analyzer = FundamentalAnalyzer()
 capital_flow_analyzer = CapitalFlowAnalyzer()
-scenario_predictor = ScenarioPredictor(analyzer, os.getenv('OPENAI_API_KEY'), os.getenv('OPENAI_API_MODEL'))
-stock_qa = StockQA(analyzer, os.getenv('OPENAI_API_KEY'))
+scenario_predictor = ScenarioPredictor(analyzer, os.getenv('OPENAI_API_KEY', None), os.getenv('OPENAI_API_MODEL', None))
+stock_qa = StockQA(analyzer, os.getenv('OPENAI_API_KEY', None))
 risk_monitor = RiskMonitor(analyzer)
 index_industry_analyzer = IndexIndustryAnalyzer(analyzer)
 industry_analyzer = IndustryAnalyzer()
@@ -2062,8 +2066,10 @@ def api_stock_profile():
                     last = rows[-1]
                     # 字段索引：5=close, 12=peTTM, 13=pbMRQ
                     def _f(i):
-                        try: return float(last[i]) if last[i] else None
-                        except: return None
+                        try:
+                            return float(last[i]) if last[i] else None
+                        except (ValueError, TypeError, IndexError):
+                            return None
                     _local_profile['pe_ttm'] = _f(12)
                     _local_profile['pb'] = _f(13)
                     close = _f(5)
@@ -2757,8 +2763,9 @@ def clean_old_tasks():
                      (now - updated_at).total_seconds() > 3600) or
                         ((now - updated_at).total_seconds() > 10800)):
                     to_delete.append(task_id)
-            except:
-                # 日期解析错误，添加到删除列表
+            except (ValueError, KeyError) as e:
+                # 日期解析错误或缺失字段，添加到删除列表
+                logger.warning(f"任务 {task_id} 解析失败: {e}")
                 to_delete.append(task_id)
 
         # 删除旧任务
@@ -5513,9 +5520,23 @@ def _preload_stock_names():
         time.sleep(max(1.0, _cooldown_s))
 
 
+# 离线环境名称字典冷启动逻辑（模块级执行，需在 Flask app 初始化之前）
+_offline_logger = logging.getLogger(__name__)
+
 if _startup_background_enabled():
+    # 联网环境：启动后台循环预热线程
     _preload_thread = threading.Thread(target=_preload_stock_names, daemon=True)
     _preload_thread.start()
+else:
+    # 离线环境：同步加载本地字典填充缓存（一次性）
+    try:
+        snapshot = _load_stock_name_snapshot()
+        if snapshot:
+            with _STOCK_NAME_CACHE_LOCK:
+                _STOCK_NAME_CACHE.update(snapshot)
+            _offline_logger.info(f"离线环境已加载本地股票名称字典，共 {len(snapshot)} 条")
+    except Exception as e:
+        _offline_logger.warning(f"离线环境加载本地名称字典失败: {e}")
 
 # 预热 /api/stock_profile 常用股票，避免首次访问compare/dashboard时等待baostock
 def _preload_profiles():

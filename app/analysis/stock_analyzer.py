@@ -43,10 +43,10 @@ class StockAnalyzer:
         load_dotenv(override=True)
 
         # 设置 OpenAI API (原 Gemini API)
-        self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.openai_api_key = os.getenv('OPENAI_API_KEY', None)
         self.openai_model = get_ai_model()
         self.function_call_model = os.getenv('FUNCTION_CALL_MODEL', 'gpt-4o')
-        self.news_model = os.getenv('NEWS_MODEL')
+        self.news_model = os.getenv('NEWS_MODEL', None)
 
         self.client = get_ai_client()
 
@@ -741,7 +741,8 @@ class StockAnalyzer:
             # 实际实现中需要获取真实数据
             correlation = 0.6  # 示例值
             return correlation
-        except:
+        except Exception as e:
+            logger.warning(f"计算恒生关联度失败: {e}")
             return 0.5  # 默认中等关联度
 
     def _get_mainland_market_sentiment(self):
@@ -751,7 +752,8 @@ class StockAnalyzer:
             # 简化版实现，返回-1到1之间的值，1表示积极情绪
             sentiment = 0.2  # 示例值
             return sentiment
-        except:
+        except Exception as e:
+            logger.warning(f"获取大陆市场情绪失败: {e}")
             return 0  # 默认中性情绪
 
     def get_stock_news(self, stock_code, market_type='A', limit=5):
@@ -784,8 +786,8 @@ class StockAnalyzer:
                 """实际执行搜索的函数"""
                 try:
                     # 获取API密钥
-                    serp_api_key = os.getenv('SERP_API_KEY')
-                    tavily_api_key = os.getenv('TAVILY_API_KEY')
+                    serp_api_key = os.getenv('SERP_API_KEY', None)
+                    tavily_api_key = os.getenv('TAVILY_API_KEY', None)
 
                     if not serp_api_key and not tavily_api_key:
                         self.logger.error("未找到SERP_API_KEY或TAVILY_API_KEY环境变量")

@@ -2537,3 +2537,32 @@ LangGraph #7845 的根因是：共享同一个 graph **实例** 并用 `astream`
 - WAL 确认：`PRAGMA journal_mode = wal`，`*.db-wal` + `*.db-shm` 文件存在
 - pytest：777 passed, 0 failed
 - 6 文件变更，+201/-93 行
+
+### 7. Wind MCP 能力审查（2026-07-08）
+
+#### 能力矩阵
+| 方法 | Wind MCP 工具 | 配额档 | TTL | 状态 |
+|------|--------------|--------|-----|------|
+| get_stock_info | get_stock_basicinfo | B | 7d | ✅ |
+| get_financial_data | get_stock_fundamentals | S | 30d | ✅ |
+| get_index_stocks | 无此工具 | - | - | → [] |
+| get_stock_history | 策略性不用 | - | - | → None |
+
+#### 架构合规（9/9 通过）
+降级链位置 ✅ | 高频域隔离 ✅ | 失败熔断 ✅ | 缓存原子写 ✅ | PRAGMA v1 ✅ | SSE 解析 ✅ | 业务错误不缓存 ✅ | WAL ✅ | 并发安全 ✅
+
+#### 新发现问题
+| ID | 问题 | 风险 | 状态 |
+|----|------|------|------|
+| WM-1 | WIND_CALL_TIMEOUT=600s 偏长 | Medium | ✅ 已改为 120s |
+| WM-2 | get_index_stocks 返回 [] | Low | 文档化（Wind 无此工具） |
+| WM-3 | get_stock_history 返回 None | Low | 策略性设计 |
+
+#### 能力边界（Agent 须知）
+1. 支持: get_stock_basicinfo (B档7d), get_stock_fundamentals (S档30d)
+2. 不支持: get_index_components (Wind无此工具), get_stock_kline (策略性不用)
+3. 配额: S/A/B 三档硬隔离，日配额耗尽自动降级
+4. 缓存: WindCache 命中 0 积分，失败熔断 300s
+5. 错误: QUOTA_ERROR/AUTH_ERROR/业务error静默降级不写缓存
+
+---

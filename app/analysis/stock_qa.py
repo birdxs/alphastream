@@ -27,8 +27,8 @@ class StockQA:
         self.openai_api_key = os.getenv('OPENAI_API_KEY', openai_api_key)
         self.client = get_ai_client()
         self.openai_model = get_ai_model()
-        self.serp_api_key = os.getenv('SERP_API_KEY')
-        self.tavily_api_key = os.getenv('TAVILY_API_KEY')
+        self.serp_api_key = os.getenv('SERP_API_KEY', None)
+        self.tavily_api_key = os.getenv('TAVILY_API_KEY', None)
         self.max_qa_rounds = int(os.getenv('MAX_QA', '10'))  # 默认保留10轮对话
         
         # 对话历史存储 - 使用字典存储不同股票的对话历史
@@ -474,7 +474,8 @@ class StockQA:
                                 try:
                                     parsed_url = urlparse(item.get("url"))
                                     source = parsed_url.netloc
-                                except:
+                                except Exception as e:
+                                    logger.warning(f"解析 Tavily URL 失败: {e}")
                                     source = "未知来源"
                             
                             news_results.append({

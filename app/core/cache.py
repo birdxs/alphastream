@@ -39,7 +39,7 @@ class UnifiedCache:
 
     def _init_redis(self):
         """尝试初始化Redis连接"""
-        redis_url = os.getenv('REDIS_URL')
+        redis_url = os.getenv('REDIS_URL', None)
         use_redis = os.getenv('USE_REDIS_CACHE', 'false').lower() == 'true'
         if redis_url and use_redis:
             try:

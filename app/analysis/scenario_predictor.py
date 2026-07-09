@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO,
 class ScenarioPredictor:
     def __init__(self, analyzer, openai_api_key=None, openai_model=None):
         self.analyzer = analyzer
-        self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.openai_api_key = os.getenv('OPENAI_API_KEY', None)
         self.client = get_ai_client()
         self.openai_model = get_ai_model()
         # logging.info(f"scenario_predictor初始化完成：「{self.openai_api_key} {self.openai_api_url} {self.openai_model}」")

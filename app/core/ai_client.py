@@ -28,12 +28,11 @@ ERROR_MESSAGES = {
 
 def get_ai_client():
     """获取配置好的OpenAI客户端（带超时和重试）"""
-    api_key = os.getenv('OPENAI_API_KEY')
+    api_key = os.getenv('OPENAI_API_KEY', None)
     base_url = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1')
 
     if not api_key:
-        logger.warning("OPENAI_API_KEY 未配置，AI功能将不可用")
-        return None
+        raise EnvironmentError("OPENAI_API_KEY 未设置，AI 功能不可用")
 
     _ai_http_timeout = float(os.getenv('AI_HTTP_TIMEOUT', '600'))
     _ai_http_connect = float(os.getenv('AI_HTTP_CONNECT_TIMEOUT', '15'))

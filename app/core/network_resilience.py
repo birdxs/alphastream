@@ -106,12 +106,20 @@ class _StaleCache:
             self._store.clear()
 
 
-_GLOBAL_CACHE = _StaleCache()
+_GLOBAL_CACHE_INSTANCE = None
+
+
+def _get_global_cache() -> _StaleCache:
+    """获取全局缓存单例（封装全局状态）"""
+    global _GLOBAL_CACHE_INSTANCE
+    if _GLOBAL_CACHE_INSTANCE is None:
+        _GLOBAL_CACHE_INSTANCE = _StaleCache()
+    return _GLOBAL_CACHE_INSTANCE
 
 
 def reset_cache_for_tests():
     """测试用: 清空缓存。"""
-    _GLOBAL_CACHE.clear()
+    _get_global_cache().clear()
 
 
 # === 主 wrapper ===
@@ -151,7 +159,7 @@ def resilient_call(
     key = cache_key or _make_cache_key(func, args, kwargs)
 
     # 命中新鲜缓存直接返回
-    cached, fresh = _GLOBAL_CACHE.get_fresh(key)
+    cached, fresh = _get_global_cache().get_fresh(key)
     if fresh:
         return cached
 
@@ -173,7 +181,7 @@ def resilient_call(
                     # 超时不计入"可重试"循环—— 直接走降级
                     break
             # 成功: 写缓存返回
-            _GLOBAL_CACHE.set(key, result, ttl=cache_ttl)
+            _get_global_cache().set(key, result, ttl=cache_ttl)
             return result
         except Exception as e:
             last_exc = e
@@ -192,7 +200,7 @@ def resilient_call(
 
     # 降级到 stale 缓存
     if use_stale_on_failure:
-        stale = _GLOBAL_CACHE.get_stale(key)
+        stale = _get_global_cache().get_stale(key)
         if stale is not None:
             logger.warning(
                 f"[resilient_call] returning stale cache for "
