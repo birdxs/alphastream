@@ -222,9 +222,9 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     chartInstance.current = chart;
 
     // 响应容器大小变化（节流~60fps）
-    let resizeTimer: ReturnType<typeof setTimeout>;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const resizeObserver = new ResizeObserver(() => {
-      clearTimeout(resizeTimer);
+      if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         if (chartRef.current) {
           chart.applyOptions({ width: chartRef.current.clientWidth });
@@ -234,7 +234,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     resizeObserver.observe(chartRef.current);
 
     return () => {
-      clearTimeout(resizeTimer);
+      if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       chart.remove();
       chartInstance.current = null;

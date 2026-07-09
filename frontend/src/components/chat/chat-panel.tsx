@@ -35,15 +35,19 @@ function ChatPanelInner() {
     if (!currentKey || currentKey === lastHandledQueryKey) return;
     lastHandledQueryKey = currentKey;
     prefillHandled.current = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
     if (q) {
-      setTimeout(() => sendMessage(q, {}), 300);
+      timerId = setTimeout(() => sendMessage(q, {}), 300);
       window.history.replaceState({}, "", "/");
     } else if (prefill) {
-      setTimeout(() => {
+      timerId = setTimeout(() => {
         window.dispatchEvent(new CustomEvent("chat-prefill", { detail: prefill }));
       }, 300);
       window.history.replaceState({}, "", "/");
     }
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
   }, [searchParams, sendMessage]);
 
   return (

@@ -26,6 +26,7 @@ import tempfile
 import uuid as _uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 from flask_cors import CORS
 from pathlib import Path
 import time
@@ -145,6 +146,26 @@ from app.web.openapi_spec import OPENAPI_SPEC
 # S1-B3: 时区感知时间工具（Hunt5-C1）
 # Asia/Shanghai = UTC+8，与 Asia/Singapore 相同偏移
 ASIA_SHANGHAI = timezone(timedelta(hours=8))
+
+# ── BD-3: 全局线程池（避免临时创建浪费资源）────────────────────────────────
+_GLOBAL_THREAD_POOL_SIZE = int(os.getenv('GLOBAL_THREAD_POOL_SIZE', '10'))
+_GLOBAL_THREAD_POOL = ThreadPoolExecutor(
+    max_workers=_GLOBAL_THREAD_POOL_SIZE,
+    thread_name_prefix='global-pool-'
+)
+# 注册 atexit 清理
+import atexit
+atexit.register(lambda: _GLOBAL_THREAD_POOL.shutdown(wait=False, cancel_futures=True))
+
+
+def get_global_thread_pool():
+    """获取全局线程池实例
+
+    Input: 无
+    Output: ThreadPoolExecutor 实例（全局单例）
+    Pos: BD-3 资源池化，供所有路由复用
+    """
+    return _GLOBAL_THREAD_POOL
 
 
 def now_cn() -> datetime:
@@ -1636,12 +1657,12 @@ def _load_stock_name_cache():
             return
         try:
             import akshare as ak
-            from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
+            from concurrent.futures import TimeoutError as _FTimeout
             _timeout_s = float(os.getenv('STOCK_NAME_CACHE_TIMEOUT_S', '15'))
-            _ex = ThreadPoolExecutor(max_workers=1)
+            # BD-3: 改用全局线程池
             _timed_out = False
             try:
-                fut = _ex.submit(ak.stock_info_a_code_name)
+                fut = _GLOBAL_THREAD_POOL.submit(ak.stock_info_a_code_name)
                 try:
                     df = fut.result(timeout=_timeout_s)
                 except _FTimeout:
@@ -1719,23 +1740,22 @@ def _get_stock_name_safe(stock_code, market_type='A'):
             pass
         return None
 
-    # 1. 先试主路径 [REAL-01 2026-05-18] 加 3s 硬超时 + shutdown(wait=False)，
-    # 避免 with __exit__ 等阻塞 future 真完成（上游 ProxyError 可阻塞 30s+）
+    # 1. 先试主路径 [REAL-01 2026-05-18] 加 3s 硬超时
+    # BD-3: 改用全局线程池，不需要手动 shutdown
     try:
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
-        _ex = ThreadPoolExecutor(max_workers=1)
+        from concurrent.futures import TimeoutError as _FTimeout
         try:
-            fut = _ex.submit(analyzer.get_stock_info, stock_code)
+            fut = _GLOBAL_THREAD_POOL.submit(analyzer.get_stock_info, stock_code)
             try:
                 info = fut.result(timeout=3)
             except _FTimeout:
                 info = None
-        finally:
-            _ex.shutdown(wait=False)
-        if isinstance(info, dict):
-            name = info.get('股票名称') or info.get('name')
-            if name and name != '未知' and name != stock_code:
-                return name
+            if isinstance(info, dict):
+                name = info.get('股票名称') or info.get('name')
+                if name and name != '未知' and name != stock_code:
+                    return name
+        except Exception:
+            pass
     except Exception as e:
         app.logger.warning(f"analyzer.get_stock_info 失败 {stock_code}: {str(e)}")
 
@@ -1792,12 +1812,12 @@ def get_stock_data():
         # 获取股票历史数据（30秒硬超时，避免akshare外网卡死占满werkzeug线程池）
         app.logger.info(
             f"获取股票 {stock_code} 的历史数据，市场: {market_type}, 起始日期: {start_date}, 结束日期: {end_date}")
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
+        from concurrent.futures import TimeoutError as _FTimeout
+        # BD-3: 改用全局线程池
         try:
-            with ThreadPoolExecutor(max_workers=1) as _ex:
-                fut = _ex.submit(analyzer.get_stock_data, stock_code, market_type, start_date, end_date)
-                _stock_data_timeout = float(os.getenv('STOCK_DATA_THREAD_TIMEOUT', '50'))
-                df = fut.result(timeout=_stock_data_timeout)  # 由 STOCK_DATA_THREAD_TIMEOUT 驱动，与下游 per_call=45 联动，留 5s buffer
+            fut = _GLOBAL_THREAD_POOL.submit(analyzer.get_stock_data, stock_code, market_type, start_date, end_date)
+            _stock_data_timeout = float(os.getenv('STOCK_DATA_THREAD_TIMEOUT', '50'))
+            df = fut.result(timeout=_stock_data_timeout)  # 由 STOCK_DATA_THREAD_TIMEOUT 驱动，与下游 per_call=45 联动，留 5s buffer
         except _FTimeout:
             app.logger.warning(f"analyzer.get_stock_data 超时(30s)：{stock_code}")
             return custom_jsonify({'error': '数据源超时', 'stock_code': stock_code}), 504
@@ -1865,7 +1885,7 @@ import atexit as _atexit
 _BAOSTOCK_LOCK = _threading.Lock()
 _PROFILE_CACHE = {}  # {stock_code: (ts, profile)}
 _PROFILE_CACHE_LOCK = _threading.RLock()  # S1-C3: 并发读写保护
-_PROFILE_TTL = 3600  # 1小时
+_PROFILE_CACHE_TTL_S = int(os.getenv('PROFILE_CACHE_TTL_S', '86400'))  # BD-5: 1天默认 TTL
 _PROFILE_STALE_MAX_S = int(os.getenv('PROFILE_STALE_MAX_S', '86400'))  # B16：stale cache 最长留存
 _BS_LOGGED_IN = False
 
@@ -1929,10 +1949,10 @@ def api_stock_profile():
 
     stock_code = validate_stock_code_strict(request.args.get('stock_code', ''))  # S2-A1
 
-    # 命中短缓存（主线程快速返回，不进入任何 I/O）
+    # 命中短缓存（主线程快速返回,不进入任何 I/O）
     now = _time.time()
     cached = _profile_cache_get(stock_code)
-    if cached and (now - cached[0] < _PROFILE_TTL):
+    if cached and (now - cached[0] < _PROFILE_CACHE_TTL_S):
         return custom_jsonify(cached[1])
 
     # 名称：只读后台预热缓存，不在请求线程触发全量加载（避免首发最多15s阻塞），
@@ -1965,7 +1985,7 @@ def api_stock_profile():
         xq_symbol = ('SH' if stock_code.startswith('6') else 'SZ') + stock_code
 
         tasks = {}
-        pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='ak_fill')
+        pool = get_global_thread_pool()  # BD-3: 使用全局池
         try:
             need_xq = any(k in fields for k in ('pe_ttm', 'pb', 'market_cap'))
             need_fa = 'roe' in fields
@@ -2029,8 +2049,7 @@ def api_stock_profile():
                     app.logger.warning(f"_akshare_fill {tag} 失败 ({stock_code}): {type(e).__name__}: {e}")
         except TimeoutError:
             app.logger.warning(f"_akshare_fill 总超时 {budget_s}s ({stock_code})")
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
+        # BD-3: 全局池不 shutdown
 
     # 2026-05-19 B10-FIX：
     # 根因：原实现 _ensure_bs_login() 在主 Flask 线程调用（bs.login() 可阻塞 10-30s），
@@ -2121,9 +2140,9 @@ def api_stock_profile():
         return _local_profile
 
     # 外层 executor：主 Flask 线程最多阻塞 22s，超时 → 503
-    _outer_pool = _TPE(max_workers=1, thread_name_prefix='profile_outer')
+    # BD-3: 改用全局线程池
     try:
-        fut = _outer_pool.submit(_do_all_baostock)
+        fut = _GLOBAL_THREAD_POOL.submit(_do_all_baostock)
         try:
             profile = fut.result(timeout=int(os.getenv('PROFILE_BAOSTOCK_TIMEOUT_S', '8')))
         except (_TPETimeout, TimeoutError) as _toe:
@@ -2167,7 +2186,7 @@ def api_stock_profile():
 
     # 淘汰过期条目并写入（S1-C3 原子操作，整体在锁内）
     now2 = _time.time()
-    _profile_cache_evict_and_set(stock_code, (now2, profile), _PROFILE_TTL)
+    _profile_cache_evict_and_set(stock_code, (now2, profile), _PROFILE_CACHE_TTL_S)
     return custom_jsonify(profile)
 
 
@@ -2478,19 +2497,19 @@ def _fetch_market_indices_data():
                     })
             return result
 
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(_try_eastmoney)
-            try:
-                result = fut.result(timeout=_PRIMARY_TIMEOUT)
-                if result:
-                    data = {'indices': result, 'timestamp': now_cn().isoformat()}
-                    _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'eastmoney'})
-                    data['source'] = 'eastmoney'
-                    return data
-            except FuturesTimeout:
-                app.logger.warning(f"实时指数主路径超时({_PRIMARY_TIMEOUT}s): eastmoney push2, 切兜底")
-            except Exception as e:
-                app.logger.warning(f"实时指数接口失败: {e}, 切兜底")
+        # BD-3: 改用全局线程池
+        fut = _GLOBAL_THREAD_POOL.submit(_try_eastmoney)
+        try:
+            result = fut.result(timeout=_PRIMARY_TIMEOUT)
+            if result:
+                data = {'indices': result, 'timestamp': now_cn().isoformat()}
+                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'eastmoney'})
+                data['source'] = 'eastmoney'
+                return data
+        except FuturesTimeout:
+            app.logger.warning(f"实时指数主路径超时({_PRIMARY_TIMEOUT}s): eastmoney push2, 切兜底")
+        except Exception as e:
+            app.logger.warning(f"实时指数接口失败: {e}, 切兜底")
 
         # --- 兜底1: 新浪 stock_zh_index_spot_sina ---
         def _try_sina():
@@ -2515,19 +2534,19 @@ def _fetch_market_indices_data():
                     })
             return result
 
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(_try_sina)
-            try:
-                result = fut.result(timeout=_FALLBACK_TIMEOUT)
-                if result:
-                    data = {'indices': result, 'timestamp': now_cn().isoformat()}
-                    _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'sina'})
-                    data['source'] = 'sina'
-                    return data
-            except FuturesTimeout:
-                app.logger.warning(f"实时指数兜底1(新浪)超时({_FALLBACK_TIMEOUT}s), 切日线")
-            except Exception as e:
-                app.logger.warning(f"实时指数兜底1(新浪)失败: {e}, 切日线")
+        # BD-3: 改用全局线程池
+        fut = _GLOBAL_THREAD_POOL.submit(_try_sina)
+        try:
+            result = fut.result(timeout=_FALLBACK_TIMEOUT)
+            if result:
+                data = {'indices': result, 'timestamp': now_cn().isoformat()}
+                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'sina'})
+                data['source'] = 'sina'
+                return data
+        except FuturesTimeout:
+            app.logger.warning(f"实时指数兜底1(新浪)超时({_FALLBACK_TIMEOUT}s), 切日线")
+        except Exception as e:
+            app.logger.warning(f"实时指数兜底1(新浪)失败: {e}, 切日线")
 
         # --- 兜底2: 历史日线最后一条（4 路并发，减少串行等待）---
         try:
@@ -2552,8 +2571,14 @@ def _fetch_market_indices_data():
                     pass
                 return None
 
-            with ThreadPoolExecutor(max_workers=4) as ex:
-                items = list(ex.map(_fetch_one_daily, indices_config, timeout=12))
+            # BD-3: 改用全局线程池（max_workers=4 的并发需求由全局池承载）
+            items = []
+            futs = [_GLOBAL_THREAD_POOL.submit(_fetch_one_daily, cfg) for cfg in indices_config]
+            for fut in futs:
+                try:
+                    items.append(fut.result(timeout=12))
+                except Exception:
+                    items.append(None)
             result = [x for x in items if x]
 
             if result:
@@ -2598,19 +2623,17 @@ def get_market_indices():
         data = cached
     else:
         # 慢路径：在线程池里调用，限时 _fast_ms
-        ex = ThreadPoolExecutor(max_workers=1)
-        fut = ex.submit(_fetch_market_indices_data)
+        # BD-3: 改用全局线程池
+        fut = _GLOBAL_THREAD_POOL.submit(_fetch_market_indices_data)
         _timed_out = False
         try:
             data = fut.result(timeout=_fast_ms / 1000)
         except FuturesTimeout:
-            # ThreadPoolExecutor.__exit__ 会 wait=True；手动关闭避免超时后仍阻塞响应。
+            # 全局池不需要手动 shutdown，只取消 future
             _timed_out = True
             fut.cancel()
             app.logger.warning(f"get_market_indices 快速超时 {_fast_ms}ms，返回 degraded")
             data = {'indices': [], 'source': 'degraded'}
-        finally:
-            ex.shutdown(wait=not _timed_out, cancel_futures=_timed_out)
 
     source = data.get('source', 'unknown')
 
@@ -3555,50 +3578,85 @@ agent_session_manager.cleanup_stale_tasks()
 # --- End of new FileSessionManager implementation ---
 
 
+def _validate_agent_params(data: dict) -> tuple:
+    """校验并规范化 agent 分析参数
+
+    Input: API request data dict
+    Output: (stock_code, research_depth, market_type, selected_analysts,
+             analysis_date, enable_memory, max_output_length)
+    Pos: start_agent_analysis 参数预处理
+
+    Raises:
+        ValueError: 参数不合法时
+    """
+    stock_code = data.get('stock_code')
+    if not stock_code:
+        raise ValueError('请提供股票代码')
+
+    research_depth = data.get('research_depth', 3)
+    market_type = data.get('market_type', 'A')
+    selected_analysts = data.get('selected_analysts', ["market", "social", "news", "fundamentals"])
+    analysis_date = data.get('analysis_date')
+    enable_memory = data.get('enable_memory', True)
+    max_output_length = data.get('max_output_length', 2048)
+
+    # 验证股票代码格式
+    is_valid, validated_code = validate_stock_code(stock_code, market_type)
+    if not is_valid:
+        raise ValueError(validated_code)
+
+    return validated_code, research_depth, market_type, selected_analysts, analysis_date, enable_memory, max_output_length
+
+
+def _build_agent_task(stock_code: str, research_depth: int, market_type: str,
+                      selected_analysts: list, analysis_date: str,
+                      enable_memory: bool, max_output_length: int) -> dict:
+    """构建 agent 任务对象
+
+    Input: 规范化参数
+    Output: task dict（含 id/status/progress/created_at 等字段）
+    Pos: start_agent_analysis 任务初始化
+    """
+    task_id = generate_task_id()
+    return {
+        'id': task_id,
+        'status': TASK_PENDING,
+        'progress': 0,
+        'current_step': '任务已创建',
+        'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+        'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+        'params': {
+            'stock_code': stock_code,
+            'research_depth': research_depth,
+            'market_type': market_type,
+            'selected_analysts': selected_analysts,
+            'analysis_date': analysis_date,
+            'enable_memory': enable_memory,
+            'max_output_length': max_output_length
+        }
+    }
+
+
 # 智能体分析路由
 @app.route('/api/start_agent_analysis', methods=['POST'])
 @validate_schema(StartAgentAnalysisSchema, source='json')  # S3-D3: schema 校验扩展
 def start_agent_analysis():
     """启动智能体分析任务"""
     try:
-        data = request.json
-        stock_code = data.get('stock_code')
-        research_depth = data.get('research_depth', 3)
-        market_type = data.get('market_type', 'A')
-        selected_analysts = data.get('selected_analysts', ["market", "social", "news", "fundamentals"])
-        analysis_date = data.get('analysis_date')
-        enable_memory = data.get('enable_memory', True)
-        max_output_length = data.get('max_output_length', 2048)
+        # 参数校验与规范化（提取为子函数 1）
+        try:
+            stock_code, research_depth, market_type, selected_analysts, \
+                analysis_date, enable_memory, max_output_length = _validate_agent_params(request.json)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
 
-        if not stock_code:
-            return jsonify({'error': '请提供股票代码'}), 400
+        # 创建任务对象（提取为子函数 2）
+        task = _build_agent_task(
+            stock_code, research_depth, market_type, selected_analysts,
+            analysis_date, enable_memory, max_output_length
+        )
+        task_id = task['id']
 
-        # 验证股票代码格式
-        is_valid, validated_code = validate_stock_code(stock_code, market_type)
-        if not is_valid:
-            return jsonify({'error': validated_code}), 400
-        stock_code = validated_code
-
-        # 创建新任务
-        task_id = generate_task_id()
-        task = {
-            'id': task_id,
-            'status': TASK_PENDING,
-            'progress': 0,
-            'current_step': '任务已创建',
-            'created_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
-            'params': {
-                'stock_code': stock_code,
-                'research_depth': research_depth,
-                'market_type': market_type,
-                'selected_analysts': selected_analysts,
-                'analysis_date': analysis_date,
-                'enable_memory': enable_memory,
-                'max_output_length': max_output_length
-            }
-        }
-        
         # 为任务创建取消事件
         task['cancel_event'] = threading.Event()
         agent_session_manager.save_task(task)
@@ -4682,12 +4740,12 @@ def ai_agent_analyze_stream():
 # ============================================================
 def _p3_call_with_timeout(domain: str, method: str, timeout: int = 60, **kwargs):  # 2026-05-18 拉富足：P3 报告生成多步调用（技术分析+AI+数据源），原 20s 不足
     """统一封装 Registry 调用 + 超时保护。抛异常则向上传播。"""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
+    from concurrent.futures import TimeoutError as _FTimeout
     from app.adapters.adapter_registry import AdapterRegistry
     reg = AdapterRegistry.default()
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(reg.call_with_fallback, domain, method, **kwargs)
-        return fut.result(timeout=timeout)
+    # BD-3: 改用全局线程池
+    fut = _GLOBAL_THREAD_POOL.submit(reg.call_with_fallback, domain, method, **kwargs)
+    return fut.result(timeout=timeout)
 
 
 def _p3_call_soft(domain: str, method: str, timeout: int = 20, **kwargs):
@@ -5160,10 +5218,10 @@ def stock_quote_batch():
 
     results = []
     errors = []
-    # [REAL-01 2026-05-18] 用 try/except 包裹 as_completed，超时立即返回已完成部分，
-    # 并 shutdown(wait=False) 不阻塞响应；避免 with 块 __exit__ 等到全部线程结束(60s+)
+    # [REAL-01 2026-05-18] 用 try/except 包裹 as_completed，超时立即返回已完成部分
     # [REAL-01 2026-05-18] 并发上限 20（原 8），整体 25s 超时（原 20s）
-    ex = ThreadPoolExecutor(max_workers=min(20, len(codes)))
+    # [BD-3] 使用全局线程池
+    ex = get_global_thread_pool()
     try:
         future_map = {ex.submit(_fetch_one, c): c for c in codes}
         try:
@@ -5184,7 +5242,7 @@ def stock_quote_batch():
                 if not fut.done():
                     errors.append({'code': code, 'msg': 'overall-timeout'})
     finally:
-        ex.shutdown(wait=False)
+        pass  # BD-3: 全局池不 shutdown
 
     return custom_jsonify({
         'results': results,
@@ -5429,8 +5487,8 @@ def adapters_status():
     _overall_timeout = float(os.getenv('ADAPTERS_STATUS_OVERALL_TIMEOUT', '10'))
     _per_call_timeout = float(os.getenv('ADAPTERS_STATUS_PER_CALL_TIMEOUT', '5'))
     # 并行执行所有 adapter 健康检查，整体超时由 ADAPTERS_STATUS_OVERALL_TIMEOUT 驱动
-    # 不使用 with 语句：with __exit__ 默认 shutdown(wait=True)，会在超时时阻塞等待慢线程
-    pool = ThreadPoolExecutor(max_workers=min(total, 16))
+    # [BD-3] 使用全局线程池
+    pool = get_global_thread_pool()
     try:
         future_map = {
             pool.submit(_hc_one, cls_name, mod_path, _per_call_timeout): cls_name
@@ -5449,9 +5507,7 @@ def adapters_status():
             # as_completed 整体超时：未收集到的 future 在下面补 degraded
             pass
     finally:
-        # cancel_futures=True 取消排队但未运行的任务；wait=False 不等待正在运行的线程
-        # 这确保即使 BaostockAdapter.bs.login() 无限阻塞，此函数也能在 overall_timeout+ε 返回
-        pool.shutdown(wait=False, cancel_futures=True)
+        pass  # BD-3: 全局池不 shutdown（任务会在全局池中自然完成或超时）
 
     # as_completed 超过 overall_timeout 后未完成的 future 不会出现在结果中，补上 degraded
     for cls_name, _ in _ADAPTER_SPECS:

@@ -102,6 +102,7 @@ const markdownComponents: Components = {
 function StreamingWrapper({ content }: { content: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const prevLenRef = useRef(0);
+  const rafIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -123,15 +124,24 @@ function StreamingWrapper({ content }: { content: string }) {
         // 添加渐现class（如果还没有的话）
         parent.classList.add('streaming-fade-in');
         // 下一帧移除以便再次触发
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = requestAnimationFrame(() => {
             parent.classList.remove('streaming-fade-in');
+            rafIdRef.current = null;
           });
         });
       }
     }
     prevLenRef.current = len;
   }, [content]);
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div ref={containerRef}>

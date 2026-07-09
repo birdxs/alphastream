@@ -4,7 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { memo, useState, useCallback } from "react";
+import { memo, useState, useCallback, useRef, useEffect } from "react";
 import type { ChatMessage } from "@/lib/types";
 import type { ArtifactType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -66,13 +66,30 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
   const isNew = mountTime - new Date(message.created_at).getTime() < 2000;
   const [copied, setCopied] = useState(false);
 
+  // 定时器 refs 防泄漏
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const handleCopy = useCallback(() => {
     if (!message.content) return;
     navigator.clipboard.writeText(message.content).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
     });
   }, [message.content]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className={`flex gap-3 group ${isNew ? "animate-[glass-enter_250ms_ease-out_both]" : ""} ${isUser ? "flex-row-reverse" : ""}`}>
@@ -152,7 +169,8 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
                       target.style.outline = "2px solid rgba(55,55,204,0.6)";
                       target.style.outlineOffset = "4px";
                       target.style.borderRadius = "12px";
-                      setTimeout(() => {
+                      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+                      highlightTimerRef.current = setTimeout(() => {
                         target.style.outline = "none";
                         target.style.outlineOffset = "0";
                       }, 1500);

@@ -4,7 +4,7 @@
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,15 +22,28 @@ export function MobileDrawer() {
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
   const setMessages = useChatStore(s => s.setMessages);
 
+  // 定时器 ref 防泄漏
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   useEffect(() => {
     if (!historyOpen || conversations.length > 0) return;
     apiClient.get<{conversations: Conversation[]}>('/api/conversations')
       .then((data) => setConversations(data.conversations))
       .catch(() => {
         setError('加载失败');
-        setTimeout(() => setError(null), 3000);
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => setError(null), 3000);
       });
   }, [historyOpen, conversations.length]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+      }
+    };
+  }, []);
 
   const newConversation = () => {
     setActiveConversation(null);
@@ -49,7 +62,8 @@ export function MobileDrawer() {
       }
     } catch {
       setError('加载消息失败');
-      setTimeout(() => setError(null), 3000);
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -63,7 +77,8 @@ export function MobileDrawer() {
       }
     } catch {
       setError('删除失败');
-      setTimeout(() => setError(null), 3000);
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = setTimeout(() => setError(null), 3000);
     }
   };
 

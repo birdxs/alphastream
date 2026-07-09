@@ -145,9 +145,14 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
   // Q2(2026-04-15): 订阅 refreshTick — use-chat-stream onDone 递增后自动重载列表
   const refreshTick = useChatStore(s => s.conversationsRefreshTick);
 
+  // 定时器 refs 防泄漏
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const showError = (msg: string) => {
     setError(msg);
-    setTimeout(() => setError(null), 3000);
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(null), 3000);
   };
 
   // 加载对话列表 — 首次 mount + refreshTick 递增时均触发
@@ -156,6 +161,18 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTick]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+      }
+      if (deleteTimerRef.current) {
+        clearTimeout(deleteTimerRef.current);
+      }
+    };
+  }, []);
 
   const loadConversations = async () => {
     setLoading(true);
@@ -226,7 +243,8 @@ export function ConversationSidebar({ isMobileSheet = false, onConversationSelec
     } else {
       // 首次点击，显示确认
       setPendingDelete(id);
-      setTimeout(() => setPendingDelete(null), 3000);
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+      deleteTimerRef.current = setTimeout(() => setPendingDelete(null), 3000);
     }
   };
 
