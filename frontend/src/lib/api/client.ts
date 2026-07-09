@@ -157,7 +157,7 @@ class ApiClient {
       try {
         // SSE 走 SSE_BASE（默认同源，经 Next dev rewrites；显式设置 NEXT_PUBLIC_SSE_URL 则直连）
         const sseUrl = `${SSE_BASE}${path}`;
-        if (process.env.NODE_ENV !== 'production') {
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') {
           console.log('[SSE] POST', sseUrl, 'attempt', attempt + 1, 'body:', body);
         }
         const res = await fetch(sseUrl, {
@@ -166,7 +166,7 @@ class ApiClient {
           body: JSON.stringify(body),
           signal,
         });
-        if (process.env.NODE_ENV !== 'production') {
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') {
           console.log('[SSE] response status', res.status, 'ok:', res.ok, 'hasBody:', !!res.body);
         }
 
@@ -202,7 +202,7 @@ class ApiClient {
 
         // 内部派发：处理一个完整SSE事件块（多行）— 按事件而非按行处理，
         // 避免TCP chunk在event:/data:中间切断时丢失event前缀
-        const isDev = process.env.NODE_ENV !== 'production';
+        const isDev = (process.env.NODE_ENV ?? 'development') !== 'production';
         const dispatchBlock = (block: string) => {
           if (isDev) console.log('[SSE-block]', block.slice(0, 200));
           let eventType = '';

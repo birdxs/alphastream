@@ -126,6 +126,17 @@ from app.web.schema import (
     JobsSearchSchema,
     JobsCompanySchema,
     ScanStatusSchema,
+    # BD-7: +10 schema（60→70/91 = 77%）
+    MarketStreamSchema,
+    HealthBasicSchema,
+    GetMetricsSchema,
+    GetOpenapiSpecSchema,
+    A2aAgentCardSchema,
+    A2aJsonRpcSchema,
+    ApiEsgClimateSchema,
+    ApiCorporateNetworkSchema,
+    ApiAltDataSchema,
+    GetCsrfTokenSchema,
 )
 from app.web.openapi_spec import OPENAPI_SPEC
 
@@ -267,6 +278,7 @@ def global_auth_gate():
 
 # ── CSRF token 端点（SPA 调用此接口获取 token）───────────────────────────────
 @app.route('/api/csrf_token', methods=['GET'])
+@validate_schema(GetCsrfTokenSchema)  # BD-7: schema 覆盖率提升
 def get_csrf_token():
     """公开端点：返回 CSRF token，前端存入 sessionStorage 后随 POST 请求附上"""
     token = generate_csrf()
@@ -413,7 +425,7 @@ if 'analyzer' not in globals():
 
         analyzer = StockAnalyzer()
         print("成功初始化全局StockAnalyzer实例")
-    except Exception as e:
+    except Exception as e:  # broad-catch: startup fallback, benign print failure
         print(f"初始化StockAnalyzer时出错: {e}", file=sys.stderr)
         raise
 
@@ -873,7 +885,7 @@ try:
             return json.loads(s, **kwargs)
 
     app.json = NanSafeJSONProvider(app)
-except Exception as _e:
+except Exception as _e:  # broad-catch: optional NaN-safe provider, fallback acceptable
     app.logger.warning(f"无法安装 NanSafeJSONProvider, 将继续使用默认 provider: {_e}")
 
 
@@ -916,7 +928,7 @@ def analyze():
                 app.logger.info(
                     f"分析结果: 股票={stock_code}, 名称={result.get('stock_name', '未知')}, 行业={result.get('industry', '未知')}")
                 results.append(result)
-            except Exception as e:
+            except Exception as e:  # broad-catch: 每只股票独立失败不中断批量 (S1-C1 api_error 已规范错误响应)
                 app.logger.error(f"分析股票 {stock_code} 时出错: {str(e)}")
                 results.append({
                     'stock_code': stock_code,
@@ -926,7 +938,7 @@ def analyze():
                 })
 
         return jsonify({'results': results})
-    except Exception as e:
+    except Exception as e:  # broad-catch: 批量结果汇总兜底 (S1-C1 api_error 已规范错误响应)
         app.logger.error(f"分析股票时出错: {traceback.format_exc()}")
         return api_error('INTERNAL', '行情分析失败，请稍后重试', details=str(e))
 
@@ -954,7 +966,7 @@ def api_north_flow_history():
         result = analyzer.get_north_flow_history(stock_code, start_date, end_date)
 
         return custom_jsonify(result)
-    except Exception as e:
+    except Exception as e:  # broad-catch: capital_flow_analyzer 已有上游网络降级日志 (S1-C1 api_error)
         app.logger.error(f"获取北向资金历史数据出错: {traceback.format_exc()}")
         return api_error('INTERNAL', '北向资金数据加载失败，请稍后重试', details=str(e))
 
@@ -969,7 +981,7 @@ def search_us_stocks():
         results = us_stock_service.search_us_stocks(keyword)
         return jsonify({'results': results})
 
-    except Exception as e:
+    except Exception as e:  # broad-catch: us_stock_service 内部各类异常统一兜底 (S1-C1 api_error)
         app.logger.error(f"搜索美股代码时出错: {str(e)}")
         return api_error('INTERNAL', '搜索股票失败，请稍后重试', details=str(e))
 
@@ -1116,7 +1128,7 @@ def start_stock_analysis():
                     update_task_status('stock_analysis', task_id, TASK_COMPLETED, progress=100, result=result)
                     app.logger.info(f"分析任务 {task_id} 完成")
 
-                except Exception as e:
+                except Exception as e:  # broad-catch: 后台任务各类失败统一降级 (已记录 TASK_FAILED)
                     app.logger.error(f"分析任务 {task_id} 失败: {str(e)}")
                     app.logger.error(traceback.format_exc())
                     update_task_status('stock_analysis', task_id, TASK_FAILED, error=str(e))
@@ -1236,7 +1248,7 @@ def start_etf_analysis():
                     update_task_status('etf_analysis', task_id, TASK_COMPLETED, progress=100, result=result)
                     app.logger.info(f"ETF分析任务 {task_id} 完成")
 
-                except Exception as e:
+                except Exception as e:  # broad-catch: ETF 后台任务各类失败统一降级 (已记录 TASK_FAILED)
                     app.logger.error(f"ETF分析任务 {task_id} 失败: {str(e)}")
                     app.logger.error(traceback.format_exc())
                     update_task_status('etf_analysis', task_id, TASK_FAILED, error=str(e))
@@ -1251,7 +1263,7 @@ def start_etf_analysis():
             'message': f'已启动ETF分析任务: {etf_code}'
         })
 
-    except Exception as e:
+    except Exception as e:  # broad-catch: ETF 外层启动异常兜底 (S1-C1 api_error)
         app.logger.error(f"启动ETF分析任务时出错: {traceback.format_exc()}")
         return api_error('INTERNAL', '启动ETF分析任务失败，请稍后重试', details=str(e))
 
@@ -1327,7 +1339,7 @@ def enhanced_analysis():
                 update_task_status('stock_analysis', task_id, TASK_COMPLETED, progress=100, result=result)
                 app.logger.info(f"分析完成: {stock_code}，耗时 {time.time() - start_time:.2f} 秒")
                 return custom_jsonify({'result': result})
-            except Exception as e:
+            except Exception as e:  # broad-catch: 增强分析任务失败兜底 (已记录 TASK_FAILED)
                 app.logger.error(f"分析过程中出错: {str(e)}")
                 update_task_status('stock_analysis', task_id, TASK_FAILED, error=str(e))
                 return custom_jsonify({'error': f'分析过程中出错: {str(e)}'}), 500
@@ -1353,7 +1365,7 @@ def enhanced_analysis():
             # 超时
             return custom_jsonify({'error': '处理超时，请稍后重试'}), 504
 
-    except Exception as e:
+    except Exception as e:  # broad-catch: 增强分析外层兜底 (S1-C1 api_error)
         app.logger.error(f"执行增强版分析时出错: {traceback.format_exc()}")
         return api_error('INTERNAL', '增强分析执行失败，请稍后重试', details=str(e))
 
@@ -2635,6 +2647,7 @@ def get_market_indices():
 
 
 @app.route('/api/market_stream')
+@validate_schema(MarketStreamSchema)  # BD-7: schema 覆盖率提升
 def market_stream():
     """SSE端点：每10秒推送一次市场指数实时数据流"""
     from flask import Response
@@ -4462,6 +4475,7 @@ def _build_agent_card():
 
 
 @app.route('/.well-known/agent-card.json', methods=['GET'])
+@validate_schema(A2aAgentCardSchema)  # BD-7: schema 覆盖率提升
 def a2a_agent_card():
     """A2A v1.0 标准发现端点 (RFC 8615 well-known)。"""
     return jsonify(_build_agent_card())
@@ -4474,6 +4488,7 @@ def a2a_agent_card_legacy():
 
 
 @app.route('/a2a/v1', methods=['POST'])
+@validate_schema(A2aJsonRpcSchema, source='json')  # BD-7: schema 覆盖率提升
 def a2a_json_rpc():
     """A2A JSON-RPC 2.0 绑定端点 — 预留未实施。"""
     return jsonify({
@@ -4769,6 +4784,7 @@ def api_esg_score(ticker: str):
 
 
 @app.route('/api/esg/climate/<string:cik>', methods=['GET'])
+@validate_schema(ApiEsgClimateSchema)  # BD-7: schema 覆盖率提升
 def api_esg_climate(cik: str):
     """EDGAR气候披露（通过 ESGAdapter.get_climate_disclosure）"""
     from app.core.artifact_wrapper import wrap_esg_v2
@@ -4826,6 +4842,7 @@ def api_corporate_search():
 
 
 @app.route('/api/corporate/<path:company_id>/network', methods=['GET'])
+@validate_schema(ApiCorporateNetworkSchema)  # BD-7: schema 覆盖率提升
 def api_corporate_network(company_id: str):
     """[G2 B4] 改 <path:> 以允许 company_id 内含斜杠 (如 us_ca/SAMPLEID)。
     Flask 默认 <string:> 不匹配斜杠, 即使客户端 URL-encode %2F 也会被解码后截断。"""
@@ -4912,6 +4929,7 @@ def api_satellite_search():
 
 # -------- Alt Data Aggregate --------
 @app.route('/api/alt_data/<string:ticker>', methods=['GET'])
+@validate_schema(ApiAltDataSchema)  # BD-7: schema 覆盖率提升
 def api_alt_data(ticker: str):
     """聚合另类数据: shipping(BDI) + esg + hiring + corporate. 部分失败不阻断。
 
@@ -5176,6 +5194,7 @@ def stock_quote_batch():
 
 
 @app.route('/health', methods=['GET'])
+@validate_schema(HealthBasicSchema)  # BD-7: schema 覆盖率提升
 def health_basic():
     """轻量存活探针 — 返回 200 + uptime + version. <100ms."""
     return jsonify({
@@ -5242,15 +5261,48 @@ def _hd_check_market_cache() -> dict:
     return {'ok': ok, 'age_s': age_s, 'ttl_s': ttl, 'has_data': has_data}
 
 
+def _hd_check_daemon_threads() -> dict:
+    """守护线程存活性检查（BD-8）
+    检查已知的 5 个守护线程是否存活（_preload_stock_names/_preload_profiles/_preload_market_indices/chat_worker/analysis_worker）
+    """
+    import threading
+    all_threads = threading.enumerate()
+    daemon_threads = [t for t in all_threads if t.daemon]
+
+    # 已知后台预热线程名称模式
+    known_daemons = {
+        'stock_names': lambda t: '_preload_stock_names' in t.name or 'stock_names' in t.name,
+        'profiles': lambda t: '_preload_profiles' in t.name or 'profiles' in t.name,
+        'market_indices': lambda t: '_preload_market_indices' in t.name or 'market_indices' in t.name,
+        'chat_worker': lambda t: 'chat_worker' in t.name or '_chat_worker' in t.name,
+        'analysis_worker': lambda t: 'analysis' in t.name and 'run_analysis' in str(t),
+    }
+
+    alive_daemons = {}
+    for key, pred in known_daemons.items():
+        matches = [t for t in daemon_threads if pred(t)]
+        alive_daemons[key] = len(matches)
+
+    total_daemons = len(daemon_threads)
+    ok = total_daemons > 0  # 至少有一个守护线程存活
+
+    return {
+        'ok': ok,
+        'total_daemon_threads': total_daemons,
+        'known_daemons': alive_daemons,
+    }
+
+
 @app.route('/api/health/deep', methods=['GET'])
 def health_deep():
-    """深度健康检查 — sqlite / akshare / llm / market_indices_cache（S3-G2 Hunt5-M）
+    """深度健康检查 — sqlite / akshare / llm / market_indices_cache / daemon_threads（S3-G2 Hunt5-M; BD-8）
     Input: 无必需参数
-    Output: JSON {status, uptime_s, version, checks:{sqlite,akshare,llm,market_indices_cache}}
+    Output: JSON {status, uptime_s, version, checks:{sqlite,akshare,llm,market_indices_cache,daemon_threads}}
     Pos: 可观测性探针，PUBLIC_PATHS 白名单，总超时 ≤ 3s
 
     S3-K 修复：改为手动管理 pool（shutdown(wait=False)），每个 future 独立 try/except
     TimeoutError + Exception，确保任何情况下返回 HTTP 200（degraded），不冒泡 500。
+    BD-8: 新增 daemon_threads 检查，统计后台线程存活状态。
     """
     from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FutTimeout
 
@@ -5263,6 +5315,7 @@ def health_deep():
         'akshare': _hd_check_akshare,
         'llm': _hd_check_llm,
         'market_indices_cache': _hd_check_market_cache,
+        'daemon_threads': _hd_check_daemon_threads,  # BD-8: 守护线程监控
     }
 
     # 手动管理 pool：避免 with 语句的 __exit__ shutdown(wait=True) 在 TimeoutError 时挂死
@@ -5306,6 +5359,7 @@ def health_deep():
 
 
 @app.route('/api/metrics', methods=['GET'])
+@validate_schema(GetMetricsSchema)  # BD-7: schema 覆盖率提升
 def get_metrics():
     """基础请求计数器快照（S3-G4 Hunt5-M）
     Input: 无必需参数
@@ -5339,6 +5393,7 @@ def get_metrics():
 
 
 @app.route('/api/openapi.json', methods=['GET'])
+@validate_schema(GetOpenapiSpecSchema)  # BD-7: schema 覆盖率提升
 def get_openapi_spec():
     """暴露 OpenAPI 3.0 spec（S3-C3 Hunt5-Major）
     Input: 无

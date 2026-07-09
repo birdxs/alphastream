@@ -14,7 +14,7 @@
  * 这确保 Turbopack 在首次用户请求前已完成 JIT 编译（避免 17s 延迟）。
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.NODE_ENV === 'development') {
+  if (process.env.NEXT_RUNTIME === 'nodejs' && (process.env.NODE_ENV ?? 'development') === 'development') {
     const port = process.env.PORT || '3000';
     const baseUrl = `http://127.0.0.1:${port}`;
 

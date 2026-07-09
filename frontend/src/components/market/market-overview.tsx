@@ -37,7 +37,7 @@ export function MarketOverview() {
       // SSE 单独直连 8888（见下方 connectSSE），两者分离互不阻塞连接池
       const rawRes = await fetch('/api/market_indices');
       if (rawRes.status === 503) {
-        if (process.env.NODE_ENV !== 'production') {
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') {
           console.debug('[market-overview] market_indices 降级，保留旧数据或占位');
         }
         setLoading(false);
@@ -73,7 +73,7 @@ export function MarketOverview() {
       }
       // B25: degraded(indices=[]) — 不立即报错，等重试或 SSE
       if (res?.degraded || res?.status === 'DEGRADED' || res?.indices?.length === 0) {
-        if (process.env.NODE_ENV !== 'production') {
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') {
           console.debug('[market-overview] market_indices 空响应/降级，保留旧数据或占位');
         }
         setLoading(false);
@@ -82,7 +82,7 @@ export function MarketOverview() {
     } catch (e) {
       // B25: 网络/JSON 错误也不立即报错，由调用方决定是否兜底
       // S3-B4: 补 debug log 便于排查（Hunt3 前端 Major）
-      if (process.env.NODE_ENV !== 'production') console.debug('[market-overview] fetchIndices 异常:', e);
+      if ((process.env.NODE_ENV ?? 'development') !== 'production') console.debug('[market-overview] fetchIndices 异常:', e);
       return false;
     }
   }, []);
@@ -127,7 +127,7 @@ export function MarketOverview() {
         }
       } catch (e) {
         // S3-B4: 补 debug log（Hunt3 前端 Major）— SSE 解析失败等待下一次推送
-        if (process.env.NODE_ENV !== 'production') console.debug('[market-overview] SSE 解析失败:', e);
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') console.debug('[market-overview] SSE 解析失败:', e);
       }
     };
 

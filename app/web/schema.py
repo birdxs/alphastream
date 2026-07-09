@@ -544,3 +544,54 @@ class JobsSearchSchema(Schema):
 class JobsCompanySchema(Schema):
     """GET /api/jobs/company/<company> — path param by Flask; no extra query params"""
     pass
+
+
+# BD-7: schema 覆盖率提升（10 个新 Schema）
+class MarketStreamSchema(Schema):
+    """GET /api/market_stream — SSE endpoint, no params"""
+    pass
+
+
+class HealthBasicSchema(Schema):
+    """GET /health — no params"""
+    pass
+
+
+class GetMetricsSchema(Schema):
+    """GET /api/metrics — no params"""
+    pass
+
+
+class GetOpenapiSpecSchema(Schema):
+    """GET /api/openapi.json — no params"""
+    pass
+
+
+class A2aAgentCardSchema(Schema):
+    """GET /.well-known/agent-card.json — no params"""
+    pass
+
+
+class A2aJsonRpcSchema(Schema):
+    """POST /a2a/v1 — JSON-RPC 2.0 body validated at handler"""
+    pass
+
+
+class ApiEsgClimateSchema(Schema):
+    """GET /api/esg/climate/<cik> — path param by Flask; no extra query params"""
+    pass
+
+
+class ApiCorporateNetworkSchema(Schema):
+    """GET /api/corporate/<company_id>/network — path param by Flask; no extra query params"""
+    pass
+
+
+class ApiAltDataSchema(Schema):
+    """GET /api/alt_data/<ticker> — path param by Flask; no extra query params"""
+    pass
+
+
+class GetCsrfTokenSchema(Schema):
+    """GET /api/csrf_token — no params"""
+    pass

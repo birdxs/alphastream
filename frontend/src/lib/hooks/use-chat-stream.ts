@@ -370,7 +370,7 @@ export function useChatStream() {
       }
 
       const endpoint = isAnalyze ? '/api/ai/agent-analyze' : '/api/ai/chat';
-      if (process.env.NODE_ENV !== 'production') {
+      if ((process.env.NODE_ENV ?? 'development') !== 'production') {
         console.log('[chat-stream] sendMessage', { endpoint, isAnalyze, resolvedCode, _hasAnalyzeVerb, msgLen: message.length });
       }
       const body = isAnalyze
