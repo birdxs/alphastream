@@ -46,6 +46,18 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  // BM-3: 防止 modal 打开时背景页面滚动穿透
+  React.useEffect(() => {
+    const main = document.querySelector('main');
+    if (main) {
+      const originalOverflow = main.style.overflow;
+      main.style.overflow = 'hidden';
+      return () => {
+        main.style.overflow = originalOverflow;
+      };
+    }
+  }, []);
+
   return (
     <SheetPortal>
       <SheetOverlay />

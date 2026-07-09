@@ -137,7 +137,7 @@ export default function DashboardPage() {
       // B23: 走 Next.js proxy (同 origin)，Node.js proxy 到 8888 连接快（13ms vs 直连 16s 冷启动）
       const rawRes = await fetch('/api/market_indices');
       if (rawRes.status === 503) {
-        if (process.env.NODE_ENV !== 'production') {
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') {
           console.debug('[dashboard] market_indices 降级，保留旧数据或占位');
         }
         return;
@@ -150,13 +150,13 @@ export default function DashboardPage() {
       if (res?.indices?.length) {
         setIndices(res.indices);
       } else if (res?.degraded || res?.status === 'DEGRADED' || res?.indices?.length === 0) {
-        if (process.env.NODE_ENV !== 'production') {
+        if ((process.env.NODE_ENV ?? 'development') !== 'production') {
           console.debug('[dashboard] market_indices 空响应/降级，保留旧数据或占位');
         }
       }
     } catch (e) {
       // S3-B4: 网络/JSON 异常保留上次数据，开发环境保留 debug 线索
-      if (process.env.NODE_ENV !== 'production') console.debug('[dashboard] fetchIndices 异常:', e);
+      if ((process.env.NODE_ENV ?? 'development') !== 'production') console.debug('[dashboard] fetchIndices 异常:', e);
     } finally {
       setIndicesLoading(false);
       setLastRefresh(new Date());
@@ -307,7 +307,7 @@ export default function DashboardPage() {
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-y-auto"
+      className="h-full"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

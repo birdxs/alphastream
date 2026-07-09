@@ -23,7 +23,11 @@ export default function SettingsPage() {
 
   const handleClearCache = () => {
     try {
-      localStorage.clear();
+      // 选择性清理项目相关 localStorage，不波及其他应用数据
+      localStorage.removeItem('watchlist-store');
+      localStorage.removeItem('portfolio-store');
+      localStorage.removeItem('chat-store');
+      localStorage.removeItem('theme');
       toast("缓存已清除，页面即将刷新", "success");
       setTimeout(() => window.location.reload(), 1000);
     } catch {

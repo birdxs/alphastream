@@ -47,11 +47,20 @@ export const useWatchlistStore = create<WatchlistState>()(
       version: 1,
       // 兼容清洗：旧版本把 code 误存为 name，迁移时清空 name===code 的脏数据
       migrate: (persisted: unknown) => {
-        const state = persisted as { items?: WatchItem[] } | undefined;
-        if (state?.items) {
-          state.items = state.items.map(i => i.name === i.code ? { ...i, name: '' } : i);
+        try {
+          const state = persisted as { items?: WatchItem[] } | undefined;
+          if (state?.items) {
+            const cleaned = state.items.filter(i => i.name === i.code).length;
+            state.items = state.items.map(i => i.name === i.code ? { ...i, name: '' } : i);
+            if (cleaned > 0) {
+              console.warn(`[migrate] watchlist-store v0→v1: cleaned ${cleaned} items with name===code`);
+            }
+          }
+          return state as WatchlistState;
+        } catch (err) {
+          console.error('[migrate] watchlist-store v0→v1 failed:', err);
+          return { items: [] } as unknown as WatchlistState;
         }
-        return state as WatchlistState;
       },
     }
   )
