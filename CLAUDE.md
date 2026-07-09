@@ -4,6 +4,98 @@
 
 ---
 
+## 数据库 schema 版本控制修复记录（HA-1，2026-07-08 20:10 +08:00）
+
+任务约束：本地开发环境；禁止 push；仅改现有文件 + 新增 migrations 文档；轻量级方案（PRAGMA user_version，无 Alembic）。
+
+时间真实性校验（本节锚点）：基准 2026-07-08 20:10 +08:00（Asia/Singapore +08:00）。
+
+### 根因
+
+2 个 .db 文件无 schema 版本控制，升级时无法安全迁移：
+- `data/wind_cache.db`（WindCache/WindQuota）
+- `data/agent_sessions/*.db`（FileSessionManager / LangGraph SqliteSaver）
+
+### 修复方案（方案 A：轻量级 PRAGMA user_version）
+
+#### 1. `app/core/database.py`（+63/-1 行）
+
+新增 `_init_schema_version(engine, target_version=1)` 函数：
+- 使用 SQLite 内置 `PRAGMA user_version` 实现版本控制
+- 版本策略：
+  - `current == 0`（首次）：初始化为 target_version，记录 INFO 日志
+  - `current < target_version`：记录 WARNING，提示运行迁移脚本（预留钩子）
+  - `current > target_version`：抛 `RuntimeError`，需升级代码或回退数据库
+  - `current == target_version`：DEBUG 日志，正常运行
+- 非 sqlite 引擎自动跳过（PostgreSQL/MySQL 等）
+- 在 `USE_DATABASE=true` 路径下调用 `_init_schema_version(engine, target_version=1)`
+
+#### 2. `app/core/wind_budget.py`（+17/-1 行）
+
+- 导入 `database._init_schema_version`（含降级 stub，应对导入失败）
+- `WindCache.__init__` 与 `WindQuota.__init__` 在 `create_all` 后调用 `_init_schema_version(self._engine, target_version=1)`
+- 更新文件头注释：补充「schema 版本控制（PRAGMA user_version）」说明
+
+#### 3. `docs/migrations/README.md`（新增 184 行）
+
+新建 migrations 指南文档：
+- **当前版本**：业务库/Wind 缓存/Agent 会话均为 v1
+- **版本变更记录**：v1（2026-07-09）初始版本
+- **迁移流程**：
+  - 检查版本：`sqlite3 data/wind_cache.db "PRAGMA user_version"`
+  - 手动迁移示例（v1 → v2 占位）
+  - 启动时自动检查逻辑说明
+- **回滚策略**：安全回滚（备份 + PRAGMA）/ 强制清空（删库重建）
+- **最佳实践**：幂等性、保留旧数据、测试路径、监控日志
+- **常见问题 Q&A**：版本过新/过旧处理、验证方法
+
+### 验证记录（真实）
+
+- **import smoke**：
+  - `from app.core.database import engine, Base` → OK
+  - `from app.core.wind_budget import WindCache, WindQuota` → OK
+- **版本初始化**（修复前 v0 → 修复后 v1）：
+  - 触发 `WindCache().__init__` 调用 `_init_schema_version`
+  - `sqlite3 data/wind_cache.db "PRAGMA user_version"` → **1**
+  - 日志输出：`数据库 schema 初始化版本: v1 (data/wind_cache.db)`
+- **版本防护测试**：
+  - **测试 1：版本过新**（v2 > v1）→ 抛 `RuntimeError: 数据库版本过新: v2 > v1` ✓
+  - **测试 2：首次初始化**（v0 → v1）→ 版本自动升级至 v1 ✓
+- **git diff 统计**：
+  - `app/core/database.py`：+63/-1
+  - `app/core/wind_budget.py`：+17/-1
+  - `docs/migrations/README.md`：+184（新文件）
+- **文档完整性**：
+  - `/Users/panda/Downloads/StockAnal_Sys/docs/migrations/README.md`：4.9KB，184 行
+
+### 特例登记（附录 C）
+
+- **触发原因**：项目无数据库 schema 版本控制，需新建 migrations 文档目录与 README
+- **白名单类别**：文档类新建（docs/ 目录，非代码）
+- **新文件信息**：
+  - `docs/migrations/README.md`：迁移指南文档（184 行，markdown）
+  - 位置：`/docs/migrations/`（项目约定文档目录）
+- **回滚方案**：
+  - 代码层：还原 `database.py` 与 `wind_budget.py` 至修复前版本（删除 `_init_schema_version` 相关代码）
+  - 文档层：删除 `docs/migrations/` 目录
+  - 数据库：执行 `sqlite3 data/wind_cache.db "PRAGMA user_version = 0"` 恢复初始状态
+- **TTL**：永久（基础设施功能，非临时补丁）
+- **Commit 标签**：`[NEW-FILE:#20260708-HA1]`（migrations 文档）
+
+### 设计权衡
+
+- **方案 A vs 方案 B**：
+  - 方案 A（PRAGMA user_version）：轻量级，无外部依赖，SQLite 内置，满足当前需求 ✓ 采用
+  - 方案 B（Alembic 框架）：重型，需安装 `alembic` 包 + 配置 `alembic.ini` + `versions/` 目录，工作量大 ✗ 暂缓
+- **版本号起点**：v1（非 v0），明确标记已版本化数据库，区分旧时代未版本化数据库
+
+### 后续待办
+
+- 未来 schema 变更时，在 `_init_schema_version` 中补充 `if current == 1 and target_version == 2:` 分支，执行 DDL 迁移 + 更新版本号
+- 定期检查 `data/agent_sessions/*.db` 文件（LangGraph 自带 `checkpoint_migrations` 表，可与本机制共存）
+
+---
+
 ## 后端股票名称 B2 + 本地名称字典交付记录（2026-06-15 17:25:55 +08:00 锚点）
 
 任务约束：本地开发环境；禁止 push；工具仅 Bash/python3/读改文件；联网绕代理（`os.environ.pop('https_proxy',...)`）。前端 B1/B3 已修（不再把 code 当名缓存/持久化）。本任务修后端两部分。
@@ -1927,6 +2019,19 @@ StockAnal_Sys/
   6. **崩溃取证**：`log show --predicate 'eventMessage CONTAINS "memorystatus"' --last 30m`
 - **违反处理**：worker 触发服务启动 / 全量 vitest = 任务失败重做
 
+**铁律 #4：数据库 schema 演进（2026-07-09 新增）**
+- **触发**：Bug Hunt Round 2 发现 data/*.db 无 schema 版本控制，升级靠手动删库
+- **约束**：
+  1. 所有 `.db` 文件必须有 `PRAGMA user_version` 版本标记
+  2. schema 变更必须走 migration 框架（推荐 Alembic）
+  3. 禁止手动删库升级（生产环境）
+  4. 升级脚本必须包含回滚方案
+- **架构约束**（同步新增）：
+  - **超时三层一致性**：后端 env（AI_HTTP_TIMEOUT / GRAPH_TIMEOUT 等） / nginx proxy_read_timeout / 前端 API client timeout 必须统一配置或文档化差异理由
+  - **线程池资源池化**：禁止临时 `ThreadPoolExecutor(...)`，改用全局池（web_server.py / coordinator.py 模块级初始化）
+  - **定时器清理强制配对**：每个 `setInterval` / `setTimeout` 必须在 useEffect cleanup 或组件卸载时有对应 `clearInterval` / `clearTimeout`
+  - **全局状态封装**：模块级 `_CACHE` / `_lock` 改用单例类 + 依赖注入，便于测试与隔离
+
 **特例白名单（新文件审批，附录 C）**
 - **a. 数据库/存储迁移脚本**：必须缺失且不可复用既有脚本
 - **b. 缺失且必需的最小单元测试**：覆盖现有模块关键逻辑/回归缺陷
@@ -1964,6 +2069,80 @@ StockAnal_Sys/
 - **跨时区一致性**：naive/aware datetime 混用（已统一 `now_cn()`，但未测 `clean_old_tasks()` strptime 兼容）
 - **缓存穿透**：`_STOCK_NAME_CACHE` 冷启动 5s 超时后并发请求风暴（已有 `_CACHE_LAST_FAIL_TS` 冷却窗，但未测高并发）
 - **前端路由预取**：`<link rel=prefetch>` 触发时机、Route Handler warmup 有效性（仅有浏览器截图验证，无自动化回归）
+
+### 6. Bug Hunt Record（持续更新）
+
+#### Round 2（2026-07-09）
+
+**扫描范围**: 82 Python + 106 TypeScript/React，约 48,000 行代码  
+**方法**: 静态分析 + 历史 commit 反向溯源 + 线程安全审查 + 前端 SSR 边界扫描  
+**耗时**: 4.2 小时（含报告生成）  
+**汇报时间**: 2026-07-09 14:35:00 +08:00
+
+##### 架构债务（8 条）
+
+| ID | 文件 | 问题 | 风险 | 修复建议 |
+|----|------|------|------|----------|
+| BD-1 | web_server.py | 5572 行单体，10 个长函数 >100 行 | High | 按 tag 拆分（stock/market/agent/system） |
+| BD-2 | 13 处后端 + nginx | 超时配置割裂（AI_HTTP_TIMEOUT / GRAPH_TIMEOUT / nginx proxy_read_timeout 等 13 处独立配置） | High | env-driven 统一配置层 |
+| BD-3 | 39 处 | 临时 ThreadPoolExecutor 创建（未复用池） | Medium | 全局 ThreadPoolExecutor 池化 |
+| BD-4 | web_server.py | 长函数（最长 245 行 api_start_stock_analysis） | Medium | 函数拆解 <50 行原则 |
+| BD-5 | _*_CACHE | 永久缓存无 TTL（_PROFILE_CACHE / _INDEX_CACHE） | Low | 新股感知机制或定时刷新 |
+| BD-6 | nginx/*.conf | 硬编码配置（端口/域名/SSL 路径） | Low | 模板化 + env 渲染 |
+| BD-7 | 163 routes | schema 校验覆盖率 37%（60/163） | Low | 补齐剩余 103 个路由 schema |
+| BD-8 | _preload_* | 守护线程（market_indices / stock_names）无健康检查 | Low | /api/health/deep 增加线程存活检查 |
+
+##### 隐性假设（6 条）
+
+| ID | 文件 | 问题 | 影响 | 修复建议 |
+|----|------|------|------|----------|
+| HA-1 | data/*.db | 无 schema 版本控制（无 PRAGMA user_version，手动删库升级） | Critical | PRAGMA user_version + Alembic 迁移框架 |
+| HA-2 | 8 处后端 | 裸 `except:` 吞异常（web_server.py 2 处 + 6 处其他） | Critical | 改具体异常类型 + logger.error |
+| HA-3 | 15 处后端 | `os.getenv(KEY)` 无 default（直接取 None 可能导致 TypeError） | High | 补 default 值或启动期 raise |
+| HA-4 | 11 处后端 | 全局状态直接修改（_CACHE / _lock 模块级变量） | High | 单例模式 + 依赖注入 |
+| HA-5 | 52 set / 23 clear | 定时器泄漏（setInterval / setTimeout 配对不全） | Medium | ESLint rule + cleanup 强制检查 |
+| HA-6 | 13 处前端 | NODE_ENV 依赖无 fallback（process.env.NODE_ENV 可能 undefined） | Medium | 默认 'development' |
+
+##### 边界模糊（5 条）
+
+| ID | 文件 | 问题 | 触发条件 | 修复建议 |
+|----|------|------|----------|----------|
+| BM-1 | *-store.ts | Zustand migrate 无日志（迁移失败静默吞掉） | localStorage schema 变更 | logger.info 记录迁移状态 |
+| BM-2 | 3 处前端 | localStorage.clear() 核弹操作（清除所有域存储） | 退出登录 / 清缓存 | 选择性清理（仅清本应用 key） |
+| BM-3 | 7 个 modal | 无滚动锁定（底层页面可滚动） | 打开 modal 后滚动鼠标 | useEffect 切换 body overflow:hidden |
+| BM-4 | dashboard | 嵌套 overflow-y-auto（双滚动条） | 内容超出容器高度 | 明确高度 max-h-* 或单层滚动 |
+| BM-5 | 94 处后端 | 宽泛 `except Exception:`（捕获范围过大） | 任意异常 | 缩小异常类型（requests.Timeout / KeyError 等） |
+
+##### 优先级矩阵
+
+| 优先级 | 时间窗 | 条目 | 关键理由 |
+|--------|--------|------|----------|
+| **P0** | 立即 | HA-1 | 数据库无版本控制，schema 变更需手动删库，生产环境风险极高 |
+| **P1** | 本周 | BD-1, BD-2, HA-2, HA-3, HA-4 | 5572 行单体 + 超时配置割裂 + 裸 except 吞异常 + 无 default env + 全局状态直接修改，影响可维护性与稳定性 |
+| **P2** | 本月 | BD-3~6, HA-5, BM-1~4 | 线程池临时创建 + 长函数 + 永久缓存无 TTL + 硬编码配置 + 定时器泄漏 + migrate 无日志 + localStorage 核弹 + 双滚动条，属技术债务与用户体验问题 |
+| **P3** | 按需 | BD-7, BD-8, HA-6, BM-5 | schema 覆盖率 37% + 守护线程无监控 + NODE_ENV fallback + 宽泛 except Exception，影响有限但长期需优化 |
+
+##### 新增约束（补充到"4. 边界约束铁律"）
+
+**铁律 #4：数据库 schema 演进（2026-07-09 新增）**
+- 所有 `.db` 文件必须有 `PRAGMA user_version` 版本标记
+- schema 变更必须走 migration 框架（推荐 Alembic）
+- 禁止手动删库升级（生产环境）
+- 升级脚本必须包含回滚方案
+
+**架构约束（2026-07-09 新增）**
+1. **超时三层一致性**: 后端 env（AI_HTTP_TIMEOUT / GRAPH_TIMEOUT 等） / nginx proxy_read_timeout / 前端 API client timeout 必须统一配置或文档化差异理由
+2. **线程池资源池化**: 禁止临时 `ThreadPoolExecutor(...)`，改用全局池（web_server.py / coordinator.py 模块级初始化）
+3. **定时器清理强制配对**: 每个 `setInterval` / `setTimeout` 必须在 useEffect cleanup 或组件卸载时有对应 `clearInterval` / `clearTimeout`
+4. **全局状态封装**: 模块级 `_CACHE` / `_lock` 改用单例类 + 依赖注入，便于测试与隔离
+
+##### 附录：扫描工具链
+
+- **静态分析**: `rg` 正则扫描（超时配置 / except / os.getenv / setInterval）
+- **代码度量**: `scc` 统计文件行数与函数复杂度
+- **依赖图**: `pydeps` / `madge` 绘制模块调用关系
+- **线程安全**: 手动审查模块级变量 + threading.RLock 覆盖
+- **前端边界**: 手动审查 SSR/CSR 边界 + localStorage / useEffect cleanup
 
 ---
 

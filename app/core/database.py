@@ -1,8 +1,11 @@
 import os
+import logging
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # 读取配置
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/stock_analyzer.db')
@@ -11,6 +14,62 @@ USE_DATABASE = os.getenv('USE_DATABASE', 'False').lower() == 'true'
 # 创建引擎
 engine = create_engine(DATABASE_URL)
 Base = declarative_base()
+
+
+def _init_schema_version(engine, target_version=1):
+    """初始化或检查 schema 版本（使用 SQLite PRAGMA user_version）。
+
+    版本策略：
+    - current == 0（首次）：初始化为 target_version
+    - current < target_version：需要迁移（预留钩子）
+    - current > target_version：代码过旧，需升级
+    - current == target_version：版本匹配，正常运行
+
+    Args:
+        engine: SQLAlchemy engine
+        target_version: 当前代码期望的 schema 版本
+
+    Returns:
+        int: 数据库当前 schema 版本
+
+    Raises:
+        RuntimeError: 数据库版本过新，需要升级代码
+    """
+    # 仅 sqlite 支持 PRAGMA user_version（其他 DB 跳过）
+    if not engine.url.drivername.startswith('sqlite'):
+        logger.info(f"非 sqlite 引擎 ({engine.url.drivername})，跳过 schema 版本检查")
+        return target_version
+
+    # 使用 raw DBAPI connection 执行 PRAGMA
+    with engine.connect() as conn:
+        raw_conn = conn.connection.dbapi_connection
+        cursor = raw_conn.execute('PRAGMA user_version')
+        current = cursor.fetchone()[0]
+
+        if current == 0:
+            # 首次初始化
+            raw_conn.execute(f'PRAGMA user_version = {target_version}')
+            raw_conn.commit()
+            logger.info(f"数据库 schema 初始化版本: v{target_version} ({engine.url.database})")
+        elif current < target_version:
+            # 需要迁移（预留钩子）
+            logger.warning(
+                f"数据库 schema 版本过旧: v{current} < v{target_version}，"
+                f"建议运行迁移脚本 (参考 docs/migrations/README.md)"
+            )
+            # 未来可在此加 migration 逻辑：
+            # if current == 1 and target_version == 2:
+            #     _migrate_v1_to_v2(conn)
+            #     raw_conn.execute(f'PRAGMA user_version = {target_version}')
+        elif current > target_version:
+            raise RuntimeError(
+                f"数据库版本过新: v{current} > v{target_version}，"
+                f"请升级代码或回退数据库版本"
+            )
+        else:
+            logger.debug(f"schema 版本匹配: v{current} ({engine.url.database})")
+
+        return current
 
 
 # 定义模型
@@ -100,3 +159,5 @@ def get_session():
 # 如果启用数据库，则初始化
 if USE_DATABASE:
     init_db()
+    # 初始化 schema 版本控制
+    _init_schema_version(engine, target_version=1)

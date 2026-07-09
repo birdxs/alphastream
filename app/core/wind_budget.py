@@ -2,7 +2,7 @@
 """
 Input: 工具名/windcode/参数/payload、各档日预算 env（WIND_QUOTA_S/A/B）、WIND_DATABASE_URL
 Output: 持久化缓存命中结果（WindCache）与日配额闸门判定（WindQuota.try_consume/remaining）
-Pos: app/core/wind_budget.py - Wind 数据源「省积分」底座；独立 sqlite 引擎（不碰业务库），供 wind_adapter 在取数前查缓存/控额度
+Pos: app/core/wind_budget.py - Wind 数据源「省积分」底座；独立 sqlite 引擎（不碰业务库），供 wind_adapter 在取数前查缓存/控额度；schema 版本控制（PRAGMA user_version）
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的 md。
 
@@ -14,6 +14,7 @@ Pos: app/core/wind_budget.py - Wind 数据源「省积分」底座；独立 sqli
 2. SQLAlchemy 写法对齐 app/core/database.py（declarative_base/create_engine/sessionmaker）。
 3. 时间统一 +08:00 感知（_now_cn），与项目 now_cn 范式一致。
 4. RLock 保护读改写，session 用完即关，避免连接泄漏。
+5. schema 版本控制：使用 PRAGMA user_version（复用 database._init_schema_version）。
 """
 import os
 import json
@@ -25,6 +26,16 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
+# 导入 database._init_schema_version 以复用 schema 版本控制逻辑
+try:
+    from app.core.database import _init_schema_version
+except ImportError:
+    # 降级：如果导入失败（如测试环境缺少 database.py），提供 stub 实现
+    def _init_schema_version(engine, target_version=1):
+        """Stub 实现（仅在导入失败时使用）。"""
+        logger.warning("未能导入 database._init_schema_version，跳过 schema 版本检查")
+        return target_version
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +120,8 @@ class WindCache:
         self._url = database_url or WIND_DATABASE_URL
         self._engine = _build_engine(self._url)
         _WindBase.metadata.create_all(self._engine)
+        # 初始化 schema 版本控制（v1）
+        _init_schema_version(self._engine, target_version=1)
         self._Session = sessionmaker(bind=self._engine)
         self._lock = threading.RLock()
 
@@ -174,6 +187,8 @@ class WindQuota:
         self._url = database_url or WIND_DATABASE_URL
         self._engine = _build_engine(self._url)
         _WindBase.metadata.create_all(self._engine)
+        # 初始化 schema 版本控制（v1）
+        _init_schema_version(self._engine, target_version=1)
         self._Session = sessionmaker(bind=self._engine)
         self._lock = threading.RLock()
         # 各档日预算（env 驱动）
