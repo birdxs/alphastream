@@ -4,6 +4,96 @@
 
 ---
 
+## BD-4 长函数拆解完整收尾记录（2026-07-08 23:57 +08:00）
+
+任务约束：本地开发环境；禁止 push；最小必要改动；不启动服务；不跑全量测试；优先改现有文件。
+
+时间真实性校验：
+- 校验发起/完成：2026-07-08 23:57:01 +08:00
+- 本机系统时间：2026-07-08 23:57:01 +0800（Asia/Singapore +08:00）
+- 时间源 1：本地系统时钟（已与全局校时锚点同步）
+- 判定：通过（偏差 < 5 秒）
+
+### 任务背景
+
+Worker Y' 在 commit `559863b` 中完成 BD-4 阶段1拆解，将 `start_agent_analysis` 从约 300 行降至 189 行（新增 2 个子函数：`_validate_agent_params` + `_build_agent_task`）。但主函数仍超过 150 行建议阈值，需继续拆解。
+
+### 阶段2拆解方案
+
+**根因分析**：
+- 主函数内嵌 `run_agent_analysis()`（153行）包含两条长分支：
+  1. 新 LangGraph Agent 系统路径（72行，事件订阅 + 进度回写 + 结果格式化）
+  2. 旧 TradingAgents 系统路径（67行，配置构建 + 动态 kwargs + 决策映射）
+
+**拆解策略**：提取两条分支为独立模块级函数，保留内嵌函数仅作路由逻辑。
+
+### 改动摘要
+
+**新增 2 个子函数**（`app/web/web_server.py`）：
+
+1. **`_run_new_agent_system()`**（3640-3716行，77行）
+   - 功能：运行新 LangGraph Agent 系统
+   - 输入：stock_code, market_type, research_depth, selected_analysts, task_id
+   - 输出：None（通过 `update_task_status` 写入结果）
+   - 封装内容：
+     - 事件总线订阅/解订阅（`task.progress_advance`）
+     - 进度回写逻辑
+     - 公司名称获取
+     - 决策对象格式化（final_decision → decision_obj）
+
+2. **`_run_old_trading_agents()`**（3717-3799行，83行）
+   - 功能：运行旧 TradingAgents 系统（保持兼容）
+   - 输入：stock_code, market_type, selected_analysts, enable_memory, max_output_length, analysis_date, task_id
+   - 输出：None（通过 `update_task_status` 写入结果）
+   - 封装内容：
+     - TradingAgentsGraph 配置构建
+     - 动态 kwargs 处理（market_type）
+     - 决策逻辑映射（BUY/SELL/HOLD）
+
+**主函数重构**（3800-3858行，59行）：
+- 保留三步骤：参数校验 → 创建任务 → 启动后台线程
+- 内嵌 `run_agent_analysis()` 简化为路由逻辑（if use_new_agent: 调子函数3 else: 调子函数4）
+- 圈复杂度降至 ≈ 3
+
+### 拆解前后对比
+
+| 指标 | 阶段0（基线） | 阶段1（Worker Y'） | 阶段2（本次） | 改进 |
+|------|--------------|-------------------|--------------|------|
+| `start_agent_analysis` 行数 | ~300 | 189 | **59** | **↓ 80%** |
+| 子函数数量 | 0 | 2 | **4** | +4 |
+| 文件总函数数 | 153 | 155 | **157** | +4 |
+| 单文件改动 | - | +167/-111 | **+169/-140** | +29 net |
+
+### 验证记录
+
+- Python 语法：`py_compile` 通过（零错误）
+- Import smoke：`from app.web.web_server import start_agent_analysis, _run_new_agent_system, _run_old_trading_agents` 成功，日志显示 71 条 v1 alias 注册、5528 条本地股票名称加载
+- 函数行数：59 < 150（达标）
+- 代码复杂度：主函数圈复杂度 ≈ 3（极简）
+- 改动统计：`+169/-140`（单文件）
+
+### 特例登记
+
+- 未创建新文件；无需新文件特例审批
+- 改动范围：仅 `app/web/web_server.py`，提取内嵌逻辑为模块级私有函数
+
+### 回滚方案
+
+```bash
+git checkout HEAD -- app/web/web_server.py
+# 还原至阶段1（189行，2个子函数）
+```
+
+不涉及数据迁移、运行时状态副作用。
+
+### 结论
+
+✅ **BD-4 完整收尾**：主函数从 189 行降至 **59 行**（68% 缩减），符合 <150 行目标。新增 2 个子函数封装两条分支路径（新/旧 Agent 系统），主函数职责缩减为"参数校验 → 创建任务 → 路由分发"，可维护性显著提升。
+
+所有 Finding（TODO/FIXME/未完成）已清零，任务正式收尾。
+
+---
+
 ## 数据库 schema 版本控制修复记录（HA-1，2026-07-08 20:10 +08:00）
 
 任务约束：本地开发环境；禁止 push；仅改现有文件 + 新增 migrations 文档；轻量级方案（PRAGMA user_version，无 Alembic）。
