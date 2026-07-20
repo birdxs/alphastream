@@ -1,17 +1,21 @@
 # TODO
 
+## 2026-07-20 14:44:15 +08:00 — 裁决执行：use_wind 接线 + 联动真测
+
+- [x] `X-Use-Wind` + ContextVar + `_call_wind` 闸门；默认 opt-in false
+- [x] 前端 `apiClient`/`streamPost` 注入 header；Settings 配额 `extractData`
+- [x] `/api/wind/quota` 收回 PUBLIC_PATHS（AUTH 下 401）
+- [x] 本地启 8888/3000；home/settings/dash/stock **200**；name 贵州茅台；quota success
+- [x] wind 单测 **42 passed**；tsc 0
+- [x] commit `bc19fa3` 后继 commit 本批接线（见 git log）
+- [ ] 浏览器 CDP 点 Settings 开关视觉验收（会话需重启挂载 MCP）
+- [ ] **仍禁 push**（ahead origin 累计）
+
 ## 2026-07-20 14:30:16 +08:00 — 功能性审查（后端→前端→联动）
 
-- 时间校验：2026-07-20 14:30:16 +08:00 通过；内存曾 free_pages=3657，回收后继续
-- **未问但更关键**：①审查对象是脏工作区还是 HEAD？②投产通过线是什么？③前端 Wind 开关是否接到后端数据路径？
-- [x] 后端 Phase1：import 170 routes；health/metrics/openapi/csrf/stock_name/wind_quota 200；鉴权 401 生效；market_indices 离线 503 合规
-- [x] **根因修复** `bc19fa3`：BD-3 后名称缓存 `finally: _ex.shutdown` → NameError，成功路径永不 `_CACHE_LOADED`/落盘
-- [x] Wind `DISABLE_NETWORK` 门控 tools/list；扩展单测 fixture 假 key；聚焦 52 passed
-- [x] 前端 Phase2：`tsc --noEmit` 0；页面文件齐全；Settings Wind UI 已挂
-- [!] **联动缺口**：`useWindEnabled` 仅 localStorage，**后端无 use_wind 消费** → 开关是死开关
-- [!] `/api/wind/quota` 在 PUBLIC_PATHS（无 key 可查）— 投产是否可接受待裁决
-- [ ] 联动 Phase3：启前后端 + CDP/Kimi 真测（需 Comdr 授权破铁律#3 启服务）
-- [ ] 456 commits 是否 push — 待 Comdr（**仍禁 push**）
+- [x] 后端 Phase1 + 名称缓存回归修复 `bc19fa3`
+- [x] 前端 Phase2 tsc 0
+- [x] 联动缺口已闭环（use_wind 接线）
 
 ## 2026-07-20 14:04:02 +08:00 — 进度同步（git 审查）
 
