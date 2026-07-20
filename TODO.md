@@ -1,5 +1,17 @@
 # TODO
 
+## 2026-07-20 14:04:02 +08:00 — 进度同步（git 审查）
+
+- 时间校验：本机 2026-07-20 14:04:02 +08:00；Cloudflare/Google/Apple Date 偏差 ≤7s → **通过**
+- HEAD：`4373f5f` Bug Hunt Round 2 最终报告（2026-07-09）；**main ahead origin +455**，未 push
+- [x] Bug Hunt Round 2：**19/19 = 100%**（P0→P3 + P2 高价值，见 CLAUDE.md / commits `64a3233`…`4373f5f`）
+- [~] **Wind MCP 工具扩展 WIP（未 commit）**：adapter 6/10 工具、`/api/wind/quota|tools`、health_deep wind 检查、Settings 开关、扩展单测（9 modified + 4 untracked，+887/-30）
+- [ ] 提交验收 Wind 扩展批次（含 mock 单测回归）
+- [ ] 455 commits / WIP 是否 push — 待 Comdr 裁决
+- [x] SSE `market_stream` OpenAPI 已文档化（`3409580`）— 关闭 2026-06-15 的 [~]
+- [ ] A2A 协议端点文档化（评估中）
+- [ ] Kimi 续测：`/compare` `/portfolio` 市场扫描 `api-docs`；agent UI；联网 profile/stock_data
+
 ## 2026-06-15 13:48:26 +08:00 — 4 议题审查裁决 + OpenAPI 第三~六批文档化 + deps 维护
 
 - [x] 4 议题审查裁决：A2A RPC 撤销（不立项）、前端 useState/use client 关闭（不改）、OpenAPI 立项、npm lockfile 修复。

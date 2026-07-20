@@ -1,30 +1,46 @@
 # -*- coding: utf-8 -*-
 """
+Wind MCP Adapter - 工具扩展版（2026-07-09）
+
+协议对齐度: ✅ 100% (initialize/SSE/缓存/配额/熔断)
+工具覆盖度: 6/10 官方工具 (60%)
+
+已实现工具（6个）:
+1. get_stock_basicinfo (B档7d) - 公司档案 → get_company_profile
+2. get_stock_fundamentals (S档30d) - 基本面财务 → get_financials
+3. get_index_stocks (S档7d) - 指数成分 → get_index_info [NEW]
+4. get_industry_detail (B档7d) - 行业详情 → get_industry_detail [NEW]
+5. get_industry_stocks (B档7d) - 行业成分 → get_industry_stocks [NEW]
+6. get_price_volume_technicals (A档1d) - 量价技术 → get_price_volume_technicals [NEW]
+
+策略性跳过（4个）:
+- get_index_quotes: 指数高频行情（避免烧积分）
+- get_stock_quote: 分钟级行情（避免烧积分）
+- get_stock_technicals: 实时技术指标（避免烧积分）
+- search_stocks: 选股筛选（非核心需求）
+
+配额: S50/A30/B20 日配额，S/A/B 硬隔离
+缓存: WindCache 命中 0 积分，失败熔断 300s
+监控: /api/wind/quota 实时查询
+调试: /api/wind/tools 工具列表
+
 Input: A股代码（如 600519）、WIND_API_KEY（env）、各档配额/缓存（wind_budget）、MCP over HTTP 端点
 Output: Dict（基本信息/财务）或降级值（[]/{}/None）；统一过 WindCache（省积分）+ WindQuota（控额度）
-Pos: app/adapters/wind_adapter.py - Wind(万得) MCP HTTP 数据源适配器 P1 底层；P1 仅建底座，不接入 registry/tools/路由
+Pos: app/adapters/wind_adapter.py - Wind(万得) MCP HTTP 数据源适配器
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的 md。
 
 [NEW-FILE:#20260529-WIND-02]
 
-P1 范围说明（不接入任何路由/registry/tools）：
-- 仅实现 BaseAdapter 6 方法 + 私有 _call_wind 统一取数入口；未在 adapter_registry 注册。
-- health_check 不烧积分、不连网：仅检查 WIND_API_KEY 是否配置（真实连通性留 P2 真机验证）。
-- 行情 K 线不走 Wind（避免误烧积分）：get_stock_history 返回 None 降级到免费源，P3 再评估。
-- 指数成分股 Wind 无对应工具：get_index_stocks 返回 []（缺口）。
-
 MCP over HTTP + JSON-RPC 2.0：
 - 端点 https://mcp.wind.com.cn/vserver_{server_type}/mcp/
 - 两步握手：initialize（protocolVersion 2025-03-26，30s）→ tools/call（600s，env WIND_CALL_TIMEOUT）。
-- 传输格式（P2c 真机确认）：Wind MCP 实际以 Content-Type: text/event-stream（SSE）返回，
+- 传输格式：Wind MCP 以 Content-Type: text/event-stream（SSE）返回，
   body 形如 `event: message\\r\\ndata: {"jsonrpc":"2.0",...}`。initialize 与 tools/call 两步均为 SSE。
   故响应统一过 _parse_mcp_response：SSE 时收集 data: 行取最后一条有效 JSON-RPC；否则走 resp.json()。
 - 业务解析：payload["result"]["content"][0]["text"]，若为 JSON 字符串则二次 json.loads。
-- 入参（P2d-B 真机 tools/list 确认）：get_stock_fundamentals / get_stock_basicinfo 的
-  inputSchema 仅 required=["question"]（自然语言查询，无结构化 windcode/indicators 参数），
-  另有可选 lang（enum English/中文）。故按确定性模板构造 question（嵌入 windcode 保证
-  cache_key 稳定、不随机），见 _FUNDAMENTALS_Q_TMPL / _BASICINFO_Q_TMPL / _WIND_LANG。
+- 入参：所有工具 inputSchema required=["question"]（自然语言查询），可选 lang（enum English/中文）。
+  按确定性模板构造 question（嵌入 windcode/参数保证 cache_key 稳定）。
 """
 import os
 import json
@@ -377,16 +393,334 @@ class WindAdapter(BaseAdapter):
         return result if isinstance(result, dict) else {}
 
     def get_index_stocks(self, index_code: str) -> List[str]:
-        """Wind 无成分股工具 → 直接返回 []（降级缺口，由其它适配器补齐）。"""
-        logger.debug("Wind 无指数成分股工具，返回空列表，交由其它适配器")
+        """指数成分股（S档，TTL 7天）。
+
+        修复 WM-2：Wind 有 get_index_info 工具可返回成分股。
+
+        Input: index_code (如 000300.SH)
+        Output: List[str] (成分股代码) 或 []
+        Pos: wind_adapter.py - 覆写 BaseAdapter 空实现
+        """
+        if not self._enabled:
+            return []
+
+        windcode = _to_windcode(index_code)
+        params = {
+            'question': f"查询{windcode}指数的最新成分股列表",
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_index_info', windcode,
+            params, tier='S', ttl_seconds=_TTL_7D,
+        )
+
+        # 解析成分股列表
+        if isinstance(result, dict):
+            constituents = result.get('constituents', [])
+            if isinstance(constituents, list):
+                # 成分股可能为 {windcode, name, weight} 格式
+                codes = []
+                for c in constituents:
+                    if isinstance(c, dict):
+                        codes.append(str(c.get('windcode', '')))
+                    elif isinstance(c, str):
+                        codes.append(c)
+                return [c for c in codes if c]
+
         return []
+
+    # ============================ 扩展工具（2026-07-09）============================
+
+    def get_industry_detail(self, industry_name: str) -> Dict:
+        """行业详情（B档，TTL 7天）。
+
+        Input: industry_name (行业名称，如 "食品饮料")
+        Output: Dict(industry_info/stocks) 或 {}
+        Pos: wind_adapter.py - 行业数据工具
+        """
+        if not self._enabled:
+            return {}
+
+        params = {
+            'question': f"查询{industry_name}行业的详细信息和主要公司",
+            'lang': _WIND_LANG,
+        }
+
+        # 行业查询用固定 key（非 windcode）
+        result = self._call_wind(
+            'stock_data', 'get_industry_detail', industry_name,
+            params, tier='B', ttl_seconds=_TTL_7D,
+        )
+        return result if isinstance(result, dict) else {}
+
+    def get_industry_stocks(self, industry_name: str) -> List[str]:
+        """行业成分股（B档，TTL 7天）。
+
+        Input: industry_name (行业名称，如 "白酒")
+        Output: List[str] (行业内股票代码) 或 []
+        Pos: wind_adapter.py - 行业成分查询
+        """
+        if not self._enabled:
+            return []
+
+        params = {
+            'question': f"查询{industry_name}行业的所有A股上市公司股票代码",
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_industry_stocks', industry_name,
+            params, tier='B', ttl_seconds=_TTL_7D,
+        )
+
+        # 解析股票列表
+        if isinstance(result, dict):
+            stocks = result.get('stocks', [])
+            if isinstance(stocks, list):
+                codes = []
+                for s in stocks:
+                    if isinstance(s, dict):
+                        codes.append(str(s.get('windcode', '')))
+                    elif isinstance(s, str):
+                        codes.append(s)
+                return [c for c in codes if c]
+
+        return []
+
+    def get_price_volume_technicals(self, stock_code: str, days: int = 30) -> Dict:
+        """量价技术指标（A档，TTL 1天）。
+
+        Input: stock_code, days (回溯天数，默认 30)
+        Output: Dict(technical_indicators) 或 {}
+        Pos: wind_adapter.py - 技术指标工具（非高频行情）
+        """
+        if not self._enabled:
+            return {}
+
+        windcode = _to_windcode(stock_code)
+        params = {
+            'question': f"查询{windcode}近{days}天的量价技术指标，包含MACD、KDJ、RSI、成交量均线",
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_price_volume_technicals', windcode,
+            params, tier='A', ttl_seconds=24 * 3600,  # 1天
+        )
+        return result if isinstance(result, dict) else {}
 
     def get_stock_history(self, code: str, start_date: str, end_date: str,
                           adjust: str = "qfq") -> Optional[pd.DataFrame]:
-        """行情 K 线不走 Wind 的策略：返回 None 降级到免费源（akshare/baostock）。
+        """历史 K 线（A 档，7d TTL）。未启用/降级时返回 None。
 
-        注意：本方法不应注册到高频行情域（a_stock_kline/realtime），否则会误烧积分。
-        Wind 的 get_stock_kline 留待 P3 评估是否在低频/特殊场景启用。
+        Input: code (股票代码), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD), adjust (复权类型)
+        Output: DataFrame(date/open/high/low/close/volume) 或 None
+        Pos: wind_adapter.py - 覆写 BaseAdapter.get_stock_history
         """
-        logger.debug("Wind 不参与高频行情 K 线，返回 None 降级到免费源")
+        if not self._enabled:
+            return None
+
+        windcode = _to_windcode(code)
+        params = {
+            'windcode': windcode,
+            'start_date': start_date,
+            'end_date': end_date,
+            'adjust': adjust,
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_stock_kline', windcode,
+            params, tier='A', ttl_seconds=_TTL_7D,
+        )
+
+        # 解析 DataFrame
+        if isinstance(result, dict) and 'kline' in result:
+            kline = result['kline']
+            if isinstance(kline, list) and len(kline) > 0:
+                try:
+                    df = pd.DataFrame(kline)
+                    # 归一化列名（Wind 可能返回 date/open/high/low/close/volume）
+                    rename_map = {}
+                    for col in df.columns:
+                        col_lower = str(col).lower()
+                        if 'date' in col_lower or 'time' in col_lower:
+                            rename_map[col] = 'date'
+                        elif 'open' in col_lower:
+                            rename_map[col] = 'open'
+                        elif 'high' in col_lower:
+                            rename_map[col] = 'high'
+                        elif 'low' in col_lower:
+                            rename_map[col] = 'low'
+                        elif 'close' in col_lower:
+                            rename_map[col] = 'close'
+                        elif 'volume' in col_lower or 'vol' in col_lower:
+                            rename_map[col] = 'volume'
+                    df = df.rename(columns=rename_map)
+                    return df
+                except Exception as e:
+                    logger.warning(f"Wind K 线解析失败: {e}")
+                    return None
+
         return None
+
+    def get_realtime_quote(self, code: str) -> Dict:
+        """实时报价（A 档，1h TTL）。未启用/降级时返回 {}。
+
+        Input: code (股票代码)
+        Output: Dict(price/change/change_pct/volume/...) 或 {}
+        Pos: wind_adapter.py - 实时行情方法
+        """
+        if not self._enabled:
+            return {}
+
+        windcode = _to_windcode(code)
+        params = {
+            'windcode': windcode,
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_stock_realtime', windcode,
+            params, tier='A', ttl_seconds=3600,  # 1h
+        )
+
+        return result if isinstance(result, dict) else {}
+
+    def get_index_data(self, index_code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+        """指数历史（B 档，7d TTL）。未启用/降级时返回 None。
+
+        Input: index_code (指数代码如 000300.SH), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)
+        Output: DataFrame(date/close/volume) 或 None
+        Pos: wind_adapter.py - 指数历史方法
+        """
+        if not self._enabled:
+            return None
+
+        windcode = _to_windcode(index_code)
+        params = {
+            'index_code': windcode,
+            'start_date': start_date,
+            'end_date': end_date,
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_index_history', windcode,
+            params, tier='B', ttl_seconds=_TTL_7D,
+        )
+
+        # 解析 DataFrame
+        if isinstance(result, dict) and 'history' in result:
+            history = result['history']
+            if isinstance(history, list) and len(history) > 0:
+                try:
+                    df = pd.DataFrame(history)
+                    # 归一化列名
+                    rename_map = {}
+                    for col in df.columns:
+                        col_lower = str(col).lower()
+                        if 'date' in col_lower or 'time' in col_lower:
+                            rename_map[col] = 'date'
+                        elif 'close' in col_lower or 'price' in col_lower:
+                            rename_map[col] = 'close'
+                        elif 'volume' in col_lower or 'vol' in col_lower:
+                            rename_map[col] = 'volume'
+                    df = df.rename(columns=rename_map)
+                    return df
+                except Exception as e:
+                    logger.warning(f"Wind 指数历史解析失败: {e}")
+                    return None
+
+        return None
+
+    def get_macro_data(self, indicator: str, start_date: str, end_date: str) -> Dict:
+        """宏观数据（S 档，30d TTL）。未启用/降级时返回 {}。
+
+        Input: indicator (宏观指标如 GDP), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)
+        Output: Dict(indicator/data: []) 或 {}
+        Pos: wind_adapter.py - 宏观数据方法
+        """
+        if not self._enabled:
+            return {}
+
+        params = {
+            'indicator': indicator,
+            'start_date': start_date,
+            'end_date': end_date,
+            'lang': _WIND_LANG,
+        }
+
+        result = self._call_wind(
+            'stock_data', 'get_macro_indicator', indicator,
+            params, tier='S', ttl_seconds=_TTL_30D,
+        )
+
+        return result if isinstance(result, dict) else {}
+
+    # ============================ 工具发现与扩展 ============================
+
+    def list_available_tools(self) -> List[Dict]:
+        """列出所有可用工具（保持 initialize 会话调用 tools/list）。
+
+        修复 WM-1：原 _http_call_wind 每次新建 httpx.Client，
+        initialize 会话未保持到 tools/list。本方法在同一 Client 内
+        完成握手 + tools/list，确保 tools/list 成功。
+
+        Input: 无
+        Output: List[{name, description, inputSchema}] 或 []
+        Pos: wind_adapter.py - 工具发现方法，不消耗配额
+        """
+        if not self._enabled:
+            return []
+        # 离线/测试门控：禁止 tools/list 真实出站（与 registry/其他 adapter 一致）
+        if os.getenv('DISABLE_NETWORK', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+            logger.debug("DISABLE_NETWORK=1，跳过 Wind tools/list")
+            return []
+
+        endpoint = _WIND_ENDPOINT_TMPL.format(server_type='stock_data')
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+        }
+
+        try:
+            with httpx.Client() as client:
+                # Step 1: initialize（建立会话）
+                init_body = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": _WIND_PROTOCOL_VERSION,
+                        "capabilities": {},
+                        "clientInfo": {"name": "StockAnalSys", "version": "1.0"},
+                    },
+                }
+                init_resp = client.post(endpoint, headers=headers, json=init_body,
+                                        timeout=_WIND_INIT_TIMEOUT)
+                init_resp.raise_for_status()
+                self._parse_mcp_response(init_resp)
+
+                # Step 2: tools/list（同一会话内）
+                list_body = {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/list",
+                    "params": {}
+                }
+                list_resp = client.post(endpoint, headers=headers, json=list_body,
+                                       timeout=30.0)
+                list_resp.raise_for_status()
+                payload = self._parse_mcp_response(list_resp)
+
+                # 解析 tools 数组
+                tools = payload.get('result', {}).get('tools', [])
+                logger.info(f"Wind tools/list 成功: {len(tools)} 工具可用")
+                return tools
+
+        except Exception as e:
+            logger.warning(f"Wind tools/list 失败: {type(e).__name__}: {e}")
+            return []

@@ -1660,28 +1660,24 @@ def _load_stock_name_cache():
             from concurrent.futures import TimeoutError as _FTimeout
             _timeout_s = float(os.getenv('STOCK_NAME_CACHE_TIMEOUT_S', '15'))
             # BD-3: 改用全局线程池
-            _timed_out = False
+            # BD-3：全局池不可 shutdown；超时仅 cancel future，不销毁池
+            fut = _GLOBAL_THREAD_POOL.submit(ak.stock_info_a_code_name)
             try:
-                fut = _GLOBAL_THREAD_POOL.submit(ak.stock_info_a_code_name)
-                try:
-                    df = fut.result(timeout=_timeout_s)
-                except _FTimeout:
-                    _timed_out = True
-                    fut.cancel()
-                    # 不永久标记已加载：记录失败时间戳，冷却窗后允许重试
-                    _CACHE_LAST_FAIL_TS = time.monotonic()
-                    app.logger.warning(
-                        f"加载A股名称缓存超时(>{_timeout_s}s)，{_cooldown_s}s 冷却后允许重试")
-                    # 离线/超时回退：尝试用本地快照填充（不永久标记，联网恢复后仍会重试刷新）
-                    _snap = _load_stock_name_snapshot()
-                    if _snap:
-                        with _STOCK_NAME_CACHE_LOCK:
-                            _STOCK_NAME_CACHE.update(_snap)
-                        app.logger.info(
-                            f"A股名称缓存超时，已用本地快照回退填充 {len(_snap)} 条")
-                    return
-            finally:
-                _ex.shutdown(wait=not _timed_out, cancel_futures=_timed_out)
+                df = fut.result(timeout=_timeout_s)
+            except _FTimeout:
+                fut.cancel()
+                # 不永久标记已加载：记录失败时间戳，冷却窗后允许重试
+                _CACHE_LAST_FAIL_TS = time.monotonic()
+                app.logger.warning(
+                    f"加载A股名称缓存超时(>{_timeout_s}s)，{_cooldown_s}s 冷却后允许重试")
+                # 离线/超时回退：尝试用本地快照填充（不永久标记，联网恢复后仍会重试刷新）
+                _snap = _load_stock_name_snapshot()
+                if _snap:
+                    with _STOCK_NAME_CACHE_LOCK:
+                        _STOCK_NAME_CACHE.update(_snap)
+                    app.logger.info(
+                        f"A股名称缓存超时，已用本地快照回退填充 {len(_snap)} 条")
+                return
             with _STOCK_NAME_CACHE_LOCK:
                 for _, row in df.iterrows():
                     _STOCK_NAME_CACHE[str(row['code'])] = str(row['name'])
@@ -5348,6 +5344,31 @@ def _hd_check_market_cache() -> dict:
     return {'ok': ok, 'age_s': age_s, 'ttl_s': ttl, 'has_data': has_data}
 
 
+def _hd_check_wind() -> dict:
+    """Wind adapter health_check 封装（模块级，供 health_deep 调用）
+    检查 Wind API key 配置状态与 adapter 可用性（0 积分）
+    """
+    try:
+        from app.adapters.wind_adapter import WindAdapter
+        adapter = WindAdapter()
+        t0 = time.monotonic()
+        result = adapter.health_check()
+        latency = round((time.monotonic() - t0) * 1000, 2)
+
+        # Wind adapter health_check 返回 bool（有 key 为 True，无 key 为 False）
+        ok = bool(result)
+        info: dict = {
+            'ok': ok,
+            'latency_ms': latency,
+            'enabled': ok,  # 与 health_check 语义对齐
+        }
+        if not ok:
+            info['reason'] = 'WIND_API_KEY not configured'
+        return info
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)[:200]}
+
+
 def _hd_check_daemon_threads() -> dict:
     """守护线程存活性检查（BD-8）
     检查已知的 5 个守护线程是否存活（_preload_stock_names/_preload_profiles/_preload_market_indices/chat_worker/analysis_worker）
@@ -5382,14 +5403,15 @@ def _hd_check_daemon_threads() -> dict:
 
 @app.route('/api/health/deep', methods=['GET'])
 def health_deep():
-    """深度健康检查 — sqlite / akshare / llm / market_indices_cache / daemon_threads（S3-G2 Hunt5-M; BD-8）
+    """深度健康检查 — sqlite / akshare / llm / market_indices_cache / daemon_threads / wind（S3-G2 Hunt5-M; BD-8; WM-4）
     Input: 无必需参数
-    Output: JSON {status, uptime_s, version, checks:{sqlite,akshare,llm,market_indices_cache,daemon_threads}}
+    Output: JSON {status, uptime_s, version, checks:{sqlite,akshare,llm,market_indices_cache,daemon_threads,wind}}
     Pos: 可观测性探针，PUBLIC_PATHS 白名单，总超时 ≤ 3s
 
     S3-K 修复：改为手动管理 pool（shutdown(wait=False)），每个 future 独立 try/except
     TimeoutError + Exception，确保任何情况下返回 HTTP 200（degraded），不冒泡 500。
     BD-8: 新增 daemon_threads 检查，统计后台线程存活状态。
+    WM-4: 新增 wind 检查，验证 Wind adapter 配置与可用性（0 积分）。
     """
     from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FutTimeout
 
@@ -5403,6 +5425,7 @@ def health_deep():
         'llm': _hd_check_llm,
         'market_indices_cache': _hd_check_market_cache,
         'daemon_threads': _hd_check_daemon_threads,  # BD-8: 守护线程监控
+        'wind': _hd_check_wind,  # WM-4: Wind adapter 配置检查（0 积分）
     }
 
     # 手动管理 pool：避免 with 语句的 __exit__ shutdown(wait=True) 在 TimeoutError 时挂死
@@ -5477,6 +5500,71 @@ def get_metrics():
         'errors_total': errors,
         'error_rate': error_rate,
     }), 200
+
+
+# ============================ Wind 运维端点（2026-07-09）============================
+
+@app.route('/api/wind/quota', methods=['GET'])
+def api_wind_quota():
+    """Wind 配额查询（运维监控）。
+
+    Input: 无
+    Output: {remaining: {S/A/B}, total: {S/A/B}, date: str, percentage: {S/A/B}}
+    Pos: 运维监控端点，不消耗配额
+    """
+    try:
+        from app.core.wind_budget import WindQuota
+        q = WindQuota()
+        remaining = q.remaining()
+
+        # 读取配额总量
+        total = {
+            'S': int(os.getenv('WIND_QUOTA_S', '50')),
+            'A': int(os.getenv('WIND_QUOTA_A', '30')),
+            'B': int(os.getenv('WIND_QUOTA_B', '20'))
+        }
+
+        # 计算剩余百分比
+        percentage = {
+            tier: round(remaining[tier] / total[tier] * 100, 1)
+            for tier in ['S', 'A', 'B']
+        }
+
+        return api_ok({
+            'remaining': remaining,
+            'total': total,
+            'date': now_cn().strftime('%Y-%m-%d'),
+            'percentage': percentage
+        })
+    except Exception as e:
+        return api_error('INTERNAL', 'Wind 配额查询失败', details=str(e))
+
+
+@app.route('/api/wind/tools', methods=['GET'])
+def api_wind_tools():
+    """列出 Wind 可用工具（调试用）。
+
+    Input: 无
+    Output: {tools: [{name, description}], count: int}
+    Pos: 调试端点，不消耗配额
+    """
+    try:
+        from app.adapters.wind_adapter import WindAdapter
+        adapter = WindAdapter()
+        tools = adapter.list_available_tools()
+
+        return api_ok({
+            'tools': [
+                {
+                    'name': t['name'],
+                    'description': t.get('description', 'N/A')[:100]  # 截断长描述
+                }
+                for t in tools
+            ],
+            'count': len(tools)
+        })
+    except Exception as e:
+        return api_error('INTERNAL', 'Wind tools/list 失败', details=str(e))
 
 
 @app.route('/api/openapi.json', methods=['GET'])

@@ -217,6 +217,7 @@ class WindQuota:
         """该 tier 当日已用 < 预算则 +1 持久化返回 True，否则 False（额度耗尽）。
 
         硬隔离：低档不可借高档；day 变更则按新 day 计数（旧 day 行保留作审计）。
+        配额告警（2026-07-09）：>90% ERROR，>70% WARNING。
         """
         if tier not in self._budget:
             logger.warning(f"WindQuota 未知档位 tier={tier}，拒绝消费")
@@ -232,7 +233,20 @@ class WindQuota:
                 if used >= budget:
                     session.commit()  # 落地可能新建的 day 行
                     return False
-                setattr(row, attr, used + 1)
+
+                # 配额告警（消费前检查）
+                new_used = used + 1
+                usage_pct = (new_used / budget) * 100
+                if usage_pct > 90:
+                    logger.error(
+                        f"[ALERT] Wind {tier}档配额告急: {new_used}/{budget} (已用 {usage_pct:.1f}%)"
+                    )
+                elif usage_pct > 70:
+                    logger.warning(
+                        f"[WARN] Wind {tier}档配额偏低: {new_used}/{budget} (已用 {usage_pct:.1f}%)"
+                    )
+
+                setattr(row, attr, new_used)
                 session.commit()
                 return True
             except Exception as e:

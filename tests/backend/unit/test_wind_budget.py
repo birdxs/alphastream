@@ -646,3 +646,155 @@ def test_basicinfo_params_include_required_question(tmp_path, monkeypatch):
     assert args.get('lang') == '中文'
     assert result == payload
     assert quota.remaining()['B'] == 4
+
+
+# ─────────────────────── 4 个新方法测试（K 线 / 实时 / 指数 / 宏观）───────────────────────
+
+
+def test_get_stock_history_kline(tmp_path, monkeypatch):
+    """Wind K 线（A 档，7d TTL）：成功返回 DataFrame，解析 kline 数组。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_A', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    payload = {
+        'kline': [
+            {'date': '2026-01-01', 'open': 100, 'high': 105, 'low': 99, 'close': 103, 'volume': 1000},
+            {'date': '2026-01-02', 'open': 103, 'high': 108, 'low': 102, 'close': 107, 'volume': 1200},
+        ],
+        'error': None,
+    }
+    _patch_httpx(monkeypatch, payload, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    df = ad.get_stock_history('600519', '2026-01-01', '2026-01-02', adjust='qfq')
+
+    assert df is not None
+    assert len(df) == 2
+    assert 'date' in df.columns
+    assert 'close' in df.columns
+    assert df['close'].iloc[1] == 107
+    assert quota.remaining()['A'] == 4
+
+
+def test_get_realtime_quote(tmp_path, monkeypatch):
+    """Wind 实时报价（A 档，1h TTL）：成功返回 dict。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_A', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    payload = {'price': 1800.5, 'change': 15.3, 'change_pct': 0.86, 'error': None}
+    _patch_httpx(monkeypatch, payload, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_realtime_quote('600519')
+
+    assert isinstance(result, dict)
+    assert result['price'] == 1800.5
+    assert result['change_pct'] == 0.86
+    assert quota.remaining()['A'] == 4
+
+
+def test_get_index_data(tmp_path, monkeypatch):
+    """Wind 指数历史（B 档，7d TTL）：成功返回 DataFrame，解析 history 数组。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_B', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    payload = {
+        'history': [
+            {'date': '2026-01-01', 'close': 4500.1, 'volume': 5000},
+            {'date': '2026-01-02', 'close': 4520.3, 'volume': 5200},
+        ],
+        'error': None,
+    }
+    _patch_httpx(monkeypatch, payload, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    df = ad.get_index_data('000300.SH', '2026-01-01', '2026-01-02')
+
+    assert df is not None
+    assert len(df) == 2
+    assert 'date' in df.columns
+    assert 'close' in df.columns
+    assert df['close'].iloc[0] == 4500.1
+    assert quota.remaining()['B'] == 4
+
+
+def test_get_macro_data(tmp_path, monkeypatch):
+    """Wind 宏观数据（S 档，30d TTL）：成功返回 dict。"""
+    monkeypatch.setenv('WIND_API_KEY', 'fake-key')
+    monkeypatch.setenv('WIND_QUOTA_S', '5')
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    cache = WindCache(_make_url(tmp_path))
+    quota = WindQuota(_make_url(tmp_path))
+    counter = {'posts': 0}
+    payload = {'indicator': 'GDP', 'data': [{'date': '2025Q4', 'value': 5.2}], 'error': None}
+    _patch_httpx(monkeypatch, payload, counter)
+
+    ad = WindAdapter(cache=cache, quota=quota)
+    result = ad.get_macro_data('GDP', '2025-01-01', '2025-12-31')
+
+    assert isinstance(result, dict)
+    assert result['indicator'] == 'GDP'
+    assert len(result['data']) == 1
+    assert result['data'][0]['value'] == 5.2
+    assert quota.remaining()['S'] == 4
+
+
+def test_wind_quota_api_route():
+    """Wind quota 路由：返回 {'data': {'remaining', 'total', 'date', 'percentage'}, 'success': True}。"""
+    from app.web.web_server import app
+
+    with app.test_client() as client:
+        resp = client.get('/api/wind/quota')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['success'] is True
+        assert 'data' in data
+
+        inner = data['data']
+        assert 'remaining' in inner
+        assert 'total' in inner
+        assert 'date' in inner
+        assert 'percentage' in inner
+
+        for tier in ['S', 'A', 'B']:
+            assert tier in inner['remaining']
+            assert tier in inner['total']
+            assert tier in inner['percentage']
+            assert isinstance(inner['remaining'][tier], int)
+            assert isinstance(inner['total'][tier], int)
+            assert isinstance(inner['percentage'][tier], (int, float))
+
+
+
+def test_wind_adapter_disabled_returns_none_or_empty():
+    """边界：Wind 未启用时（无 key），4 个新方法降级返回 None 或 {}。"""
+    import os
+    os.environ.pop('WIND_API_KEY', None)
+    from app.core.wind_budget import WindCache, WindQuota
+    from app.adapters.wind_adapter import WindAdapter
+
+    ad = WindAdapter(cache=WindCache('sqlite:///:memory:'), quota=WindQuota('sqlite:///:memory:'))
+    assert ad.get_stock_history('600519', '2026-01-01', '2026-01-02') is None
+    assert ad.get_realtime_quote('600519') == {}
+    assert ad.get_index_data('000001.SH', '2026-01-01', '2026-01-02') is None
+    assert ad.get_macro_data('CPI', '2026-01-01', '2026-01-02') == {}
+    assert ad.get_index_data('000300.SH', '2026-01-01', '2026-01-02') is None
+    assert ad.get_macro_data('GDP', '2025-01-01', '2025-12-31') == {}
+
