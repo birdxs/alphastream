@@ -9,7 +9,17 @@ Wind Adapter 扩展工具单元测试（2026-07-09）
 - get_industry_stocks()（行业成分）
 - get_price_volume_technicals()（量价技术）
 """
+
 import pytest
+
+@pytest.fixture(autouse=True)
+def autouse_enable_use_wind():
+    """单测默认允许 Wind 路径（生产默认 opt-in false；测试显式打开避免 ContextVar 污染）。"""
+    from app.adapters.wind_adapter import set_use_wind
+    set_use_wind(True)
+    yield
+    set_use_wind(False)
+
 from unittest.mock import Mock
 from app.adapters.wind_adapter import WindAdapter
 from app.core.wind_budget import WindCache, WindQuota

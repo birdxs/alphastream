@@ -1,14 +1,24 @@
 # TODO
 
+## 2026-07-20 14:30:16 +08:00 — 功能性审查（后端→前端→联动）
+
+- 时间校验：2026-07-20 14:30:16 +08:00 通过；内存曾 free_pages=3657，回收后继续
+- **未问但更关键**：①审查对象是脏工作区还是 HEAD？②投产通过线是什么？③前端 Wind 开关是否接到后端数据路径？
+- [x] 后端 Phase1：import 170 routes；health/metrics/openapi/csrf/stock_name/wind_quota 200；鉴权 401 生效；market_indices 离线 503 合规
+- [x] **根因修复** `bc19fa3`：BD-3 后名称缓存 `finally: _ex.shutdown` → NameError，成功路径永不 `_CACHE_LOADED`/落盘
+- [x] Wind `DISABLE_NETWORK` 门控 tools/list；扩展单测 fixture 假 key；聚焦 52 passed
+- [x] 前端 Phase2：`tsc --noEmit` 0；页面文件齐全；Settings Wind UI 已挂
+- [!] **联动缺口**：`useWindEnabled` 仅 localStorage，**后端无 use_wind 消费** → 开关是死开关
+- [!] `/api/wind/quota` 在 PUBLIC_PATHS（无 key 可查）— 投产是否可接受待裁决
+- [ ] 联动 Phase3：启前后端 + CDP/Kimi 真测（需 Comdr 授权破铁律#3 启服务）
+- [ ] 456 commits 是否 push — 待 Comdr（**仍禁 push**）
+
 ## 2026-07-20 14:04:02 +08:00 — 进度同步（git 审查）
 
-- 时间校验：本机 2026-07-20 14:04:02 +08:00；Cloudflare/Google/Apple Date 偏差 ≤7s → **通过**
-- HEAD：`4373f5f` Bug Hunt Round 2 最终报告（2026-07-09）；**main ahead origin +455**，未 push
-- [x] Bug Hunt Round 2：**19/19 = 100%**（P0→P3 + P2 高价值，见 CLAUDE.md / commits `64a3233`…`4373f5f`）
-- [~] **Wind MCP 工具扩展 WIP（未 commit）**：adapter 6/10 工具、`/api/wind/quota|tools`、health_deep wind 检查、Settings 开关、扩展单测（9 modified + 4 untracked，+887/-30）
-- [ ] 提交验收 Wind 扩展批次（含 mock 单测回归）
-- [ ] 455 commits / WIP 是否 push — 待 Comdr 裁决
-- [x] SSE `market_stream` OpenAPI 已文档化（`3409580`）— 关闭 2026-06-15 的 [~]
+- HEAD 现为 `bc19fa3`；**main ahead origin +456**，未 push
+- [x] Bug Hunt Round 2：**19/19 = 100%**
+- [x] Wind 扩展 WIP 已本地 commit 冻结（`bc19fa3`）
+- [x] SSE `market_stream` OpenAPI 已文档化（`3409580`）
 - [ ] A2A 协议端点文档化（评估中）
 - [ ] Kimi 续测：`/compare` `/portfolio` 市场扫描 `api-docs`；agent UI；联网 profile/stock_data
 

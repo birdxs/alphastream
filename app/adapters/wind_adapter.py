@@ -47,7 +47,8 @@ import json
 import time
 import logging
 import threading
-from typing import Optional, List, Dict
+from contextvars import ContextVar
+from typing import Optional, List, Dict, Any
 
 import pandas as pd
 import httpx
@@ -56,6 +57,38 @@ from .base_adapter import BaseAdapter
 from ..core.wind_budget import WindCache, WindQuota
 
 logger = logging.getLogger(__name__)
+
+# 请求级 Wind 开关（opt-in 省积分）。None=未设置 → 读 WIND_USE_DEFAULT（默认 false）
+_use_wind_cv: ContextVar[Optional[bool]] = ContextVar('use_wind', default=None)
+
+
+def set_use_wind(enabled: bool) -> None:
+    """绑定当前执行上下文是否允许走 Wind 付费路径。"""
+    _use_wind_cv.set(bool(enabled))
+
+
+def is_use_wind_enabled() -> bool:
+    """True 才允许 Wind 出站/烧配额。默认关闭（opt-in）。
+
+    优先级：ContextVar（请求头 X-Use-Wind / body.use_wind）>
+    env WIND_USE_DEFAULT（兼容「有 key 即用」旧行为）。
+    """
+    v = _use_wind_cv.get()
+    if v is not None:
+        return bool(v)
+    return os.getenv('WIND_USE_DEFAULT', 'false').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
+
+
+def parse_use_wind_flag(raw: Any) -> bool:
+    """将 header/query/body 原始值解析为 bool。"""
+    if raw is None:
+        return False
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('1', 'true', 'yes', 'on')
+
 
 # Wind MCP 协议版本（initialize 握手）
 _WIND_PROTOCOL_VERSION = "2025-03-26"
@@ -309,6 +342,12 @@ class WindAdapter(BaseAdapter):
         不消费额度、不发 HTTP；HTTP 失败写入 last_fail_ts，成功则清除该键。
         """
         if not self._enabled:
+            return None
+        # 请求级开关：关闭时整段跳过（含缓存），走免费降级链，避免误用付费源
+        if not is_use_wind_enabled():
+            logger.debug(
+                "use_wind=false，跳过 Wind tool=%s windcode=%s", tool, windcode
+            )
             return None
 
         # 1) 缓存优先（0 积分）—— 始终最先，熔断不影响缓存命中

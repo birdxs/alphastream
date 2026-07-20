@@ -95,6 +95,20 @@ function safeJSONParse<T>(text: string): T {
   return JSON.parse(sanitized) as T;
 }
 
+/** 读取 Settings 的 Wind 开关，注入 X-Use-Wind（opt-in 省积分） */
+function windHeaders(): Record<string, string> {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return { 'X-Use-Wind': 'false' };
+  }
+  try {
+    return {
+      'X-Use-Wind': localStorage.getItem('wind_enabled') === 'true' ? 'true' : 'false',
+    };
+  } catch {
+    return { 'X-Use-Wind': 'false' };
+  }
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -112,7 +126,10 @@ class ApiClient {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), API_DEFAULT_TIMEOUT_MS);
     try {
-      const res = await fetch(url, { signal: ctrl.signal });
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { ...windHeaders() },
+      });
       if (!res.ok) throw new ApiError(res.status, await extractErrorMessage(res));
       return safeJSONParse<T>(await res.text());
     } finally {
@@ -126,7 +143,10 @@ class ApiClient {
     const tid = setTimeout(() => ctrl.abort(), API_DEFAULT_TIMEOUT_MS);
     // 自动附加 CSRF token（Hunt1-C2：防止 CSRF 攻击）
     const csrfToken = await fetchCsrfToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...windHeaders(),
+    };
     if (csrfToken) headers['X-CSRFToken'] = csrfToken;
     try {
       const res = await fetch(`${this.baseUrl}${path}`, {
@@ -162,7 +182,7 @@ class ApiClient {
         }
         const res = await fetch(sseUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...windHeaders() },
           body: JSON.stringify(body),
           signal,
         });

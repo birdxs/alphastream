@@ -27,18 +27,25 @@ export default function SettingsPage() {
   const { enabled: windEnabled, setEnabled: setWindEnabled } = useWindEnabled();
   const { toast } = useToast();
 
-  // Wind 配额 SWR
+  // Wind 配额 SWR（走 apiClient 自动带 X-Use-Wind；api_ok 外壳用 extractData）
   const { data: quota, error: quotaError, mutate: refreshQuota } = useSWR<{
     remaining: { S: number; A: number; B: number };
     total: { S: number; A: number; B: number };
     date: string;
     percentage: { S: number; A: number; B: number };
   }>(
-    '/api/wind/quota',
+    windEnabled ? '/api/wind/quota' : null,
     async (url) => {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('获取配额失败');
-      return res.json();
+      const { apiClient, extractData } = await import('@/lib/api/client');
+      const raw = await apiClient.get<unknown>(url);
+      const data = extractData<{
+        remaining: { S: number; A: number; B: number };
+        total: { S: number; A: number; B: number };
+        date: string;
+        percentage: { S: number; A: number; B: number };
+      }>(raw);
+      if (!data) throw new Error('获取配额失败');
+      return data;
     },
     {
       refreshInterval: 30000, // 30s 刷新

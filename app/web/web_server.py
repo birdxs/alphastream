@@ -282,6 +282,30 @@ def inject_correlation_id():
     g.request_start_time = time.monotonic()  # S3-G4: metrics 计时
 
 
+# ── 全局 before_request：绑定 Wind 请求级开关 ────────────────────────────────
+@app.before_request
+def bind_use_wind_flag():
+    """从 X-Use-Wind / query.use_wind / JSON body.use_wind 绑定 contextvar。
+
+    默认 false（opt-in 省积分）。前端 Settings 开关写 localStorage，
+    client.ts 统一注入 X-Use-Wind 头。
+    """
+    try:
+        from app.adapters.wind_adapter import set_use_wind, parse_use_wind_flag
+        raw = request.headers.get('X-Use-Wind')
+        if raw is None or str(raw).strip() == '':
+            raw = request.args.get('use_wind')
+        if (raw is None or str(raw).strip() == '') and request.method in (
+            'POST', 'PUT', 'PATCH',
+        ):
+            body = request.get_json(silent=True) or {}
+            if isinstance(body, dict):
+                raw = body.get('use_wind')
+        set_use_wind(parse_use_wind_flag(raw))
+    except Exception:
+        pass  # 绑定失败不阻断请求；默认关闭 Wind
+
+
 # ── 全局 before_request 鉴权门 ───────────────────────────────────────────────
 @app.before_request
 def global_auth_gate():
@@ -314,7 +338,7 @@ allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8888,http://127
 _DEV_ORIGIN_PATTERNS = [
     re.compile(r'^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+):(3000|8888)$'),
 ]
-CORS(app, resources={r"/api/*": {"origins": allowed_origins + _DEV_ORIGIN_PATTERNS, "methods": ["GET", "POST", "PUT", "DELETE"], "allow_headers": ["Content-Type", "X-API-Key", "X-CSRFToken"]}})
+CORS(app, resources={r"/api/*": {"origins": allowed_origins + _DEV_ORIGIN_PATTERNS, "methods": ["GET", "POST", "PUT", "DELETE"], "allow_headers": ["Content-Type", "X-API-Key", "X-CSRFToken", "X-Use-Wind"]}})
 
 
 # ── S3-F2: after_request: X-Correlation-Id 响应头 + S3-F4: security headers ─

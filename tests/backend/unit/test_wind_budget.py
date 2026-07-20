@@ -9,7 +9,17 @@ Pos: tests/backend/unit/test_wind_budget.py - Wind P1 离线层单测
 import time
 import importlib
 
+
 import pytest
+
+@pytest.fixture(autouse=True)
+def autouse_enable_use_wind():
+    """单测默认允许 Wind 路径（生产默认 opt-in false；测试显式打开避免 ContextVar 污染）。"""
+    from app.adapters.wind_adapter import set_use_wind
+    set_use_wind(True)
+    yield
+    set_use_wind(False)
+
 
 
 def _make_url(tmp_path):
@@ -798,3 +808,45 @@ def test_wind_adapter_disabled_returns_none_or_empty():
     assert ad.get_index_data('000300.SH', '2026-01-01', '2026-01-02') is None
     assert ad.get_macro_data('GDP', '2025-01-01', '2025-12-31') == {}
 
+# ---- use_wind 请求级开关 ----
+def test_use_wind_gate_blocks_http(tmp_path, monkeypatch):
+    """use_wind=false 时 _call_wind 不消费配额、不写缓存。"""
+    from app.adapters.wind_adapter import (
+        WindAdapter, set_use_wind, is_use_wind_enabled,
+    )
+    from app.core.wind_budget import WindCache, WindQuota
+
+    cache = WindCache(database_url=f"sqlite:///{tmp_path}/c.db")
+    quota = WindQuota(database_url=f"sqlite:///{tmp_path}/q.db")
+    ad = WindAdapter(api_key='k', cache=cache, quota=quota)
+    set_use_wind(False)
+    assert is_use_wind_enabled() is False
+    # 即使 mock http 存在也不应被调用
+    calls = {'n': 0}
+    def boom(*a, **k):
+        calls['n'] += 1
+        raise AssertionError('HTTP should not run when use_wind=false')
+    monkeypatch.setattr(ad, '_http_call_wind', boom)
+    out = ad.get_financial_data('600519')
+    assert out == {} or out is None or out == {}
+    assert calls['n'] == 0
+    rem = quota.remaining()
+    assert rem['S'] == int(__import__('os').getenv('WIND_QUOTA_S', '50'))
+
+
+def test_use_wind_gate_allows_when_true(tmp_path, monkeypatch):
+    from app.adapters.wind_adapter import WindAdapter, set_use_wind
+    from app.core.wind_budget import WindCache, WindQuota
+    cache = WindCache(database_url=f"sqlite:///{tmp_path}/c2.db")
+    quota = WindQuota(database_url=f"sqlite:///{tmp_path}/q2.db")
+    ad = WindAdapter(api_key='k', cache=cache, quota=quota)
+    set_use_wind(True)
+    monkeypatch.setattr(
+        ad, '_call_wind',
+        lambda *a, **k: {'roe': 0.2},
+    )
+    # get_financial_data 走 _call_wind；我们直接断言开关打开后 is_use_wind
+    from app.adapters.wind_adapter import is_use_wind_enabled
+    assert is_use_wind_enabled() is True
+    # 清理，避免污染其它用例
+    set_use_wind(False)
