@@ -1,15 +1,27 @@
 # TODO
 
+## 2026-07-20 14:58:40 +08:00 — 彻底停服后 CDP Bridge 真测
+
+- [x] 彻底停 8888/3000 → 干净重启 → cdp-bridge streamable-http :8765/:18765
+- [x] CDP 真测通过：
+  - Settings：Wind 开关可点、配额 S50/A30/B20 UI、`X-Use-Wind:true`
+  - Dashboard：上证 3796.28 等真实指数 + 贵州茅台关注
+  - Stock 600519：贵州茅台 ¥1253.00 -0.48% + K线/基本面 tab
+  - API：stock_name 贵州茅台 / wind/quota success / health ok
+- [x] 后端单测 **54 passed**
+- [x] 截图：`/tmp/stockanal_review/cdp/*verified*.png`
+- [x] 测后彻底停服（8888/3000/cdp-bridge）
+- [ ] **仍禁 push**
+
 ## 2026-07-20 14:44:15 +08:00 — 裁决执行：use_wind 接线 + 联动真测
 
 - [x] `X-Use-Wind` + ContextVar + `_call_wind` 闸门；默认 opt-in false
 - [x] 前端 `apiClient`/`streamPost` 注入 header；Settings 配额 `extractData`
 - [x] `/api/wind/quota` 收回 PUBLIC_PATHS（AUTH 下 401）
-- [x] 本地启 8888/3000；home/settings/dash/stock **200**；name 贵州茅台；quota success
-- [x] wind 单测 **42 passed**；tsc 0
-- [x] commit `bc19fa3` 后继 commit 本批接线（见 git log）
-- [ ] 浏览器 CDP 点 Settings 开关视觉验收（会话需重启挂载 MCP）
-- [ ] **仍禁 push**（ahead origin 累计）
+- [x] 本地启 8888/3000；CDP 真测闭环（见上节）
+- [x] wind 单测 **54 passed**；tsc 0
+- [x] commits：`7cae626` use_wind / `01eb747` docs
+- [ ] **仍禁 push**
 
 ## 2026-07-20 14:30:16 +08:00 — 功能性审查（后端→前端→联动）
 
