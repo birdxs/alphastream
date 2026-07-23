@@ -373,29 +373,31 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 风险 | 过严误杀 → env 调高阈值；无 ContextVar 时旁路直调保持兼容 |
 | 进度 | **DONE** commit 见 `feat(agent): P0-1 tool call guardrail against failure storms` |
 
-#### P0-2 意图-工具协议 + 服务端二次校验
+#### P0-2 意图-工具协议 + 服务端二次校验 — **Sprint2 部分 DONE（规则意图路由，2026-07-23）**
 
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo `DASHBOARD_TOOL_PROTOCOL` |
 | 缺口 | 自由 FC 意图漂移 |
-| 融化 | `STOCKANAL_TOOL_PROTOCOL` 动态注入；**analyze 拒绝 mutate 工具名**（服务端硬拦） |
-| 契约 | `protocol_version: stockanal-tool-v1`；intent 枚举 |
-| 验收 | 10 条分析 query 零写工具；snapshot 测 |
-| 超越 | intent 与 EventBus 同步，确认面可知「当前允许面」 |
-| 风险 | prompt 过长 → 按 intent 裁剪 |
+| 融化 | **Sprint2 落地**：`app/core/intent_router.py` 规则分类（`single_stock_deep` / `portfolio` / `cross_market_event` / `market_overview` / `general`）；`/api/ai/chat` SSE `event:meta` + system_hint；analyze 拒绝 mutate 仍属后续加强 |
+| 契约 | intent 枚举 + confidence/reasons/stock_codes；`router=rules_v1`；无假行情数 |
+| 验收 | `tests/backend/unit/test_sprint2_intent_portfolio.py` 意图规则用例 |
+| 超越 | intent 写入 done.payload；前端 chat-panel intent badge |
+| 风险 | 规则假阳性 → 后续可 LLM 辅助但不依赖联网 |
+| 进度 | **Sprint2 A 已落地**；完整 `STOCKANAL_TOOL_PROTOCOL` 写工具硬拦仍可增强 |
 
-#### P0-3 持仓读入回路（反空中造仓）
+#### P0-3 持仓读入回路（反空中造仓） — **Sprint2 DONE（2026-07-23）**
 
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo portfolio_read_* |
-| 缺口 | Agent 难稳定读真仓 |
-| 融化 | `portfolio_list/detail` 工具 → 本仓存储；注入分析上下文 |
-| 契约 | code/name/market…；name 守铁律 |
-| 验收 | 「我的持仓风险」点名真实 code |
-| 超越 | 合并 watchlist；行业分布接既有 industry 工具 |
-| 风险 | 隐私/鉴权 → AUTH_REQUIRED 路径强制 |
+| 缺口 | ~~Agent 难稳定读真仓~~ |
+| 融化 | `get_portfolio_snapshot` / `get_portfolio_risk_summary`（`tools.py`）；chat body `portfolio_snapshot` → ContextVar；前端 portfolio-store 发送时注入 |
+| 契约 | `{holdings, source, as_of}`；空仓 `holdings=[]`；name===code 置空串（铁律 #1） |
+| 验收 | 单测空仓/有仓/scrub name；schema 接受 optional snapshot |
+| 超越 | portfolio 意图自动注入 system 摘要 + 工具可复核 |
+| 风险 | 隐私/鉴权 → 仍走现有 AUTH；未建新 DB |
+| 进度 | **Sprint2 B+C+D 已落地** |
 
 #### P0-4 证据信封：provenance + 工具时间线契约 — **工具时间线 DONE（2026-07-23 Sprint1 / 任务编号 P0-4）**
 
@@ -715,6 +717,17 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 ### P0-5 HITL 确认面（2026-07-23）
 
 状态：**完成**。闸门在 `coordinator` final_decision 后 `request_approval`；前端 `ApprovalCard`/`PendingApprovalsPanel` 挂 `agent-side-panel`；高风险超时 `timeout_reject`。详见 `sprint0-inventory.md` 末段。
+
+### Sprint2 意图路由 + 持仓只读（2026-07-23）
+
+| 段 | 内容 |
+|----|------|
+| 范围 | P0-2（规则意图）+ P0-3（真仓只读）chat 路径融化 |
+| 后端 | `intent_router.py`；`tools.py` ContextVar + 2 工具；`web_server.ai_chat_stream` meta/system 注入；`schema`/`openapi` `portfolio_snapshot` |
+| 前端 | `use-chat-stream` 附带 snapshot；`onMeta`→`chat-store.lastIntentMeta`；`chat-panel` intent badge |
+| 测试 | `tests/backend/unit/test_sprint2_intent_portfolio.py` |
+| commit | `feat(agent): Sprint2 intent routing + portfolio snapshot tools` |
+| 禁 | push；假持仓；新建持仓 DB |
 
 ### P0-3 辩论证据面 + P0-4 工具时间线（2026-07-23 Sprint1 任务编号）
 

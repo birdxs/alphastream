@@ -4251,14 +4251,23 @@ def upload_image():
 @validate_schema(AiChatStreamSchema, source='json')  # S3-G1: schema 校验扩展
 def ai_chat_stream():
     """AI对话流式端点 — SSE输出Token+工具调用+Agent状态+Artifact
-    Input: JSON body {message, conversation_id}
-    Output: SSE stream
+    Input: JSON body {message, conversation_id, portfolio_snapshot?}
+    Output: SSE stream（含 Sprint2 event:meta 意图路由）
     Pos: LLM 调用入口，已套 20 req/min 限流防止 API KEY 超支
     """
     from flask import Response, stream_with_context
     import queue
     from app.core.ai_client import get_ai_client, chat_with_tools_stream
-    from app.core.tools import OPENAI_TOOLS_SCHEMA
+    from app.core.tools import (
+        OPENAI_TOOLS_SCHEMA,
+        normalize_portfolio_snapshot,
+        portfolio_context,
+    )
+    from app.core.intent_router import (
+        classify_intent,
+        INTENT_PORTFOLIO,
+        INTENT_CROSS_MARKET_EVENT,
+    )
     from app.core.artifact_wrapper import execute_tool_with_artifact
     from app.core.conversation import get_conversation_manager
     from app.core.event_bus import get_event_bus
@@ -4276,6 +4285,26 @@ def ai_chat_stream():
     if not message or not isinstance(message, str) or not message.strip():
         return jsonify({'error': '请输入消息'}), 400
     message = message.strip()
+
+    # Sprint2: 真仓规范化 + 意图路由（规则优先；空仓不造假）
+    portfolio_snapshot = normalize_portfolio_snapshot(data.get('portfolio_snapshot'))
+    has_holdings = bool(portfolio_snapshot.get('holdings'))
+    intent_result = classify_intent(
+        message,
+        has_portfolio_snapshot=has_holdings,
+        stock_code_hint=(stock_code or '') if isinstance(stock_code, str) else '',
+    )
+    intent_meta = intent_result.to_meta()
+    intent_meta['portfolio_count'] = len(portfolio_snapshot.get('holdings') or [])
+    intent_meta['portfolio_source'] = portfolio_snapshot.get('source') or 'none'
+    app.logger.info(
+        "ai_chat intent=%s conf=%.3f reasons=%s codes=%s portfolio_count=%s",
+        intent_result.intent,
+        intent_result.confidence,
+        list(intent_result.reasons),
+        list(intent_result.stock_codes),
+        intent_meta['portfolio_count'],
+    )
 
     client = get_ai_client()
     if not client:
@@ -4310,205 +4339,251 @@ def ai_chat_stream():
         def emit(event_type, data):
             return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
 
-        try:
-            # 构建消息历史 — 跨会话记忆增强
-            # 加载对话中除当前消息外的最近5条历史消息作为上下文
-            all_history = conv_mgr.get_messages_for_ai(conversation_id, max_messages=6)
-            # 分离历史消息（排除刚保存的当前用户消息）和当前消息
-            if all_history and all_history[-1].get('role') == 'user' and all_history[-1].get('content') == message:
-                prior_history = all_history[:-1][-5:]  # 最近5条历史消息
-                current_msg = [all_history[-1]]
-            else:
-                prior_history = all_history[-5:]
-                current_msg = [{"role": "user", "content": message}]
+        # 全程绑定持仓 ContextVar（含 worker 线程 copy_context 语义靠 portfolio_context 外层 + worker 内 set）
+        with portfolio_context(portfolio_snapshot):
+            # 第一帧：意图 meta（无假金融数）
+            yield emit('meta', intent_meta)
+            try:
+                # 构建消息历史 — 跨会话记忆增强
+                # 加载对话中除当前消息外的最近5条历史消息作为上下文
+                all_history = conv_mgr.get_messages_for_ai(conversation_id, max_messages=6)
+                # 分离历史消息（排除刚保存的当前用户消息）和当前消息
+                if all_history and all_history[-1].get('role') == 'user' and all_history[-1].get('content') == message:
+                    prior_history = all_history[:-1][-5:]  # 最近5条历史消息
+                    current_msg = [all_history[-1]]
+                else:
+                    prior_history = all_history[-5:]
+                    current_msg = [{"role": "user", "content": message}]
 
-            # 系统提示
-            history_hint = ""
-            if prior_history:
-                history_hint = "\n你可以参考之前的对话历史来保持上下文连贯性。"
-            system_prompt = f"""你是专业的AI金融分析助手。你可以使用工具获取股票数据进行分析。
+                # 系统提示
+                history_hint = ""
+                if prior_history:
+                    history_hint = "\n你可以参考之前的对话历史来保持上下文连贯性。"
+                system_prompt = f"""你是专业的AI金融分析助手。你可以使用工具获取股票数据进行分析。
 当用户提到股票代码时，请使用对应工具获取实时数据后给出专业分析。
 当前关注股票: {stock_code or '未指定'}
 市场类型: {market_type}
-请用中文回复，分析要专业、数据要准确。{history_hint}"""
+意图: {intent_result.intent}（置信 {intent_result.confidence:.2f}）
+{intent_result.system_hint}
+严禁编造持仓、价格、财报或新闻；工具空结果/降级时必须如实说明。{history_hint}"""
 
-            messages = [{"role": "system", "content": system_prompt}] + prior_history + current_msg
-            # 保存原始messages副本，降级时使用（chat_with_tools_stream会修改messages）
-            original_messages = [dict(m) for m in messages]
-
-            # 工具执行器（带artifact包装）
-            artifacts_collected = []
-            tool_calls_log = []
-
-            def artifact_tool_executor(tool_name, arguments):
-                raw_result, artifact = execute_tool_with_artifact(tool_name, arguments)
-                if artifact:
-                    artifacts_collected.append(artifact)
-                return raw_result
-
-            # 收集完整回复
-            full_content = ""
-
-            # [REAL-01 Q1/Q3] 心跳改造：阻塞调用移到后台线程 + 主生成器轮询事件队列
-            # 1) chat_with_tools_stream 是同步阻塞的；2) event_callback 在 worker 线程触发时把 token 入队；
-            # 3) 主线程每秒检查队列拿 token 立即 yield 给前端；4) 每 15s 无 token 则 yield `: heartbeat`
-            #    防止 Cloudflare / Nginx / 浏览器 idle 切连。
-            import threading as _threading
-            import queue as _queue
-            HEARTBEAT_INTERVAL = int(os.getenv('AI_CHAT_HEARTBEAT_INTERVAL', '15'))
-            event_queue: _queue.Queue = _queue.Queue()
-
-            def event_callback(event_type, data):
-                """worker 线程回调：把 token 推入主线程队列"""
-                nonlocal full_content
-                if event_type == 'token' and data.get('content'):
-                    full_content += data['content']
-                    # 立即把增量内容入队，主线程 yield 给客户端
-                    event_queue.put(('token_delta', data['content']))
-
-            # 执行流式AI对话（带工具调用，模型不支持时降级）
-            check_timeout()
-            content, tools_log, error = None, [], None
-
-            worker_result = {'content': None, 'tools_log': [], 'error': None, 'exc': None}
-
-            def _chat_worker():
-                """后台线程执行真正的阻塞 LLM 调用"""
-                try:
-                    c, t, e = chat_with_tools_stream(
-                        client, messages, OPENAI_TOOLS_SCHEMA,
-                        tool_executor=artifact_tool_executor,
-                        max_tool_rounds=3,
-                        event_callback=event_callback
+                # Sprint2: portfolio 意图注入真实持仓摘要（无假 name/假价）
+                if intent_result.inject_portfolio or intent_result.intent == INTENT_PORTFOLIO:
+                    holdings = portfolio_snapshot.get('holdings') or []
+                    if holdings:
+                        brief_parts = []
+                        for h in holdings[:50]:
+                            code = h.get('code') or ''
+                            name = h.get('name') or ''
+                            label = f"{code}{(' ' + name) if name else ''}".strip()
+                            extras = []
+                            if h.get('weight') is not None:
+                                extras.append(f"w={h.get('weight')}")
+                            if h.get('shares') is not None:
+                                extras.append(f"sh={h.get('shares')}")
+                            if h.get('cost') is not None:
+                                extras.append(f"cost={h.get('cost')}")
+                            brief_parts.append(
+                                label + (f"({','.join(extras)})" if extras else '')
+                            )
+                        system_prompt += (
+                            f"\n[portfolio_snapshot source={portfolio_snapshot.get('source')} "
+                            f"as_of={portfolio_snapshot.get('as_of')} count={len(holdings)}] "
+                            + "; ".join(brief_parts)
+                            + "。可调用 get_portfolio_snapshot / get_portfolio_risk_summary 复核。"
+                        )
+                    else:
+                        system_prompt += (
+                            "\n[portfolio_snapshot empty] 用户当前无持仓记录；"
+                            "禁止编造持仓，应提示其在组合页维护或确认空仓。"
+                        )
+                if intent_result.intent == INTENT_CROSS_MARKET_EVENT:
+                    system_prompt += (
+                        "\n跨市场事件路径：先核实事件事实，再对照相关标的/指数；"
+                        "缺少工具结果时不得假装已检索。"
                     )
-                    worker_result['content'] = c
-                    worker_result['tools_log'] = t
-                    worker_result['error'] = e
-                except Exception as ex:
-                    worker_result['exc'] = ex
-                finally:
-                    event_queue.put(('worker_done', None))
+                system_prompt += "\n请用中文回复，分析要专业、数据要准确。"
 
-            worker_th = _threading.Thread(target=_chat_worker, daemon=True)
-            worker_th.start()
+                messages = [{"role": "system", "content": system_prompt}] + prior_history + current_msg
+                # 保存原始messages副本，降级时使用（chat_with_tools_stream会修改messages）
+                original_messages = [dict(m) for m in messages]
 
-            last_event_ts = time.time()
-            worker_done = False
-            while not worker_done:
-                check_timeout()
-                try:
-                    kind, payload = event_queue.get(timeout=1.0)
-                except _queue.Empty:
-                    # 队列空：判断是否需要发心跳
-                    if time.time() - last_event_ts >= HEARTBEAT_INTERVAL:
-                        yield f": heartbeat {int(time.time())}\n\n"
-                        last_event_ts = time.time()
-                    continue
+                # 工具执行器（带artifact包装）；worker 线程内再 set 持仓上下文
+                artifacts_collected = []
+                tool_calls_log = []
+                _snap_for_worker = portfolio_snapshot
 
-                if kind == 'token_delta':
-                    # 实时推送增量 token 给前端
-                    yield emit('token', {'content': payload, 'finish_reason': None})
-                    last_event_ts = time.time()
-                elif kind == 'worker_done':
-                    worker_done = True
+                def artifact_tool_executor(tool_name, arguments):
+                    raw_result, artifact = execute_tool_with_artifact(tool_name, arguments)
+                    if artifact:
+                        artifacts_collected.append(artifact)
+                    return raw_result
 
-            if worker_result['exc'] is not None:
-                tool_err = worker_result['exc']
-                app.logger.warning(f"带工具的流式调用失败，降级为普通对话: {tool_err}")
-                error = None  # 清除错误，尝试降级
-            else:
-                content = worker_result['content']
-                tools_log = worker_result['tools_log']
-                error = worker_result['error']
-
-            # 工具调用失败时降级为不带tools的普通对话
-            if error and ('400' in str(error) or 'tool' in str(error).lower()):
-                app.logger.info("降级为不带工具的普通对话")
+                # 收集完整回复
                 full_content = ""
-                from app.core.ai_client import chat_completion_stream, get_completion_content
-                # 用干净的原始messages，避免残留的tool_call消息导致API错误
-                stream, stream_err = chat_completion_stream(client, original_messages)
-                if stream_err:
-                    yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
-                    return
-                # 收集流式响应 - 同样带心跳
-                collected = ""
+
+                # [REAL-01 Q1/Q3] 心跳改造：阻塞调用移到后台线程 + 主生成器轮询事件队列
+                # 1) chat_with_tools_stream 是同步阻塞的；2) event_callback 在 worker 线程触发时把 token 入队；
+                # 3) 主线程每秒检查队列拿 token 立即 yield 给前端；4) 每 15s 无 token 则 yield `: heartbeat`
+                #    防止 Cloudflare / Nginx / 浏览器 idle 切连。
+                import threading as _threading
+                import queue as _queue
+                HEARTBEAT_INTERVAL = int(os.getenv('AI_CHAT_HEARTBEAT_INTERVAL', '15'))
+                event_queue: _queue.Queue = _queue.Queue()
+
+                def event_callback(event_type, data):
+                    """worker 线程回调：把 token 推入主线程队列"""
+                    nonlocal full_content
+                    if event_type == 'token' and data.get('content'):
+                        full_content += data['content']
+                        # 立即把增量内容入队，主线程 yield 给客户端
+                        event_queue.put(('token_delta', data['content']))
+
+                # 执行流式AI对话（带工具调用，模型不支持时降级）
+                check_timeout()
+                content, tools_log, error = None, [], None
+
+                worker_result = {'content': None, 'tools_log': [], 'error': None, 'exc': None}
+
+                def _chat_worker():
+                    """后台线程执行真正的阻塞 LLM 调用（绑定请求级持仓 ContextVar）"""
+                    try:
+                        with portfolio_context(_snap_for_worker):
+                            c, t, e = chat_with_tools_stream(
+                                client, messages, OPENAI_TOOLS_SCHEMA,
+                                tool_executor=artifact_tool_executor,
+                                max_tool_rounds=3,
+                                event_callback=event_callback
+                            )
+                            worker_result['content'] = c
+                            worker_result['tools_log'] = t
+                            worker_result['error'] = e
+                    except Exception as ex:
+                        worker_result['exc'] = ex
+                    finally:
+                        event_queue.put(('worker_done', None))
+
+                worker_th = _threading.Thread(target=_chat_worker, daemon=True)
+                worker_th.start()
+
                 last_event_ts = time.time()
-                for chunk in stream:
+                worker_done = False
+                while not worker_done:
                     check_timeout()
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        delta = chunk.choices[0].delta.content
-                        collected += delta
-                        yield emit('token', {'content': delta, 'finish_reason': None})
+                    try:
+                        kind, payload = event_queue.get(timeout=1.0)
+                    except _queue.Empty:
+                        # 队列空：判断是否需要发心跳
+                        if time.time() - last_event_ts >= HEARTBEAT_INTERVAL:
+                            yield f": heartbeat {int(time.time())}\n\n"
+                            last_event_ts = time.time()
+                        continue
+
+                    if kind == 'token_delta':
+                        # 实时推送增量 token 给前端
+                        yield emit('token', {'content': payload, 'finish_reason': None})
                         last_event_ts = time.time()
-                    elif time.time() - last_event_ts >= HEARTBEAT_INTERVAL:
-                        yield f": heartbeat {int(time.time())}\n\n"
-                        last_event_ts = time.time()
-                content = collected
-                error = None
-                tools_log = []
+                    elif kind == 'worker_done':
+                        worker_done = True
 
-            if error:
-                yield emit('error', {'code': 'AI_ERROR', 'message': error})
-                return
+                if worker_result['exc'] is not None:
+                    tool_err = worker_result['exc']
+                    app.logger.warning(f"带工具的流式调用失败，降级为普通对话: {tool_err}")
+                    error = None  # 清除错误，尝试降级
+                else:
+                    content = worker_result['content']
+                    tools_log = worker_result['tools_log']
+                    error = worker_result['error']
 
-            final_content = content or full_content
+                # 工具调用失败时降级为不带tools的普通对话
+                if error and ('400' in str(error) or 'tool' in str(error).lower()):
+                    app.logger.info("降级为不带工具的普通对话")
+                    full_content = ""
+                    from app.core.ai_client import chat_completion_stream, get_completion_content
+                    # 用干净的原始messages，避免残留的tool_call消息导致API错误
+                    stream, stream_err = chat_completion_stream(client, original_messages)
+                    if stream_err:
+                        yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
+                        return
+                    # 收集流式响应 - 同样带心跳
+                    collected = ""
+                    last_event_ts = time.time()
+                    for chunk in stream:
+                        check_timeout()
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            delta = chunk.choices[0].delta.content
+                            collected += delta
+                            yield emit('token', {'content': delta, 'finish_reason': None})
+                            last_event_ts = time.time()
+                        elif time.time() - last_event_ts >= HEARTBEAT_INTERVAL:
+                            yield f": heartbeat {int(time.time())}\n\n"
+                            last_event_ts = time.time()
+                    content = collected
+                    error = None
+                    tools_log = []
 
-            # [REAL-01 Q1/Q3] 增量 token 已在 worker 循环中实时 yield 给前端；
-            # 这里仅在 full_content 为空（例如普通对话降级路径已经在自己的循环里推过）时不再重复推送。
-            # 只发一个 finish_reason=stop 的空 token 表示结束。
-            yield emit('token', {'content': '', 'finish_reason': 'stop'})
+                if error:
+                    yield emit('error', {'code': 'AI_ERROR', 'message': error})
+                    return
 
-            # 推送所有artifact
-            for artifact in artifacts_collected:
-                yield emit('artifact', artifact)
+                final_content = content or full_content
 
-            # 保存AI回复到对话历史
-            conv_mgr.add_message(
-                conversation_id, 'assistant', final_content or '',
-                artifacts=artifacts_collected,
-                tool_calls=tools_log
-            )
+                # [REAL-01 Q1/Q3] 增量 token 已在 worker 循环中实时 yield 给前端；
+                # 这里仅在 full_content 为空（例如普通对话降级路径已经在自己的循环里推过）时不再重复推送。
+                # 只发一个 finish_reason=stop 的空 token 表示结束。
+                yield emit('token', {'content': '', 'finish_reason': 'stop'})
 
-            # 生成follow-up问题
-            follow_ups = _generate_follow_ups(stock_code, final_content)
+                # 推送所有artifact
+                for artifact in artifacts_collected:
+                    yield emit('artifact', artifact)
 
-            # 对话摘要生成 — 消息超过10条时自动生成摘要
-            try:
-                msg_count = conv_mgr.get_message_count(conversation_id)
-                if msg_count > 10 and final_content:
-                    # 用最近几条消息生成简短摘要
-                    recent = conv_mgr.get_messages_for_ai(conversation_id, max_messages=10)
-                    summary_prompt = [
-                        {"role": "system", "content": "请用50字以内概括以下对话的核心主题和关键结论，仅输出摘要文本："},
-                        {"role": "user", "content": "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent if m.get('content')])}
-                    ]
-                    from app.core.ai_client import chat_completion_stream
-                    summary_stream, summary_err = chat_completion_stream(client, summary_prompt)
-                    if not summary_err and summary_stream:
-                        summary_text = ""
-                        for chunk in summary_stream:
-                            if chunk.choices and chunk.choices[0].delta.content:
-                                summary_text += chunk.choices[0].delta.content
-                        if summary_text.strip():
-                            conv_mgr.update_summary(conversation_id, summary_text.strip())
-            except Exception as sum_err:
-                app.logger.warning(f"生成对话摘要失败: {sum_err}")
+                # 保存AI回复到对话历史
+                conv_mgr.add_message(
+                    conversation_id, 'assistant', final_content or '',
+                    artifacts=artifacts_collected,
+                    tool_calls=tools_log
+                )
 
-            # 推送完成事件
-            yield emit('done', {
-                'conversation_id': conversation_id,
-                'follow_up_questions': follow_ups
-            })
+                # 生成follow-up问题
+                follow_ups = _generate_follow_ups(stock_code, final_content)
 
-        except TimeoutError as te:
-            app.logger.warning(f"AI对话超时: {te}")
-            yield emit('error', {'code': 'TIMEOUT', 'message': 'AI响应超时，请稍后重试或缩短问题长度'})
-        except GeneratorExit:
-            app.logger.debug("AI对话SSE连接已断开")
-        except Exception as e:
-            app.logger.error(f"AI对话流式处理失败: {traceback.format_exc()}")
-            yield emit('error', {'code': 'STREAM_ERROR', 'message': 'AI服务处理异常，请稍后重试'})
+                # 对话摘要生成 — 消息超过10条时自动生成摘要
+                try:
+                    msg_count = conv_mgr.get_message_count(conversation_id)
+                    if msg_count > 10 and final_content:
+                        # 用最近几条消息生成简短摘要
+                        recent = conv_mgr.get_messages_for_ai(conversation_id, max_messages=10)
+                        summary_prompt = [
+                            {"role": "system", "content": "请用50字以内概括以下对话的核心主题和关键结论，仅输出摘要文本："},
+                            {"role": "user", "content": "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent if m.get('content')])}
+                        ]
+                        from app.core.ai_client import chat_completion_stream
+                        summary_stream, summary_err = chat_completion_stream(client, summary_prompt)
+                        if not summary_err and summary_stream:
+                            summary_text = ""
+                            for chunk in summary_stream:
+                                if chunk.choices and chunk.choices[0].delta.content:
+                                    summary_text += chunk.choices[0].delta.content
+                            if summary_text.strip():
+                                conv_mgr.update_summary(conversation_id, summary_text.strip())
+                except Exception as sum_err:
+                    app.logger.warning(f"生成对话摘要失败: {sum_err}")
+
+                # 推送完成事件（附 intent，便于前端 badge）
+                yield emit('done', {
+                    'conversation_id': conversation_id,
+                    'follow_up_questions': follow_ups,
+                    'intent': intent_result.intent,
+                })
+
+            except TimeoutError as te:
+                app.logger.warning(f"AI对话超时: {te}")
+                yield emit('error', {'code': 'TIMEOUT', 'message': 'AI响应超时，请稍后重试或缩短问题长度'})
+            except GeneratorExit:
+                app.logger.debug("AI对话SSE连接已断开")
+            except Exception as e:
+                app.logger.error(f"AI对话流式处理失败: {traceback.format_exc()}")
+                yield emit('error', {'code': 'STREAM_ERROR', 'message': 'AI服务处理异常，请稍后重试'})
 
     return Response(
         stream_with_context(generate()),

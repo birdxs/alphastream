@@ -287,6 +287,9 @@ class ApiClient {
               case 'rejected':
                 handlers.onApprovalResolved?.(payload as Record<string, unknown>);
                 break;
+              case 'meta':
+                handlers.onMeta?.(payload as Parameters<NonNullable<typeof handlers.onMeta>>[0]);
+                break;
               case 'error': handlers.onError?.(payload as Parameters<NonNullable<typeof handlers.onError>>[0]); break;
               case 'done':
                 doneEventSeen = true;

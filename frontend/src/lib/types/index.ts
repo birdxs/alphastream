@@ -21,10 +21,25 @@ export interface SSEHandlers {
   onDebateTurn?: (data: DebateTurn) => void;
   /** P0-2 降级可视化（零假值）：agent.degraded */
   onAgentDegraded?: (data: AgentDegradedEvent) => void;
+  /** Sprint2: chat 意图路由 meta（无假行情数） */
+  onMeta?: (data: ChatIntentMeta) => void;
   onError?: (data: { code: string; message: string; recoverable?: boolean }) => void;
   onDone?: (data: StreamDone) => void;
   // 流通道关闭时的兜底（无论是否收到 done 事件都会触发，用于强制清理 loading 状态）
   onClose?: () => void;
+}
+
+/** Sprint2 意图分类 meta（SSE event: meta） */
+export interface ChatIntentMeta {
+  intent?: string;
+  confidence?: number;
+  reasons?: string[];
+  stock_codes?: string[];
+  inject_portfolio?: boolean;
+  router?: string;
+  portfolio_count?: number;
+  portfolio_source?: string;
+  [key: string]: unknown;
 }
 
 // Artifact类型
@@ -144,6 +159,8 @@ export interface StreamDone {
   // agent-analyze 路径附带：每个Agent执行结果摘要
   execution_log?: Array<{ agent?: string; status?: string; mode?: string; tools_used?: number; timestamp?: string }>;
   stock_code?: string;
+  /** Sprint2: chat 路径意图标签 */
+  intent?: string;
 }
 
 // 对话

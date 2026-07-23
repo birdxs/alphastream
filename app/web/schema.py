@@ -399,12 +399,14 @@ class IndividualFundFlowRankSchema(Schema):
 
 
 class AiChatStreamSchema(Schema):
-    """POST /api/ai/chat"""
+    """POST /api/ai/chat — SSE 流式；Sprint2 可选 portfolio_snapshot 注入真仓"""
     message = fields.Str(required=True, validate=mv.Length(min=1, max=5000))
     conversation_id = fields.Str(load_default='', validate=mv.Length(max=100))
     stock_code = fields.Str(load_default='', validate=mv.Length(max=20))
     market_type = fields.Str(load_default='A', validate=mv.Length(max=10))
     research_depth = fields.Int(load_default=3, validate=mv.Range(min=1, max=5))
+    # Sprint2: 前端 portfolio-store 真值；holdings 可空；服务端不造假持仓
+    portfolio_snapshot = fields.Dict(load_default=None, allow_none=True, keys=fields.String())
 
 
 class AiAgentAnalyzeSchema(Schema):

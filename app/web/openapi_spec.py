@@ -1325,7 +1325,7 @@ _PATHS: Dict[str, Any] = {
     '/api/ai/chat': {
         'post': {
             'tags': ['AI'],
-            'summary': 'AI 对话（SSE 流式响应）',
+            'summary': 'AI 对话（SSE 流式；Sprint2 意图 meta + 可选真仓 portfolio_snapshot）',
             'operationId': 'postAiChat',
             'requestBody': {
                 'required': True,
@@ -1338,11 +1338,38 @@ _PATHS: Dict[str, Any] = {
                         'stock_code': {'type': 'string', 'default': '', 'maxLength': 20},
                         'market_type': {'type': 'string', 'default': 'A', 'maxLength': 10},
                         'research_depth': {'type': 'integer', 'default': 3, 'minimum': 1, 'maximum': 5},
+                        'portfolio_snapshot': {
+                            'type': 'object',
+                            'description': (
+                                'Sprint2 可选真仓快照（前端 portfolio-store）；'
+                                'holdings 可空；服务端禁止编造持仓。'
+                                'SSE 先推 event:meta 含 intent 分类。'
+                            ),
+                            'additionalProperties': True,
+                            'properties': {
+                                'holdings': {
+                                    'type': 'array',
+                                    'items': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'code': {'type': 'string'},
+                                            'name': {'type': 'string'},
+                                            'weight': {'type': 'number'},
+                                            'shares': {'type': 'number'},
+                                            'cost': {'type': 'number'},
+                                            'market_type': {'type': 'string'},
+                                        },
+                                    },
+                                },
+                                'source': {'type': 'string'},
+                                'as_of': {'type': 'string'},
+                            },
+                        },
                     },
                 }}},
             },
             'responses': {
-                '200': {'description': 'SSE 事件流（text/event-stream）',
+                '200': {'description': 'SSE 事件流（text/event-stream；含 meta/token/artifact/done）',
                         'content': {'text/event-stream': {'schema': {'type': 'string'}}}},
                 '400': {'description': '参数校验失败'},
             },

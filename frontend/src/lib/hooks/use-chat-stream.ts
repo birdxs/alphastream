@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useChatStore } from '@/lib/stores/chat-store';
 import { useAgentStore } from '@/lib/stores/agent-store';
+import { usePortfolioStore } from '@/lib/stores/portfolio-store';
 import type { SSEHandlers, ChatMessage, StreamDone } from '@/lib/types';
 
 // ===== 意图识别规则 =====
@@ -127,6 +128,10 @@ export function useChatStream() {
       let fullContentBuffer = '';
 
       const handlers: SSEHandlers = {
+        onMeta: (data) => {
+          // Sprint2: 意图 meta（无假行情数）→ chat-store badge
+          chatStore.setLastIntentMeta(data || null);
+        },
         onToken: (data) => {
           const content = data.content;
           // [UI-Q4] token 带 agent 字段 → 视为agent推理token, 追加到agent-store的流式reasoning行
@@ -479,11 +484,41 @@ export function useChatStream() {
             user_message: message,
             conversation_id: chatStore.activeConversationId || '',
           }
-        : {
-            message,
-            conversation_id: chatStore.activeConversationId || '',
-            ...options,
-          };
+        : (() => {
+            // Sprint2: chat 路径附带 portfolio-store 真仓（name===code → name 空串）
+            const base: Record<string, unknown> = {
+              message,
+              conversation_id: chatStore.activeConversationId || '',
+              ...options,
+            };
+            try {
+              const holdings = usePortfolioStore.getState().holdings || [];
+              if (Array.isArray(holdings) && holdings.length > 0) {
+                base.portfolio_snapshot = {
+                  source: 'portfolio-store',
+                  as_of: new Date().toISOString(),
+                  holdings: holdings
+                    .map((h) => {
+                      const code = (h.code || '').trim();
+                      const rawName = (h.name || '').trim();
+                      const name = rawName && rawName !== code ? rawName : '';
+                      const row: Record<string, unknown> = {
+                        code,
+                        name,
+                        market_type: 'A',
+                      };
+                      if (typeof h.shares === 'number') row.shares = h.shares;
+                      if (typeof h.costPrice === 'number') row.cost = h.costPrice;
+                      return row;
+                    })
+                    .filter((h) => typeof h.code === 'string' && !!h.code),
+                };
+              }
+            } catch {
+              // store 不可用则不附带
+            }
+            return base;
+          })();
 
       try {
         await apiClient.streamPost(

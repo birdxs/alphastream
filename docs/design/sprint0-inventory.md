@@ -10,7 +10,7 @@ Pos: docs/design/sprint0-inventory.md — Sprint0 交付物；零业务代码
 |------|-----|
 | 文档版本 | **v1.0** |
 | 盘点时间 | **2026-07-23 15:33:50 +08:00**（校时：本机 PDT 08:33:53 -0700 ≡ UTC 15:33:53；Cloudflare Date `Thu, 23 Jul 2026 15:33:54 GMT`；GitHub Date `Thu, 23 Jul 2026 15:33:50 GMT`；最大偏差 ≤4s，通过） |
-| 状态 | **Sprint0 盘点完成；待 Comdr「可进 Sprint1」** |
+| 状态 | **Sprint0 盘点完成；Sprint1 多项 P0 DONE；Sprint2（意图+真仓只读）DONE 2026-07-23** |
 | 约束 | **零** `app/` / `frontend/src` 业务改动；禁 push；禁启服务 |
 | 依据设计 | `docs/design/dojo-agents-absorption-plan.md` **v1.1**（全文为准；非早期 PortfolioSnapshot-P0） |
 | 批准 MD 的 P0 编号 | **P0-1** 工具护栏 · **P0-2** 意图协议 · **P0-3** 真仓只读 · **P0-4** 证据信封 · **P0-5 确认面（HITL）** · **P0-6** 辩论+完成态 · **P0-7** 降级帽 |

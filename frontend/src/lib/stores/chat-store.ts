@@ -1,13 +1,13 @@
 /**
  * Input: 用户交互事件（发送消息、切换对话等）
- * Output: 聊天状态（对话列表、消息、流式内容、artifacts）
+ * Output: 聊天状态（对话列表、消息、流式内容、artifacts、Sprint2 意图 meta）
  * Pos: lib/stores/chat-store.ts - 聊天核心状态管理
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ChatMessage, Artifact, Conversation } from '@/lib/types';
+import type { ChatMessage, Artifact, Conversation, ChatIntentMeta } from '@/lib/types';
 
 interface ChatState {
   conversations: Conversation[];
@@ -19,6 +19,8 @@ interface ChatState {
   followUpQuestions: string[];
   // Q2(2026-04-15): 对话列表刷新计数器 — onDone 递增后 sidebar 自动重载
   conversationsRefreshTick: number;
+  /** Sprint2: 最近一次 chat 意图 meta（不持久化） */
+  lastIntentMeta: ChatIntentMeta | null;
 
   // Actions
   setActiveConversation: (id: string | null) => void;
@@ -33,6 +35,7 @@ interface ChatState {
   setMessages: (msgs: ChatMessage[]) => void;
   updateConversationTitle: (id: string, title: string) => void;
   bumpConversationsRefresh: () => void;
+  setLastIntentMeta: (meta: ChatIntentMeta | null) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -46,6 +49,7 @@ export const useChatStore = create<ChatState>()(
       artifacts: [],
       followUpQuestions: [],
       conversationsRefreshTick: 0,
+      lastIntentMeta: null,
 
       setActiveConversation: (id) => set({ activeConversationId: id }),
       bumpConversationsRefresh: () =>
@@ -67,6 +71,7 @@ export const useChatStore = create<ChatState>()(
             c.conversation_id === id ? { ...c, title } : c
           ),
         })),
+      setLastIntentMeta: (meta) => set({ lastIntentMeta: meta }),
     }),
     {
       name: 'chat-storage',

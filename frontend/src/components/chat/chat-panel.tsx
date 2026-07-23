@@ -20,6 +20,7 @@ function ChatPanelInner() {
   const { sendMessage, stopGeneration } = useChatStream();
   const messages = useChatStore(s => s.messages);
   const isStreaming = useChatStore(s => s.isStreaming);
+  const lastIntentMeta = useChatStore(s => s.lastIntentMeta);
   const searchParams = useSearchParams();
   const prefillHandled = useRef(false);
 
@@ -63,6 +64,18 @@ function ChatPanelInner() {
             </div>
           </div>
           <span className="text-xs font-medium text-foreground/80">AI分析助手</span>
+          {lastIntentMeta?.intent ? (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#3737CC]/30 text-[#3737CC] dark:text-[#9aa0ff] bg-[#3737CC]/5"
+              title={
+                typeof lastIntentMeta.confidence === 'number'
+                  ? `intent conf=${lastIntentMeta.confidence}`
+                  : 'intent'
+              }
+            >
+              {lastIntentMeta.intent}
+            </span>
+          ) : null}
         </div>
       </div>
 
