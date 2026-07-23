@@ -53,9 +53,9 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 | HITL 测试对齐 | `627a969` | — | pending card props + approval API tests |
 | HITL 确认面 | `fe1c08e` | — | ApprovalCard / side-panel / API |
 | 工具护栏 | `dd0fbc4` | — | `tool_guardrails` failure storm |
-| **P0-2 写工具硬拦 + 拟写意图** | （本 handoff commit） | — | `tools.execute_tool` WRITE_TOOL_BLOCKED；`intent_router` portfolio_write_blocked |
+| **P0-2 写工具硬拦 + 拟写意图** | `e7714bf` | — | `tools.execute_tool` WRITE_TOOL_BLOCKED；`intent_router` portfolio_write_blocked |
 | Sprint0 盘点锁定 | `7886bd5` | — | inventory + approval |
-| **最终交付 handoff** | （本 commit） | — | 本文 §6 验收清单 + §7 commit 全表 + §8 已知缺口 |
+| **最终交付 handoff** | `e7714bf` | — | 本文 §9 验收清单 + §10 commit 全表 + §11 已知缺口 |
 | Settings 导航入口 | `7d19e75` | — | 顶栏/移动齿轮 → `/settings` |
 | Wind use_wind + 配额 | `7cae626` | — | 请求级开关；`/api/wind/quota` 鉴权策略 |
 | profile `_outer_pool` + portfolio 输入守卫 | 本冲刺 | （见最终 commit） | P0：移除全局池 shutdown 残留；portfolio 非 dict 400 |
@@ -328,7 +328,7 @@ pkill -9 -f "next dev" 2>/dev/null
 
 | 短哈希 | 说明 |
 |--------|------|
-| （见 git log 最新） | `docs: final delivery handoff for Comdr`（含 P0-2 写硬拦代码 + 本清单） |
+| `e7714bf` | `docs: final delivery handoff for Comdr`（含 P0-2 写硬拦代码 + 本清单） |
 
 ### 10.1 最近 30 条 oneline（handoff 前快照）
 
