@@ -1,10 +1,18 @@
-// Input: 决策数据（action/confidence/reasoning/risk/price_targets/position）
-// Output: 增强版决策卡片，含置信度进度条、风险评分、价格目标、决策理由
+// Input: 决策数据（action/confidence/reasoning/risk/price_targets/position/degradations）
+// Output: 增强版决策卡片，含置信度进度条、风险评分、价格目标、决策理由、降级条
 // Pos: artifact-renderer.tsx 的子组件，decision_card 类型 Artifact 渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import { Badge } from "@/components/ui/badge";
+
+interface DegradationView {
+  level?: string;
+  cause?: string;
+  message?: string;
+  confidence_cap?: number;
+  source?: string;
+}
 
 interface Props {
   data: {
@@ -19,6 +27,9 @@ interface Props {
       target?: number;
     };
     position_suggestion?: string;
+    /** P0-2 结构化降级（零假值） */
+    degradations?: DegradationView[];
+    confidence_cap?: number;
   };
 }
 
@@ -34,6 +45,11 @@ export function DecisionCardArtifact({ data }: Props) {
   const action = String(data.action || "HOLD").toUpperCase();
   const confidence = Number(data.confidence || 0);
   const riskScore = Number(data.risk_score || 1 - confidence);
+  const degradations = Array.isArray(data.degradations) ? data.degradations : [];
+  const confCap =
+    typeof data.confidence_cap === "number" && !Number.isNaN(data.confidence_cap)
+      ? data.confidence_cap
+      : undefined;
 
   const actionConfig =
     {
@@ -83,9 +99,38 @@ export function DecisionCardArtifact({ data }: Props) {
       <div className="w-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-2">
         <div
           className="h-2 rounded-full transition-all duration-1000 bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
-          style={{ width: `${confidence * 100}%` }}
+          style={{ width: `${Math.max(0, Math.min(1, confidence)) * 100}%` }}
         />
       </div>
+
+      {/* P0-2 降级可视化：有降级时明示上界帽与 cause，不显示假数 */}
+      {(degradations.length > 0 || confCap != null) && (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 space-y-1.5"
+          data-testid="decision-degradation-banner"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+              数据降级（未使用假行情）
+            </span>
+            {confCap != null && (
+              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-700 dark:text-amber-300">
+                置信上限 {(confCap * 100).toFixed(0)}%
+              </Badge>
+            )}
+          </div>
+          {degradations.slice(0, 4).map((d, i) => (
+            <p key={i} className="text-[11px] leading-snug text-amber-800/90 dark:text-amber-200/90">
+              <span className="font-mono opacity-80">{d.cause || "tool_failure"}</span>
+              {d.source ? ` · ${d.source}` : ""}
+              {d.message ? ` — ${d.message}` : ""}
+            </p>
+          ))}
+          {degradations.length > 4 && (
+            <p className="text-[10px] text-muted-foreground">另有 {degradations.length - 4} 条降级记录</p>
+          )}
+        </div>
+      )}
 
       {/* 风险评分 */}
       <div className="flex items-center gap-4 text-sm">

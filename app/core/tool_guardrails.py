@@ -466,6 +466,26 @@ def guarded_execute(
 
     decision = ctrl.before_call(tool_name, args)
     if not decision.allows_execution:
+        # P0：护栏拦截 → agent.degraded（不造假金融数据）
+        try:
+            from app.core.event_bus import publish_agent_degraded
+            publish_agent_degraded(
+                cause='guardrail_block',
+                message=(
+                    decision.message
+                    or f'工具 {tool_name} 被护栏拦截（{decision.action}），未执行取数'
+                ),
+                level='critical' if decision.action == 'halt' else 'warn',
+                source=tool_name,
+                correlation_id=getattr(ctrl, 'correlation_id', '') or '',
+                extra={
+                    'guardrail_action': decision.action,
+                    'tool_name': tool_name,
+                    'code': decision.code,
+                },
+            )
+        except Exception:
+            pass
         return format_guardrail_result(decision)
 
     raised = False
@@ -477,6 +497,22 @@ def guarded_execute(
         raised = True
         result = f"工具 {tool_name} 执行失败: {exc}"
         logger.error("tool %s failed: %s", tool_name, exc)
+        try:
+            from app.core.event_bus import (
+                infer_degradation_cause_from_text,
+                publish_agent_degraded,
+            )
+            cause = infer_degradation_cause_from_text(str(exc))
+            publish_agent_degraded(
+                cause=cause,
+                message=result[:500],
+                level='warn',
+                source=tool_name,
+                correlation_id=getattr(ctrl, 'correlation_id', '') or '',
+                extra={'tool_name': tool_name, 'raised': True},
+            )
+        except Exception:
+            pass
 
     failed = is_tool_result_failure(result, raised=raised)
     after = ctrl.after_call(tool_name, args, result, failed=failed)
@@ -485,4 +521,44 @@ def guarded_execute(
     elif after.action in ("block", "halt") and failed:
         # 本次已执行且失败达阈：附加 guidance，下次 before 会拦
         result = append_guardrail_guidance(result, after)
+        try:
+            from app.core.event_bus import (
+                infer_degradation_cause_from_text,
+                publish_agent_degraded,
+            )
+            cause = infer_degradation_cause_from_text(result)
+            if cause == 'tool_failure' and raised is False:
+                # 结果型失败优先 source_degraded（空/无数据），非阻断幻觉
+                cause = 'source_degraded'
+            publish_agent_degraded(
+                cause=cause,
+                message=(after.message or result)[:500],
+                level='warn',
+                source=tool_name,
+                correlation_id=getattr(ctrl, 'correlation_id', '') or '',
+                extra={
+                    'guardrail_action': after.action,
+                    'tool_name': tool_name,
+                    'failed': True,
+                },
+            )
+        except Exception:
+            pass
+    elif failed and after.action == "allow":
+        # 单次失败但未达阈：仍可发 info 级降级提示（零假数）
+        try:
+            from app.core.event_bus import (
+                infer_degradation_cause_from_text,
+                publish_agent_degraded,
+            )
+            publish_agent_degraded(
+                cause=infer_degradation_cause_from_text(result),
+                message=result[:500],
+                level='info',
+                source=tool_name,
+                correlation_id=getattr(ctrl, 'correlation_id', '') or '',
+                extra={'tool_name': tool_name, 'failed': True, 'threshold_not_reached': True},
+            )
+        except Exception:
+            pass
     return result

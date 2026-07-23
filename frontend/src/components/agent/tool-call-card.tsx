@@ -43,10 +43,21 @@ function formatDuration(ms: number | undefined): string {
 
 export function ToolCallCard({ toolCall }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const icon = TOOL_ICONS[toolCall.tool_name] || "\u{1F527}";
-  const name = TOOL_NAMES[toolCall.tool_name] || toolCall.tool_name;
-  const hasResult = !!toolCall.result;
-  const isError = hasResult && /error|\u5931\u8D25|\u5F02\u5E38|\u9519\u8BEF/i.test(toolCall.result?.result_summary || "");
+  // P0-4：契约字段 name/args_digest/ok/error/duration_ms/source（兼容旧 tool_name/arguments/result）
+  const toolKey = toolCall.name || toolCall.tool_name || "unknown";
+  const icon = TOOL_ICONS[toolKey] || "\u{1F527}";
+  const name = TOOL_NAMES[toolKey] || toolKey;
+  const hasResult = !!toolCall.result || toolCall.status === "done" || toolCall.status === "error";
+  const summary =
+    toolCall.result?.result_summary ||
+    toolCall.result?.result ||
+    toolCall.result?.error ||
+    "";
+  const isError =
+    toolCall.result?.ok === false ||
+    !!toolCall.result?.error ||
+    toolCall.status === "error" ||
+    (hasResult && /error|\u5931\u8D25|\u5F02\u5E38|\u9519\u8BEF/i.test(summary));
 
   // 状态圆点颜色
   const dotColor = !hasResult
@@ -68,6 +79,8 @@ export function ToolCallCard({ toolCall }: Props) {
       ? "text-[#FF8767]"
       : "text-[#46BEA3]";
 
+  const sourceLabel = toolCall.source || toolCall.agent || toolCall.result?.source;
+
   return (
     <div
       className={`
@@ -85,14 +98,19 @@ export function ToolCallCard({ toolCall }: Props) {
           <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
           <span className="shrink-0">{icon}</span>
           <span className="font-medium truncate">{name}</span>
-          {toolCall.agent && (
+          {toolCall.args_digest && (
+            <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+              {toolCall.args_digest}
+            </span>
+          )}
+          {sourceLabel && (
             <Badge variant="outline" className="text-[10px] shrink-0 border-white/10">
-              {toolCall.agent}
+              {sourceLabel}
             </Badge>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {hasResult && toolCall.result?.duration_ms && (
+          {hasResult && toolCall.result?.duration_ms != null && (
             <span className="font-mono text-muted-foreground tabular-nums">
               {formatDuration(toolCall.result.duration_ms)}
             </span>
@@ -120,14 +138,20 @@ export function ToolCallCard({ toolCall }: Props) {
           <div className="backdrop-blur-sm bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2 border border-foreground/[0.06] dark:border-white/[0.06]">
             <span className="text-[10px] text-muted-foreground block mb-1">{"\u53C2\u6570"}</span>
             <pre className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
-              {JSON.stringify(toolCall.arguments, null, 2)}
+              {toolCall.args_digest
+                ? `args_digest: ${toolCall.args_digest}\n${
+                    toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : ""
+                  }`.trim()
+                : JSON.stringify(toolCall.arguments ?? {}, null, 2)}
             </pre>
           </div>
-          {toolCall.result?.result_summary && (
+          {(summary || toolCall.result?.error) && (
             <div className="backdrop-blur-sm bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2 border border-foreground/[0.06] dark:border-white/[0.06]">
-              <span className="text-[10px] text-muted-foreground block mb-1">{"\u7ED3\u679C"}</span>
+              <span className="text-[10px] text-muted-foreground block mb-1">
+                {isError ? "\u9519\u8BEF" : "\u7ED3\u679C"}
+              </span>
               <pre className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded px-2 py-1.5 font-mono text-[10px] text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all">
-                {toolCall.result.result_summary}
+                {toolCall.result?.error || summary}
               </pre>
             </div>
           )}

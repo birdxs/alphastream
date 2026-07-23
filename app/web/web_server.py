@@ -3766,6 +3766,17 @@ def _run_new_agent_system(stock_code: str, market_type: str, research_depth: int
         'approved': final_decision.get('approved'),
         'approval_type': final_decision.get('approval_type'),
         'approval_status': final_decision.get('approval_status'),
+        # P0-2 降级可视化：透传结构化 degradation（零假值）
+        'degradations': list(
+            final_decision.get('degradations')
+            or result_state.get('degradations')
+            or []
+        ),
+        'confidence_cap': (
+            final_decision.get('confidence_cap')
+            if final_decision.get('confidence_cap') is not None
+            else result_state.get('confidence_cap')
+        ),
     }
 
     terminal = TASK_FAILED if result_state.get('hitl_rejected') else TASK_COMPLETED
@@ -4759,7 +4770,11 @@ def ai_agent_analyze_stream():
                     event = bridge_queue.get(timeout=HEARTBEAT_INTERVAL)
                     if event is None:
                         break
-                    yield emit(event.get('event_type', 'info'), event.get('data', {}))
+                    # EventBus 桥接项键为 event（总线名）；payload 内可带 event_type（P0 降级/审批）
+                    yield emit(
+                        event.get('event') or event.get('event_type', 'info'),
+                        event.get('data', {}),
+                    )
                 except queue.Empty:
                     # SSE 注释行心跳（: 开头被客户端忽略），保活连接
                     yield f": heartbeat {int(time.time())}\n\n"
@@ -4773,13 +4788,41 @@ def ai_agent_analyze_stream():
                 yield emit('error', {'code': 'ANALYSIS_ERROR', 'message': error_holder[0]})
             elif result_holder[0]:
                 result = result_holder[0]
-                final_decision = result.get('final_decision', {})
+                final_decision = result.get('final_decision', {}) or {}
+                # P0-2：把 degradations / confidence_cap 挂到决策卡，前端可零假值展示降级
+                degs = list(result.get('degradations') or [])
+                cap = result.get('confidence_cap')
+                if isinstance(final_decision, dict):
+                    if degs and 'degradations' not in final_decision:
+                        final_decision = {**final_decision, 'degradations': degs}
+                    if cap is not None and final_decision.get('confidence_cap') is None:
+                        final_decision = {**final_decision, 'confidence_cap': cap}
                 yield emit('artifact', {
                     'type': 'artifact',
                     'artifact_type': 'decision_card',
                     'title': f'{stock_code} 投资决策',
                     'data': final_decision
                 })
+                # P0-3：辩论证据面 artifact（双栏 + 分歧摘要，短扫可读）
+                debate_summary = result.get('debate_summary') or ''
+                if debate_summary or result.get('bull_case') or result.get('bear_case'):
+                    bull_case = result.get('bull_case') or ''
+                    bear_case = result.get('bear_case') or ''
+                    yield emit('artifact', {
+                        'type': 'artifact',
+                        'artifact_type': 'debate_card',
+                        'title': f'{stock_code} 多空辩论',
+                        'data': {
+                            'bull_case': (bull_case[:500] + '…') if len(bull_case) > 500 else bull_case,
+                            'bear_case': (bear_case[:500] + '…') if len(bear_case) > 500 else bear_case,
+                            'debate_summary': debate_summary if isinstance(debate_summary, str) else str(debate_summary),
+                            'divergence_points': [
+                                '估值合理性',
+                                '增长可持续性',
+                                '风险定价',
+                            ],
+                        },
+                    })
                 # 投资者共识 artifact（depth>=5 时可用）
                 investor_consensus = result.get('investor_consensus')
                 if investor_consensus:

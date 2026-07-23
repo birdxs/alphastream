@@ -1,12 +1,12 @@
 /**
- * Input: SSE流中的Agent进度和工具调用事件
- * Output: Agent分析状态（进度、工具调用链、整体进度）
+ * Input: SSE流中的Agent进度、工具调用、降级与辩论事件
+ * Output: Agent分析状态（进度、工具调用链、辩论轮次、降级列表、整体进度）
  * Pos: lib/stores/agent-store.ts - Agent分析过程状态管理
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
 import { create } from 'zustand';
-import type { AgentProgress, ToolCallStart, ToolCallResult } from '@/lib/types';
+import type { AgentProgress, ToolCallStart, ToolCallResult, DebateTurn } from '@/lib/types';
 
 // 实时数据流事件 — 用于AgentProgressPanel时间线视图
 export type AgentEventType =
@@ -15,7 +15,11 @@ export type AgentEventType =
   | 'agent_completed'
   | 'tool_call_start'
   | 'tool_call_result'
-  | 'reasoning';
+  | 'reasoning'
+  | 'debate_turn'
+  | 'degraded'
+  | 'done'
+  | 'error';
 
 export interface AgentEvent {
   id: string;             // 唯一id（时间戳+随机）
@@ -27,9 +31,29 @@ export interface AgentEvent {
   meta?: Record<string, unknown>; // 附加信息（tool params、duration、progress等）
 }
 
+/** P0-2 降级条目（零假值可视化） */
+export interface DegradationItem {
+  id: string;
+  level: 'info' | 'warn' | 'critical' | string;
+  cause: string;
+  message: string;
+  confidence_cap?: number;
+  source?: string;
+  task_id?: string;
+  stock_code?: string;
+  correlation_id?: string;
+  ts: number;
+}
+
 interface AgentState {
   agentProgresses: AgentProgress[];
-  toolCalls: Array<ToolCallStart & { result?: ToolCallResult }>;
+  toolCalls: Array<ToolCallStart & { result?: ToolCallResult; status?: string }>;
+  /** P0-3 辩论轮次（bull/bear/summary） */
+  debateTurns: DebateTurn[];
+  /** P0-2 本 run 降级列表 */
+  degradations: DegradationItem[];
+  /** 本 run 最紧 confidence 上界；undefined=未封顶 */
+  confidenceCap?: number;
   events: AgentEvent[];
   overallProgress: number;
   isAnalyzing: boolean;
@@ -37,6 +61,8 @@ interface AgentState {
   setAgentProgress: (progress: AgentProgress) => void;
   addToolCall: (tc: ToolCallStart) => void;
   setToolCallResult: (id: string, result: ToolCallResult) => void;
+  addDebateTurn: (turn: DebateTurn) => void;
+  addDegradation: (item: Omit<DegradationItem, 'id' | 'ts'> & Partial<Pick<DegradationItem, 'id' | 'ts'>>) => void;
   appendEvent: (ev: Omit<AgentEvent, 'id' | 'ts'> & { id?: string; ts?: number }) => void;
   /**
    * [UI-Q4] 流式 reasoning token 累积:
@@ -61,6 +87,9 @@ const MAX_EVENTS = 500; // 防内存膨胀，最多保留500条事件
 export const useAgentStore = create<AgentState>((set) => ({
   agentProgresses: [],
   toolCalls: [],
+  debateTurns: [],
+  degradations: [],
+  confidenceCap: undefined,
   events: [],
   overallProgress: 0,
   isAnalyzing: false,
@@ -75,16 +104,78 @@ export const useAgentStore = create<AgentState>((set) => ({
       else updated.push(progress);
       return { agentProgresses: updated, overallProgress: progress.progress };
     }),
-  addToolCall: (tc) => set((s) => {
-    const next = [...s.toolCalls, tc];
-    return { toolCalls: next.length > MAX_EVENTS ? next.slice(next.length - MAX_EVENTS) : next };
-  }),
+  addToolCall: (tc) =>
+    set((s) => {
+      // P0-4：归一 name/tool_name
+      const normalized: ToolCallStart & { status?: string } = {
+        ...tc,
+        name: tc.name || tc.tool_name,
+        tool_name: tc.tool_name || tc.name || 'unknown',
+        status: 'running',
+      };
+      const next = [...s.toolCalls, normalized];
+      return {
+        toolCalls: next.length > MAX_EVENTS ? next.slice(next.length - MAX_EVENTS) : next,
+      };
+    }),
   setToolCallResult: (id, result) =>
     set((s) => ({
       toolCalls: s.toolCalls.map((tc) =>
-        tc.tool_call_id === id ? { ...tc, result } : tc
+        tc.tool_call_id === id
+          ? {
+              ...tc,
+              status: result.ok === false || result.error ? 'error' : 'done',
+              result: {
+                ...result,
+                name: result.name || result.tool_name || tc.name || tc.tool_name,
+                result_summary: result.result_summary ?? result.result,
+              },
+            }
+          : tc
       ),
     })),
+  addDebateTurn: (turn) =>
+    set((s) => {
+      // 同 side 覆盖（summary/bull/bear 各一条最新）
+      const without = s.debateTurns.filter((t) => t.side !== turn.side);
+      return { debateTurns: [...without, turn] };
+    }),
+  addDegradation: (item) =>
+    set((s) => {
+      const full: DegradationItem = {
+        id: item.id ?? nextId(),
+        ts: item.ts ?? Date.now(),
+        level: item.level || 'warn',
+        cause: item.cause || 'tool_failure',
+        message: item.message || '数据源降级，未使用假行情填补。',
+        confidence_cap: item.confidence_cap,
+        source: item.source,
+        task_id: item.task_id,
+        stock_code: item.stock_code,
+        correlation_id: item.correlation_id,
+      };
+      // 去重：同 cause+source+message 短窗内不重复堆叠
+      const dup = s.degradations.some(
+        (d) =>
+          d.cause === full.cause &&
+          d.source === full.source &&
+          d.message === full.message &&
+          Math.abs(d.ts - full.ts) < 3000,
+      );
+      if (dup) return {};
+      let nextCap = s.confidenceCap;
+      if (typeof full.confidence_cap === 'number' && !Number.isNaN(full.confidence_cap)) {
+        nextCap =
+          nextCap == null
+            ? full.confidence_cap
+            : Math.min(nextCap, Math.max(0, Math.min(1, full.confidence_cap)));
+      }
+      const next =
+        s.degradations.length >= 32
+          ? [...s.degradations.slice(s.degradations.length - 31), full]
+          : [...s.degradations, full];
+      return { degradations: next, confidenceCap: nextCap };
+    }),
   appendEvent: (ev) =>
     set((s) => {
       const full: AgentEvent = {
@@ -96,9 +187,10 @@ export const useAgentStore = create<AgentState>((set) => ({
         detail: ev.detail,
         meta: ev.meta,
       };
-      const next = s.events.length >= MAX_EVENTS
-        ? [...s.events.slice(s.events.length - MAX_EVENTS + 1), full]
-        : [...s.events, full];
+      const next =
+        s.events.length >= MAX_EVENTS
+          ? [...s.events.slice(s.events.length - MAX_EVENTS + 1), full]
+          : [...s.events, full];
       return { events: next };
     }),
   appendReasoningToken: (agent, token, finalize = false) =>
@@ -127,9 +219,10 @@ export const useAgentStore = create<AgentState>((set) => ({
         detail: token,
         meta: { streaming: true },
       };
-      const next = events.length >= MAX_EVENTS
-        ? [...events.slice(events.length - MAX_EVENTS + 1), full]
-        : [...events, full];
+      const next =
+        events.length >= MAX_EVENTS
+          ? [...events.slice(events.length - MAX_EVENTS + 1), full]
+          : [...events, full];
       return { events: next };
     }),
   setOverallProgress: (p) => set({ overallProgress: p }),
@@ -138,6 +231,9 @@ export const useAgentStore = create<AgentState>((set) => ({
     set({
       agentProgresses: [],
       toolCalls: [],
+      debateTurns: [],
+      degradations: [],
+      confidenceCap: undefined,
       events: [],
       overallProgress: 0,
       isAnalyzing: false,

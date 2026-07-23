@@ -147,17 +147,28 @@ export function useChatStream() {
         },
         onToolCallStart: (data) => {
           agentStore.addToolCall(data);
-          // 实时数据流：工具调用开始
-          let argsPreview = '';
-          try {
-            argsPreview = JSON.stringify(data.arguments ?? {});
-          } catch { argsPreview = String(data.arguments ?? ''); }
+          // P0-4：时间线只消费契约字段 name/args_digest/source
+          const toolName = data.name || data.tool_name || 'tool';
+          const digest = data.args_digest ? ` · ${data.args_digest}` : '';
+          let argsPreview = data.args_digest || '';
+          if (!argsPreview) {
+            try {
+              argsPreview = JSON.stringify(data.arguments ?? {});
+            } catch {
+              argsPreview = String(data.arguments ?? '');
+            }
+          }
           agentStore.appendEvent({
             type: 'tool_call_start',
-            agent: data.agent,
-            title: `调用工具 ${data.tool_name}`,
+            agent: data.agent || data.source,
+            title: `调用工具 ${toolName}${digest}`,
             detail: argsPreview,
-            meta: { tool_call_id: data.tool_call_id, tool_name: data.tool_name, arguments: data.arguments },
+            meta: {
+              tool_call_id: data.tool_call_id,
+              name: toolName,
+              args_digest: data.args_digest,
+              source: data.source,
+            },
           });
         },
         onToolCallResult: (data) => {
@@ -165,13 +176,71 @@ export function useChatStream() {
           if (data.artifact) {
             chatStore.addArtifact(data.artifact);
           }
-          // 实时数据流：工具调用结果
+          // P0-4：ok / error / duration_ms / result_summary
+          const toolName = data.name || data.tool_name || 'tool';
           const dur = data.duration_ms != null ? ` · ${data.duration_ms}ms` : '';
+          const okMark = data.ok === false || data.error ? '失败' : '完成';
           agentStore.appendEvent({
             type: 'tool_call_result',
-            title: `${data.tool_name} 完成${dur}`,
-            detail: data.result_summary || (data.artifact ? `生成 artifact: ${data.artifact.title}` : ''),
-            meta: { tool_call_id: data.tool_call_id, duration_ms: data.duration_ms },
+            agent: data.agent || data.source,
+            title: `${toolName} ${okMark}${dur}`,
+            detail:
+              data.error ||
+              data.result_summary ||
+              data.result ||
+              (data.artifact ? `生成 artifact: ${data.artifact.title}` : ''),
+            meta: {
+              tool_call_id: data.tool_call_id,
+              name: toolName,
+              ok: data.ok,
+              error: data.error,
+              duration_ms: data.duration_ms,
+              source: data.source,
+            },
+          });
+        },
+        onDebateTurn: (data) => {
+          agentStore.addDebateTurn(data);
+          const sideLabel =
+            data.side === 'bull' ? '多方' : data.side === 'bear' ? '空方' : '辩论摘要';
+          agentStore.appendEvent({
+            type: 'debate_turn',
+            agent: data.agent,
+            title: `${sideLabel}${data.confidence ? ` · 置信${data.confidence}` : ''}`,
+            detail: data.thesis || (data.divergence_points || []).join('；'),
+            meta: {
+              side: data.side,
+              confidence: data.confidence,
+              divergence_points: data.divergence_points,
+            },
+          });
+        },
+        // P0-2 降级可视化（agent.degraded / agent_degraded）
+        onAgentDegraded: (data) => {
+          agentStore.addDegradation({
+            level: data.level || 'warn',
+            cause: data.cause || 'tool_failure',
+            message: data.message || '数据源降级，未使用假行情填补。',
+            confidence_cap: data.confidence_cap,
+            source: data.source,
+            task_id: data.task_id,
+            stock_code: data.stock_code,
+            correlation_id: data.correlation_id,
+          });
+          const capTxt =
+            typeof data.confidence_cap === 'number'
+              ? ` · 置信上限${Math.round(data.confidence_cap * 100)}%`
+              : '';
+          agentStore.appendEvent({
+            type: 'degraded',
+            title: `降级${data.cause ? ` · ${data.cause}` : ''}${capTxt}`,
+            detail: data.message || '数据源降级，未使用假行情填补。',
+            meta: {
+              level: data.level,
+              cause: data.cause,
+              confidence_cap: data.confidence_cap,
+              source: data.source,
+            },
           });
         },
         onArtifact: (data) => {

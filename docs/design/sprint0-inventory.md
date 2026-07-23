@@ -556,8 +556,8 @@ else:
 |----|----------|
 | P0-2 协议硬拦 | system 注入 + analyze 路径服务端拒绝 mutate 工具名 |
 | P0-3 真仓只读 | `portfolio-store` 真源 → Agent 工具 `portfolio_list/detail` |
-| P0-4 证据信封 | 规范化 `agent.tool_*`（映射现 `tool_call.*`）+ provenance 字段 |
-| P0-6 辩论+完成态 | 新增 `agent.debate_turn` + §2 terminal 枚举 |
+| P0-4 证据信封 | **工具时间线 DONE（Sprint1 任务 P0-4，2026-07-23）** `agent.tool_*` 契约；provenance[] 仍待 |
+| P0-6 辩论+完成态 | **辩论证据面 DONE（Sprint1 任务 P0-3，2026-07-23）** `agent.debate_turn` + debate_card；terminal 枚举仍待 |
 | P0-7 降级帽 | 新增 `agent.degraded` + UI 横幅 + confidence_cap |
 
 ### 6.4 明确不做（P0）
@@ -619,4 +619,20 @@ else:
 | 契约 | 禁止静默通过高风险 | approve/reject/timeout_reject 均显式；timeout_auto 仅非高风险防御分支 |
 
 验收：单测 `tests/backend/unit/test_hitl_gate.py`；前端 tsc 聚焦改动文件。
+
+---
+
+## 8. Sprint1 实现进度补记（2026-07-23）
+
+### Sprint1 任务编号 P0-3 辩论证据面 + P0-4 工具时间线（= 设计 P0-6 / P0-4 工具侧）
+
+| 项 | 状态 | 证据 |
+|----|------|------|
+| bull/bear/debate_summary 进 state | 既有 + 强化 | `coordinator._summarize_debate` 写 `debate_summary` |
+| `agent.debate_turn` 事件 | DONE | EVENT_AGENT_DEBATE_TURN；bull/bear/summary 三轮 |
+| 前端双栏/分歧扫读 | DONE | `debate-card.tsx` + `agent-side-panel` strip + artifact SSE |
+| `agent.tool_call`/`agent.tool_result` 字段 | DONE | name/args_digest/ok/error/duration_ms/source |
+| 前端 timeline 契约消费 | DONE | tool-call-card / use-chat-stream / types |
+
+回滚：还原 `ai_client` publish helpers、`_summarize_debate` 事件、`web_server` debate_card 发射与前端 debate 相关组件/类型。
 

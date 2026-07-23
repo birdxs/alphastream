@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useAgentStore, type AgentEvent, type AgentEventType } from "@/lib/stores/agent-store";
 import { AgentStatusBadge } from "./agent-status-badge";
-import { ChevronUp, ChevronDown, Bot, Wrench, Brain, CheckCircle2, Activity, ArrowDownCircle } from "lucide-react";
+import { ChevronUp, ChevronDown, Bot, Wrench, Brain, CheckCircle2, Activity, ArrowDownCircle, AlertTriangle, Scale } from "lucide-react";
 
 // 10个Agent的标准顺序
 const AGENT_ORDER = [
@@ -69,6 +69,35 @@ const EVENT_VISUAL: Record<AgentEventType, EventVisualConfig> = {
     border: 'border-[#FF8767]/30',
     label: '推理',
   },
+  debate_turn: {
+    Icon: Scale,
+    color: 'text-[#F59E0B]',
+    bg: 'bg-[#F59E0B]/10',
+    border: 'border-[#F59E0B]/30',
+    label: '辩论',
+  },
+  // P0-2 降级事件时间线条目
+  degraded: {
+    Icon: AlertTriangle,
+    color: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/30',
+    label: '降级',
+  },
+  done: {
+    Icon: CheckCircle2,
+    color: 'text-[#46BEA3]',
+    bg: 'bg-[#46BEA3]/10',
+    border: 'border-[#46BEA3]/30',
+    label: '完成',
+  },
+  error: {
+    Icon: AlertTriangle,
+    color: 'text-[#FF8767]',
+    bg: 'bg-[#FF8767]/10',
+    border: 'border-[#FF8767]/30',
+    label: '错误',
+  },
 };
 
 function fmtTs(ts: number): string {
@@ -83,7 +112,7 @@ function truncate(s: string | undefined, n: number): string {
 }
 
 function EventRow({ ev, prevTs }: { ev: AgentEvent; prevTs?: number }) {
-  const cfg = EVENT_VISUAL[ev.type];
+  const cfg = EVENT_VISUAL[ev.type] ?? EVENT_VISUAL.degraded;
   const Icon = cfg.Icon;
   const [open, setOpen] = useState(false);
   const hasDetail = !!(ev.detail && ev.detail.length > 0);

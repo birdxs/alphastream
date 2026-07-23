@@ -55,3 +55,6 @@ class StockAnalysisState(TypedDict):
     execution_log: Annotated[List[Dict[str, Any]], operator.add]
     progress: Annotated[float, _progress_reducer]  # 0.0 - 100.0
     errors: Annotated[List[str], operator.add]
+    # P0 降级可视化（零假值）：结构化 degradation + confidence 上界帽
+    degradations: Annotated[List[Dict[str, Any]], operator.add]
+    confidence_cap: Optional[float]  # 全 run 最紧上界；None=不封顶

@@ -1,4 +1,5 @@
-文件列表：artifact-card.tsx, candlestick-chart.tsx, score-radar.tsx, capital-flow-chart.tsx, decision-card.tsx, technical-panel.tsx, investor-personas.tsx, search-results.tsx, fundamental-scorecard.tsx, risk-radar-chart.tsx, news-feed.tsx, alt-data-panel.tsx, shipping-chart.tsx, esg-scorecard.tsx, hiring-signal.tsx, corporate-network.tsx
+文件列表：artifact-card.tsx, candlestick-chart.tsx, score-radar.tsx, capital-flow-chart.tsx, decision-card.tsx
+- `debate-card.tsx` — P0-3 多空辩论双栏 + 分歧扫读, technical-panel.tsx, investor-personas.tsx, search-results.tsx, fundamental-scorecard.tsx, risk-radar-chart.tsx, news-feed.tsx, alt-data-panel.tsx, shipping-chart.tsx, esg-scorecard.tsx, hiring-signal.tsx, corporate-network.tsx
 地位：Artifact图表组件目录（AI Generative UI渲染层）
 功能：TradingView K线 | Recharts雷达/柱状图/饼图 | 决策卡 | 投资者对比 | 技术面板 | 基本面 | 风险雷达 | 新闻 | 另类数据聚合；capital-flow-chart 后端输入金额为 yuan、图表展示为万元
 

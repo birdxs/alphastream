@@ -11,7 +11,7 @@ import { ArtifactCard } from "@/components/artifacts/artifact-card";
 import { ErrorBoundary } from "@/components/common/error-boundary";
 import {
   TrendingUp, BarChart3, DollarSign, ArrowDownUp,
-  Newspaper, AlertTriangle, Search, Target, Users, Bot, ClipboardList,
+  Newspaper, AlertTriangle, Search, Target, Swords, Users, Bot, ClipboardList,
   Ship, Leaf, Briefcase, Network, Layers,
 } from "lucide-react";
 
@@ -145,6 +145,24 @@ const DecisionCardArtifact = dynamic(
     ),
   }
 );
+const DebateCardArtifact = dynamic(
+  () =>
+    import("@/components/artifacts/debate-card").then((m) => ({
+      default: m.DebateCardArtifact,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[180px] bg-muted rounded relative overflow-hidden p-4 animate-pulse">
+        <div className="grid grid-cols-2 gap-3 h-full">
+          <div className="rounded-lg bg-foreground/[0.04]" />
+          <div className="rounded-lg bg-foreground/[0.04]" />
+        </div>
+      </div>
+    ),
+  }
+);
+
 
 const TechnicalPanelArtifact = dynamic(
   () =>
@@ -412,6 +430,7 @@ function getArtifactIcon(type: string): ReactNode {
     risk_gauge: <AlertTriangle className={iconClass} />,
     search_results: <Search className={iconClass} />,
     decision_card: <Target className={iconClass} />,
+    debate_card: <Swords className={iconClass} />,
     investor_consensus: <Users className={iconClass} />,
     investor_opinions: <Users className={iconClass} />,
     agent_pipeline: <Bot className={iconClass} />,
@@ -467,6 +486,8 @@ function renderArtifactContent(artifact: Artifact) {
       return <CapitalFlowArtifact data={data} />;
     case "decision_card":
       return <DecisionCardArtifact data={data} />;
+    case "debate_card":
+      return <DebateCardArtifact data={data} />;
     case "investor_consensus":
       // 后端直接传consensus对象作为data，需包装为 { consensus: data }
       return <InvestorPersonasArtifact data={data.consensus ? data : { consensus: data }} />;

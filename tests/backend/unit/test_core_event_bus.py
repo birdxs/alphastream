@@ -281,3 +281,50 @@ def test_T016_sse_bridge_filter_none_receives_all():
     events = {it['event'] for it in items}
     assert events == {'a', 'b'}
     bus.destroy_sse_bridge(q)
+
+
+# ---------------------------------------------------------------------------
+# P0-2 降级可视化：结构化 degradation + confidence 上界帽
+# ---------------------------------------------------------------------------
+
+class TestAgentDegraded:
+    def test_publish_agent_degraded_payload_and_bus(self, _reset_eventbus_singleton):
+        bus = _reset_eventbus_singleton
+        seen = []
+        bus.subscribe(eb_mod.EVENT_AGENT_DEGRADED, lambda p: seen.append(p))
+
+        payload = eb_mod.publish_agent_degraded(
+            cause='tool_timeout',
+            message='upstream timeout after 5s',
+            level='warn',
+            source='get_stock_data',
+            task_id='t1',
+            stock_code='600519',
+        )
+        assert payload['event_type'] == 'agent.degraded'
+        assert payload['cause'] == 'tool_timeout'
+        assert payload['confidence_cap'] == eb_mod.confidence_cap_for_cause('tool_timeout')
+        assert payload['source'] == 'get_stock_data'
+        assert payload['stock_code'] == '600519'
+        assert len(seen) == 1
+        assert seen[0]['cause'] == 'tool_timeout'
+        assert 'price' not in seen[0]  # 铁律 #1：无假行情字段
+
+    def test_normalize_unknown_cause_falls_to_tool_failure(self):
+        assert eb_mod.normalize_degradation_cause('totally_unknown_xyz') == 'tool_failure'
+        assert eb_mod.normalize_degradation_cause('guardrail') == 'guardrail_block'
+        assert eb_mod.normalize_degradation_cause('timeout_error') == 'tool_timeout'
+
+    def test_apply_and_merge_confidence_cap(self):
+        assert eb_mod.apply_confidence_cap(0.9, 0.4) == 0.4
+        assert eb_mod.apply_confidence_cap(0.2, 0.4) == 0.2
+        # 无效 confidence 安全退化为 0.0 再与 cap 取 min
+        assert eb_mod.apply_confidence_cap(None, 0.5) == 0.0
+        assert eb_mod.merge_confidence_cap(0.7, 0.3) == 0.3
+        assert eb_mod.merge_confidence_cap(None, None) is None
+        assert eb_mod.merge_confidence_cap(0.2, None) == 0.2
+
+    def test_infer_degradation_cause_from_text(self):
+        assert eb_mod.infer_degradation_cause_from_text('ReadTimeout on adapter') == 'tool_timeout'
+        assert eb_mod.infer_degradation_cause_from_text('ProxyError connection reset') == 'network'
+        assert eb_mod.infer_degradation_cause_from_text('empty response from upstream') == 'upstream_empty'

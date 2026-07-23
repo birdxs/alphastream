@@ -22,6 +22,8 @@ describe('useAgentStore', () => {
     expect(s.agentProgresses).toEqual([]);
     expect(s.toolCalls).toEqual([]);
     expect(s.events).toEqual([]);
+    expect(s.degradations).toEqual([]);
+    expect(s.confidenceCap).toBeUndefined();
     expect(s.overallProgress).toBe(0);
     expect(s.isAnalyzing).toBe(false);
   });
@@ -122,6 +124,12 @@ describe('useAgentStore', () => {
       params: {},
     } as ToolCallStart);
 
+    store.addDegradation({
+      level: 'warn',
+      cause: 'network',
+      message: 'down',
+      confidence_cap: 0.3,
+    });
     store.reset();
     const s = useAgentStore.getState();
     expect(s.isAnalyzing).toBe(false);
@@ -129,6 +137,8 @@ describe('useAgentStore', () => {
     expect(s.events).toEqual([]);
     expect(s.toolCalls).toEqual([]);
     expect(s.agentProgresses).toEqual([]);
+    expect(s.degradations).toEqual([]);
+    expect(s.confidenceCap).toBeUndefined();
   });
 
   it('appendReasoningToken 流式追加 + finalize 行为', () => {
@@ -145,4 +155,45 @@ describe('useAgentStore', () => {
     expect(events[0].detail).toBe('Hello world!');
     expect((events[0].meta as { streaming?: boolean }).streaming).toBe(false);
   });
+
+  it('P0-2 addDegradation 写入列表并取更紧 confidenceCap', () => {
+    const store = useAgentStore.getState();
+    store.addDegradation({
+      level: 'warn',
+      cause: 'tool_timeout',
+      message: 'upstream timeout',
+      confidence_cap: 0.55,
+      source: 'get_stock_data',
+    });
+    store.addDegradation({
+      level: 'critical',
+      cause: 'guardrail_block',
+      message: 'halt',
+      confidence_cap: 0.2,
+      source: 'guardrail',
+    });
+    const s = useAgentStore.getState();
+    expect(s.degradations.length).toBe(2);
+    expect(s.confidenceCap).toBe(0.2);
+  });
+
+  it('P0-2 addDegradation 短窗同 cause/source/message 去重', () => {
+    const store = useAgentStore.getState();
+    store.addDegradation({
+      level: 'warn',
+      cause: 'network',
+      message: 'proxy fail',
+      source: 'akshare',
+      confidence_cap: 0.4,
+    });
+    store.addDegradation({
+      level: 'warn',
+      cause: 'network',
+      message: 'proxy fail',
+      source: 'akshare',
+      confidence_cap: 0.4,
+    });
+    expect(useAgentStore.getState().degradations.length).toBe(1);
+  });
+
 });

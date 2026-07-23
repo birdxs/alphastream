@@ -285,15 +285,12 @@ def _summarize_debate(state: Dict[str, Any]) -> Dict[str, Any]:
       - 多方主论点摘要
       - 空方主论点摘要
       - 综合倾向判断 (看多/看空/分歧)
+
+    P0-3：同时发布 agent.debate_turn（bull/bear/summary 三轮），供前端证据面扫读。
     """
     bull_case = state.get('bull_case') or ''
     bear_case = state.get('bear_case') or ''
-
-    if not bull_case and not bear_case:
-        return {
-            'debate_summary': '辩论双方均未产出有效分析',
-            'execution_log': [{'agent': '辩论综合', 'status': 'skipped', 'reason': 'empty_cases'}]
-        }
+    stock_code = state.get('stock_code') or ''
 
     def _extract_confidence(text: str) -> str:
         """从 bull/bear 文本中抽取置信度关键词 (高/中/低)"""
@@ -304,12 +301,42 @@ def _summarize_debate(state: Dict[str, Any]) -> Dict[str, Any]:
                 return kw
         return '未标注'
 
+    def _publish_debate_turn(side: str, thesis: str, confidence: str, points: list = None):
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_AGENT_DEBATE_TURN
+            get_event_bus().publish(EVENT_AGENT_DEBATE_TURN, {
+                'event_type': 'agent.debate_turn',
+                'data': {
+                    'side': side,  # bull | bear | summary
+                    'stock_code': stock_code,
+                    'thesis': (thesis or '')[:400],
+                    'confidence': confidence,
+                    'divergence_points': points or [],
+                    'agent': '辩论综合' if side == 'summary' else (
+                        '看多研究员' if side == 'bull' else '看空研究员'
+                    ),
+                },
+            })
+        except Exception:
+            pass
+
+    if not bull_case and not bear_case:
+        _publish_debate_turn('summary', '辩论双方均未产出有效分析', '未知', [])
+        return {
+            'debate_summary': '辩论双方均未产出有效分析',
+            'execution_log': [{'agent': '辩论综合', 'status': 'skipped', 'reason': 'empty_cases'}]
+        }
+
     bull_conf = _extract_confidence(bull_case)
     bear_conf = _extract_confidence(bear_case)
 
-    # 截取 bull/bear 前300字作为主论点摘要
+    # 截取 bull/bear 前300字作为主论点摘要（证据面短扫）
     bull_thesis = (bull_case[:300] + '...') if len(bull_case) > 300 else bull_case
     bear_thesis = (bear_case[:300] + '...') if len(bear_case) > 300 else bear_case
+
+    # P0-3：先发双方 turn，再发 summary
+    _publish_debate_turn('bull', bull_thesis, bull_conf)
+    _publish_debate_turn('bear', bear_thesis, bear_conf)
 
     # 综合倾向
     if bull_conf == '高' and bear_conf != '高':
@@ -321,19 +348,28 @@ def _summarize_debate(state: Dict[str, Any]) -> Dict[str, Any]:
     else:
         tendency = f'多方置信度{bull_conf}, 空方置信度{bear_conf}, 综合需权衡'
 
+    # 固定 3 条可扫读分歧点（不读长文也能抓住冲突）
+    divergence_points = [
+        '估值合理性（多方乐观 vs 空方审慎）',
+        '增长可持续性与盈利质量',
+        '风险定价与边际变化',
+    ]
+
     summary = (
         f"【多方主论点】{bull_thesis}\n\n"
         f"【空方主论点】{bear_thesis}\n\n"
         f"【多方置信度】{bull_conf}\n"
         f"【空方置信度】{bear_conf}\n"
-        f"【综合研判】{tendency}"
+        f"【综合研判】{tendency}\n"
+        f"【分歧点】" + "；".join(divergence_points)
     )
+
+    _publish_debate_turn('summary', tendency, f'{bull_conf}/{bear_conf}', divergence_points)
 
     return {
         'debate_summary': summary,
         'execution_log': [{'agent': '辩论综合', 'status': 'success'}]
     }
-
 
 def _route_after_technical(state: Dict[str, Any]) -> str:
     """
@@ -563,6 +599,8 @@ def run_agent_analysis(
         'execution_log': [],
         'progress': 0.0,
         'errors': [],
+        'degradations': [],
+        'confidence_cap': None,
     }
 
     # 注入自适应策略
@@ -609,8 +647,70 @@ def run_agent_analysis(
             try:
                 result = _fut.result(timeout=_agent_graph_timeout)
             except _FutTimeout:
+                try:
+                    from app.core.event_bus import publish_agent_degraded
+                    publish_agent_degraded(
+                        cause='tool_timeout',
+                        message=f'Agent graph 超时（{_agent_graph_timeout}s），未生成假行情',
+                        level='critical',
+                        source='coordinator',
+                        task_id=task_id or '',
+                        stock_code=stock_code,
+                        correlation_id=task_id or conversation_id or '',
+                    )
+                except Exception:
+                    pass
                 raise TimeoutError(f"Agent graph 超时（限制 {_agent_graph_timeout}s，stock={stock_code}）")
         logger.info(f"Agent分析完成: {stock_code} (thread_id={thread_id})")
+
+        # P0 降级可视化 + confidence 上界帽（铁律 #1：无假数；仅收紧置信）
+        try:
+            from app.core.event_bus import (
+                apply_confidence_cap,
+                infer_degradation_cause_from_text,
+                merge_confidence_cap,
+                publish_agent_degraded,
+            )
+            degs = list(result.get('degradations') or [])
+            cap = result.get('confidence_cap')
+            # 将 errors 中尚未结构化的失败提升为 degradation 事件
+            for err_txt in (result.get('errors') or []):
+                if not err_txt:
+                    continue
+                cause = infer_degradation_cause_from_text(str(err_txt))
+                payload = publish_agent_degraded(
+                    cause=cause,
+                    message=str(err_txt)[:500],
+                    level='warn',
+                    source='agent.errors',
+                    task_id=task_id or '',
+                    stock_code=stock_code,
+                    correlation_id=task_id or conversation_id or '',
+                )
+                degs.append(payload)
+                cap = merge_confidence_cap(cap, payload.get('confidence_cap'))
+            result['degradations'] = degs
+            result['confidence_cap'] = cap
+            fd = result.get('final_decision')
+            if isinstance(fd, dict) and cap is not None and 'confidence' in fd:
+                raw_conf = fd.get('confidence')
+                capped = apply_confidence_cap(raw_conf, cap)
+                if raw_conf is not None and float(capped) != float(raw_conf):
+                    publish_agent_degraded(
+                        cause='source_degraded',
+                        message=(
+                            f'置信度由 {raw_conf} 收紧至 {capped}'
+                            f'（cap={cap}，未补假行情）'
+                        ),
+                        level='info',
+                        source='confidence_cap',
+                        task_id=task_id or '',
+                        stock_code=stock_code,
+                        confidence_cap=cap,
+                    )
+                result['final_decision'] = {**fd, 'confidence': capped, 'confidence_cap': cap}
+        except Exception as _deg_exc:
+            logger.debug('degradation post-process skipped: %s', _deg_exc)
 
         # P0-5 HITL 确认面：高风险决策阻塞等待人工确认（禁止静默通过）
         # 放在 final_decision 写出之后、对外发布 completed 之前

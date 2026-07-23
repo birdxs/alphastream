@@ -215,6 +215,9 @@ export function AgentSidePanel() {
   const [now, setNow] = useState<number | null>(null);
   const [cleared, setCleared] = useState(false);
   const events = useAgentStore((s) => s.events);
+  const debateTurns = useAgentStore((s) => s.debateTurns);
+  const degradations = useAgentStore((s) => s.degradations);
+  const confidenceCap = useAgentStore((s) => s.confidenceCap);
   const isAnalyzing = useAgentStore((s) => s.isAnalyzing);
   const agentProgresses = useAgentStore((s) => s.agentProgresses);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -372,6 +375,88 @@ export function AgentSidePanel() {
       <div className="px-3 pt-2 shrink-0" data-testid="pending-approvals-host">
         <PendingApprovalsPanel />
       </div>
+
+      {/* P0-2 降级可视化条：有 degradation 时吸顶可见，不渲染假数 */}
+      {(degradations.length > 0 || confidenceCap != null) && (
+        <div
+          className="mx-3 mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 space-y-1"
+          data-testid="agent-degradation-banner"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+              数据降级（未使用假行情）
+            </span>
+            {confidenceCap != null && (
+              <span className="text-[10px] font-mono text-amber-700/90 dark:text-amber-300/90">
+                置信上限 {Math.round(confidenceCap * 100)}%
+              </span>
+            )}
+          </div>
+          <ul className="space-y-0.5 max-h-20 overflow-y-auto">
+            {degradations.slice(-4).map((d) => (
+              <li key={d.id} className="text-[10px] leading-snug text-amber-900/85 dark:text-amber-100/85">
+                <span className="font-mono opacity-80">{d.cause}</span>
+                {d.source ? ` · ${d.source}` : ""}
+                {d.message ? ` — ${d.message}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* P0-3 辩论证据面：双栏扫读分歧（有 turn 才显） */}
+      {debateTurns.length > 0 && (
+        <div
+          className="px-3 pb-2 shrink-0 border-b border-foreground/[0.06] space-y-1.5"
+          data-testid="debate-turns-strip"
+        >
+          <div className="text-[10px] uppercase tracking-wide text-foreground/45">Debate · 分歧扫读</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {(["bull", "bear"] as const).map((side) => {
+              const turn = debateTurns.find((t) => t.side === side);
+              const label = side === "bull" ? "多方" : "空方";
+              const tone =
+                side === "bull"
+                  ? "border-emerald-500/30 text-emerald-500"
+                  : "border-rose-500/30 text-rose-500";
+              return (
+                <div key={side} className={`rounded border ${tone} bg-foreground/[0.03] px-2 py-1.5`}>
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="text-[10px] font-semibold">{label}</span>
+                    <span className="text-[9px] opacity-70">{turn?.confidence || "—"}</span>
+                  </div>
+                  <p className="text-[10px] leading-snug text-foreground/70 line-clamp-3">
+                    {turn?.thesis || "等待产出…"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          {(() => {
+            const summary = debateTurns.find((t) => t.side === "summary");
+            if (!summary) return null;
+            const pts = summary.divergence_points || [];
+            return (
+              <div className="rounded border border-amber-500/25 bg-amber-500/5 px-2 py-1.5">
+                <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-0.5">
+                  分歧点
+                </div>
+                {pts.length > 0 ? (
+                  <ul className="space-y-0.5">
+                    {pts.slice(0, 3).map((pt, i) => (
+                      <li key={i} className="text-[10px] text-foreground/70 leading-snug">
+                        · {pt}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[10px] text-foreground/70 line-clamp-2">{summary.thesis}</p>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       <div
         ref={scrollRef}

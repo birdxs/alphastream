@@ -10,6 +10,7 @@ import os
 import json
 import time
 import logging
+import hashlib
 from typing import Any, Dict, Optional
 from openai import OpenAI
 import httpx
@@ -100,6 +101,84 @@ def _truncate_large(text: str) -> str:
     if len(text) > _TRUNC_MAX:
         return text[:_TRUNC_MAX] + '\n...(truncated, total={}KB)'.format(len(text) // 1024)
     return text
+
+
+def _args_digest(arguments):
+    """P0-4：对工具参数做稳定 digest（sha256 前 12 位）。"""
+    try:
+        if isinstance(arguments, dict):
+            raw = json.dumps(arguments, ensure_ascii=False, sort_keys=True, default=str)
+        else:
+            raw = str(arguments)
+    except Exception:
+        raw = repr(arguments)
+    return hashlib.sha256(raw.encode('utf-8', errors='replace')).hexdigest()[:12]
+
+
+def _tool_call_start_payload(tool_call_id, tool_name, arguments, agent_name=None, source=None):
+    """P0-4 契约：name / args_digest / source；保留 tool_name+arguments 兼容旧前端。"""
+    return {
+        'tool_call_id': tool_call_id,
+        'name': tool_name,
+        'tool_name': tool_name,
+        'args_digest': _args_digest(arguments),
+        'arguments': arguments if isinstance(arguments, dict) else {},
+        'source': source or (agent_name or 'chat_with_tools'),
+        'agent': agent_name or '',
+    }
+
+
+def _tool_call_result_payload(tool_call_id, tool_name, result, duration_ms, agent_name=None, source=None, ok=None, error=None):
+    """P0-4 契约：ok / error / duration_ms / result_summary；保留 result 兼容展开详情。"""
+    result_str = result if isinstance(result, str) else str(result)
+    summary = _truncate_large(result_str)
+    inferred_ok = True
+    inferred_error = None
+    if error:
+        inferred_ok = False
+        inferred_error = error
+    elif isinstance(result_str, str) and result_str.lstrip().startswith('{'):
+        try:
+            parsed = json.loads(result_str)
+            if isinstance(parsed, dict):
+                if parsed.get('guardrail') in ('block', 'halt') or parsed.get('error'):
+                    inferred_ok = False
+                    inferred_error = str(
+                        parsed.get('message') or parsed.get('error') or parsed.get('guardrail')
+                    )[:200]
+        except Exception:
+            pass
+    if ok is not None:
+        inferred_ok = bool(ok)
+    return {
+        'tool_call_id': tool_call_id,
+        'name': tool_name,
+        'tool_name': tool_name,
+        'ok': inferred_ok,
+        'error': inferred_error,
+        'duration_ms': int(duration_ms or 0),
+        'result_summary': summary,
+        'result': summary,
+        'source': source or (agent_name or 'chat_with_tools'),
+        'agent': agent_name or '',
+    }
+
+
+def _publish_tool_events(event_type_wire, bus_events, payload):
+    """P0-4：同时发总线主题 + 兼容 SSE event_type（tool_call_start|tool_call_result）。"""
+    try:
+        from app.core.event_bus import get_event_bus
+        bus = get_event_bus()
+        for bus_name in bus_events:
+            try:
+                bus.publish(bus_name, {
+                    'event_type': event_type_wire,
+                    'data': payload,
+                })
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _publish_reasoning(agent_name, content):
@@ -335,24 +414,22 @@ def _chat_with_tools_body(client, messages, tools_schema, tool_executor,
 
             logger.info(f"[Round {round_idx + 1}] 执行工具: {tool_name}({arguments})")
 
-            # [UI-Q3→UI-Q4] publish tool_call_start 到 event_bus (完整arguments, 零截断除非>10KB)
+            # P0-4 规范化 tool 事件（name/args_digest/ok/error/duration_ms/source）
             _tc_start_ts = time.time()
+            _tool_err = None
             try:
-                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_START
-                try:
-                    _args_full = json.dumps(arguments, ensure_ascii=False)
-                except Exception:
-                    _args_full = str(arguments)
-                get_event_bus().publish(EVENT_TOOL_CALL_START, {
-                    'event_type': 'tool_call_start',
-                    'data': {
-                        'tool_call_id': tc_id,
-                        'tool_name': tool_name,
-                        'arguments': arguments,  # 结构化对象, 前端可决定如何显示
-                        'arguments_raw': _truncate_large(_args_full),  # 完整原始
-                        'agent': agent_name or '',
-                    }
-                })
+                from app.core.event_bus import (
+                    EVENT_TOOL_CALL_START, EVENT_AGENT_TOOL_CALL,
+                    EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT,
+                )
+                _start_payload = _tool_call_start_payload(
+                    tc_id, tool_name, arguments, agent_name=agent_name,
+                )
+                _publish_tool_events(
+                    'tool_call_start',
+                    [EVENT_TOOL_CALL_START, EVENT_AGENT_TOOL_CALL],
+                    _start_payload,
+                )
             except Exception:
                 pass
 
@@ -361,22 +438,25 @@ def _chat_with_tools_body(client, messages, tools_schema, tool_executor,
                 result = tool_executor(tool_name, arguments)
             except Exception as e:
                 result = f"工具执行异常: {str(e)}"
+                _tool_err = str(e)
                 logger.error(f"工具 {tool_name} 执行异常: {e}")
 
-            # [UI-Q3→UI-Q4] publish tool_call_result 到 event_bus (完整结果, 零截断除非>10KB)
             try:
-                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_RESULT
-                _result_str = result if isinstance(result, str) else str(result)
-                get_event_bus().publish(EVENT_TOOL_CALL_RESULT, {
-                    'event_type': 'tool_call_result',
-                    'data': {
-                        'tool_call_id': tc_id,
-                        'tool_name': tool_name,
-                        'result_summary': _truncate_large(_result_str),
-                        'duration_ms': int((time.time() - _tc_start_ts) * 1000),
-                        'agent': agent_name or '',
-                    }
-                })
+                from app.core.event_bus import (
+                    EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT,
+                )
+                _result_payload = _tool_call_result_payload(
+                    tc_id, tool_name, result,
+                    int((time.time() - _tc_start_ts) * 1000),
+                    agent_name=agent_name,
+                    ok=False if _tool_err else None,
+                    error=_tool_err,
+                )
+                _publish_tool_events(
+                    'tool_call_result',
+                    [EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT],
+                    _result_payload,
+                )
             except Exception:
                 pass
 
@@ -668,29 +748,22 @@ def _chat_with_tools_stream_body(
             logger.info(f"[流式 Round {round_idx + 1}] 执行工具: {tool_name}({arguments})")
 
             _tc_start_ts = time.time()
+            _tool_err = None
+            _start_payload = _tool_call_start_payload(
+                tc_msg['id'], tool_name, arguments, agent_name=agent_name,
+            )
             if event_callback:
-                event_callback('tool_call_start', {
-                    'tool_call_id': tc_msg['id'],
-                    'tool_name': tool_name,
-                    'arguments': arguments
-                })
-            # [UI-Q3→UI-Q4] publish到event_bus, 完整arguments零截断
+                event_callback('tool_call_start', _start_payload)
+            # P0-4：总线历史主题 + agent.tool_call 契约主题
             try:
-                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_START
-                try:
-                    _args_full = json.dumps(arguments, ensure_ascii=False)
-                except Exception:
-                    _args_full = str(arguments)
-                get_event_bus().publish(EVENT_TOOL_CALL_START, {
-                    'event_type': 'tool_call_start',
-                    'data': {
-                        'tool_call_id': tc_msg['id'],
-                        'tool_name': tool_name,
-                        'arguments': arguments,
-                        'arguments_raw': _truncate_large(_args_full),
-                        'agent': agent_name or '',
-                    }
-                })
+                from app.core.event_bus import (
+                    EVENT_TOOL_CALL_START, EVENT_AGENT_TOOL_CALL,
+                )
+                _publish_tool_events(
+                    'tool_call_start',
+                    [EVENT_TOOL_CALL_START, EVENT_AGENT_TOOL_CALL],
+                    _start_payload,
+                )
             except Exception:
                 pass
 
@@ -699,28 +772,27 @@ def _chat_with_tools_stream_body(
                 result = tool_executor(tool_name, arguments)
             except Exception as e:
                 result = f"工具执行异常: {str(e)}"
+                _tool_err = str(e)
                 logger.error(f"工具 {tool_name} 执行异常: {e}")
 
+            duration_ms = int((time.time() - _tc_start_ts) * 1000)
+            _result_payload = _tool_call_result_payload(
+                tc_msg['id'], tool_name, result, duration_ms,
+                agent_name=agent_name,
+                ok=False if _tool_err else None,
+                error=_tool_err,
+            )
             if event_callback:
-                event_callback('tool_call_result', {
-                    'tool_call_id': tc_msg['id'],
-                    'tool_name': tool_name,
-                    'result': result[:500] if isinstance(result, str) else str(result)[:500]
-                })
-            # [UI-Q3→UI-Q4] publish到event_bus, 完整result零截断(>10KB才标记)
+                event_callback('tool_call_result', _result_payload)
             try:
-                from app.core.event_bus import get_event_bus, EVENT_TOOL_CALL_RESULT
-                _result_str = result if isinstance(result, str) else str(result)
-                get_event_bus().publish(EVENT_TOOL_CALL_RESULT, {
-                    'event_type': 'tool_call_result',
-                    'data': {
-                        'tool_call_id': tc_msg['id'],
-                        'tool_name': tool_name,
-                        'result_summary': _truncate_large(_result_str),
-                        'duration_ms': int((time.time() - _tc_start_ts) * 1000),
-                        'agent': agent_name or '',
-                    }
-                })
+                from app.core.event_bus import (
+                    EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT,
+                )
+                _publish_tool_events(
+                    'tool_call_result',
+                    [EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT],
+                    _result_payload,
+                )
             except Exception:
                 pass
 

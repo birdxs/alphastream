@@ -17,6 +17,10 @@ export interface SSEHandlers {
   /** P0-5 HITL 确认面 */
   onApprovalNeeded?: (data: Record<string, unknown>) => void;
   onApprovalResolved?: (data: Record<string, unknown>) => void;
+  /** P0-3 辩论轮次证据 */
+  onDebateTurn?: (data: DebateTurn) => void;
+  /** P0-2 降级可视化（零假值）：agent.degraded */
+  onAgentDegraded?: (data: AgentDegradedEvent) => void;
   onError?: (data: { code: string; message: string; recoverable?: boolean }) => void;
   onDone?: (data: StreamDone) => void;
   // 流通道关闭时的兜底（无论是否收到 done 事件都会触发，用于强制清理 loading 状态）
@@ -48,6 +52,7 @@ export type ArtifactType =
   | 'risk_gauge'
   | 'search_results'
   | 'decision_card'
+  | 'debate_card'         // P0-3 多空辩论证据面
   | 'investor_consensus'
   | 'investor_opinions'
   | 'agent_pipeline'
@@ -67,20 +72,69 @@ export interface AgentProgress {
   stock_code?: string;
 }
 
+/** P0-2 降级事件（agent.degraded）— 零假值可视化 */
+export type DegradationCause =
+  | 'tool_timeout'
+  | 'source_degraded'
+  | 'guardrail_block'
+  | 'network'
+  | 'timeout'
+  | 'upstream_empty'
+  | 'quota'
+  | 'auth'
+  | 'parse'
+  | 'tool_failure'
+  | string;
+
+export interface AgentDegradedEvent {
+  event_type?: 'agent.degraded' | string;
+  level: 'info' | 'warn' | 'critical' | string;
+  cause: DegradationCause;
+  message: string;
+  confidence_cap?: number;
+  source?: string;
+  task_id?: string;
+  stock_code?: string;
+  correlation_id?: string;
+}
+
 // 工具调用
+/** P0-4 工具时间线契约：name/args_digest/ok/error/duration_ms/source（兼容旧 tool_name/arguments/result） */
 export interface ToolCallStart {
   tool_call_id: string;
+  /** 契约主字段 */
+  name?: string;
   tool_name: string;
-  arguments: Record<string, unknown>;
+  args_digest?: string;
+  arguments?: Record<string, unknown>;
+  source?: string;
+  status?: "running" | "done" | "error";
   agent?: string;
 }
 
 export interface ToolCallResult {
   tool_call_id: string;
-  tool_name: string;
-  result_summary: string;
-  artifact?: Artifact;
+  name?: string;
+  tool_name?: string;
+  ok?: boolean;
+  error?: string | null;
   duration_ms?: number;
+  result_summary?: string;
+  /** @deprecated 用 result_summary；保留兼容 */
+  result?: string;
+  source?: string;
+  agent?: string;
+  artifact?: Artifact;
+}
+
+/** P0-3 辩论轮次（bull / bear / summary） */
+export interface DebateTurn {
+  side: "bull" | "bear" | "summary" | string;
+  stock_code?: string;
+  thesis?: string;
+  confidence?: string;
+  divergence_points?: string[];
+  agent?: string;
 }
 
 // 流结束

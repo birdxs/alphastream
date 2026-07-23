@@ -254,8 +254,22 @@ class ApiClient {
           try {
             switch (effectiveType) {
               case 'token': handlers.onToken?.(payload as Parameters<NonNullable<typeof handlers.onToken>>[0]); break;
-              case 'tool_call_start': handlers.onToolCallStart?.(payload as Parameters<NonNullable<typeof handlers.onToolCallStart>>[0]); break;
-              case 'tool_call_result': handlers.onToolCallResult?.(payload as Parameters<NonNullable<typeof handlers.onToolCallResult>>[0]); break;
+              case 'tool_call_start':
+              case 'agent.tool_call':
+                handlers.onToolCallStart?.(payload as Parameters<NonNullable<typeof handlers.onToolCallStart>>[0]);
+                break;
+              case 'tool_call_result':
+              case 'agent.tool_result':
+                handlers.onToolCallResult?.(payload as Parameters<NonNullable<typeof handlers.onToolCallResult>>[0]);
+                break;
+              case 'agent.debate_turn':
+                handlers.onDebateTurn?.(payload as Parameters<NonNullable<typeof handlers.onDebateTurn>>[0]);
+                break;
+              // P0-2 降级可视化：总线主名 + 别名
+              case 'agent.degraded':
+              case 'agent_degraded':
+                handlers.onAgentDegraded?.(payload as Parameters<NonNullable<typeof handlers.onAgentDegraded>>[0]);
+                break;
               case 'artifact': handlers.onArtifact?.(payload as Parameters<NonNullable<typeof handlers.onArtifact>>[0]); break;
               case 'agent_progress': handlers.onAgentProgress?.(payload as Parameters<NonNullable<typeof handlers.onAgentProgress>>[0]); break;
               case 'reasoning': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;

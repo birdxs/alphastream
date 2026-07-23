@@ -397,17 +397,18 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 超越 | 合并 watchlist；行业分布接既有 industry 工具 |
 | 风险 | 隐私/鉴权 → AUTH_REQUIRED 路径强制 |
 
-#### P0-4 证据信封：provenance + 工具时间线契约
+#### P0-4 证据信封：provenance + 工具时间线契约 — **工具时间线 DONE（2026-07-23 Sprint1 / 任务编号 P0-4）**
 
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo AnalysisResult/DataSourceRef；本仓 timeline |
-| 缺口 | 血统与事件字段不统一 |
-| 融化 | 结果/Artifact 可选 `provenance[]`；规范化 `agent.tool_*` 事件 |
-| 契约 | source/adapter/fetched_at/cache_hit；禁止假 source |
-| 验收 | 主路径 timeline 字段齐全；provenance 真或显式 unavailable |
-| 超越 | Artifact「数据血统」折叠 |
+| 缺口 | ~~工具事件字段不统一~~（时间线已规范）；provenance[] 仍待补 |
+| 融化 | 规范化 `agent.tool_call` / `agent.tool_result`（映射 `tool.call.*` + wire `tool_call_*`） |
+| 契约 | name / args_digest / ok / error / duration_ms / source；兼容 tool_name/arguments/result |
+| 验收 | timeline 卡片只消费契约字段；digest 稳定；失败 ok=false |
+| 超越 | Artifact「数据血统」折叠（provenance 后续） |
 | 风险 | 字段膨胀 → 默认摘要 |
+| 交付 | `ai_client` payload helpers + 双主题 publish；前端 tool-call-card/timeline/types |
 
 #### P0-5 确认面一等公民（HITL 产品闭合） — **DONE（2026-07-23）**
 
@@ -422,17 +423,18 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 风险 | 超时策略已锁定高风险 timeout_reject |
 | 交付 | hitl/coordinator/web_server/event_bus；approval-card/pending-approvals；test_hitl_gate + test_hitl |
 
-#### P0-6 辩论证据面 + 完成态
+#### P0-6 辩论证据面 + 完成态 — **证据面 DONE（2026-07-23 Sprint1 / 任务编号 P0-3）**
 
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo 可观察对抗；本仓 bull/bear |
-| 缺口 | 长文本、terminal 态不清 |
-| 融化 | 双栏/分歧点 Artifact；完成=`decision+证据+审批终态` |
-| 契约 | disagreement 结构；terminal 枚举 API/UI 一致 |
-| 验收 | 一次点击到证据锚；状态机一致 |
+| 缺口 | ~~长文本难扫读~~；terminal 完成态仍待统一 |
+| 融化 | `agent.debate_turn` 事件 + `debate_card` 双栏 Artifact + side-panel 分歧条 |
+| 契约 | side=bull\|bear\|summary；thesis/confidence/divergence_points；state 仍写 debate_summary |
+| 验收 | 不读长文可扫到分歧点；bull/bear/summary 三轮可观测 |
 | 超越 | 分歧点链接 tool 证据 id |
-| 风险 | 信息过载 → 默认折叠 |
+| 风险 | 信息过载 → 默认双栏折叠摘要 |
+| 交付 | coordinator `_summarize_debate`；web_server debate_card；DebateCardArtifact |
 
 #### P0-7 降级可视化与 confidence 帽（零假值回路）
 
@@ -713,3 +715,17 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 ### P0-5 HITL 确认面（2026-07-23）
 
 状态：**完成**。闸门在 `coordinator` final_decision 后 `request_approval`；前端 `ApprovalCard`/`PendingApprovalsPanel` 挂 `agent-side-panel`；高风险超时 `timeout_reject`。详见 `sprint0-inventory.md` 末段。
+
+### P0-3 辩论证据面 + P0-4 工具时间线（2026-07-23 Sprint1 任务编号）
+
+> 说明：本任务口令编号 **P0-3=辩论证据面**、**P0-4=工具时间线契约**，对应设计文 **§P0-6 / §P0-4（工具侧）**。
+
+状态：**代码完成（本地 commit，未 push）**。
+
+| 编号 | 能力 | 关键路径 |
+|------|------|----------|
+| P0-3 / 设计 P0-6 | `agent.debate_turn` + debate_card 双栏 + 分歧扫读 | `app/agents/coordinator.py` `_summarize_debate`；`app/web/web_server.py` SSE artifact；`frontend/.../debate-card.tsx`；`agent-side-panel` strip |
+| P0-4 / 设计 P0-4 | `agent.tool_call`/`agent.tool_result` 契约字段 | `app/core/ai_client.py` helpers；`app/core/event_bus.py` 常量；`tool-call-card`/`use-chat-stream`/`types` |
+
+验证：`tests/agents/test_debate_summary.py`（含 debate_turn + payload 契约）；相关 import smoke；前端 tsc 改动文件。
+
