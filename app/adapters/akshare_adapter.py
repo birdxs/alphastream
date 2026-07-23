@@ -4,19 +4,141 @@ akshare适配器 - 老王说：内部多数据源自动切换！
 东财挂了切同花顺，同花顺挂了切新浪，新浪挂了切腾讯...
 Input: 股票代码、日期范围等查询参数
 Output: DataFrame或Dict格式的股票/财务/板块数据
-Pos: app/adapters层，作为主数据源适配器被fallback_manager调度
+Pos: app/adapters层，作为主数据源适配器被fallback_manager调度；含 A 股 code/market helper
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
 import akshare as ak
 import pandas as pd
 import logging
 import os
+import re
 import time
 import threading
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from .base_adapter import BaseAdapter
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# A 股代码 / 市场 helper（akshare 1.18.75 契约；与 CapitalFlowAnalyzer.a_share_market_tag 对齐）
+# 资金流 market：6→sh，0/3→sz，4/8→bj（含 92 开头北交所）
+# 雪球：SH/SZ+代码；BJ 雪球多数端点不稳 → None 文档化降级
+# 东财 hist：纯 6 位；tx/sina：sh/sz/bj 前缀（BJ 勿强绑 sz）
+# ---------------------------------------------------------------------------
+
+
+def to_em_pure_code(code: str) -> str:
+    """东财 hist 用纯 6 位代码；清洗 SH/SZ/BJ 前缀与后缀。"""
+    if code is None:
+        return ''
+    s = str(code).strip().upper()
+    s = s.replace('.SH', '').replace('.SZ', '').replace('.BJ', '')
+    s = re.sub(r'^(SH|SZ|BJ)', '', s)
+    digits = re.sub(r'\D', '', s)
+    if len(digits) >= 6:
+        return digits[-6:]
+    return digits
+
+
+def to_flow_market(code: str) -> str:
+    """个股资金流 market 标签（ak.stock_individual_fund_flow 的 market）。
+
+    契约：6→sh，0/3→sz，4/8→bj（含 92xxxx）。无法识别时默认 sz（保守降级，不造假数）。
+    """
+    pure = to_em_pure_code(code)
+    if not pure:
+        return 'sz'
+    if pure.startswith('6'):
+        return 'sh'
+    if pure.startswith(('0', '3')):
+        return 'sz'
+    if pure.startswith(('4', '8')) or pure.startswith('92'):
+        return 'bj'
+    if pure.startswith('9'):
+        return 'sh'
+    return 'sz'
+
+
+def to_xq_symbol(code: str) -> Optional[str]:
+    """雪球 symbol：SH600519 / SZ000001。
+
+    北交所（4/8/92）在 akshare 1.18.75 无稳定雪球契约 → 返回 None，调用方跳过雪球路径。
+    """
+    pure = to_em_pure_code(code)
+    if not pure or len(pure) != 6:
+        return None
+    if pure.startswith('6'):
+        return f'SH{pure}'
+    if pure.startswith(('0', '3')):
+        return f'SZ{pure}'
+    return None
+
+
+def to_tx_sina_symbol(code: str) -> Optional[str]:
+    """腾讯/新浪日 K：sh600519 / sz000001 / bj8xxxxx。BJ 用 bj 前缀，勿强绑 sz。"""
+    pure = to_em_pure_code(code)
+    if not pure:
+        return None
+    if pure.startswith(('6', '9')):
+        return f'sh{pure}'
+    if pure.startswith(('0', '3')):
+        return f'sz{pure}'
+    if pure.startswith(('4', '8')) or pure.startswith('92'):
+        return f'bj{pure}'
+    return f'sz{pure}'
+
+
+# 同花顺概念/行业资金流合法 period
+FUND_FLOW_BOARD_PERIODS = frozenset({
+    '即时', '3日排行', '5日排行', '10日排行', '20日排行',
+})
+# 个股 rank indicator（勿与「10日排行」混用）
+FUND_FLOW_RANK_INDICATORS = frozenset({'今日', '3日', '5日', '10日'})
+
+_BOARD_PERIOD_ALIASES = {
+    '即时': '即时', '今日': '即时', 'today': '即时', '1日': '即时',
+    '3日': '3日排行', '3日排行': '3日排行',
+    '5日': '5日排行', '5日排行': '5日排行',
+    '10日': '10日排行', '10日排行': '10日排行',
+    '20日': '20日排行', '20日排行': '20日排行',
+}
+
+_RANK_INDICATOR_ALIASES = {
+    '今日': '今日', '即时': '今日', 'today': '今日',
+    '3日': '3日', '3日排行': '3日',
+    '5日': '5日', '5日排行': '5日',
+    '10日': '10日', '10日排行': '10日',
+}
+
+
+def normalize_fund_flow_board_period(period: Optional[str]) -> Tuple[str, bool]:
+    """归一概念/行业资金流 period → (normalized, ok)。
+
+    ok=False：非法枚举已映射到默认「即时」；调用方应在响应中标注 degraded/mapped，勿盲传非法值。
+    """
+    if period is None or str(period).strip() == '':
+        return '即时', True
+    raw = str(period).strip()
+    if raw in FUND_FLOW_BOARD_PERIODS:
+        return raw, True
+    mapped = _BOARD_PERIOD_ALIASES.get(raw) or _BOARD_PERIOD_ALIASES.get(raw.lower())
+    if mapped:
+        return mapped, True
+    return '即时', False
+
+
+def normalize_fund_flow_rank_indicator(indicator: Optional[str]) -> Tuple[str, bool]:
+    """归一个股资金流 rank indicator（今日|3日|5日|10日）→ (normalized, ok)。"""
+    if indicator is None or str(indicator).strip() == '':
+        return '今日', True
+    raw = str(indicator).strip()
+    if raw in FUND_FLOW_RANK_INDICATORS:
+        return raw, True
+    mapped = _RANK_INDICATOR_ALIASES.get(raw) or _RANK_INDICATOR_ALIASES.get(raw.lower())
+    if mapped:
+        return mapped, True
+    return '今日', False
+
 
 # B16 AkshareAdapter 探针缓存常量（S1-C5: RLock 保护并发双字段写）
 _AKSHARE_HC_CACHE = {'ok': None, 'ts': 0.0}
@@ -133,22 +255,14 @@ class AkshareAdapter(BaseAdapter):
         return "akshare"
 
     def _format_code_for_tx(self, code: str) -> str:
-        """转换股票代码为腾讯格式：000001 -> sz000001"""
-        code = code.replace('.SH', '').replace('.SZ', '').replace('sh', '').replace('sz', '')
-        prefix = 'sh' if code.startswith('6') else 'sz'
-        return f"{prefix}{code}"
+        """转换股票代码为腾讯格式；委托 to_tx_sina_symbol（BJ 用 bj 前缀，勿强绑 sz）。"""
+        sym = to_tx_sina_symbol(code)
+        return sym if sym else f"sz{to_em_pure_code(code)}"
 
     def _format_code_for_sina(self, code: str) -> str:
-        """转换股票代码为新浪格式：000001 -> sz000001, 600519 -> sh600519, 北交所 -> bj"""
-        code = code.replace('.SH', '').replace('.SZ', '').replace('.BJ', '')\
-                   .replace('sh', '').replace('sz', '').replace('bj', '')
-        if code.startswith(('6', '9')):
-            prefix = 'sh'
-        elif code.startswith(('0', '3')):
-            prefix = 'sz'
-        else:
-            prefix = 'bj'
-        return f"{prefix}{code}"
+        """转换股票代码为新浪格式；与 to_tx_sina_symbol 一致。"""
+        sym = to_tx_sina_symbol(code)
+        return sym if sym else f"sz{to_em_pure_code(code)}"
 
     @staticmethod
     def _normalize_sina_daily(df: pd.DataFrame) -> pd.DataFrame:

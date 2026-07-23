@@ -63,13 +63,36 @@ def _normalize_kline_df(df: pd.DataFrame) -> pd.DataFrame:
 # === 港股 ===
 
 def _fetch_hk_kline_raw(stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-    """raw 调用, 不带韧性 (供 wrapper 包裹)"""
+    """raw 调用, 不带韧性 (供 wrapper 包裹)。
+
+    主源 stock_hk_hist；失败试 stock_hk_daily（全量日线再切片；不用 min 接口）。
+    """
     import akshare as ak
     # akshare 港股代号要求 5 位 (如 00700)
     sc = stock_code.zfill(5) if stock_code.isdigit() and len(stock_code) < 5 else stock_code
-    df = ak.stock_hk_hist(symbol=sc, period="daily",
-                          start_date=start_date, end_date=end_date, adjust="qfq")
-    return df
+    last_err = None
+    try:
+        df = ak.stock_hk_hist(symbol=sc, period="daily",
+                              start_date=start_date, end_date=end_date, adjust="qfq")
+        if df is not None and not getattr(df, 'empty', True):
+            return df
+    except Exception as e:
+        last_err = e
+        logger.warning(f"stock_hk_hist 失败 ({sc}): {type(e).__name__}: {e}")
+    # 第二源
+    try:
+        if hasattr(ak, 'stock_hk_daily'):
+            try:
+                df = ak.stock_hk_daily(symbol=sc, adjust="qfq")
+            except TypeError:
+                df = ak.stock_hk_daily(symbol=sc)
+            if df is not None and not getattr(df, 'empty', True):
+                # 可能需列名 date；调用方 _normalize_kline 会标准化
+                logger.info(f"港股 {sc} 降级 stock_hk_daily rows={len(df)} (prev_err={last_err})")
+                return df
+    except Exception as e2:
+        logger.warning(f"stock_hk_daily 失败 ({sc}): {type(e2).__name__}: {e2}")
+    return pd.DataFrame()
 
 
 def _fetch_hk_spot_raw(stock_code: str) -> dict:

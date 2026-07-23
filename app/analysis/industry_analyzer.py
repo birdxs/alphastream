@@ -435,17 +435,31 @@ class IndustryAnalyzer:
                         self.logger.warning(f"未找到行业 {industry} 的板块代码")
                         continue
 
-                    # 尝试使用不同的参数来获取行业数据 - 不使用"3m"
+                    # 行业 hist：默认 → period=daily → 概念板 hist 同名降级（列可能不同，仅作涨跌幅近似）
+                    industry_info = None
                     try:
-                        # 尝试不使用period参数
                         industry_info = ak.stock_board_industry_hist_em(symbol=industry_code)
                     except Exception as e1:
                         try:
-                            # 尝试使用daily参数
-                            industry_info = ak.stock_board_industry_hist_em(symbol=industry_code, period="daily")
+                            industry_info = ak.stock_board_industry_hist_em(
+                                symbol=industry_code, period="daily"
+                            )
                         except Exception as e2:
-                            self.logger.warning(f"分析行业 {industry} 历史数据失败: {str(e1)}, {str(e2)}")
-                            continue
+                            try:
+                                # 部分行业代码在概念接口有交叉映射；失败则跳过（不崩溃）
+                                industry_info = ak.stock_board_concept_hist_em(
+                                    symbol=industry, period="daily"
+                                )
+                                self.logger.warning(
+                                    f"行业 {industry} 走 stock_board_concept_hist_em 降级: {e1!s}; {e2!s}"
+                                )
+                            except Exception as e3:
+                                self.logger.warning(
+                                    f"分析行业 {industry} 历史数据失败: {e1!s}, {e2!s}, {e3!s}"
+                                )
+                                continue
+                    if industry_info is None:
+                        continue
 
                     # 计算行业涨跌幅
                     if not industry_info.empty:

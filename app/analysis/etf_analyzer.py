@@ -69,13 +69,16 @@ class EtfAnalyzer:
             fund_info_df = self._get_cached(cache_key)
             if fund_info_df is None:
                 try:
-                    fund_info_df = ak.fund_etf_fund_info_em(fund=self.etf_code)
+                    try:
+                        fund_info_df = ak.fund_etf_fund_info_em(fund=self.etf_code)
+                    except TypeError:
+                        fund_info_df = ak.fund_etf_fund_info_em(symbol=self.etf_code)
                     if fund_info_df is not None and not fund_info_df.empty:
                         self._set_cached(cache_key, fund_info_df)
                     else:
                         fund_info_df = pd.DataFrame()
                 except Exception as e:
-                    logger.warning(f"获取ETF基金概况失败: {e}")
+                    logger.warning(f"fund_etf_fund_info_em 失败: {e}")
                     fund_info_df = pd.DataFrame()
 
             if fund_info_df.empty:
@@ -118,8 +121,56 @@ class EtfAnalyzer:
                     else:
                         hist_df = pd.DataFrame()
                 except Exception as e:
-                    logger.warning(f"获取ETF历史行情失败: {e}")
+                    logger.warning(f"fund_etf_hist_em 失败: {e}")
                     hist_df = pd.DataFrame()
+                # 第二源：fund_etf_hist_sina（日线；不用 min 接口硬套）
+                if hist_df is None or getattr(hist_df, 'empty', True):
+                    try:
+                        if hasattr(ak, 'fund_etf_hist_sina'):
+                            pure = ''.join(c for c in str(self.etf_code) if c.isdigit())[-6:]
+                            sina_sym = f"sh{pure}" if pure.startswith('5') else f"sz{pure}"
+                            hist_df = ak.fund_etf_hist_sina(symbol=sina_sym)
+                            if hist_df is not None and not hist_df.empty:
+                                colmap = {}
+                                for c in hist_df.columns:
+                                    cl = str(c).lower()
+                                    if 'date' in cl or c in ('日期', 'day'):
+                                        colmap[c] = '日期'
+                                    elif c in ('open', '开盘'):
+                                        colmap[c] = '开盘'
+                                    elif c in ('high', '最高'):
+                                        colmap[c] = '最高'
+                                    elif c in ('low', '最低'):
+                                        colmap[c] = '最低'
+                                    elif c in ('close', '收盘'):
+                                        colmap[c] = '收盘'
+                                    elif 'volume' in cl or c in ('成交量',):
+                                        colmap[c] = '成交量'
+                                    elif c in ('amount', '成交额'):
+                                        colmap[c] = '成交额'
+                                if colmap:
+                                    hist_df = hist_df.rename(columns=colmap)
+                                if '日期' in hist_df.columns:
+                                    try:
+                                        hist_df['日期'] = pd.to_datetime(hist_df['日期'])
+                                        s = pd.to_datetime(start_date_str)
+                                        e = pd.to_datetime(end_date_str)
+                                        hist_df = hist_df[(hist_df['日期'] >= s) & (hist_df['日期'] <= e)]
+                                    except Exception:
+                                        pass
+                                if '成交额' not in hist_df.columns:
+                                    hist_df['成交额'] = 0
+                                if '换手率' not in hist_df.columns:
+                                    hist_df['换手率'] = 0
+                                self._set_cached(cache_key, hist_df)
+                                logger.info(f"ETF {self.etf_code} hist 降级到 fund_etf_hist_sina")
+                            else:
+                                hist_df = pd.DataFrame()
+                        else:
+                            hist_df = pd.DataFrame()
+                    except Exception as e2:
+                        logger.warning(f"fund_etf_hist_sina 失败: {e2}")
+                        hist_df = pd.DataFrame()
 
             if hist_df.empty:
                 self.analysis_result['market_performance'] = {"error": "未能获取到该ETF的历史行情数据。"}
@@ -228,8 +279,37 @@ class EtfAnalyzer:
                     else:
                         benchmark_df = pd.DataFrame()
                 except Exception as e:
-                    logger.warning(f"获取基准指数数据失败: {e}")
+                    logger.warning(f"stock_zh_index_daily 失败: {e}")
                     benchmark_df = pd.DataFrame()
+                # 第二源：stock_zh_index_daily_em
+                if benchmark_df is None or getattr(benchmark_df, 'empty', True):
+                    try:
+                        if hasattr(ak, 'stock_zh_index_daily_em'):
+                            pure = ''.join(c for c in str(benchmark_code) if c.isdigit())[-6:]
+                            for em_sym in (pure, benchmark_code, f"sh{pure}", f"sz{pure}"):
+                                try:
+                                    benchmark_df = ak.stock_zh_index_daily_em(symbol=em_sym)
+                                    if benchmark_df is not None and not benchmark_df.empty:
+                                        # 列归一 date/close
+                                        rename = {}
+                                        for c in list(benchmark_df.columns):
+                                            cl = str(c).lower()
+                                            if c in ('date', '日期') or 'date' in cl:
+                                                rename[c] = 'date'
+                                            elif c in ('close', '收盘', '收盘价'):
+                                                rename[c] = 'close'
+                                        if rename:
+                                            benchmark_df = benchmark_df.rename(columns=rename)
+                                        self._set_cached(cache_key_bm, benchmark_df)
+                                        logger.info(f"基准 {benchmark_code} 降级到 stock_zh_index_daily_em ({em_sym})")
+                                        break
+                                except Exception:
+                                    continue
+                            if benchmark_df is None or getattr(benchmark_df, 'empty', True):
+                                benchmark_df = pd.DataFrame()
+                    except Exception as e2:
+                        logger.warning(f"stock_zh_index_daily_em 失败: {e2}")
+                        benchmark_df = pd.DataFrame()
 
             if benchmark_df.empty:
                 self.analysis_result['market_performance']['benchmark_returns'] = {}
@@ -449,13 +529,16 @@ class EtfAnalyzer:
             holdings_df = self._get_cached(cache_key)
             if holdings_df is None:
                 try:
-                    holdings_df = ak.fund_portfolio_hold_em(symbol=self.etf_code, date=now_cn().strftime("%Y"))
+                    try:
+                        holdings_df = ak.fund_portfolio_hold_em(symbol=self.etf_code, date=now_cn().strftime("%Y"))
+                    except TypeError:
+                        holdings_df = ak.fund_portfolio_hold_em(fund=self.etf_code, date=now_cn().strftime("%Y"))
                     if holdings_df is not None and not holdings_df.empty:
                         self._set_cached(cache_key, holdings_df)
                     else:
                         holdings_df = pd.DataFrame()
                 except Exception as e:
-                    logger.warning(f"获取ETF持仓数据失败: {e}")
+                    logger.warning(f"fund_portfolio_hold_em 失败（返回空持仓）: {e}")
                     holdings_df = pd.DataFrame()
 
             if holdings_df.empty or '股票代码' not in holdings_df.columns:

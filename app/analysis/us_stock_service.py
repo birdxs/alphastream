@@ -63,5 +63,6 @@ class USStockService:
             return formatted_results
 
         except Exception as e:
-            self.logger.error(f"搜索美股代码时出错: {str(e)}")
-            raise Exception(f"搜索美股代码失败: {str(e)}")
+            # 与 market_data_adapter 一致：失败返回空，不抛、不造假列表
+            self.logger.warning(f"搜索美股代码失败（降级空）: {str(e)}")
+            return []

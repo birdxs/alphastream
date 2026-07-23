@@ -95,12 +95,11 @@ def test_search_no_match(service, us_spot_df):
 
 
 def test_search_akshare_exception(service):
-    """用例 6：边界 - akshare 抛异常被包装为 Exception。"""
+    """用例 6：akshare 抛异常 → 降级空列表（与 adapter 一致，不抛、不造假）。"""
     with patch("app.analysis.us_stock_service.ak.stock_us_spot_em",
                side_effect=RuntimeError("network down")):
-        with pytest.raises(Exception) as exc:
-            service.search_us_stocks("AAPL")
-        assert "搜索美股代码失败" in str(exc.value)
+        result = service.search_us_stocks("AAPL")
+    assert result == []
 
 
 def test_search_empty_keyword(service, us_spot_df):

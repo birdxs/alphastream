@@ -22,18 +22,26 @@ _NORTH_MARKET_SYMBOLS = frozenset({
 def a_share_market_tag(stock_code: str) -> str:
     """A 股代码 → akshare market：sh / sz / bj。
 
-    规则：6→sh；0/3→sz；4/8 及 92 开头（北交）→bj；其余默认 sh。
+    单一实现委托 app.adapters.akshare_adapter.to_flow_market，避免 analyzer/adapter 分叉。
+    规则：6→sh；0/3→sz；4/8 及 92 开头（北交）→bj。
     """
-    code = (stock_code or '').strip().split('.')[0]
-    if not code:
-        return 'sh'
-    if code.startswith('6'):
-        return 'sh'
-    if code.startswith(('0', '3')):
+    try:
+        from app.adapters.akshare_adapter import to_flow_market
+        return to_flow_market(stock_code)
+    except Exception:
+        code = (stock_code or '').strip().split('.')[0]
+        pure = ''.join(c for c in code if c.isdigit())
+        if len(pure) >= 6:
+            pure = pure[-6:]
+        if not pure:
+            return 'sz'
+        if pure.startswith('6'):
+            return 'sh'
+        if pure.startswith(('0', '3')):
+            return 'sz'
+        if pure.startswith(('4', '8')) or pure.startswith('92'):
+            return 'bj'
         return 'sz'
-    if code.startswith(('4', '8', '92')):
-        return 'bj'
-    return 'sh'
 
 
 class CapitalFlowAnalyzer:
@@ -307,47 +315,187 @@ class CapitalFlowAnalyzer:
             return False
 
     def get_concept_fund_flow(self, period="10日排行"):
-        """获取概念/行业资金流向数据"""
-        try:
-            self.logger.info(f"Getting concept fund flow for period: {period}")
+        """获取概念资金流向（同花顺契约）。
 
-            # 检查缓存
-            cache_key = f"concept_fund_flow_{period}"
+        period 归一到 即时|3日排行|5日排行|10日排行|20日排行。
+        主源 stock_fund_flow_concept 失败时：
+          1) 试 stock_fund_flow_industry（行业资金流，同源字段语义）
+          2) 再失败仅返回 board name 列表（source=board_name_em，列不同构，禁止假装为资金流）
+        """
+        try:
+            from app.adapters.akshare_adapter import normalize_fund_flow_board_period
+            period_n, period_ok = normalize_fund_flow_board_period(period)
+            self.logger.info(
+                f"Getting concept fund flow for period: {period!r} -> {period_n!r} (ok={period_ok})"
+            )
+
+            cache_key = f"concept_fund_flow_{period_n}"
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
-                # 如果在最近一小时内有缓存数据，则返回缓存数据
                 if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
-            # 从akshare获取数据
-            concept_data = ak.stock_fund_flow_concept(symbol=period)
+            source = 'stock_fund_flow_concept'
+            concept_data = None
+            last_err = None
+            try:
+                concept_data = ak.stock_fund_flow_concept(symbol=period_n)
+            except Exception as e1:
+                last_err = e1
+                self._log_upstream_failure("stock_fund_flow_concept", e1)
+                try:
+                    concept_data = ak.stock_fund_flow_industry(symbol=period_n)
+                    source = 'stock_fund_flow_industry'
+                    self.logger.warning(
+                        "concept fund flow degraded to industry fund flow (source=%s)", source
+                    )
+                except Exception as e2:
+                    last_err = e2
+                    self._log_upstream_failure("stock_fund_flow_industry", e2)
+                    # 仅作降级信息：板块名称列表，标注 source，列与资金流不同构
+                    try:
+                        name_df = ak.stock_board_concept_name_em()
+                        items = []
+                        if name_df is not None and not name_df.empty:
+                            name_col = next(
+                                (c for c in ('板块名称', '概念名称', '名称') if c in name_df.columns),
+                                name_df.columns[0] if len(name_df.columns) else None,
+                            )
+                            code_col = next(
+                                (c for c in ('板块代码', '概念代码', '代码') if c in name_df.columns),
+                                None,
+                            )
+                            for i, row in name_df.head(100).iterrows():
+                                items.append({
+                                    "rank": int(i) + 1 if not isinstance(i, int) else i + 1,
+                                    "sector": str(row.get(name_col, '')) if name_col else '',
+                                    "code": str(row.get(code_col, '')) if code_col else '',
+                                    "company_count": None,
+                                    "sector_index": None,
+                                    "change_percent": None,
+                                    "inflow": None,
+                                    "outflow": None,
+                                    "net_flow": None,
+                                })
+                        result = {
+                            'data': items,
+                            'source': 'board_concept_name_em',
+                            'note': 'name_list_only_not_fund_flow',
+                            'period': period_n,
+                            'period_mapped': not period_ok,
+                        }
+                        self.data_cache[cache_key] = (now_cn(), result)
+                        return result
+                    except Exception as e3:
+                        self._log_upstream_failure("stock_board_concept_name_em", e3)
+                        return {
+                            'data': [],
+                            'source': 'degraded',
+                            'reason': str(last_err or e3),
+                            'period': period_n,
+                        }
 
-            # 处理数据
-            result = []
+            if concept_data is None or getattr(concept_data, 'empty', True):
+                return {
+                    'data': [],
+                    'source': 'degraded',
+                    'reason': str(last_err) if last_err else 'empty',
+                    'period': period_n,
+                }
+
+            result_items = []
             for _, row in concept_data.iterrows():
                 try:
-                    # 列名可能有所不同，所以我们使用灵活的方法
                     item = {
                         "rank": int(row.get("序号", 0)),
-                        "sector": row.get("行业", ""),
-                        "company_count": int(row.get("公司家数", 0)),
-                        "sector_index": float(row.get("行业指数", 0)),
+                        "sector": row.get("行业", row.get("概念", row.get("名称", ""))),
+                        "company_count": int(row.get("公司家数", 0) or 0),
+                        "sector_index": float(row.get("行业指数", row.get("指数", 0)) or 0),
                         "change_percent": self._parse_percent(row.get("阶段涨跌幅", "0%")),
-                        "inflow": float(row.get("流入资金", 0)),
-                        "outflow": float(row.get("流出资金", 0)),
-                        "net_flow": float(row.get("净额", 0))
+                        "inflow": float(row.get("流入资金", 0) or 0),
+                        "outflow": float(row.get("流出资金", 0) or 0),
+                        "net_flow": float(row.get("净额", 0) or 0),
                     }
-                    result.append(item)
-                except Exception as e:
-                    # self.logger.warning(f"Error processing row in concept fund flow: {str(e)}")
+                    result_items.append(item)
+                except Exception:
                     continue
 
-            # 缓存结果
-            self.data_cache[cache_key] = (now_cn(), result)
-
-            return result
+            # 成功路径保持 list 契约（兼容 /api/concept_fund_flow 与既有单测）
+            self.data_cache[cache_key] = (now_cn(), result_items)
+            return result_items
         except Exception as e:
             self._log_upstream_failure("getting concept fund flow", e)
+            return {'data': [], 'source': 'degraded', 'reason': str(e)}
+
+    def get_industry_fund_flow(self, period="即时"):
+        """行业资金流向（stock_fund_flow_industry），period 与概念同源归一。"""
+        try:
+            from app.adapters.akshare_adapter import normalize_fund_flow_board_period
+            period_n, period_ok = normalize_fund_flow_board_period(period)
+            cache_key = f"industry_fund_flow_{period_n}"
+            if cache_key in self.data_cache:
+                cache_time, cached_data = self.data_cache[cache_key]
+                if (now_cn() - cache_time).total_seconds() < 3600:
+                    return cached_data
+            try:
+                df = ak.stock_fund_flow_industry(symbol=period_n)
+                source = 'stock_fund_flow_industry'
+            except Exception as e1:
+                self._log_upstream_failure("stock_fund_flow_industry", e1)
+                try:
+                    name_df = ak.stock_board_industry_name_em()
+                    items = []
+                    if name_df is not None and not name_df.empty:
+                        name_col = next(
+                            (c for c in ('板块名称', '行业名称', '名称') if c in name_df.columns),
+                            name_df.columns[0] if len(name_df.columns) else None,
+                        )
+                        for i, row in name_df.head(100).iterrows():
+                            items.append({
+                                "rank": (int(i) + 1) if not isinstance(i, int) else i + 1,
+                                "sector": str(row.get(name_col, '')) if name_col else '',
+                                "net_flow": None,
+                                "change_percent": None,
+                            })
+                    result = {
+                        'data': items,
+                        'source': 'board_industry_name_em',
+                        'note': 'name_list_only_not_fund_flow',
+                        'period': period_n,
+                        'period_mapped': not period_ok,
+                    }
+                    self.data_cache[cache_key] = (now_cn(), result)
+                    return result
+                except Exception as e2:
+                    self._log_upstream_failure("stock_board_industry_name_em", e2)
+                    return {'data': [], 'source': 'degraded', 'reason': str(e1), 'period': period_n}
+
+            items = []
+            if df is not None and not df.empty:
+                for _, row in df.iterrows():
+                    try:
+                        items.append({
+                            "rank": int(row.get("序号", 0)),
+                            "sector": row.get("行业", row.get("名称", "")),
+                            "company_count": int(row.get("公司家数", 0) or 0),
+                            "change_percent": self._parse_percent(row.get("阶段涨跌幅", "0%")),
+                            "inflow": float(row.get("流入资金", 0) or 0),
+                            "outflow": float(row.get("流出资金", 0) or 0),
+                            "net_flow": float(row.get("净额", 0) or 0),
+                        })
+                    except Exception:
+                        continue
+            result = {
+                'data': items,
+                'source': source,
+                'period': period_n,
+                'period_mapped': not period_ok,
+                'count': len(items),
+            }
+            self.data_cache[cache_key] = (now_cn(), result)
+            return result
+        except Exception as e:
+            self._log_upstream_failure("getting industry fund flow", e)
             return {'data': [], 'source': 'degraded', 'reason': str(e)}
 
     def get_individual_fund_flow_rank(self, period="10日"):
@@ -355,29 +503,27 @@ class CapitalFlowAnalyzer:
 
         返回统一结构（H2-4 修复）：
             {'data': list[dict], 'error': str | None, 'count': int, 'amount_unit': 'yuan'}
-        调用方通过 result['error'] is not None 判断失败，通过 result['data'] 取列表。
-        AkShare 净额字段单位为元，后端保持原始数值不缩放。
+        indicator 归一：今日|3日|5日|10日（勿与「10日排行」混用）。
         """
         try:
-            self.logger.info(f"Getting individual fund flow ranking for period: {period}")
+            from app.adapters.akshare_adapter import normalize_fund_flow_rank_indicator
+            period_n, period_ok = normalize_fund_flow_rank_indicator(period)
+            self.logger.info(
+                f"Getting individual fund flow ranking for period: {period!r} -> {period_n!r}"
+            )
 
-            # 检查缓存
-            cache_key = f"individual_fund_flow_rank_{period}"
+            cache_key = f"individual_fund_flow_rank_{period_n}"
             if cache_key in self.data_cache:
                 cache_time, cached_data = self.data_cache[cache_key]
-                # 如果在最近一小时内有缓存数据，则返回缓存数据
                 if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
-            # 从akshare获取数据
-            stock_data = ak.stock_individual_fund_flow_rank(indicator=period)
+            stock_data = ak.stock_individual_fund_flow_rank(indicator=period_n)
 
-            # 处理数据
             items = []
             for _, row in stock_data.iterrows():
                 try:
-                    # 根据不同时间段设置列名前缀
-                    period_prefix = "" if period == "今日" else f"{period}"
+                    period_prefix = "" if period_n == "今日" else f"{period_n}"
 
                     item = {
                         "rank": int(row.get("序号", 0)),
@@ -401,8 +547,14 @@ class CapitalFlowAnalyzer:
                     self.logger.warning(f"Error processing row in individual fund flow rank: {str(e)}")
                     continue
 
-            result = {'data': items, 'error': None, 'count': len(items), 'amount_unit': 'yuan'}
-            # 缓存结果
+            result = {
+                'data': items,
+                'error': None,
+                'count': len(items),
+                'amount_unit': 'yuan',
+                'period': period_n,
+                'period_mapped': not period_ok,
+            }
             self.data_cache[cache_key] = (now_cn(), result)
 
             return result

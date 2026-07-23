@@ -169,7 +169,11 @@ def test_get_concept_fund_flow_happy_path(analyzer):
 
 def test_get_concept_fund_flow_exception_returns_mock(analyzer):
     with patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_concept",
-               side_effect=Exception("net err")):
+               side_effect=Exception("net err")), \
+         patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_industry",
+               side_effect=Exception("net err2")), \
+         patch("app.analysis.capital_flow_analyzer.ak.stock_board_concept_name_em",
+               side_effect=Exception("net err3")):
         result = analyzer.get_concept_fund_flow(period="10日排行")
     # 金融铁律：异常降级返回空数据 + degraded 标记，禁止 mock 伪造数据
     assert isinstance(result, dict)
@@ -328,6 +332,10 @@ def test_individual_fund_flow_rank_network_error_controlled_degradation(analyzer
 def test_concept_fund_flow_network_error_controlled_degradation(analyzer, caplog):
     """板块资金流上游 ConnectionError：降级契约 + WARNING 降级日志。"""
     with patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_concept",
+               side_effect=_req_exc.ConnectionError("RemoteDisconnected")), \
+         patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_industry",
+               side_effect=_req_exc.ConnectionError("RemoteDisconnected")), \
+         patch("app.analysis.capital_flow_analyzer.ak.stock_board_concept_name_em",
                side_effect=_req_exc.ConnectionError("RemoteDisconnected")):
         with caplog.at_level("WARNING", logger="app.analysis.capital_flow_analyzer"):
             result = analyzer.get_concept_fund_flow(period="10日排行")
@@ -454,3 +462,73 @@ def test_individual_fund_flow_maps_bj(analyzer):
         analyzer.get_individual_fund_flow("830799", market_type="A")
     assert captured.get("market") == "bj"
     assert captured.get("stock") == "830799"
+
+# ---------------------------------------------------------------- 第二批：market_tag / period 归一 / 概念备源
+def test_a_share_market_tag_and_to_flow_market_aligned():
+    """600519→sh, 000001→sz, 300xxx→sz, 8/92→bj；adapter 与 analyzer 一致。"""
+    from app.adapters.akshare_adapter import to_flow_market
+    from app.analysis.capital_flow_analyzer import a_share_market_tag
+    cases = [
+        ("600519", "sh"),
+        ("000001", "sz"),
+        ("300750", "sz"),
+        ("830799", "bj"),
+        ("920001", "bj"),
+        ("430047", "bj"),
+        ("SH600519", "sh"),
+        ("sz000001", "sz"),
+    ]
+    for code, exp in cases:
+        assert to_flow_market(code) == exp, code
+        assert a_share_market_tag(code) == exp, code
+
+
+def test_normalize_fund_flow_board_period_illegal_maps():
+    from app.adapters.akshare_adapter import normalize_fund_flow_board_period
+    p, ok = normalize_fund_flow_board_period("10日排行")
+    assert p == "10日排行" and ok is True
+    p, ok = normalize_fund_flow_board_period("10日")
+    assert p == "10日排行" and ok is True
+    p, ok = normalize_fund_flow_board_period("not-a-period")
+    assert p == "即时" and ok is False
+
+
+def test_normalize_rank_indicator_not_mixed_with_board_period():
+    from app.adapters.akshare_adapter import normalize_fund_flow_rank_indicator
+    p, ok = normalize_fund_flow_rank_indicator("10日排行")
+    assert p == "10日" and ok is True
+    p, ok = normalize_fund_flow_rank_indicator("今日")
+    assert p == "今日" and ok is True
+
+
+def test_concept_fund_flow_illegal_period_does_not_raise(analyzer):
+    import pandas as pd
+    df = pd.DataFrame([{
+        "序号": 1, "行业": "半导体", "公司家数": 10, "行业指数": 1000.0,
+        "阶段涨跌幅": "5.5%", "流入资金": 1e9, "流出资金": 8e8, "净额": 2e8,
+    }])
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_concept", return_value=df) as m:
+        result = analyzer.get_concept_fund_flow(period="非法周期XYZ")
+    assert isinstance(result, list)
+    assert len(result) == 1
+    # 非法 period 归一到合法枚举「即时」后传入，不抛
+    call_kw = m.call_args.kwargs if m.call_args else {}
+    call_args = m.call_args.args if m.call_args else ()
+    symbol = call_kw.get("symbol") or (call_args[0] if call_args else None)
+    assert symbol == "即时"
+
+
+def test_concept_fund_flow_fallback_to_name_list(analyzer):
+    import pandas as pd
+    names = pd.DataFrame([{"板块名称": "半导体", "板块代码": "BK0001"}])
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_concept", side_effect=Exception("x")), \
+         patch("app.analysis.capital_flow_analyzer.ak.stock_fund_flow_industry", side_effect=Exception("y")), \
+         patch("app.analysis.capital_flow_analyzer.ak.stock_board_concept_name_em", return_value=names):
+        result = analyzer.get_concept_fund_flow(period="即时")
+    assert isinstance(result, dict)
+    assert result.get("source") == "board_concept_name_em"
+    assert result.get("note") == "name_list_only_not_fund_flow"
+    assert result["data"][0]["sector"] == "半导体"
+    # 净额不可假装为真实资金流
+    assert result["data"][0].get("net_flow") is None
+
