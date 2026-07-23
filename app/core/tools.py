@@ -1,7 +1,7 @@
 """
 Input: 各分析模块的方法调用、OpenAI Function Calling工具调用请求；可选请求级 portfolio_snapshot（ContextVar）
 Output: LangChain @tool 包装的标准工具函数 + OpenAI Function Calling格式schema + 工具执行分发
-Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 turn 护栏（tool_guardrails）；Sprint2 持仓只读工具
+Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 护栏 + P0-2 写工具硬拦；Sprint2 持仓只读
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone, timedelta
@@ -698,7 +699,7 @@ STOCK_ANALYSIS_TOOLS_SCHEMA = [
 
 # === 工具执行分发 ===
 
-# 工具名称到LangChain工具实例的映射
+# 工具名称到LangChain工具实例的映射（全部为只读分析工具）
 TOOL_EXECUTORS = {
     "get_stock_data": get_stock_data,
     "get_technical_indicators": get_technical_indicators,
@@ -711,9 +712,81 @@ TOOL_EXECUTORS = {
     "get_portfolio_risk_summary": get_portfolio_risk_summary,
 }
 
+# P0-2：只读工具白名单 = 当前注册面；任何写仓/下单类名称硬拦 no-op
+READ_ONLY_TOOL_NAMES = frozenset(TOOL_EXECUTORS.keys())
+
+# 显式写类工具名（含未来 LLM 幻觉名）；一律拒绝，不执行、不假成功
+_WRITE_TOOL_EXACT = frozenset({
+    "add_holding",
+    "remove_holding",
+    "update_holding",
+    "delete_holding",
+    "write_portfolio",
+    "save_portfolio",
+    "update_portfolio",
+    "clear_portfolio",
+    "mutate_portfolio",
+    "buy",
+    "sell",
+    "place_order",
+    "cancel_order",
+    "submit_order",
+    "execute_trade",
+    "create_order",
+    "modify_order",
+    "portfolio_write",
+    "portfolio_update",
+})
+
+_WRITE_TOOL_NAME_RE = re.compile(
+    r"(?:^|_)(add|remove|delete|update|write|save|create|place|execute|submit|mutate)"
+    r"(?:_|$)"
+    r"|(?:portfolio|holding|order|trade).*(?:write|mutat|update|add|remove|delete|save)"
+    r"|^(?:buy|sell)$",
+    re.I,
+)
+
+
+def is_write_tool_name(tool_name: str) -> bool:
+    """判断工具名是否属于写仓/下单类（服务端硬拦对象）。"""
+    n = (tool_name or "").strip()
+    if not n:
+        return False
+    if n in READ_ONLY_TOOL_NAMES:
+        return False
+    low = n.lower()
+    if low in _WRITE_TOOL_EXACT or n in _WRITE_TOOL_EXACT:
+        return True
+    return bool(_WRITE_TOOL_NAME_RE.search(n))
+
+
+def _refuse_write_tool(tool_name: str) -> str:
+    """写工具硬拦：结构化明确错误，executed=false，data=null（铁律 #1）。"""
+    payload = {
+        "success": False,
+        "executed": False,
+        "error": "WRITE_TOOL_BLOCKED",
+        "error_code": "WRITE_TOOL_BLOCKED",
+        "tool": tool_name,
+        "message": (
+            "写仓/下单类工具已服务端硬拦：当前 Agent 链路仅允许只读分析。"
+            "未执行任何写操作；请用户在组合页手动维护持仓。"
+            "禁止将本响应解读为下单或改仓成功。"
+        ),
+        "data": None,
+    }
+    try:
+        logger.warning("WRITE_TOOL_BLOCKED tool=%s", tool_name)
+    except Exception:
+        pass
+    return json.dumps(payload, ensure_ascii=False)
+
 
 def _raw_execute_tool(tool_name: str, arguments: dict) -> str:
-    """底层工具执行（无护栏）。未知工具抛 ValueError（保持既有契约）。"""
+    """底层工具执行（无护栏）。写工具硬拦；未知只读外工具抛 ValueError。"""
+    if is_write_tool_name(tool_name):
+        return _refuse_write_tool(tool_name)
+
     executor = TOOL_EXECUTORS.get(tool_name)
     if executor is None:
         available = ', '.join(TOOL_EXECUTORS.keys())
@@ -736,17 +809,23 @@ def execute_tool(tool_name: str, arguments: dict) -> str:
     通过LangChain工具的 .invoke() 方法调用，兼容 @tool 装饰器的调用约定。
     P0-1：若当前 ContextVar 绑定了 turn 护栏，则同 tool+归一化 args 连续失败
     达阈值时返回结构化 JSON（guardrail=block|halt|warn），不造假金融数据。
+    P0-2：写仓/下单类工具名服务端硬拦（no-op + WRITE_TOOL_BLOCKED），只读白名单照常。
 
     Args:
         tool_name: 工具名称（需与TOOL_EXECUTORS中的key匹配）
         arguments: 工具参数字典
 
     Returns:
-        str: 工具执行结果的字符串表示；被护栏拦截时为含 guardrail 字段的 JSON
+        str: 工具执行结果的字符串表示；被护栏拦截时为含 guardrail 字段的 JSON；
+             写工具硬拦时为含 error_code=WRITE_TOOL_BLOCKED 的 JSON
 
     Raises:
         ValueError: 未知的工具名称（仅裸路径；护栏开启时未知工具仍 raise，由调用方捕获）
     """
+    # 写工具硬拦优先于护栏/注册表（含 LLM 幻觉工具名）
+    if is_write_tool_name(tool_name):
+        return _refuse_write_tool(tool_name)
+
     try:
         from app.core.tool_guardrails import get_turn_guardrails, guarded_execute
 

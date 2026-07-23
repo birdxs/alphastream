@@ -33,8 +33,8 @@ Pos: docs/design/dojo-agents-absorption-plan.md — 设计层唯一入口；审�
 | **生效后准入** | Sprint 0 **已执行**；仍禁止 push；**业务编码**须另批「可进 Sprint1」 |
 | **本轮绝对禁止** | `pip install dojoagents/strands-agents/dojosdk` 进主依赖；新建第二 HTTP 主入口；Vite 第二前端；替换 `coordinator.py` 主图；复制 Dojo monorepo；用假数 Demo Agent |
 | **Sprint0 进度** | **完成**（2026-07-23 15:33:50 +08:00）：事件 payload / terminal 态 / HITL 断点 / 风险分级 → `docs/design/sprint0-inventory.md` |
-| **Sprint1–3 进度** | **本地已落地**（详见 §11 状态表 + `DELIVERY-STATUS.md`）；P0-7 降级帽与部分 P1 仍未闭合 |
-| **下一步闸门** | 交付冲刺后：P0-7 / 写工具硬拦增强 / P1 Skills·Plan；默认仍 **禁 push** |
+| **Sprint1–3 进度** | **本地已落地**（详见 §11 状态表 + `DELIVERY-STATUS.md`）；P0-7 降级帽已 DONE（合约层）；provenance[] 与写仓 harness 属已知缺口/Sprint4 |
+| **下一步闸门** | handoff 后：provenance[] / 真写 harness / P1 Skills·Plan；默认仍 **禁 push** |
 
 > **铁律**：设计全文已批；实现按 Comdr 全权托管 + 分 Sprint 授权推进。伪修复（无铁证三件套）= 任务失败。
 
@@ -375,7 +375,7 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 风险 | 过严误杀 → env 调高阈值；无 ContextVar 时旁路直调保持兼容 |
 | 进度 | **DONE** commit 见 `feat(agent): P0-1 tool call guardrail against failure storms` |
 
-#### P0-2 意图-工具协议 + 服务端二次校验 — **Sprint2 部分 DONE（规则意图路由，2026-07-23）**
+#### P0-2 意图-工具协议 + 服务端二次校验 — **DONE（2026-07-23 handoff：写工具硬拦 + 拟写意图）**
 
 | 段 | 内容 |
 |----|------|
@@ -440,7 +440,7 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 风险 | 信息过载 → 默认双栏折叠摘要 |
 | 交付 | coordinator `_summarize_debate`；web_server debate_card；DebateCardArtifact |
 
-#### P0-7 降级可视化与 confidence 帽（零假值回路）
+#### P0-7 降级可视化与 confidence 帽（零假值回路） ✅ **DONE**（合约层 2026-07-23；真机压测可选）
 
 | 段 | 内容 |
 |----|------|
@@ -510,7 +510,7 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 |--------|------|------|----------------------|------|
 | **Sprint 0** | 只读盘点与契约 | **DONE** | `7886bd5` | `sprint0-inventory.md` |
 | **Sprint 1** | P0 回路闭合（护栏/HITL/辩论/时间线） | **DONE（主切片）** | `dd0fbc4` `fe1c08e` `0c244f9` `627a969` `7d78236` `fd077ae` | P0-7 未做；provenance 数组未完 |
-| **Sprint 2** | 意图路由 + 真仓只读 | **DONE** | `f0d1289` | P0-2 规则路由；完整写工具硬拦可增强 |
+| **Sprint 2** | 意图路由 + 真仓只读 | **DONE** | `f0d1289` + handoff | P0-2 规则路由 + 写工具硬拦 |
 | **Sprint 3** | 组合诊断 + 观察 mode | **DONE（本切片）** | `b612718` | Skills/Plan/Memory 仍属 P1 未启动 |
 | **Sprint 4** | 写仓 harness + facade + P2 | **未开** | — | 待 Comdr |
 
@@ -519,12 +519,12 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | ID | 能力 | 状态 | 代表 commit | 落点摘要 |
 |----|------|------|-------------|----------|
 | **P0-1** | 工具调用护栏 | **DONE** | `dd0fbc4` | `tool_guardrails.py` + execute_tool / FC stream |
-| **P0-2** | 意图-工具协议 | **部分 DONE** | `f0d1289` | `intent_router.py` 规则路由 + SSE meta；写工具硬拦仍可增强 |
+| **P0-2** | 意图-工具协议 | **DONE** | `f0d1289` + handoff | 规则路由 + `WRITE_TOOL_BLOCKED` + 拟写意图硬拒绝 |
 | **P0-3** | 持仓读入回路 | **DONE** | `f0d1289` | `get_portfolio_snapshot` / risk_summary；chat 注入 snapshot |
 | **P0-4** | 工具时间线契约 | **DONE（timeline）** | `0c244f9` | tool_call/result 契约字段；provenance[] 仍待 |
 | **P0-5** | HITL 确认面 | **DONE** | `fe1c08e` `627a969` | ApprovalCard / pending API / timeout_reject |
 | **P0-6** | 辩论证据面 | **DONE（证据面）** | `0c244f9` | debate_card + 分歧条；terminal 完成态仍可统一 |
-| **P0-7** | 降级帽 / confidence | **TODO** | — | `agent.degraded` + UI 横幅未闭合 |
+| **P0-7** | 降级帽 / confidence | **DONE（合约层）** | state/event_bus/decision-card | `degradations`+`confidence_cap`+`agent.degraded`+UI 横幅；真机压测可选 |
 
 配套已交付（非 P0 编号但支撑可使用）：
 
@@ -546,7 +546,7 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 - **P0-1 工具护栏：DONE**（`dd0fbc4`）  
 - **P0-5 HITL 确认面：DONE**（`fe1c08e`/`627a969`）  
 - **P0-4 工具时间线 + P0-6 辩论证据面：DONE**（`0c244f9` 等）  
-- **未闭合**：P0-7 降级帽；provenance[]；terminal 态统一。  
+- **已知缺口（非阻塞）**：provenance[] 结构化数组；terminal 态统一；写仓 harness（Sprint4）。  
 - 分批 pytest；CDP 真测；禁 Playwright/全量 vitest。
 
 ### Sprint 2 — 意图 + 真仓只读 ✅ DONE
@@ -794,4 +794,3 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 | P0-4 / 设计 P0-4 | `agent.tool_call`/`agent.tool_result` 契约字段 | `app/core/ai_client.py` helpers；`app/core/event_bus.py` 常量；`tool-call-card`/`use-chat-stream`/`types` |
 
 验证：`tests/agents/test_debate_summary.py`（含 debate_turn + payload 契约）；相关 import smoke；前端 tsc 改动文件。
-

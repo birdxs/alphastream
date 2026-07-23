@@ -22,11 +22,13 @@ from app.core.intent_router import (
     INTENT_GENERAL,
     INTENT_MARKET_OVERVIEW,
     INTENT_PORTFOLIO,
+    INTENT_PORTFOLIO_WRITE,
     INTENT_SINGLE_STOCK_DEEP,
     classify_intent,
 )
 from app.core.tools import (
     execute_tool,
+    is_write_tool_name,
     normalize_portfolio_snapshot,
     portfolio_context,
 )
@@ -79,6 +81,45 @@ class TestIntentRouterRules:
         assert "price" not in meta
         assert "fake" not in json.dumps(meta).lower()
         assert meta["router"] == "rules_v1"
+
+    def test_portfolio_write_intent_hard_refuse_hint(self):
+        """P0-2：拟写仓关键词优先于持仓分析，system_hint 硬拒绝假成功。"""
+        r = classify_intent("帮我加仓600519")
+        assert r.intent == INTENT_PORTFOLIO_WRITE
+        assert "写仓" in r.system_hint or "硬拦" in r.system_hint
+        assert "禁止" in r.system_hint
+        assert r.inject_portfolio is True
+        assert r.confidence >= 0.9
+
+    def test_portfolio_write_precedence_over_portfolio_kw(self):
+        r = classify_intent("把持仓调仓，减仓一半")
+        assert r.intent == INTENT_PORTFOLIO_WRITE
+
+
+class TestWriteToolHardBlock:
+    """P0-2：写仓/下单工具名服务端 no-op + 明确错误，不假成功。"""
+
+    def test_is_write_tool_name(self):
+        assert is_write_tool_name("add_holding") is True
+        assert is_write_tool_name("buy") is True
+        assert is_write_tool_name("place_order") is True
+        assert is_write_tool_name("get_stock_data") is False
+        assert is_write_tool_name("get_portfolio_snapshot") is False
+
+    def test_execute_write_tool_blocked_json(self):
+        raw = execute_tool("add_holding", {"code": "600519", "shares": 100})
+        data = json.loads(raw)
+        assert data["success"] is False
+        assert data.get("executed") is False
+        assert data["error_code"] == "WRITE_TOOL_BLOCKED"
+        assert data.get("data") is None
+        assert "写" in data["message"] or "硬拦" in data["message"]
+
+    def test_execute_buy_alias_blocked(self):
+        raw = execute_tool("buy", {"symbol": "600519"})
+        data = json.loads(raw)
+        assert data["error_code"] == "WRITE_TOOL_BLOCKED"
+        assert data["success"] is False
 
 
 class TestPortfolioSnapshotTools:
