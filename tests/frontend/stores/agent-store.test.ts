@@ -76,7 +76,12 @@ describe('useAgentStore', () => {
       result: { price: 100 },
     } as ToolCallResult;
     useAgentStore.getState().setToolCallResult('tc-1', result);
-    expect(useAgentStore.getState().toolCalls[0].result).toEqual(result);
+    const stored = useAgentStore.getState().toolCalls[0];
+    expect(stored.status).toBe('done');
+    expect(stored.result?.tool_call_id).toBe('tc-1');
+    expect(stored.result?.success).toBe(true);
+    // P0-4 归一化会补 name/result_summary，不要求与输入对象 deep equal
+    expect(stored.result?.result ?? stored.result?.result_summary).toEqual({ price: 100 });
   });
 
   it('appendEvent 添加 600 条事件 → MAX_EVENTS 滑动窗口生效（events.length === 500）[P0-1]', () => {
