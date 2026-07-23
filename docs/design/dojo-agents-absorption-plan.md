@@ -8,15 +8,16 @@ Pos: docs/design/dojo-agents-absorption-plan.md — 设计层唯一入口；审�
 
 | 字段 | 值 |
 |------|-----|
-| **文档状态** | **已通过 2026-07-23 Comdr 全权托管** |
-| **版本** | `v1.1`（Sprint0 盘点后） |
-| **日期锚点** | `2026-07-23`（Asia/Singapore +08:00） |
+| **文档状态** | **已通过 2026-07-23 Comdr 全权托管**；**Sprint0–3 本地可使用交付冲刺（2026-07-24 01:18 +08:00）** |
+| **版本** | `v1.2`（Sprint0–3 收口 + DELIVERY-STATUS） |
+| **日期锚点** | `2026-07-23` 设计日；交付锚点 `2026-07-24 01:18:57 +08:00` |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **对照对象** | [Alpha-Dojo/DojoAgents](https://github.com/Alpha-Dojo/DojoAgents)（Apache-2.0，PyPI `dojoagents`≈0.1.9） |
 | **本仓宿主** | Flask:8888 + Next:3000 + LangGraph multi-agent + adapters/Wind + Chat/Artifacts |
 | **战略对齐** | `docs/AI_NATIVE_RESEARCH.md`（Chat 为主、Artifacts 为工位、过程透明、用户保持控制） |
-| **授权边界** | 全文设计已批；**实现编码仍须 Comdr「可进 Sprint1」**；Sprint0 已完成只读盘点 |
+| **授权边界** | 全文设计已批；Comdr 已授权无人托管实现至 Sprint3 交付冲刺；仍 **禁 push（默认）** |
 | **Sprint0 证据** | `/Users/panda/Downloads/StockAnal_Sys/docs/design/sprint0-inventory.md` |
+| **交付清单** | `/Users/panda/Downloads/StockAnal_Sys/docs/design/DELIVERY-STATUS.md` |
 
 ---
 
@@ -32,9 +33,10 @@ Pos: docs/design/dojo-agents-absorption-plan.md — 设计层唯一入口；审�
 | **生效后准入** | Sprint 0 **已执行**；仍禁止 push；**业务编码**须另批「可进 Sprint1」 |
 | **本轮绝对禁止** | `pip install dojoagents/strands-agents/dojosdk` 进主依赖；新建第二 HTTP 主入口；Vite 第二前端；替换 `coordinator.py` 主图；复制 Dojo monorepo；用假数 Demo Agent |
 | **Sprint0 进度** | **完成**（2026-07-23 15:33:50 +08:00）：事件 payload / terminal 态 / HITL 断点 / 风险分级 → `docs/design/sprint0-inventory.md` |
-| **下一步闸门** | 待 Comdr 批 **「可进 Sprint1」** 后方可改 `app/` / `frontend/src` |
+| **Sprint1–3 进度** | **本地已落地**（详见 §11 状态表 + `DELIVERY-STATUS.md`）；P0-7 降级帽与部分 P1 仍未闭合 |
+| **下一步闸门** | 交付冲刺后：P0-7 / 写工具硬拦增强 / P1 Skills·Plan；默认仍 **禁 push** |
 
-> **铁律**：设计全文已批；**实现编码**以「可进 Sprint1」为闸。未获该闸前任何业务实现提交 = 违规。伪修复（无铁证三件套）= 任务失败。
+> **铁律**：设计全文已批；实现按 Comdr 全权托管 + 分 Sprint 授权推进。伪修复（无铁证三件套）= 任务失败。
 
 ---
 
@@ -500,32 +502,64 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 ## 11. 实施路线图 Sprint 0–4
 
-> 全文设计已批（全权托管）；**业务编码**仍以「可进 Sprint1」为闸。绝对时间锚点文档日 2026-07-23。禁止 push。
+> 全文设计已批（全权托管）；绝对时间锚点文档日 2026-07-23；交付冲刺锚点 2026-07-24 01:18 +08:00。默认禁 push。
 
-### Sprint 0 — 只读盘点与契约（零业务代码） ✅ 完成
+### 11.0 Sprint 状态总表（2026-07-24 01:18 +08:00）
+
+| Sprint | 主题 | 状态 | 关键 commit（短哈希） | 备注 |
+|--------|------|------|----------------------|------|
+| **Sprint 0** | 只读盘点与契约 | **DONE** | `7886bd5` | `sprint0-inventory.md` |
+| **Sprint 1** | P0 回路闭合（护栏/HITL/辩论/时间线） | **DONE（主切片）** | `dd0fbc4` `fe1c08e` `0c244f9` `627a969` `7d78236` `fd077ae` | P0-7 未做；provenance 数组未完 |
+| **Sprint 2** | 意图路由 + 真仓只读 | **DONE** | `f0d1289` | P0-2 规则路由；完整写工具硬拦可增强 |
+| **Sprint 3** | 组合诊断 + 观察 mode | **DONE（本切片）** | `b612718` | Skills/Plan/Memory 仍属 P1 未启动 |
+| **Sprint 4** | 写仓 harness + facade + P2 | **未开** | — | 待 Comdr |
+
+### 11.1 P0 项 DONE 汇总
+
+| ID | 能力 | 状态 | 代表 commit | 落点摘要 |
+|----|------|------|-------------|----------|
+| **P0-1** | 工具调用护栏 | **DONE** | `dd0fbc4` | `tool_guardrails.py` + execute_tool / FC stream |
+| **P0-2** | 意图-工具协议 | **部分 DONE** | `f0d1289` | `intent_router.py` 规则路由 + SSE meta；写工具硬拦仍可增强 |
+| **P0-3** | 持仓读入回路 | **DONE** | `f0d1289` | `get_portfolio_snapshot` / risk_summary；chat 注入 snapshot |
+| **P0-4** | 工具时间线契约 | **DONE（timeline）** | `0c244f9` | tool_call/result 契约字段；provenance[] 仍待 |
+| **P0-5** | HITL 确认面 | **DONE** | `fe1c08e` `627a969` | ApprovalCard / pending API / timeout_reject |
+| **P0-6** | 辩论证据面 | **DONE（证据面）** | `0c244f9` | debate_card + 分歧条；terminal 完成态仍可统一 |
+| **P0-7** | 降级帽 / confidence | **TODO** | — | `agent.degraded` + UI 横幅未闭合 |
+
+配套已交付（非 P0 编号但支撑可使用）：
+
+| 能力 | commit | 说明 |
+|------|--------|------|
+| Settings 顶栏入口 | `7d19e75` | 桌面/移动导航齿轮 |
+| Wind 请求级开关 + 配额 API | `7cae626` | `/api/wind/quota`；设置页 Wind 区块 |
+| Sprint3 组合诊断 + 观察 | `b612718` | `/portfolio` 诊断卡 + mode live\|watch |
+
+完整启动/验证/回滚 → **`docs/design/DELIVERY-STATUS.md`**。
+
+### Sprint 0 — 只读盘点与契约（零业务代码） ✅ DONE
 
 - 事件 payload 文字 schema、terminal 态表、HITL 断点清单、风险分级差距 → **已落盘** `docs/design/sprint0-inventory.md`（2026-07-23 15:33:50 +08:00）。  
-- 退出：Comdr 批「可进 Sprint1」。（Sprint0 交付物已齐；编码闸仍在 Comdr。）
+- 退出条件已满足；后续编码按托管推进。
 
-### Sprint 1 — P0 回路闭合
+### Sprint 1 — P0 回路闭合 ✅ 主切片 DONE
 
-- **P0-1 工具护栏：✅ DONE**（2026-07-23，`tool_guardrails.py` + `execute_tool` + FC stream）  
-- 待做：Protocol+硬拦、读仓工具、provenance/timeline、确认面、降级帽、完成态（Comdr 可砍子集）。  
-- 分批 pytest；授权后 CDP 真测；禁 Playwright/全量 vitest。
+- **P0-1 工具护栏：DONE**（`dd0fbc4`）  
+- **P0-5 HITL 确认面：DONE**（`fe1c08e`/`627a969`）  
+- **P0-4 工具时间线 + P0-6 辩论证据面：DONE**（`0c244f9` 等）  
+- **未闭合**：P0-7 降级帽；provenance[]；terminal 态统一。  
+- 分批 pytest；CDP 真测；禁 Playwright/全量 vitest。
 
-### Sprint 2 — 对抗证据与决策备忘
+### Sprint 2 — 意图 + 真仓只读 ✅ DONE
 
-- 辩论 Artifact 深化、decision memo、scorecard 字段写入（谨慎）。  
+- **P0-2 规则意图路由 + P0-3 持仓 snapshot 工具与 chat 注入**（`f0d1289`）。  
+- 辩论 Artifact / decision memo / scorecard 深化仍可后续增强（部分在 Sprint1 已做证据面）。
 
-### Sprint 3 — Skills / Plan / Memory / 压缩 / 回放 + 组合诊断
+### Sprint 3 — 组合诊断 + 观察 mode ✅ 本切片 DONE；P1 Skills 未开
 
-- P1-1/2/5/6/9/10 为主。  
-- **组合风险诊断 + 观察标记（2026-07-23）✅ 部分完成（本批）**：  
-  - `risk_monitor.build_portfolio_diagnosis` + `analyze_portfolio_risk` 扩展 `sector_concentration` / `name_overlap` / `defensive_weight` / `unknown_industry_*`（缺行业=`unknown`，禁止假行业）  
-  - OpenAPI `/api/portfolio_risk` 文档追加；结构摘要工具附带诊断字段  
-  - `portfolio-store` `mode: live|watch` + `setHoldingMode`；UI「观察」标签（agent 不写仓）  
-  - `/portfolio` 页风险诊断摘要（Skeleton/—）  
-  - 单测：`test_analysis_risk_monitor` + `portfolio-store`  
+- **组合风险诊断 + 观察标记（`b612718`）**：  
+  - `risk_monitor.build_portfolio_diagnosis` + `analyze_portfolio_risk` 扩展字段（缺行业=`unknown`，禁止假行业）  
+  - OpenAPI `/api/portfolio_risk`；`portfolio-store` `mode: live|watch`；`/portfolio` 诊断摘要  
+- **未开**：P1-1 Skills / P1-2 Plan DAG / Memory / 压缩 / 回放。
 
 ### Sprint 4 — 写仓 harness + 市场 facade + P2 选修
 
@@ -533,12 +567,13 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 ### 每 Sprint DoD
 
-- [ ] 绝对时间戳验证记录  
-- [ ] 无假金融数据路径  
-- [ ] 可回滚 commit 粒度  
-- [ ] 本文件/TODO 同步  
-- [ ] 能力描述是「回路」而非「新菜单」  
-- [ ] 未 push  
+- [x] 绝对时间戳验证记录（交付冲刺节）  
+- [x] 无假金融数据路径（铁律 #1 守卫保留）  
+- [x] 可回滚 commit 粒度  
+- [x] 本文件 / DELIVERY-STATUS 同步  
+- [x] 能力描述是「回路」而非「新菜单」  
+- [x] 未 push（默认）  
+
 
 ---
 
@@ -713,11 +748,11 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 3. **宿主** = Flask + LangGraph + Next + adapters/Wind。  
 4. **P0** = 护栏 + 协议硬拦 + 真仓只读 + 证据信封 + 确认面 + 辩论/完成态 + 降级帽。  
 5. **超越** = 辩论×持仓、Wind 感知调度、TruthGuard、合规夹注、Artifacts 标准化、演进→skill。  
-6. **现状** = **已通过 2026-07-23 Comdr 全权托管；Sprint0 完成；实现编码须「可进 Sprint1」。**
+6. **现状** = **全权托管 + Sprint0–3 主切片本地可使用；P0-7 与多数 P1 未开；见 DELIVERY-STATUS。**
 
 ---
 
-**— 全文完 · 已通过 2026-07-23 Comdr 全权托管 · Sprint0 完成 · 待「可进 Sprint1」· v1.1 —**  
+**— 全文完 · 全权托管 · Sprint0–3 主切片 DONE · v1.2 · 交付清单 DELIVERY-STATUS.md —**  
 **绝对路径**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/dojo-agents-absorption-plan.md`
 
 ### P0-5 HITL 确认面（2026-07-23）

@@ -1,4 +1,4 @@
 # docs/design/
-- 文件：dojo-agents-absorption-plan.md（**已通过 2026-07-23 Comdr 全权托管**，v1.1）；sprint0-inventory.md（Sprint0 只读盘点完成）
-- 地位：设计文档区；实现编码须「可进 Sprint1」闸
+- 文件：dojo-agents-absorption-plan.md（v1.2，Sprint0–3 主切片）；sprint0-inventory.md；**DELIVERY-STATUS.md**（本地可使用交付清单）
+- 地位：设计 + 交付状态；默认禁 push
 - 一旦这里的结构发生变化，请务必更新我... 就像重新标记领地一样。

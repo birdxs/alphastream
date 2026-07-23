@@ -2162,48 +2162,47 @@ def api_stock_profile():
 
     # 外层 executor：主 Flask 线程最多阻塞 22s，超时 → 503
     # BD-3: 改用全局线程池
+    # 外层：主 Flask 线程最多阻塞 PROFILE_BAOSTOCK_TIMEOUT_S，超时 → 503
+    # BD-3: 改用全局线程池（禁止在请求末尾 shutdown 全局池；历史 _outer_pool 残留已删）
+    fut = _GLOBAL_THREAD_POOL.submit(_do_all_baostock)
     try:
-        fut = _GLOBAL_THREAD_POOL.submit(_do_all_baostock)
+        profile = fut.result(timeout=int(os.getenv('PROFILE_BAOSTOCK_TIMEOUT_S', '8')))
+    except (_TPETimeout, TimeoutError) as _toe:
+        app.logger.warning(f"baostock overall_timeout ({stock_code})，进入 akshare-only 兜底")
+        _fb = {
+            'stock_code': stock_code,
+            'stock_name': _STOCK_NAME_CACHE.get(stock_code),  # B2: 缺名返回 None，不回填 code
+            'industry': None, 'market_cap': None,
+            'pe_ttm': None, 'pb': None, 'roe': None,
+        }
         try:
-            profile = fut.result(timeout=int(os.getenv('PROFILE_BAOSTOCK_TIMEOUT_S', '8')))
-        except (_TPETimeout, TimeoutError) as _toe:
-            app.logger.warning(f"baostock overall_timeout ({stock_code})，进入 akshare-only 兜底")
-            _fb = {
-                'stock_code': stock_code,
-                'stock_name': _STOCK_NAME_CACHE.get(stock_code),  # B2: 缺名返回 None，不回填 code
-                'industry': None, 'market_cap': None,
-                'pe_ttm': None, 'pb': None, 'roe': None,
-            }
-            try:
-                _akshare_fill(_fb, ['industry', 'market_cap', 'pe_ttm', 'pb', 'roe'], budget_s=6.0)
-            except Exception as _e:
-                app.logger.warning(f"akshare-only 兜底失败 ({stock_code}): {_e}")
+            _akshare_fill(_fb, ['industry', 'market_cap', 'pe_ttm', 'pb', 'roe'], budget_s=6.0)
+        except Exception as _e:
+            app.logger.warning(f"akshare-only 兜底失败 ({stock_code}): {_e}")
 
-            if any(_fb.get(k) is not None for k in ('industry', 'pe_ttm', 'pb', 'roe')):
-                resp = custom_jsonify(_fb)
-                resp.headers['X-Data-Source'] = 'akshare-fallback'
+        if any(_fb.get(k) is not None for k in ('industry', 'pe_ttm', 'pb', 'roe')):
+            resp = custom_jsonify(_fb)
+            resp.headers['X-Data-Source'] = 'akshare-fallback'
+            return resp
+
+        # akshare 也失败 → 尝试 stale cache
+        _stale = _profile_cache_get(stock_code)
+        if _stale:
+            _stale_ts, _stale_data = _stale if isinstance(_stale, tuple) else (0, _stale)
+            if (_time.time() - _stale_ts) < _PROFILE_STALE_MAX_S:
+                resp = custom_jsonify(_stale_data)
+                resp.headers['X-Cache'] = 'stale'
+                resp.headers['X-Data-Source'] = 'cache-stale'
                 return resp
 
-            # akshare 也失败 → 尝试 stale cache
-            _stale = _profile_cache_get(stock_code)
-            if _stale:
-                _stale_ts, _stale_data = _stale if isinstance(_stale, tuple) else (0, _stale)
-                if (_time.time() - _stale_ts) < _PROFILE_STALE_MAX_S:
-                    resp = custom_jsonify(_stale_data)
-                    resp.headers['X-Cache'] = 'stale'
-                    resp.headers['X-Data-Source'] = 'cache-stale'
-                    return resp
-
-            return custom_jsonify({
-                'error': 'all_sources_failed',
-                'reason': 'baostock_timeout + akshare_fallback_failed',
-                'stock_code': stock_code
-            }), 503
-        except Exception as e:
-            app.logger.error(f"api_stock_profile 子线程异常 ({stock_code}): {e}")
-            return custom_jsonify({'error': 'internal_error', 'detail': str(e)}), 500
-    finally:
-        _outer_pool.shutdown(wait=False, cancel_futures=True)
+        return custom_jsonify({
+            'error': 'all_sources_failed',
+            'reason': 'baostock_timeout + akshare_fallback_failed',
+            'stock_code': stock_code
+        }), 503
+    except Exception as e:
+        app.logger.error(f"api_stock_profile 子线程异常 ({stock_code}): {e}")
+        return custom_jsonify({'error': 'internal_error', 'detail': str(e)}), 500
 
     # 淘汰过期条目并写入（S1-C3 原子操作，整体在锁内）
     now2 = _time.time()
@@ -3154,11 +3153,18 @@ def api_risk_analysis():
 @validate_schema(PortfolioRiskSchema, source='json')  # S3-E1: schema 校验扩展
 def api_portfolio_risk():
     try:
-        data = request.json
+        data = request.json or {}
         portfolio = data.get('portfolio', [])
 
         if not portfolio:
             return jsonify({'error': '请提供投资组合'}), 400
+        # PortfolioRiskSchema 允许 Raw 列表；运行时必须是对象，避免 str.get 类 500
+        if not all(isinstance(item, dict) for item in portfolio):
+            return api_error(
+                'INVALID_INPUT',
+                'portfolio 每项须为对象（含 code 或 stock_code）',
+                details='expected list of objects',
+            )
 
         # 获取投资组合风险分析结果
         result = risk_monitor.analyze_portfolio_risk(portfolio)
