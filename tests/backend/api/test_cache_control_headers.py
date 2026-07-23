@@ -603,3 +603,54 @@ def test_after_request_skips_existing_cache_control(flask_app):
         # 已有 public,max-age=60，不应被覆盖为 no-store
         assert "no-store" not in cc, f"已有 Cache-Control 不应被覆盖，实际: {cc!r}"
         assert "max-age=60" in cc, f"原有 max-age=60 应保留，实际: {cc!r}"
+
+
+# ---------------------------------------------------------------------------
+# G10 热路由 OpenAPI 覆盖（仅静态契约，不改运行时）
+# ---------------------------------------------------------------------------
+
+def test_openapi_json_includes_g10_hot_routes(flask_client):
+    """G10：north_flow / start_stock|agent / upload / wind 6 路 path+method 存在。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+    expected = {
+        "/api/north_flow_history": "get",
+        "/api/start_stock_analysis": "post",
+        "/api/start_agent_analysis": "post",
+        "/api/upload_image": "post",
+        "/api/wind/quota": "get",
+        "/api/wind/tools": "get",
+    }
+    for path, method in expected.items():
+        assert path in paths, f"missing path {path}"
+        assert method in paths[path], f"missing method {method} on {path}"
+
+
+def test_openapi_json_g10_hot_route_parameters(flask_client):
+    """G10：关键参数/body 约束（limit / stock_code required）。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    paths = resp.get_json()["paths"]
+
+    north = paths["/api/north_flow_history"]["get"]
+    params = north.get("parameters") or []
+    limit = next((p for p in params if p.get("name") == "limit"), None)
+    assert limit is not None
+    schema = limit.get("schema") or {}
+    assert schema.get("minimum") == 1
+    assert schema.get("maximum") == 500
+
+    start_stock = paths["/api/start_stock_analysis"]["post"]
+    body_schema = (
+        start_stock["requestBody"]["content"]["application/json"]["schema"]
+    )
+    assert "stock_code" in body_schema.get("required", [])
+
+    start_agent = paths["/api/start_agent_analysis"]["post"]
+    agent_schema = (
+        start_agent["requestBody"]["content"]["application/json"]["schema"]
+    )
+    assert "stock_code" in agent_schema.get("required", [])
+    depth = agent_schema["properties"]["research_depth"]
+    assert depth.get("minimum") == 1 and depth.get("maximum") == 5

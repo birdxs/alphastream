@@ -8,7 +8,7 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.1-final-handoff` |
+| **文档版本** | `v1.2-g9-g12-handoff` |
 | **交付锚点** | **2026-07-23 18:45:00 +08:00**（最终 handoff；校时：本机 `2026-07-23 03:44:xx -0700` ≡ UTC 10:44；Cloudflare/GitHub HTTPS Date 同源，偏差 ≤10s，通过） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
@@ -438,4 +438,81 @@ git checkout HEAD~1 -- app/core/tools.py app/core/intent_router.py \
 `app/core/{artifact_wrapper,event_bus,tools,ai_client}.py`、`app/agents/coordinator.py`、`app/web/web_server.py`、  
 `frontend/src/lib/{types,stores/agent-store,hooks/use-chat-stream,api/client}.ts`、  
 `frontend/src/components/{artifacts/decision-card,agent/agent-status-badge}.tsx` 与相关测试。
+
+
+## 8.6 G9–G12 落地 + 全谱 G1–G12 handoff（2026-07-23 早间工作点 +08:00 锚点）
+
+> 时间锚点：本机 `date` 与 Cloudflare/GitHub HTTPS Date 同源校验通过（偏差 ≪ 100s）。  
+> 约束：本地开发；**禁止 push**；聚焦 pytest；不启服务。
+
+### G1–G12 状态总表
+
+| ID | 项 | 状态 | 落点摘要 |
+|----|----|------|----------|
+| **G1** | provenance[] | ✅ | artifact_wrapper + coordinator + decision-card 血统折叠 |
+| **G2** | terminal 态统一 | ✅ | normalize_task_status / run_terminal / HITL 徽章 |
+| **G3** | 事件别名 | ✅ | role_started|finished 与 started|completed 双发 + 去重 |
+| **G4** | 写意图硬拦矩阵 | ✅ | WRITE 名拦截 + portfolio_write system_hint |
+| **G5** | 决策备忘 Artifact | ✅ | build_decision_memo → decision_memo（无假数） |
+| **G6** | Run scorecard | ✅ | compute_run_scorecard + EVENT_RUN_SCORECARD |
+| **G7** | 反思可读面 | ✅ | summarize_reflection_readonly（禁写权重） |
+| **G8** | Memory 预取 | ✅ | get_history + semantic_summary → memory_context |
+| **G9** | 市场/板块 facade（薄） | ✅ **本批** | `get_market_overview_brief` / `get_sector_snapshot`；失败空+source；DISABLE_NETWORK 安全 |
+| **G10** | OpenAPI 热路由一小批 | ✅ **本批** | +6 path：north_flow / start_stock|agent / upload / wind quota|tools；paths 65→71；最小测试 |
+| **G11** | intent badge 加固 | ✅ **本批** | chat-panel 仅消费 meta.intent∈IntentKind→中文标签；否则隐藏（铁律名称） |
+| **G12** | 降级夹具补强 | ✅ **本批** | scorecard memo 降级不透传 price_targets；decision-card 降级隐藏价位；unit fixture |
+
+### 本批 commit 文件表（落盘）
+
+| 区域 | 文件 |
+|------|------|
+| G9 | `app/core/tools.py`（facade + TOOL_EXECUTORS / OPENAI schema / MARKET_TOOLS_SCHEMA） |
+| G10 | `app/web/openapi_spec.py`；`tests/backend/api/test_cache_control_headers.py` |
+| G11 | `frontend/src/components/chat/chat-panel.tsx`；`frontend/src/lib/types/index.ts`（IntentKind + INTENT_LABELS_ZH） |
+| G12 | `app/agents/scorecard.py`；`frontend/src/components/artifacts/decision-card.tsx`；`tests/backend/unit/test_agent_scorecard.py` |
+| G9 测 | `tests/backend/unit/test_sprint2_intent_portfolio.py`（TestMarketSectorFacadeG9） |
+| 文档 | 本节 + 版本号 |
+
+### 验证（真实命令）
+
+```bash
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 \
+  pytest -q tests/backend/unit/test_sprint2_intent_portfolio.py \
+         tests/backend/unit/test_agent_scorecard.py \
+         tests/backend/api/test_cache_control_headers.py
+# → 59 passed, 13 warnings
+
+cd frontend && node node_modules/typescript/bin/tsc --noEmit   # exit 0
+npx eslint src/components/chat/chat-panel.tsx \
+  src/components/artifacts/decision-card.tsx \
+  src/lib/types/index.ts   # exit 0（0 error）
+```
+
+import-smoke：`len(OPENAPI_SPEC['paths']) == 71`；`get_market_overview_brief` / `get_sector_snapshot` ∈ TOOL_EXECUTORS。
+
+### 回岗清单（Comdr / 下一 worker）
+
+1. **可选浏览器 10 分钟**：AI 对话触发 market_overview / single_stock_deep，确认顶栏 badge 中文且无 intent 时不显示；故意降级场景下 decision-card **无目标价数字**。  
+2. **G9 真网抽样**（非本批必做）：清 DISABLE_NETWORK 后手工 `execute_tool('get_market_overview_brief')` 一次，核对 source≠offline_disabled。  
+3. **OpenAPI 消费方**：若 Swagger UI 缓存，刷新 `/api/openapi.json` 确认 71 paths。  
+4. **仍默认禁 push**；合并前再跑一次上述 pytest 三文件。
+
+### 仍暂缓项（明确不在本批）
+
+| 项 | 原因 | 建议门槛 |
+|----|------|----------|
+| **写仓 harness / 真 mutate 端点** | P0-2 仅硬拦；无审批写路径 | Sprint4 + Comdr 书面审批 + 审计日志 |
+| **Plan DAG / 多步编排** | 架构面大，超出 facade 薄封装 | 独立设计 + 超时/配额统一 |
+| **Skills / dojosdk 数据面替换** | 破坏 adapters/Wind 铁证链 | 仅 facade 挂现源；禁替换 |
+| **git push** | 工作区纪律 + 本地 ahead origin | Comdr 显式授权 |
+| **全量 vitest / npm build / 启服务** | 铁律 #3 资源 | 仅 tsc + 聚焦 eslint + 聚焦 pytest |
+
+### 回滚
+
+```bash
+git revert <本批 commit>
+# 或按文件还原 tools.py / openapi_spec.py / scorecard.py / chat-panel.tsx /
+# decision-card.tsx / types/index.ts 与三份测试追加段
+```
+
 

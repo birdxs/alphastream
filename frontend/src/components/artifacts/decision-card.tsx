@@ -1,10 +1,11 @@
+"use client";
+
 import type { ProvenanceEntry } from '@/lib/types';
 // Input: 决策数据（action/confidence/reasoning/risk/price_targets/position/degradations/scorecard/memo/reflection/memory）
 // Output: 增强版决策卡片，含置信度进度条、风险评分、价格目标、决策理由、降级条、评分卡/备忘/反思只读/记忆预取
 // Pos: artifact-renderer.tsx 的子组件，decision_card 类型 Artifact 渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
-"use client";
 import { Badge } from "@/components/ui/badge";
 
 interface DegradationView {
@@ -98,6 +99,11 @@ export function DecisionCardArtifact({ data }: Props) {
       </div>
     );
   }
+  const isDegraded =
+    Boolean(data.degradations && data.degradations.length > 0) ||
+    (data.confidence_cap != null && Number(data.confidence_cap) < 1);
+  // G12：降级时禁止展示价位数字（铁律 #1）
+  const showPriceTargets = !isDegraded;
 
   const action = String(data.action || "HOLD").toUpperCase();
   const confidence = Number(data.confidence || 0);
@@ -205,8 +211,8 @@ export function DecisionCardArtifact({ data }: Props) {
         )}
       </div>
 
-      {/* 价格目标 */}
-      {data.price_targets && (
+      {/* 价格目标：G12 降级态隐藏价位数字（铁律 #1） */}
+      {showPriceTargets && data.price_targets && (
         <div className="grid grid-cols-3 gap-2 text-center text-sm">
           {data.price_targets.support && (
             <div className="bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg p-2 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
@@ -227,6 +233,15 @@ export function DecisionCardArtifact({ data }: Props) {
             </div>
           )}
         </div>
+      )}
+
+      {isDegraded && data.price_targets && (
+        <p className="text-xs text-muted-foreground">
+          降级运行中：目标价位已隐藏
+          {data.confidence_cap != null
+            ? `（置信上限 ${(Number(data.confidence_cap) * 100).toFixed(0)}%）`
+            : ''}
+        </p>
       )}
 
       {/* 决策理由 */}

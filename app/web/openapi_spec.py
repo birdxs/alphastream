@@ -1398,6 +1398,135 @@ _PATHS: Dict[str, Any] = {
             },
         },
     },
+    # ── G10 热路由补齐（仅静态文档，不改运行时）──────────────────────────
+    '/api/north_flow_history': {
+        'get': {
+            'tags': ['FundFlow'],
+            'summary': '北向资金历史',
+            'operationId': 'getNorthFlowHistory',
+            'parameters': [
+                {
+                    'name': 'limit', 'in': 'query', 'required': False,
+                    'schema': {'type': 'integer', 'minimum': 1, 'maximum': 500, 'default': 30},
+                    'description': '返回条数 1-500',
+                },
+            ],
+            'responses': {
+                '200': {'description': '北向资金历史序列',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
+    '/api/start_stock_analysis': {
+        'post': {
+            'tags': ['Stock'],
+            'summary': '启动个股异步分析任务',
+            'operationId': 'startStockAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'required': ['stock_code'],
+                    'properties': {
+                        'stock_code': {
+                            'type': 'string', 'minLength': 1, 'maxLength': 20,
+                            'description': '股票代码',
+                        },
+                        'market_type': {
+                            'type': 'string', 'maxLength': 10, 'default': 'A',
+                        },
+                    },
+                }}},
+            },
+            'responses': {
+                '200': {'description': '任务已创建',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '400': {'description': '参数校验失败'},
+            },
+        },
+    },
+    '/api/start_agent_analysis': {
+        'post': {
+            'tags': ['Agent'],
+            'summary': '启动多智能体分析任务',
+            'operationId': 'startAgentAnalysis',
+            'requestBody': {
+                'required': True,
+                'content': {'application/json': {'schema': {
+                    'type': 'object',
+                    'required': ['stock_code'],
+                    'properties': {
+                        'stock_code': {
+                            'type': 'string', 'minLength': 1, 'maxLength': 20,
+                        },
+                        'market_type': {
+                            'type': 'string', 'maxLength': 10, 'default': 'A',
+                        },
+                        'research_depth': {
+                            'type': 'integer', 'minimum': 1, 'maximum': 5, 'default': 3,
+                        },
+                        'selected_analysts': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                            'description': '分析师角色列表（可选）',
+                        },
+                    },
+                }}},
+            },
+            'responses': {
+                '200': {'description': 'Agent 任务已创建',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '400': {'description': '参数校验失败'},
+            },
+        },
+    },
+    '/api/upload_image': {
+        'post': {
+            'tags': ['Ops'],
+            'summary': '上传图片（multipart；magic-bytes 校验）',
+            'operationId': 'uploadImage',
+            'requestBody': {
+                'required': True,
+                'content': {
+                    'multipart/form-data': {
+                        'schema': {
+                            'type': 'object',
+                            'properties': {
+                                'file': {'type': 'string', 'format': 'binary'},
+                            },
+                        },
+                    },
+                },
+            },
+            'responses': {
+                '200': {'description': '上传成功',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '400': {'description': '非法文件/路径/类型'},
+            },
+        },
+    },
+    '/api/wind/quota': {
+        'get': {
+            'tags': ['Ops'],
+            'summary': 'Wind 日配额剩余（0 积分）',
+            'operationId': 'getWindQuota',
+            'responses': {
+                '200': {'description': 'remaining/total/date/percentage',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
+    '/api/wind/tools': {
+        'get': {
+            'tags': ['Ops'],
+            'summary': 'Wind MCP 可用工具列表（调试，0 积分）',
+            'operationId': 'listWindTools',
+            'responses': {
+                '200': {'description': 'tools + count',
+                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+            },
+        },
+    },
 }
 
 # ─────────────────────────────────────────────

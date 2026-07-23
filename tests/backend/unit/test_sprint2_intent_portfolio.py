@@ -256,3 +256,64 @@ class TestWriteGuardMatrixG4:
         # 不得出现鼓励写仓的假成功措辞
         for bad in ("已成功下单", "已写入持仓", "order placed", "portfolio updated"):
             assert bad not in (r.system_hint or "")
+
+
+
+class TestMarketSectorFacadeG9:
+    """G9：get_market_overview_brief / get_sector_snapshot 薄 facade。"""
+
+    def test_registered_in_executors(self):
+        from app.core.tools import TOOL_EXECUTORS, READ_ONLY_TOOL_NAMES
+
+        assert "get_market_overview_brief" in TOOL_EXECUTORS
+        assert "get_sector_snapshot" in TOOL_EXECUTORS
+        assert "get_market_overview_brief" in READ_ONLY_TOOL_NAMES
+        assert "get_sector_snapshot" in READ_ONLY_TOOL_NAMES
+        assert is_write_tool_name("get_market_overview_brief") is False
+        assert is_write_tool_name("get_sector_snapshot") is False
+
+    def test_offline_market_overview_no_fake_prices(self, monkeypatch):
+        """DISABLE_NETWORK=1：indices=[] + source=offline_disabled，正文无假指数点位。"""
+        monkeypatch.setenv("DISABLE_NETWORK", "1")
+        raw = execute_tool("get_market_overview_brief", {})
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        assert isinstance(data, dict)
+        assert data.get("indices") == []
+        assert data.get("source") == "offline_disabled"
+        assert data.get("count") == 0
+        # 不得出现像真价的数字字段顶层
+        for k in ("price", "close", "change_pct", "上证", "point"):
+            assert k not in data
+        note = str(data.get("note") or "")
+        assert "编造" in note or "DISABLE_NETWORK" in note
+
+    def test_offline_sector_snapshot_empty(self, monkeypatch):
+        monkeypatch.setenv("DISABLE_NETWORK", "1")
+        raw = execute_tool(
+            "get_sector_snapshot",
+            {"industry": "白酒", "symbol": "即时"},
+        )
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        assert data.get("data") == []
+        assert data.get("source") == "offline_disabled"
+        assert data.get("count") == 0
+        assert data.get("industry") in ("白酒", None) or data.get("industry") == "白酒"
+
+    def test_market_overview_upstream_error_returns_empty(self, monkeypatch):
+        """上游抛错 → source=error / indices=[]，不抛、不造假。"""
+        monkeypatch.delenv("DISABLE_NETWORK", raising=False)
+        monkeypatch.setenv("DISABLE_NETWORK", "0")
+
+        def _boom():
+            raise RuntimeError("upstream down")
+
+        # patch web_server 取数函数
+        import app.web.web_server as ws
+
+        monkeypatch.setattr(ws, "_fetch_market_indices_data", _boom)
+        # force not offline
+        monkeypatch.setenv("DISABLE_NETWORK", "")
+        raw = execute_tool("get_market_overview_brief", {})
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        assert data.get("indices") == []
+        assert data.get("source") in ("error", "offline_disabled")

@@ -7,6 +7,8 @@ Pos: tests/backend/unit/test_agent_scorecard.py - G5+G6+G7+G8 unit
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.agents.scorecard import (
@@ -219,3 +221,98 @@ def test_publish_run_scorecard_event_smoke(monkeypatch):
     assert out["event_type"] == eb.EVENT_RUN_SCORECARD
     assert published and published[0][0] == eb.EVENT_RUN_SCORECARD
     assert published[0][1]["data_coverage"] is not None
+
+
+
+def test_g12_degraded_fixture_no_fake_price_digits():
+    """G12：agent.degraded + confidence_cap 夹具不得携带假价数字进入 scorecard memo。
+
+    铁律 #1：降级态不把 point-in-time 假价写入可展示决策字段。
+    """
+    from app.core import event_bus as eb
+
+    degradations = [
+        {
+            "level": "partial",
+            "cause": "upstream_timeout",
+            "message": "行情超时降级",
+            "confidence_cap": 0.4,
+            "source": "agent.degraded",
+        }
+    ]
+    # 故意混入假价字段：scorecard/memo 路径应忽略，不把假价提升为事实
+    final_decision = {
+        "action": "HOLD",
+        "confidence": 0.9,
+        "price_targets": {
+            "support": 1174.06,
+            "target": 4384.17,
+            "resistance": 4500.0,
+        },
+        "degradations": degradations,
+        "confidence_cap": 0.4,
+    }
+    state = {
+        "technical_report": None,
+        "fundamental_report": None,
+        "capital_flow_report": None,
+        "sentiment_report": None,
+        "bull_case": None,
+        "bear_case": None,
+        "execution_log": [{"status": "error", "tool": "get_stock_data"}],
+        "final_decision": final_decision,
+        "degradations": degradations,
+    }
+    sc = compute_run_scorecard(state, task_id="g12-tid", stock_code="600519")
+    assert sc["confidence_cap"] is not None
+    assert float(sc["confidence_cap"]) <= 0.4 + 1e-9
+    # scorecard 本身不承载 price_targets
+    assert "price_targets" not in sc
+    assert "support" not in sc
+    assert "target" not in sc
+    memo = build_decision_memo(state, scorecard=sc)
+    assert isinstance(memo, dict)
+    # memo 不得承载 price_targets 假价；标志性假点位不得出现在 memo JSON
+    assert "price_targets" not in memo or memo.get("price_targets") in (None, {}, [])
+    memo_s = json.dumps(memo, ensure_ascii=False)
+    for fake in ("1174.06", "4384.17", "4500"):
+        assert fake not in memo_s
+    # memo 可含 action；不得把假点位当必填字段输出
+    memo_s = json.dumps(memo, ensure_ascii=False) if not isinstance(memo, str) else memo
+    # 允许 action 文本；禁止夹具里的标志性假价原样落到 memo 必填价位键
+    if isinstance(memo, dict):
+        assert memo.get("price_targets") in (None, {}, [])
+        for fake in (1174.06, 4384.17):
+            # 价位数字不得以目标价字段出现
+            pt = memo.get("price_targets") or {}
+            assert fake not in (pt.values() if isinstance(pt, dict) else [])
+
+
+def test_g12_event_bus_agent_degraded_payload_shape(monkeypatch):
+    """agent.degraded 事件载荷含 confidence_cap，不含假行情价位。"""
+    from app.core import event_bus as eb
+
+    published = []
+
+    class _Bus:
+        def publish(self, event_type, payload):
+            published.append((event_type, payload))
+            return payload
+
+    monkeypatch.setattr(eb, "get_event_bus", lambda: _Bus())
+    out = eb.publish_agent_degraded(
+        task_id="g12-tid",
+        stock_code="600519",
+        confidence_cap=0.4,
+        cause="fixture",
+        message="unit degrade",
+    )
+    assert isinstance(out, dict)
+    assert out.get("confidence_cap") == 0.4
+    assert "price" not in out
+    assert "price_targets" not in out
+    assert "1174.06" not in json.dumps(out)
+    assert published, "should publish agent.degraded"
+    et, pl = published[0]
+    assert et == eb.EVENT_AGENT_DEGRADED
+    assert pl.get("confidence_cap") == 0.4

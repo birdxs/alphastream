@@ -1,6 +1,6 @@
-// Input: chat-store + useChatStream
-// Output: 完整Chat面板 — 头部 + 消息/欢迎 + 建议 + 输入，含微妙渐变背景与滚动阴影
-// Pos: 首页中栏
+// Input: chat-store + useChatStream（含 SSE meta.intent）
+// Output: 完整Chat面板 — 头部 + 消息/欢迎 + 建议 + 输入；intent badge 仅展示已知 IntentKind 中文标签
+// Pos: 首页中栏；G11 铁律名称：无 meta.intent / 未知 intent 则隐藏 badge，禁止 stock_code 冒充
 
 "use client";
 import { Suspense, useEffect, useRef } from "react";
@@ -11,6 +11,7 @@ import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import { SuggestedQuestions } from "./suggested-questions";
 import { WelcomeScreen } from "./welcome-screen";
+import { INTENT_LABELS_ZH, type IntentKind } from "@/lib/types";
 
 // 模块级guard — 桌面+移动双ChatPanel共享，防止?q=触发两次sendMessage
 // key记录已处理的URL查询串，新URL会重置触发
@@ -64,18 +65,27 @@ function ChatPanelInner() {
             </div>
           </div>
           <span className="text-xs font-medium text-foreground/80">AI分析助手</span>
-          {lastIntentMeta?.intent ? (
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#3737CC]/30 text-[#3737CC] dark:text-[#9aa0ff] bg-[#3737CC]/5"
-              title={
-                typeof lastIntentMeta.confidence === 'number'
-                  ? `intent conf=${lastIntentMeta.confidence}`
-                  : 'intent'
-              }
-            >
-              {lastIntentMeta.intent}
-            </span>
-          ) : null}
+          {/* G11：仅当 meta.intent 命中已知 IntentKind 时展示中文 badge；否则隐藏（铁律 #1 名称） */}
+          {(() => {
+            const raw = lastIntentMeta?.intent;
+            if (!raw || typeof raw !== 'string') return null;
+            const key = raw.trim() as IntentKind;
+            const label = key ? INTENT_LABELS_ZH[key] : undefined;
+            if (!label) return null;
+            return (
+              <span
+                data-testid="chat-intent-badge"
+                className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#3737CC]/30 text-[#3737CC] dark:text-[#9aa0ff] bg-[#3737CC]/5"
+                title={
+                  typeof lastIntentMeta?.confidence === 'number'
+                    ? `intent conf=${lastIntentMeta.confidence}`
+                    : 'intent'
+                }
+              >
+                {label}
+              </span>
+            );
+          })()}
         </div>
       </div>
 

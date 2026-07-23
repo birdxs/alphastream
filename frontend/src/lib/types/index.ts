@@ -44,6 +44,25 @@ export interface ChatIntentMeta {
   [key: string]: unknown;
 }
 
+/** 与 app.core.intent_router.Intent 字面量对齐的意图枚举 */
+export type IntentKind =
+  | 'single_stock_deep'
+  | 'portfolio'
+  | 'portfolio_write_blocked'
+  | 'cross_market_event'
+  | 'market_overview'
+  | 'general';
+
+/** G11：chat intent badge 中文标签；未知 intent 不得用 stock_code 冒充 */
+export const INTENT_LABELS_ZH: Record<IntentKind, string> = {
+  single_stock_deep: '个股深析',
+  portfolio: '组合风险',
+  portfolio_write_blocked: '组合写入(已拦截)',
+  cross_market_event: '跨市场事件',
+  market_overview: '市场总览',
+  general: '通用问答',
+};
+
 // Artifact类型
 export interface ArtifactSource {
   name: string;

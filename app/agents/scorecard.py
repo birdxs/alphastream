@@ -286,7 +286,16 @@ def build_decision_memo(
         "stock_code": state.get("stock_code"),
     }
     # 价格目标仅透传上游已有字段，不合成
-    if isinstance(fd.get("price_targets"), dict):
+    # G12 / 铁律 #1：降级态（degradations 或 confidence_cap < 1）不透传价位数字，避免假价误导
+    degraded = bool(state.get("degradations")) or (
+        isinstance(sc, dict)
+        and sc.get("confidence_cap") is not None
+        and float(sc["confidence_cap"]) < 1.0 - 1e-12
+    ) or (
+        state.get("confidence_cap") is not None
+        and float(state["confidence_cap"]) < 1.0 - 1e-12
+    )
+    if isinstance(fd.get("price_targets"), dict) and not degraded:
         memo["price_targets"] = fd["price_targets"]
     if fd.get("position_suggestion") is not None:
         memo["position_suggestion"] = fd.get("position_suggestion")

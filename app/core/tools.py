@@ -433,6 +433,130 @@ def get_portfolio_risk_summary(include_market_risk: bool = False) -> str:
     return json.dumps(base, ensure_ascii=False, default=str)
 
 
+def _offline_or_disabled() -> bool:
+    """DISABLE_NETWORK=1 / 离线：facade 不得联网、不得造假数。"""
+    return os.environ.get("DISABLE_NETWORK", "").strip() in ("1", "true", "True", "YES", "yes")
+
+
+@tool
+def get_market_overview_brief() -> str:
+    """大盘/指数只读简报 facade（G9 薄封装）。
+
+    内部复用现有 market indices 路径；失败/离线返回 indices=[] + source，**不编造指数点位**。
+    """
+    if _offline_or_disabled():
+        return json.dumps({
+            "indices": [],
+            "source": "offline_disabled",
+            "note": "DISABLE_NETWORK=1；不拉取行情、不编造指数",
+            "count": 0,
+            "asof": _now_cn_iso(),
+        }, ensure_ascii=False)
+    try:
+        # 延迟 import，避免 tools ↔ web_server 循环依赖
+        from app.web import web_server as ws
+        payload = ws._fetch_market_indices_data()
+        if not isinstance(payload, dict):
+            payload = {}
+        indices = payload.get("indices") if isinstance(payload.get("indices"), list) else []
+        source = payload.get("source") or ("empty" if not indices else "market_indices")
+        if not indices and source not in ("offline_disabled", "empty"):
+            source = source or "degraded"
+        return json.dumps({
+            "indices": indices[:20],
+            "source": source,
+            "count": len(indices),
+            "asof": payload.get("timestamp") or _now_cn_iso(),
+            "note": payload.get("note") or (
+                "上游无指数数据" if not indices else "只读指数简报"
+            ),
+        }, ensure_ascii=False)
+    except Exception as e:
+        logger.warning("get_market_overview_brief failed: %s", e)
+        return json.dumps({
+            "indices": [],
+            "source": "error",
+            "note": f"市场简报失败: {type(e).__name__}",
+            "count": 0,
+            "asof": _now_cn_iso(),
+        }, ensure_ascii=False)
+
+
+@tool
+def get_sector_snapshot(industry: str = "", symbol: str = "即时") -> str:
+    """板块/行业资金流只读快照 facade（G9 薄封装）。
+
+    industry 非空优先行业详情；否则取行业资金流即时榜。
+    失败/离线 → data=[] + source，**不编造流入金额或假涨跌**。
+    """
+    industry = (industry or "").strip()
+    symbol = (symbol or "即时").strip() or "即时"
+    if _offline_or_disabled():
+        return json.dumps({
+            "data": [],
+            "industry": industry or None,
+            "symbol": symbol,
+            "source": "offline_disabled",
+            "note": "DISABLE_NETWORK=1；不拉板块数据、不编造资金流",
+            "count": 0,
+            "asof": _now_cn_iso(),
+        }, ensure_ascii=False)
+    try:
+        from app.analysis.industry_analyzer import IndustryAnalyzer
+        analyzer = IndustryAnalyzer()
+        if industry:
+            detail = analyzer.get_industry_detail(industry)
+            if isinstance(detail, dict) and detail:
+                return json.dumps({
+                    "data": [detail],
+                    "industry": industry,
+                    "symbol": symbol,
+                    "source": detail.get("source") or "industry_analyzer",
+                    "count": 1,
+                    "asof": _now_cn_iso(),
+                    "note": "行业详情只读快照",
+                }, ensure_ascii=False, default=str)
+        flow = analyzer.get_industry_fund_flow(symbol=symbol)
+        if isinstance(flow, list):
+            rows = flow
+        elif isinstance(flow, dict):
+            rows = flow.get("data") if isinstance(flow.get("data"), list) else []
+            if not rows and flow:
+                rows = [flow]
+        else:
+            rows = []
+        if industry and rows:
+            ind_l = industry.lower()
+            filtered = [
+                r for r in rows
+                if isinstance(r, dict) and ind_l in str(
+                    r.get("industry") or r.get("name") or r.get("板块") or ""
+                ).lower()
+            ]
+            if filtered:
+                rows = filtered
+        return json.dumps({
+            "data": rows[:30] if isinstance(rows, list) else [],
+            "industry": industry or None,
+            "symbol": symbol,
+            "source": "industry_fund_flow" if rows else "empty",
+            "count": len(rows) if isinstance(rows, list) else 0,
+            "asof": _now_cn_iso(),
+            "note": "无板块数据" if not rows else "行业/板块资金流只读快照",
+        }, ensure_ascii=False, default=str)
+    except Exception as e:
+        logger.warning("get_sector_snapshot failed: %s", e)
+        return json.dumps({
+            "data": [],
+            "industry": industry or None,
+            "symbol": symbol,
+            "source": "error",
+            "note": f"板块快照失败: {type(e).__name__}",
+            "count": 0,
+            "asof": _now_cn_iso(),
+        }, ensure_ascii=False)
+
+
 # === LangChain工具注册表（保持向后兼容） ===
 ALL_TOOLS = [
     get_stock_data,
@@ -444,6 +568,8 @@ ALL_TOOLS = [
     get_risk_assessment,
     get_portfolio_snapshot,
     get_portfolio_risk_summary,
+    get_market_overview_brief,
+    get_sector_snapshot,
 ]
 
 # LangChain按职能分组
@@ -647,6 +773,47 @@ OPENAI_TOOLS_SCHEMA = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_market_overview_brief",
+            "description": (
+                "大盘/指数只读简报 facade。"
+                "失败或离线时返回 indices=[] + source，禁止编造指数点位。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_sector_snapshot",
+            "description": (
+                "板块/行业资金流只读快照 facade。"
+                "industry 可指定行业名；失败或离线返回 data=[] + source，禁止编造资金流假数。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "industry": {
+                        "type": "string",
+                        "description": "行业/板块名称（可选，空则取即时榜）",
+                        "default": ""
+                    },
+                    "symbol": {
+                        "type": "string",
+                        "description": "资金流时间维度，默认「即时」",
+                        "default": "即时"
+                    }
+                },
+                "required": []
+            }
+        }
     }
 ]
 
@@ -690,6 +857,14 @@ PORTFOLIO_TOOLS_SCHEMA = [
     )
 ]
 
+MARKET_TOOLS_SCHEMA = [
+    s for s in OPENAI_TOOLS_SCHEMA
+    if s['function']['name'] in (
+        'get_market_overview_brief',
+        'get_sector_snapshot',
+    )
+]
+
 # 全量schema（排除搜索工具，用于股票分析场景）
 STOCK_ANALYSIS_TOOLS_SCHEMA = [
     s for s in OPENAI_TOOLS_SCHEMA
@@ -710,6 +885,8 @@ TOOL_EXECUTORS = {
     "get_risk_assessment": get_risk_assessment,
     "get_portfolio_snapshot": get_portfolio_snapshot,
     "get_portfolio_risk_summary": get_portfolio_risk_summary,
+    "get_market_overview_brief": get_market_overview_brief,
+    "get_sector_snapshot": get_sector_snapshot,
 }
 
 # P0-2：只读工具白名单 = 当前注册面；任何写仓/下单类名称硬拦 no-op
