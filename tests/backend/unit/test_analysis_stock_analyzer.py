@@ -491,3 +491,25 @@ class TestATR:
         df = _make_kline(30)
         atr = analyzer.calculate_atr(df, 14)
         assert atr.iloc[-1] >= 0
+
+
+# ---------------------------------------------------------------- C2: 北向委托 CapitalFlowAnalyzer
+def test_north_flow_delegates_without_hist_em_stock_code(monkeypatch):
+    """C2: StockAnalyzer 不再对个股调 stock_hsgt_hist_em(symbol=code)。"""
+    import types
+    from app.analysis.stock_analyzer import StockAnalyzer
+    from app.analysis import capital_flow_analyzer as cfa
+
+    called = {"n": 0}
+    def fake_north(self, stock_code, start_date=None, end_date=None):
+        called["n"] += 1
+        called["code"] = stock_code
+        return {"history": [{"date": "2024-01-01", "net_amount": 1.0}]}
+
+    monkeypatch.setattr(cfa.CapitalFlowAnalyzer, "get_north_flow_history", fake_north)
+    sa = StockAnalyzer.__new__(StockAnalyzer)
+    sa.logger = types.SimpleNamespace(error=lambda *a, **k: None)
+    out = sa.get_north_flow_history("600519")
+    assert called["n"] == 1
+    assert called["code"] == "600519"
+    assert out["history"]

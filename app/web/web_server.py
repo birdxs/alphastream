@@ -2500,12 +2500,14 @@ def _fetch_market_indices_data():
             cached['source'] = 'cache'
             return cached
 
-        # --- 主路径: 东财 stock_zh_index_spot_em ---
+        # --- 主路径: 东财 stock_zh_index_spot_em(symbol="沪深重要指数") ---
+        # H1: 必须传 symbol；四目标码未齐时不当完整 HIT，继续 sina/daily 兜底或合并补齐
+        _INDEX_TARGET_CODES = ['000001', '399001', '399006', '000300']
+
         def _try_eastmoney():
-            df = ak.stock_zh_index_spot_em()
-            target_codes = ['000001', '399001', '399006', '000300']
+            df = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
             result = []
-            for code in target_codes:
+            for code in _INDEX_TARGET_CODES:
                 row = df[df['代码'] == code]
                 if not row.empty:
                     r = row.iloc[0]
@@ -2517,15 +2519,21 @@ def _fetch_market_indices_data():
                     })
             return result
 
+        em_partial = None  # 东财部分命中，供后续合并
         # BD-3: 改用全局线程池
         fut = _GLOBAL_THREAD_POOL.submit(_try_eastmoney)
         try:
             result = fut.result(timeout=_PRIMARY_TIMEOUT)
-            if result:
+            if result and len(result) >= len(_INDEX_TARGET_CODES):
                 data = {'indices': result, 'timestamp': now_cn().isoformat()}
                 _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'eastmoney'})
                 data['source'] = 'eastmoney'
                 return data
+            if result:
+                em_partial = result
+                app.logger.warning(
+                    f"实时指数主路径仅命中 {len(result)}/{len(_INDEX_TARGET_CODES)}，不当完整 HIT，切兜底补齐"
+                )
         except FuturesTimeout:
             app.logger.warning(f"实时指数主路径超时({_PRIMARY_TIMEOUT}s): eastmoney push2, 切兜底")
         except Exception as e:
@@ -2554,15 +2562,38 @@ def _fetch_market_indices_data():
                     })
             return result
 
+        def _merge_indices(primary, secondary):
+            """按 code 合并指数列表：secondary 补齐 primary 缺失项。"""
+            by_code = {}
+            for item in (primary or []):
+                if item and item.get('code'):
+                    by_code[item['code']] = item
+            for item in (secondary or []):
+                if item and item.get('code') and item['code'] not in by_code:
+                    by_code[item['code']] = item
+            order = _INDEX_TARGET_CODES
+            ordered = [by_code[c] for c in order if c in by_code]
+            # 附加非目标码（一般不会有）
+            for c, item in by_code.items():
+                if c not in order:
+                    ordered.append(item)
+            return ordered
+
         # BD-3: 改用全局线程池
         fut = _GLOBAL_THREAD_POOL.submit(_try_sina)
         try:
             result = fut.result(timeout=_FALLBACK_TIMEOUT)
-            if result:
+            if em_partial:
+                result = _merge_indices(em_partial, result or [])
+            if result and len(result) >= len(_INDEX_TARGET_CODES):
                 data = {'indices': result, 'timestamp': now_cn().isoformat()}
-                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'sina'})
-                data['source'] = 'sina'
+                src = 'eastmoney+sina' if em_partial else 'sina'
+                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': src})
+                data['source'] = src
                 return data
+            if result:
+                # 仍不齐则继续 daily，携带部分结果合并
+                em_partial = result
         except FuturesTimeout:
             app.logger.warning(f"实时指数兜底1(新浪)超时({_FALLBACK_TIMEOUT}s), 切日线")
         except Exception as e:
@@ -2600,21 +2631,28 @@ def _fetch_market_indices_data():
                 except Exception:
                     items.append(None)
             result = [x for x in items if x]
+            if em_partial:
+                result = _merge_indices(em_partial, result or [])
 
             if result:
                 data = {'indices': result, 'timestamp': now_cn().isoformat()}
-                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'daily'})
-                data['source'] = 'daily'
+                src = 'merged_daily' if em_partial else 'daily'
+                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': src})
+                data['source'] = src
                 return data
         except Exception as e:
             app.logger.error(f"历史指数数据也失败: {e}")
 
-        # --- 兜底3: 返回已有缓存（无论是否过期）---
+        # --- 兜底3: 返回已有缓存（无论是否过期）；部分结果不当完整 HIT 缓存 ---
         if _market_indices_cache.get('data'):
             app.logger.warning("所有指数来源均失败，返回过期缓存")
             stale = dict(_market_indices_cache['data'])
             stale['source'] = 'stale_cache'
             return stale
+
+        # 仅有残缺部分结果：返回但不写 cache（避免假 HIT）
+        if em_partial:
+            return {'indices': em_partial, 'source': 'partial', 'timestamp': now_cn().isoformat()}
 
         return {'indices': [], 'source': 'degraded'}
 

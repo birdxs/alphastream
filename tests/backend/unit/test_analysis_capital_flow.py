@@ -354,3 +354,103 @@ def test_non_network_exception_still_logs_error(analyzer, caplog):
                   if r.name == "app.analysis.capital_flow_analyzer"]
     assert any(r.levelname == "ERROR" for r in cf_records), \
         "非网络类异常应保留 ERROR 级日志"
+
+
+# ---------------------------------------------------------------- C1/H2/H3: 北向 history + market 映射
+def test_a_share_market_tag_bj_rules():
+    """H2: 6→sh, 0/3→sz, 4/8/92→bj。"""
+    from app.analysis.capital_flow_analyzer import a_share_market_tag, CapitalFlowAnalyzer
+    assert a_share_market_tag("600519") == "sh"
+    assert a_share_market_tag("000001") == "sz"
+    assert a_share_market_tag("300750") == "sz"
+    assert a_share_market_tag("830799") == "bj"
+    assert a_share_market_tag("430047") == "bj"
+    assert a_share_market_tag("920000") == "bj"
+    assert CapitalFlowAnalyzer.market_tag_for_code("830799") == "bj"
+
+
+def test_north_flow_market_calls_beixiang_not_kwargs(analyzer):
+    """C1: 市场级走 stock_hsgt_hist_em(symbol=北向资金)，无 start/end kwargs。"""
+    import pandas as pd
+    calls = []
+
+    def fake_hist(**kwargs):
+        calls.append(kwargs)
+        return pd.DataFrame({
+            "日期": ["2024-01-02", "2024-01-03"],
+            "当日成交净买额": [1.0, 2.0],
+        })
+
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_hsgt_hist_em", side_effect=fake_hist):
+        with patch("app.analysis.capital_flow_analyzer.ak.stock_hsgt_individual_em") as ind:
+            with patch("app.analysis.capital_flow_analyzer.ak.stock_hsgt_individual_detail_em") as det:
+                result = analyzer.get_north_flow_history("")
+                ind.assert_not_called()
+                det.assert_not_called()
+
+    assert calls, "应调用 hist"
+    assert calls[0].get("symbol") == "北向资金"
+    assert "start_date" not in calls[0]
+    assert "end_date" not in calls[0]
+    assert isinstance(result.get("history"), list)
+    assert len(result["history"]) == 2
+
+
+def test_north_flow_individual_uses_detail_or_em_not_hist(analyzer):
+    """C1/C2: 6 位代码走 individual_detail_em；严禁 hist_em(股票代码)。"""
+    import pandas as pd
+    hist_calls = []
+    detail_calls = []
+
+    def fake_hist(**kwargs):
+        hist_calls.append(kwargs)
+        raise AssertionError("个股路径禁止 stock_hsgt_hist_em")
+
+    def fake_detail(**kwargs):
+        detail_calls.append(kwargs)
+        return pd.DataFrame({
+            "持股日期": ["2024-06-01", "2024-06-02"],
+            "持股数量": [100, 110],
+        })
+
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_hsgt_hist_em", side_effect=fake_hist):
+        with patch(
+            "app.analysis.capital_flow_analyzer.ak.stock_hsgt_individual_detail_em",
+            side_effect=fake_detail,
+        ):
+            result = analyzer.get_north_flow_history(
+                "600519", start_date="20240101", end_date="20241231"
+            )
+
+    assert not hist_calls
+    assert detail_calls
+    assert detail_calls[0]["symbol"] == "600519"
+    assert "start_date" in detail_calls[0]
+    assert len(result.get("history") or []) == 2
+
+
+def test_individual_fund_flow_maps_bj(analyzer):
+    """H2: 北交所代码 market=bj。"""
+    import pandas as pd
+    captured = {}
+
+    def fake_flow(**kwargs):
+        captured.update(kwargs)
+        return pd.DataFrame({
+            "日期": ["2024-01-01"],
+            "主力净流入-净额": [1000.0],
+            "小单净流入-净额": [0.0],
+            "中单净流入-净额": [0.0],
+            "大单净流入-净额": [0.0],
+            "超大单净流入-净额": [0.0],
+            "主力净流入-净占比": [1.0],
+            "小单净流入-净占比": [0.0],
+            "中单净流入-净占比": [0.0],
+            "大单净流入-净占比": [0.0],
+            "超大单净流入-净占比": [0.0],
+        })
+
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow", side_effect=fake_flow):
+        analyzer.get_individual_fund_flow("830799", market_type="A")
+    assert captured.get("market") == "bj"
+    assert captured.get("stock") == "830799"

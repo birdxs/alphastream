@@ -406,10 +406,23 @@ class AkshareAdapter(BaseAdapter):
             result.append(item)
         return result
 
+    @staticmethod
+    def _a_share_market_tag(code: str) -> str:
+        """6→sh；0/3→sz；4/8/92→bj（与 capital_flow_analyzer.a_share_market_tag 一致）。"""
+        c = (code or '').strip().split('.')[0]
+        if c.startswith('6'):
+            return 'sh'
+        if c.startswith(('0', '3')):
+            return 'sz'
+        if c.startswith(('4', '8', '92')):
+            return 'bj'
+        return 'sh'
+
     def get_capital_flow(self, code: str) -> Dict:
         """获取资金流向"""
         try:
-            df = ak.stock_individual_fund_flow(stock=code, market="sh" if code.startswith('6') else "sz")
+            market = self._a_share_market_tag(str(code))
+            df = ak.stock_individual_fund_flow(stock=code, market=market)
             if df is not None and not df.empty:
                 return {'flow': df.to_dict('records')}
         except Exception as e:
@@ -424,7 +437,7 @@ class AkshareAdapter(BaseAdapter):
         """
         try:
             import akshare as ak
-            market = "sh" if str(code).startswith('6') else "sz"
+            market = self._a_share_market_tag(str(code))
             df = ak.stock_individual_fund_flow(stock=str(code), market=market)
             if df is not None and not df.empty:
                 return df
@@ -433,12 +446,50 @@ class AkshareAdapter(BaseAdapter):
         return pd.DataFrame()
 
     def get_north_flow(self) -> pd.DataFrame:
-        """获取北向资金"""
+        """获取北向资金（H3：优先「北向资金」；失败则沪+深合并；再备 summary）。"""
         try:
-            df = ak.stock_hsgt_hist_em(symbol="沪股通")
+            df = ak.stock_hsgt_hist_em(symbol="北向资金")
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            logger.warning(f"获取北向资金(北向资金)失败: {type(e).__name__}: {e}")
+        # fallback: 沪股通 + 深股通
+        frames = []
+        for sym in ("沪股通", "深股通"):
+            try:
+                part = ak.stock_hsgt_hist_em(symbol=sym)
+                if part is not None and not part.empty:
+                    frames.append(part)
+            except Exception as e:
+                logger.warning(f"获取北向资金({sym})失败: {type(e).__name__}: {e}")
+        if len(frames) == 1:
+            return frames[0]
+        if len(frames) == 2:
+            try:
+                date_cols = ['日期', '持股日期', '交易日期']
+                num_candidates = ['当日成交净买额', '当日资金流入', '净买额', '净流入']
+                df_a, df_b = frames[0], frames[1]
+                dcol_a = next((c for c in date_cols if c in df_a.columns), df_a.columns[0])
+                dcol_b = next((c for c in date_cols if c in df_b.columns), df_b.columns[0])
+                ncol_a = next((c for c in num_candidates if c in df_a.columns), None)
+                ncol_b = next((c for c in num_candidates if c in df_b.columns), None)
+                if ncol_a and ncol_b:
+                    a = df_a[[dcol_a, ncol_a]].rename(columns={dcol_a: '日期', ncol_a: 'net_a'})
+                    b = df_b[[dcol_b, ncol_b]].rename(columns={dcol_b: '日期', ncol_b: 'net_b'})
+                    a['日期'] = pd.to_datetime(a['日期'], errors='coerce')
+                    b['日期'] = pd.to_datetime(b['日期'], errors='coerce')
+                    merged = pd.merge(a, b, on='日期', how='outer')
+                    merged['当日成交净买额'] = merged['net_a'].fillna(0) + merged['net_b'].fillna(0)
+                    return merged[['日期', '当日成交净买额']].sort_values('日期', ascending=False)
+                return df_a if len(df_a) >= len(df_b) else df_b
+            except Exception as e:
+                logger.warning(f"北向资金沪深合并失败: {type(e).__name__}: {e}")
+                return frames[0]
+        try:
+            df = ak.stock_hsgt_fund_flow_summary_em()
             return df if df is not None else pd.DataFrame()
         except Exception as e:
-            logger.warning(f"获取北向资金失败: {type(e).__name__}: {e}")
+            logger.warning(f"获取北向资金(summary)失败: {type(e).__name__}: {e}")
             return pd.DataFrame()
 
     def health_check(self) -> bool:

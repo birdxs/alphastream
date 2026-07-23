@@ -1,7 +1,8 @@
-# Input  : AkShare 资金流向 DataFrame 与股票代码/周期参数
-# Output : 个股/板块资金流向结构化 dict/list，金额字段单位保持 yuan
+# Input  : AkShare 资金流向 DataFrame 与股票代码/周期参数（含北向 hsgt）
+# Output : 个股/板块资金流向结构化 dict/list，金额字段单位保持 yuan；北向 history
 # Pos    : 金融数据单位契约边界，供 API 与前端图表消费；上游网络降级走受控 WARNING 日志
 import logging
+import re
 import traceback
 import akshare as ak
 import pandas as pd
@@ -10,6 +11,29 @@ from datetime import datetime, timedelta, timezone
 
 _ASIA_SHANGHAI = timezone(timedelta(hours=8))
 now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
+
+# 市场级北向 symbol（非 6 位 A 股代码时走 hist 汇总）
+_NORTH_MARKET_SYMBOLS = frozenset({
+    '', '北向资金', '沪股通', '深股通', '南向资金', '港股通沪', '港股通深',
+    'north', 'northbound', 'hsgt', 'HSGT',
+})
+
+
+def a_share_market_tag(stock_code: str) -> str:
+    """A 股代码 → akshare market：sh / sz / bj。
+
+    规则：6→sh；0/3→sz；4/8 及 92 开头（北交）→bj；其余默认 sh。
+    """
+    code = (stock_code or '').strip().split('.')[0]
+    if not code:
+        return 'sh'
+    if code.startswith('6'):
+        return 'sh'
+    if code.startswith(('0', '3')):
+        return 'sz'
+    if code.startswith(('4', '8', '92')):
+        return 'bj'
+    return 'sh'
 
 
 class CapitalFlowAnalyzer:
@@ -24,6 +48,204 @@ class CapitalFlowAnalyzer:
         # 初始化统一数据层
         from app.core.data_provider import get_data_provider
         self.data_provider = get_data_provider()
+
+    @staticmethod
+    def market_tag_for_code(stock_code: str) -> str:
+        """对外暴露的 market 映射（与 a_share_market_tag 一致）。"""
+        return a_share_market_tag(stock_code)
+
+    def _parse_ymd(self, value):
+        """宽松解析 YYYYMMDD / YYYY-MM-DD / Timestamp → date 或 None。"""
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return None
+        if hasattr(value, 'date') and not isinstance(value, str):
+            try:
+                return value.date()
+            except Exception:
+                pass
+        s = str(value).strip()
+        if not s or s.lower() in ('nan', 'none', 'nat', '--'):
+            return None
+        s = s.replace('/', '-').replace('.', '-')
+        digits = re.sub(r'\D', '', s)
+        try:
+            if len(digits) >= 8:
+                return datetime.strptime(digits[:8], '%Y%m%d').date()
+            if len(s) >= 10:
+                return datetime.strptime(s[:10], '%Y-%m-%d').date()
+        except ValueError:
+            return None
+        return None
+
+    def _filter_history_by_dates(self, history, start_date=None, end_date=None):
+        """客户端按日期过滤 history 列表。"""
+        if not history:
+            return history
+        start_d = self._parse_ymd(start_date) if start_date else None
+        end_d = self._parse_ymd(end_date) if end_date else None
+        if start_d is None and end_d is None:
+            return history
+        out = []
+        for item in history:
+            d = self._parse_ymd(item.get('date'))
+            if d is None:
+                continue
+            if start_d and d < start_d:
+                continue
+            if end_d and d > end_d:
+                continue
+            out.append(item)
+        return out
+
+    def _rows_from_hsgt_df(self, df):
+        """将 hsgt hist/individual DataFrame 规范为 history 列表。"""
+        if df is None or (hasattr(df, 'empty') and df.empty):
+            return []
+        date_cols = ['日期', '持股日期', '交易日期', 'date', 'Date']
+        amount_cols = [
+            '当日成交净买额', '当日资金流入', '北向资金净流入', '净买额',
+            '净流入', '持股数量', '持股数量(股)', '今日持股股数',
+            '持股市值', '今日持股市值',
+        ]
+        date_col = next((c for c in date_cols if c in df.columns), df.columns[0])
+        amount_col = next((c for c in amount_cols if c in df.columns), None)
+        if amount_col is None:
+            for c in df.columns:
+                if c == date_col:
+                    continue
+                if pd.api.types.is_numeric_dtype(df[c]):
+                    amount_col = c
+                    break
+        history = []
+        for _, row in df.iterrows():
+            try:
+                d_raw = row.get(date_col, '')
+                d_parsed = self._parse_ymd(d_raw)
+                date_str = d_parsed.isoformat() if d_parsed else str(d_raw)
+                net_amount = None
+                if amount_col is not None:
+                    val = row.get(amount_col)
+                    if val is not None and str(val) not in ('', 'nan', 'None', '--'):
+                        try:
+                            net_amount = float(val)
+                        except (ValueError, TypeError):
+                            net_amount = None
+                item = {'date': date_str, 'net_amount': net_amount}
+                for extra in ('持股数量', '持股市值', '持股数量占A股百分比', '当日收盘价', '当日涨跌幅'):
+                    if extra in df.columns:
+                        try:
+                            v = row.get(extra)
+                            if v is not None and str(v) not in ('', 'nan', 'None'):
+                                item[extra] = (
+                                    float(v)
+                                    if isinstance(v, (int, float, np.floating, np.integer))
+                                    else v
+                                )
+                        except Exception:
+                            pass
+                history.append(item)
+            except Exception as e:
+                self.logger.warning(f"north flow row parse skip: {e}")
+                continue
+        return history
+
+    def _merge_hsgt_hist_sh_sz(self):
+        """北向资金失败：沪股通+深股通按日期加总净额。"""
+        frames = []
+        for sym in ('沪股通', '深股通'):
+            try:
+                part = ak.stock_hsgt_hist_em(symbol=sym)
+                if part is not None and not part.empty:
+                    frames.append(part)
+            except Exception as e:
+                self.logger.warning(f"stock_hsgt_hist_em({sym}) fallback failed: {e}")
+        if not frames:
+            return None
+        if len(frames) == 1:
+            return frames[0]
+        df_a, df_b = frames[0].copy(), frames[1].copy()
+        date_cols = ['日期', '持股日期', '交易日期']
+        dcol_a = next((c for c in date_cols if c in df_a.columns), df_a.columns[0])
+        dcol_b = next((c for c in date_cols if c in df_b.columns), df_b.columns[0])
+        num_candidates = ['当日成交净买额', '当日资金流入', '净买额', '净流入']
+        ncol_a = next((c for c in num_candidates if c in df_a.columns), None)
+        ncol_b = next((c for c in num_candidates if c in df_b.columns), None)
+        if ncol_a is None or ncol_b is None:
+            return df_a if len(df_a) >= len(df_b) else df_b
+        a = df_a[[dcol_a, ncol_a]].rename(columns={dcol_a: '日期', ncol_a: 'net_a'})
+        b = df_b[[dcol_b, ncol_b]].rename(columns={dcol_b: '日期', ncol_b: 'net_b'})
+        a['日期'] = pd.to_datetime(a['日期'], errors='coerce')
+        b['日期'] = pd.to_datetime(b['日期'], errors='coerce')
+        merged = pd.merge(a, b, on='日期', how='outer')
+        merged['当日成交净买额'] = merged['net_a'].fillna(0) + merged['net_b'].fillna(0)
+        return merged[['日期', '当日成交净买额']].sort_values('日期', ascending=False)
+
+    def get_north_flow_history(self, stock_code, start_date=None, end_date=None):
+        """北向资金历史（C1/C2/H3 契约）。
+
+        - 空代码/市场标识：stock_hsgt_hist_em(symbol="北向资金")，无 start/end kwargs
+        - 6 位 A 股：优先 stock_hsgt_individual_detail_em(start/end)；失败退 individual_em
+        - 严禁 stock_hsgt_hist_em(股票代码)
+        - 失败返回 {'history': []}，不抛未捕获异常
+        """
+        code = (stock_code or '').strip()
+        pure = code.split('.')[0] if code else ''
+        try:
+            is_market = (not pure) or pure in _NORTH_MARKET_SYMBOLS or not re.fullmatch(r'\d{6}', pure)
+
+            if is_market:
+                symbol = pure if pure in _NORTH_MARKET_SYMBOLS and pure not in (
+                    '', 'north', 'northbound', 'hsgt', 'HSGT'
+                ) else '北向资金'
+                if symbol in ('', 'north', 'northbound', 'hsgt', 'HSGT'):
+                    symbol = '北向资金'
+                self.logger.info(f"north flow market hist symbol={symbol}")
+                df = None
+                try:
+                    df = ak.stock_hsgt_hist_em(symbol=symbol)
+                except Exception as e1:
+                    self.logger.warning(f"stock_hsgt_hist_em({symbol}) failed: {e1}")
+                if df is None or (hasattr(df, 'empty') and df.empty):
+                    if symbol == '北向资金':
+                        df = self._merge_hsgt_hist_sh_sz()
+                if df is None or (hasattr(df, 'empty') and df.empty):
+                    try:
+                        # 第三备：summary（无参）
+                        df = ak.stock_hsgt_fund_flow_summary_em()
+                    except Exception as e3:
+                        self.logger.warning(f"stock_hsgt_fund_flow_summary_em failed: {e3}")
+                history = self._rows_from_hsgt_df(df)
+            else:
+                self.logger.info(f"north flow individual symbol={pure}")
+                df = None
+                # 默认日期：近 1 年（detail API 需要 YYYYMMDD）
+                sd = start_date or (now_cn() - timedelta(days=365)).strftime('%Y%m%d')
+                ed = end_date or now_cn().strftime('%Y%m%d')
+                # 规范化为 YYYYMMDD
+                sd_d = self._parse_ymd(sd)
+                ed_d = self._parse_ymd(ed)
+                sd_s = sd_d.strftime('%Y%m%d') if sd_d else str(re.sub(r'\D', '', str(sd)))[:8]
+                ed_s = ed_d.strftime('%Y%m%d') if ed_d else str(re.sub(r'\D', '', str(ed)))[:8]
+                try:
+                    df = ak.stock_hsgt_individual_detail_em(
+                        symbol=pure, start_date=sd_s, end_date=ed_s
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        f"stock_hsgt_individual_detail_em({pure}) failed: {e}; fallback individual_em"
+                    )
+                    try:
+                        df = ak.stock_hsgt_individual_em(symbol=pure)
+                    except Exception as e2:
+                        self.logger.warning(f"stock_hsgt_individual_em({pure}) failed: {e2}")
+                        return {'history': [], 'source': 'degraded', 'error': str(e2)}
+                history = self._rows_from_hsgt_df(df)
+
+            history = self._filter_history_by_dates(history, start_date, end_date)
+            return {'history': history, 'stock_code': pure or code, 'source': 'akshare'}
+        except Exception as e:
+            self._log_upstream_failure(f"north_flow_history code={stock_code}", e)
+            return {'history': [], 'source': 'degraded', 'error': str(e)}
 
     def _log_upstream_failure(self, context, exc):
         """统一记录上游数据源失败日志。
@@ -200,15 +422,18 @@ class CapitalFlowAnalyzer:
                 self.logger.info(f"非A股市场 {market_type}, 资金流向接口不支持, 返回空数据")
                 return {'data': [], 'source': 'unsupported', 'reason': 'market_type not supported', 'amount_unit': 'yuan'}
 
-            # 转换market参数为akshare期望的 'sh'/'sz' 格式
-            # 'A'/'a'/None/空字符串 均需根据股票代码自动判断
-            if market_type in ('A', 'a', None, ''):
-                if stock_code.startswith('6'):
-                    market_type = "sh"
-                elif stock_code.startswith('0') or stock_code.startswith('3'):
-                    market_type = "sz"
+            # 转换 market 为 akshare 期望的 sh/sz/bj（H2：4/8/92→bj）
+            if market_type in ('A', 'a', None, '', 'SH', 'SZ', 'BJ'):
+                if market_type in ('SH',):
+                    market_type = 'sh'
+                elif market_type in ('SZ',):
+                    market_type = 'sz'
+                elif market_type in ('BJ',):
+                    market_type = 'bj'
                 else:
-                    market_type = "sh"  # 默认上海
+                    market_type = a_share_market_tag(stock_code)
+            elif market_type not in ('sh', 'sz', 'bj'):
+                market_type = a_share_market_tag(stock_code)
 
             # 检查缓存
             cache_key = f"individual_fund_flow_{stock_code}_{market_type}"
@@ -217,15 +442,6 @@ class CapitalFlowAnalyzer:
                 # 如果在一小时内有缓存数据，则返回缓存数据
                 if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
-
-            # 以下分支已被上面的统一转换覆盖，保留作为防御性兜底
-            if not market_type:
-                if stock_code.startswith('6'):
-                    market_type = "sh"
-                elif stock_code.startswith('0') or stock_code.startswith('3'):
-                    market_type = "sz"
-                else:
-                    market_type = "sh"  # Default to Shanghai
 
             # 从akshare获取数据
             flow_data = ak.stock_individual_fund_flow(stock=stock_code, market=market_type)

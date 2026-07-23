@@ -266,3 +266,68 @@ def test_financial_indicator_handles_nan(fa):
     assert pe is None, f"NaN PE 应返回 None，实际: {pe}"
     assert roe is None, f"NaN ROE 应返回 None，实际: {roe}"
     assert npm is None, f"NaN 净利率应返回 None，实际: {npm}"
+
+
+# ---------------------------------------------------------------- C3: long-form growth + no fake zero CAGR
+def test_growth_data_long_form_parses_indicators(fa, monkeypatch):
+    """C3: long-form 按「指标」行提取营收/净利润并算 CAGR，不用 0 伪装。"""
+    import pandas as pd
+    from app.analysis import fundamental_analyzer as fm
+
+    long_df = pd.DataFrame([
+        {
+            "选项": "常用指标",
+            "指标": "营业总收入",
+            "2021-12-31": 100.0,
+            "2022-12-31": 110.0,
+            "2023-12-31": 121.0,
+            "2024-12-31": 133.1,
+        },
+        {
+            "选项": "常用指标",
+            "指标": "归属母公司股东的净利润",
+            "2021-12-31": 10.0,
+            "2022-12-31": 12.0,
+            "2023-12-31": 14.4,
+            "2024-12-31": 17.28,
+        },
+        {
+            "选项": "常用指标",
+            "指标": "营业总收入同比增长",
+            "2021-12-31": 5.0,
+            "2022-12-31": 10.0,
+            "2023-12-31": 10.0,
+            "2024-12-31": 10.0,
+        },
+    ])
+    monkeypatch.setattr(fm.ak, "stock_financial_abstract", lambda symbol: long_df)
+    growth = fa.get_growth_data("600519")
+    assert growth
+    # 约 10% CAGR（4 期 3 年）
+    assert growth.get("revenue_growth_3y") is not None
+    assert 5 < growth["revenue_growth_3y"] < 15
+    assert growth.get("profit_growth_3y") is not None
+    # 不得用 0 伪装缺失
+    for k, v in growth.items():
+        assert v != 0 or v is None
+
+
+def test_growth_data_empty_on_unparseable(fa, monkeypatch):
+    """抽不出序列时返回 {}，不填 0。"""
+    import pandas as pd
+    from app.analysis import fundamental_analyzer as fm
+
+    monkeypatch.setattr(
+        fm.ak, "stock_financial_abstract",
+        lambda symbol: pd.DataFrame([{"选项": "x", "指标": "无关指标", "a": 1}]),
+    )
+    monkeypatch.setattr(
+        fm.ak, "stock_financial_abstract_ths",
+        lambda symbol: (_ for _ in ()).throw(RuntimeError("ths down")),
+    )
+    monkeypatch.setattr(
+        fm.ak, "stock_financial_analysis_indicator",
+        lambda symbol, start_year="1900": (_ for _ in ()).throw(RuntimeError("ind down")),
+    )
+    growth = fa.get_growth_data("000001")
+    assert growth == {} or all(v is None for v in growth.values())

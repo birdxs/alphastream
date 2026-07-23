@@ -134,32 +134,15 @@ class StockAnalyzer:
             return pd.DataFrame()
 
     def get_north_flow_history(self, stock_code, start_date=None, end_date=None):
-        """获取单个股票的北向资金历史持股数据"""
+        """获取北向资金历史。委托 CapitalFlowAnalyzer（C1/C2 统一实现）。
+
+        严禁 stock_hsgt_hist_em(股票代码 / start_date/end_date kwargs)。
+        """
         try:
-            import akshare as ak
-
-            # 获取历史持股数据
-            if start_date is None and end_date is None:
-                # 默认获取近90天数据
-                north_hist_data = ak.stock_hsgt_hist_em(symbol=stock_code)
-            else:
-                north_hist_data = ak.stock_hsgt_hist_em(symbol=stock_code, start_date=start_date, end_date=end_date)
-
-            if north_hist_data.empty:
-                return {"history": []}
-
-            # 转换为列表格式返回
-            history = []
-            for _, row in north_hist_data.iterrows():
-                history.append({
-                    "date": row.get('日期', ''),
-                    "holding": float(row.get('持股数', 0)) if '持股数' in row else 0,
-                    "ratio": float(row.get('持股比例', 0)) if '持股比例' in row else 0,
-                    "change": float(row.get('持股变动', 0)) if '持股变动' in row else 0,
-                    "market_value": float(row.get('持股市值', 0)) if '持股市值' in row else 0
-                })
-
-            return {"history": history}
+            from app.analysis.capital_flow_analyzer import CapitalFlowAnalyzer
+            return CapitalFlowAnalyzer().get_north_flow_history(
+                stock_code, start_date=start_date, end_date=end_date
+            )
         except Exception as e:
             self.logger.error(f"获取北向资金历史数据出错: {str(e)}")
             return {"history": []}
