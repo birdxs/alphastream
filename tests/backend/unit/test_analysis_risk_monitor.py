@@ -10,7 +10,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.analysis.risk_monitor import RiskMonitor
+from app.analysis.risk_monitor import (
+    RiskMonitor,
+    build_portfolio_diagnosis,
+    _normalize_industry_label,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -164,3 +168,61 @@ def test_analyze_portfolio_risk_basic(monitor, fake_analyzer):
     assert out["portfolio_risk_score"] == pytest.approx(57.0)
     # 高风险股票列表
     assert any(s["stock_code"] == "000001" for s in out["high_risk_stocks"])
+    # Sprint3 诊断字段
+    assert "sector_concentration" in out
+    assert "name_overlap" in out
+    assert "defensive_weight" in out
+    assert out["sector_concentration"]["max_sector"] == "半导体"
+    assert out["unknown_industry_share"] is not None
+
+
+# --------------------------------------------------------------------------- #
+# Sprint3 组合诊断（纯函数，缺行业=unknown）
+# --------------------------------------------------------------------------- #
+def test_normalize_industry_label_unknown_not_fake():
+    assert _normalize_industry_label(None) == "unknown"
+    assert _normalize_industry_label("") == "unknown"
+    assert _normalize_industry_label("未知") == "unknown"
+    assert _normalize_industry_label("银行") == "银行"
+
+
+def test_build_portfolio_diagnosis_sector_and_homogeny():
+    d = build_portfolio_diagnosis([
+        {"stock_code": "000001", "stock_name": "平安银行", "weight": 0.4, "industry": "银行"},
+        {"stock_code": "600000", "stock_name": "浦发银行", "weight": 0.3, "industry": "银行"},
+        {"stock_code": "600519", "stock_name": "贵州茅台", "weight": 0.3, "industry": None},
+    ])
+    assert d["sector_concentration"]["max_sector"] == "银行"
+    assert d["sector_concentration"]["max_sector_weight"] == pytest.approx(0.7)
+    assert d["defensive_weight"] == pytest.approx(0.7)
+    assert d["unknown_industry_share"] == pytest.approx(0.3)
+    assert "unknown" in d["sector_concentration"]["by_sector"]
+    assert d["name_overlap"]["homogenized"] is True
+    assert any("银行" in h for h in d["name_overlap"]["hints"])
+
+
+def test_build_portfolio_diagnosis_no_fake_industry_on_empty_info():
+    d = build_portfolio_diagnosis([
+        {"stock_code": "123456", "stock_name": "神秘股", "weight": 1.0},
+    ])
+    assert d["sector_concentration"]["max_sector"] == "unknown"
+    assert d["unknown_industry_share"] == pytest.approx(1.0)
+    assert d["defensive_weight"] == pytest.approx(0.0)
+    assert d["name_overlap"]["homogenized"] is False
+
+
+def test_analyze_portfolio_risk_respects_body_industry_and_unknown(fake_analyzer):
+    monitor = RiskMonitor(fake_analyzer)
+    fake_analyzer.get_stock_info.return_value = {}  # 无行业，依赖 body 或缺省 unknown
+    monitor.analyze_stock_risk = MagicMock(  # type: ignore[method-assign]
+        return_value={"total_risk_score": 40, "risk_level": "中等", "alerts": []}
+    )
+    out = monitor.analyze_portfolio_risk([
+        {"stock_code": "000001", "weight": 0.5, "industry": "银行", "stock_name": "平安银行"},
+        {"stock_code": "999999", "weight": 0.5},  # 无 industry、info 空 → unknown
+    ])
+    assert "error" not in out
+    assert out["sector_concentration"]["by_sector"].get("银行") == pytest.approx(0.5)
+    assert out["sector_concentration"]["by_sector"].get("unknown") == pytest.approx(0.5)
+    assert out["unknown_industry_share"] == pytest.approx(0.5)
+    assert out["risk_concentration"]["max_industry"] in ("银行", "unknown")

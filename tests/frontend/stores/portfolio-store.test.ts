@@ -25,6 +25,8 @@ const h = (code: string, overrides: Partial<Holding> = {}): Holding => ({
   shares: overrides.shares ?? 100,
   costPrice: overrides.costPrice ?? 10,
   currentPrice: overrides.currentPrice,
+  mode: overrides.mode,
+  addedAt: overrides.addedAt ?? Date.now(),
 });
 
 describe('usePortfolioStore', () => {
@@ -84,5 +86,20 @@ describe('usePortfolioStore', () => {
     store.removeHolding('GOOG');
     const codes = usePortfolioStore.getState().holdings.map(x => x.code);
     expect(codes).toEqual(['AAPL', 'MSFT']);
+  });
+
+  it('setHoldingMode 可标记观察仓，默认 live', () => {
+    const store = usePortfolioStore.getState();
+    store.addHolding(h('600519', { name: '贵州茅台' }));
+    expect(usePortfolioStore.getState().holdings[0].mode).toBe('live');
+    store.setHoldingMode('600519', 'watch');
+    expect(usePortfolioStore.getState().holdings[0].mode).toBe('watch');
+    store.setHoldingMode('600519', 'live');
+    expect(usePortfolioStore.getState().holdings[0].mode).toBe('live');
+  });
+
+  it('addHolding 可显式写入 watch mode', () => {
+    usePortfolioStore.getState().addHolding(h('000001', { name: '平安银行', mode: 'watch' }));
+    expect(usePortfolioStore.getState().holdings[0].mode).toBe('watch');
   });
 });

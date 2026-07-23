@@ -335,7 +335,22 @@ def _structural_portfolio_risk(holdings: List[Dict[str, Any]]) -> Dict[str, Any]
         norms = [w / w_sum for _, _, w in weights]
         hhi = sum(x * x for x in norms)
         top_share = max_item[2] / w_sum
-    return {
+    # Sprint3：在只读结构摘要中附带组合诊断（行业未知=unknown，不造假）
+    diagnosis = None
+    try:
+        from app.analysis.risk_monitor import build_portfolio_diagnosis
+        diagnosis_entries = []
+        for h in holdings:
+            diagnosis_entries.append({
+                "stock_code": h.get("code") or h.get("stock_code") or "",
+                "stock_name": h.get("name") or h.get("stock_name") or "",
+                "weight": h.get("weight"),
+                "industry": h.get("industry") or h.get("sector"),
+            })
+        diagnosis = build_portfolio_diagnosis(diagnosis_entries)
+    except Exception:
+        diagnosis = None
+    out = {
         "mode": "structural",
         "empty": False,
         "count": n,
@@ -348,6 +363,13 @@ def _structural_portfolio_risk(holdings: List[Dict[str, Any]]) -> Dict[str, Any]
         "hhi": hhi,
         "message": "结构摘要来自用户 weight 真值；未调用行情接口，不产生假风险分",
     }
+    if diagnosis is not None:
+        out["sector_concentration"] = diagnosis.get("sector_concentration")
+        out["name_overlap"] = diagnosis.get("name_overlap")
+        out["defensive_weight"] = diagnosis.get("defensive_weight")
+        out["unknown_industry_share"] = diagnosis.get("unknown_industry_share")
+        out["diagnosis"] = diagnosis
+    return out
 
 
 @tool

@@ -6,9 +6,195 @@
 许可证：MIT License
 """
 # risk_monitor.py
+# Input: StockAnalyzer + 持仓列表
+# Output: 单票/组合风险 + 组合诊断（行业集中度/同质化/防御占比；缺行业=unknown）
+# Pos: app/analysis/risk_monitor.py — 风险分析与组合诊断
+# 一旦我被修改，请更新本头注释与所属目录 README。
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from collections import defaultdict
+
+# 防御型行业关键词（仅匹配真实行业文案；无行业永不发明）
+_DEFENSIVE_INDUSTRY_KEYWORDS = (
+    "银行", "保险", "公用", "电力", "水务", "燃气",
+    "高速公路", "铁路", "港口", "机场", "通信运营", "运营商",
+    "食品", "饮料", "白酒", "乳品", "制药", "医药", "中药",
+    "超市", "零售", "公用事业", "交通运输",
+    "bank", "utility", "utilities", "insurance", "telecom", "pharma",
+    "consumer staples",
+)
+
+# 名称/主题同质化关键词（简单规则，非 AI 分类）
+_NAME_HOMOGENY_KEYWORDS = (
+    "银行", "证券", "保险", "白酒", "光伏", "锂电", "芯片", "半导体",
+    "医药", "地产", "信托", "券商", "煤炭", "钢铁", "石油", "新能源",
+    "军工", "机器人", "汽车",
+)
+
+
+def _normalize_industry_label(raw) -> str:
+    """缺行业 → unknown；禁止伪造行业。'未知'/空/None 统一 unknown。"""
+    if raw is None:
+        return "unknown"
+    s = str(raw).strip()
+    if not s or s in ("未知", "N/A", "n/a", "None", "null", "-", "—"):
+        return "unknown"
+    return s
+
+
+def _is_defensive_industry(industry: str) -> bool:
+    if not industry or industry == "unknown":
+        return False
+    low = industry.lower()
+    for kw in _DEFENSIVE_INDUSTRY_KEYWORDS:
+        if kw.lower() in low:
+            return True
+    return False
+
+
+def build_portfolio_diagnosis(stock_entries):
+    """组合诊断字段（纯结构，可离线单测）。
+
+    stock_entries: list of dict，至少含 weight；可选 industry/stock_name/stock_code。
+    缺行业一律 industry='unknown'，不填假行业。
+    """
+    if not stock_entries:
+        return {
+            "sector_concentration": {
+                "by_sector": {},
+                "max_sector": None,
+                "max_sector_weight": None,
+                "hhi": None,
+                "unknown_weight": None,
+                "unknown_share": None,
+            },
+            "name_overlap": {
+                "groups": [],
+                "homogenized": False,
+                "hints": [],
+            },
+            "defensive_weight": None,
+            "unknown_industry_weight": None,
+            "unknown_industry_share": None,
+            "weight_sum": 0.0,
+        }
+
+    total_w = 0.0
+    sector_w = defaultdict(float)
+    unknown_w = 0.0
+    defensive_w = 0.0
+    cleaned = []
+
+    for s in stock_entries:
+        try:
+            w = float(s.get("weight") or 0)
+        except (TypeError, ValueError):
+            w = 0.0
+        if w <= 0:
+            continue
+        ind = _normalize_industry_label(s.get("industry") or s.get("行业"))
+        name = (s.get("stock_name") or s.get("name") or "").strip()
+        code = str(s.get("stock_code") or s.get("code") or "")
+        sector_w[ind] += w
+        if ind == "unknown":
+            unknown_w += w
+        elif _is_defensive_industry(ind):
+            defensive_w += w
+        total_w += w
+        cleaned.append({"code": code, "name": name, "weight": w, "industry": ind})
+
+    by_sector = {k: round(v, 6) for k, v in sorted(sector_w.items(), key=lambda x: -x[1])}
+    max_sector = None
+    max_sector_weight = None
+    hhi = None
+    unknown_share = None
+    defensive_share = None
+    if total_w > 0:
+        norms = {k: v / total_w for k, v in sector_w.items()}
+        hhi = sum(x * x for x in norms.values())
+        max_sector, max_raw = max(sector_w.items(), key=lambda x: x[1])
+        max_sector_weight = max_raw / total_w
+        unknown_share = unknown_w / total_w
+        defensive_share = defensive_w / total_w
+
+    groups = []
+    hints = []
+    by_ind = defaultdict(list)
+    for c in cleaned:
+        if c["industry"] != "unknown":
+            by_ind[c["industry"]].append(c)
+    for ind, members in by_ind.items():
+        if len(members) >= 2:
+            groups.append({
+                "type": "same_industry",
+                "key": ind,
+                "codes": [m["code"] for m in members if m["code"]],
+                "names": [m["name"] for m in members if m["name"]],
+                "count": len(members),
+            })
+            hints.append(f"行业「{ind}」持有 {len(members)} 只，存在同质化敞口")
+
+    for kw in _NAME_HOMOGENY_KEYWORDS:
+        matched = [
+            c for c in cleaned
+            if kw in (c["name"] or "") or kw in (c["industry"] if c["industry"] != "unknown" else "")
+        ]
+        if len(matched) >= 2 and any(kw in (c["name"] or "") for c in matched):
+            groups.append({
+                "type": "name_keyword",
+                "key": kw,
+                "codes": [m["code"] for m in matched if m["code"]],
+                "names": [m["name"] for m in matched if m["name"]],
+                "count": len(matched),
+            })
+            hints.append(f"名称/主题「{kw}」相关持仓 {len(matched)} 只")
+
+    prefix_map = defaultdict(list)
+    for c in cleaned:
+        code = c["code"]
+        if len(code) >= 3 and code.isdigit():
+            prefix_map[code[:3]].append(c)
+    for pref, members in prefix_map.items():
+        if len(members) >= 3:
+            groups.append({
+                "type": "code_prefix",
+                "key": pref,
+                "codes": [m["code"] for m in members],
+                "names": [m["name"] for m in members if m["name"]],
+                "count": len(members),
+            })
+            hints.append(f"代码前缀 {pref}* 共 {len(members)} 只，请核对板块集中度")
+
+    seen_h = set()
+    uniq_hints = []
+    for h in hints:
+        if h not in seen_h:
+            seen_h.add(h)
+            uniq_hints.append(h)
+
+    homogenized = any(g["count"] >= 2 for g in groups)
+
+    return {
+        "sector_concentration": {
+            "by_sector": by_sector,
+            "max_sector": max_sector,
+            "max_sector_weight": max_sector_weight,
+            "hhi": hhi,
+            "unknown_weight": unknown_w if total_w > 0 else None,
+            "unknown_share": unknown_share,
+        },
+        "name_overlap": {
+            "groups": groups,
+            "homogenized": homogenized,
+            "hints": uniq_hints,
+        },
+        "defensive_weight": defensive_share,
+        "unknown_industry_weight": unknown_w if total_w > 0 else None,
+        "unknown_industry_share": unknown_share,
+        "weight_sum": total_w,
+    }
+
 
 class RiskMonitor:
     def __init__(self, analyzer):
@@ -261,7 +447,12 @@ class RiskMonitor:
         }
 
     def analyze_portfolio_risk(self, portfolio):
-        """分析投资组合整体风险"""
+        """分析投资组合整体风险。
+
+        扩展返回（Sprint3）：
+        - sector_concentration / name_overlap / defensive_weight / unknown_industry_*
+        - 缺行业 → industry='unknown'，禁止假行业
+        """
         try:
             if not portfolio or len(portfolio) == 0:
                 return {"error": "投资组合为空"}
@@ -270,6 +461,7 @@ class RiskMonitor:
             stock_risks = {}
             total_weight = 0
             weighted_risk_score = 0
+            diagnosis_entries = []
 
             for stock in portfolio:
                 stock_code = stock.get('stock_code')
@@ -279,9 +471,44 @@ class RiskMonitor:
                 if not stock_code:
                     continue
 
+                try:
+                    weight = float(weight)
+                except (TypeError, ValueError):
+                    weight = 0
+                if weight <= 0:
+                    continue
+
+                # 行业：优先请求体 industry；否则 get_stock_info；失败/空 → unknown
+                industry_raw = stock.get("industry") or stock.get("行业")
+                stock_name = stock.get("stock_name") or stock.get("name")
+                try:
+                    info = self.analyzer.get_stock_info(stock_code) or {}
+                    if not stock_name:
+                        stock_name = info.get("股票名称") or info.get("name") or stock_code
+                    if not industry_raw:
+                        industry_raw = info.get("行业") or info.get("industry")
+                except Exception:
+                    info = {}
+                    if not stock_name:
+                        stock_name = stock_code
+                industry = _normalize_industry_label(industry_raw)
+
+                diagnosis_entries.append({
+                    "stock_code": stock_code,
+                    "stock_name": stock_name or "",
+                    "weight": weight,
+                    "industry": industry,
+                })
+
                 # 分析股票风险
                 risk = self.analyze_stock_risk(stock_code, market_type)
-                stock_risks[stock_code] = risk
+                if not isinstance(risk, dict):
+                    risk = {"error": "invalid_risk_result"}
+                stock_risks[stock_code] = {
+                    **risk,
+                    "industry": industry,
+                    "stock_name": stock_name or stock_code,
+                }
 
                 # 计算加权风险分数
                 total_weight += weight
@@ -310,7 +537,8 @@ class RiskMonitor:
                 {
                     "stock_code": code,
                     "risk_score": risk.get('total_risk_score', 0),
-                    "risk_level": risk.get('risk_level', '未知')
+                    "risk_level": risk.get('risk_level', '未知'),
+                    "industry": risk.get("industry", "unknown"),
                 }
                 for code, risk in stock_risks.items()
                 if risk.get('total_risk_score', 0) >= 60
@@ -319,14 +547,15 @@ class RiskMonitor:
             # 收集所有风险警报
             all_alerts = []
             for code, risk in stock_risks.items():
-                for alert in risk.get('alerts', []):
+                for alert in risk.get('alerts', []) or []:
                     all_alerts.append({
                         "stock_code": code,
                         **alert
                     })
 
-            # 分析风险集中度
+            # 分析风险集中度（兼容旧字段 + 诊断）
             risk_concentration = self._analyze_risk_concentration(portfolio, stock_risks)
+            diagnosis = build_portfolio_diagnosis(diagnosis_entries)
 
             return {
                 "portfolio_risk_score": portfolio_risk_score,
@@ -334,7 +563,14 @@ class RiskMonitor:
                 "high_risk_stocks": high_risk_stocks,
                 "alerts": all_alerts,
                 "risk_concentration": risk_concentration,
-                "stock_risks": stock_risks
+                "stock_risks": stock_risks,
+                # Sprint3 诊断字段
+                "sector_concentration": diagnosis["sector_concentration"],
+                "name_overlap": diagnosis["name_overlap"],
+                "defensive_weight": diagnosis["defensive_weight"],
+                "unknown_industry_weight": diagnosis["unknown_industry_weight"],
+                "unknown_industry_share": diagnosis["unknown_industry_share"],
+                "diagnosis": diagnosis,
             }
 
         except Exception as e:
@@ -344,32 +580,40 @@ class RiskMonitor:
             }
 
     def _analyze_risk_concentration(self, portfolio, stock_risks):
-        """分析风险集中度"""
-        # 分析行业集中度
+        """分析风险集中度（旧字段兼容；行业缺省 unknown 不发明假行业）"""
         industries = {}
         for stock in portfolio:
             stock_code = stock.get('stock_code')
-            stock_info = self.analyzer.get_stock_info(stock_code)
-            industry = stock_info.get('行业', '未知')
-            weight = stock.get('weight', 1)
+            industry_raw = stock.get("industry") or stock.get("行业")
+            if not industry_raw:
+                try:
+                    stock_info = self.analyzer.get_stock_info(stock_code) or {}
+                    industry_raw = stock_info.get('行业') or stock_info.get('industry')
+                except Exception:
+                    industry_raw = None
+            industry = _normalize_industry_label(industry_raw)
+            try:
+                weight = float(stock.get('weight', 1) or 0)
+            except (TypeError, ValueError):
+                weight = 0
+            if weight <= 0:
+                continue
+            industries[industry] = industries.get(industry, 0) + weight
 
-            if industry in industries:
-                industries[industry] += weight
-            else:
-                industries[industry] = weight
+        max_industry = max(industries.items(), key=lambda x: x[1]) if industries else ('unknown', 0)
 
-        # 找出权重最大的行业
-        max_industry = max(industries.items(), key=lambda x: x[1]) if industries else ('未知', 0)
-
-        # 计算高风险股票总权重
         high_risk_weight = 0
         for stock in portfolio:
             stock_code = stock.get('stock_code')
             if stock_code in stock_risks and stock_risks[stock_code].get('total_risk_score', 0) >= 60:
-                high_risk_weight += stock.get('weight', 1)
+                try:
+                    high_risk_weight += float(stock.get('weight', 1) or 0)
+                except (TypeError, ValueError):
+                    pass
 
         return {
             "max_industry": max_industry[0],
             "max_industry_weight": max_industry[1],
-            "high_risk_weight": high_risk_weight
+            "high_risk_weight": high_risk_weight,
+            "by_industry": industries,
         }

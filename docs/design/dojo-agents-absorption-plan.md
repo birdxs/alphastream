@@ -517,9 +517,15 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 - 辩论 Artifact 深化、decision memo、scorecard 字段写入（谨慎）。  
 
-### Sprint 3 — Skills / Plan / Memory / 压缩 / 回放
+### Sprint 3 — Skills / Plan / Memory / 压缩 / 回放 + 组合诊断
 
 - P1-1/2/5/6/9/10 为主。  
+- **组合风险诊断 + 观察标记（2026-07-23）✅ 部分完成（本批）**：  
+  - `risk_monitor.build_portfolio_diagnosis` + `analyze_portfolio_risk` 扩展 `sector_concentration` / `name_overlap` / `defensive_weight` / `unknown_industry_*`（缺行业=`unknown`，禁止假行业）  
+  - OpenAPI `/api/portfolio_risk` 文档追加；结构摘要工具附带诊断字段  
+  - `portfolio-store` `mode: live|watch` + `setHoldingMode`；UI「观察」标签（agent 不写仓）  
+  - `/portfolio` 页风险诊断摘要（Skeleton/—）  
+  - 单测：`test_analysis_risk_monitor` + `portfolio-store`  
 
 ### Sprint 4 — 写仓 harness + 市场 facade + P2 选修
 
@@ -728,6 +734,18 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 | 测试 | `tests/backend/unit/test_sprint2_intent_portfolio.py` |
 | commit | `feat(agent): Sprint2 intent routing + portfolio snapshot tools` |
 | 禁 | push；假持仓；新建持仓 DB |
+
+### Sprint3 组合风险诊断 + 观察 mode（2026-07-23）
+
+| 段 | 内容 |
+|----|------|
+| 范围 | portfolio_risk 诊断字段；观察组合 UI 标记（只读语义） |
+| 后端 | `app/analysis/risk_monitor.py`：`build_portfolio_diagnosis`；`sector_concentration`/`name_overlap`/`defensive_weight`/`unknown_industry_share`；缺行业→`unknown` |
+| API | `/api/portfolio_risk` 响应扩展；`openapi_spec` 保守追加；`tools._analyze_portfolio_structure` 附带诊断 |
+| 前端 | `portfolio-store` `mode: live\|watch` + migrate v2；`/portfolio` 诊断卡片 + 观察标签 |
+| 测试 | `tests/backend/unit/test_analysis_risk_monitor.py`（+4）；`tests/frontend/stores/portfolio-store.test.ts`（+2）→ 14 pytest / 8 vitest |
+| commit | `feat(portfolio): Sprint3 risk diagnosis + watch mode marker` |
+| 禁 | push；假行业；agent 自动写仓 |
 
 ### P0-3 辩论证据面 + P0-4 工具时间线（2026-07-23 Sprint1 任务编号）
 

@@ -952,6 +952,11 @@ _PATHS: Dict[str, Any] = {
         'post': {
             'tags': ['Stock'],
             'summary': '投资组合风险分析',
+            'description': (
+                '加权组合风险 + Sprint3 诊断字段。'
+                '响应保守追加 sector_concentration / name_overlap / defensive_weight / '
+                'unknown_industry_share；缺行业=unknown，禁止假行业。'
+            ),
             'operationId': 'portfolioRisk',
             'requestBody': {
                 'required': True,
@@ -960,7 +965,20 @@ _PATHS: Dict[str, Any] = {
                     'properties': {
                         'portfolio': {
                             'type': 'array',
-                            'items': {'type': 'object', 'additionalProperties': True},
+                            'items': {
+                                'type': 'object',
+                                'additionalProperties': True,
+                                'properties': {
+                                    'stock_code': {'type': 'string'},
+                                    'weight': {'type': 'number'},
+                                    'market_type': {'type': 'string'},
+                                    'industry': {
+                                        'type': 'string',
+                                        'description': '可选；缺省后端查询，查不到=unknown',
+                                    },
+                                    'stock_name': {'type': 'string'},
+                                },
+                            },
                             'minItems': 1,
                             'maxItems': 100,
                         },
@@ -969,7 +987,12 @@ _PATHS: Dict[str, Any] = {
                 }}},
             },
             'responses': {
-                '200': {'description': '投资组合风险分析结果'},
+                '200': {
+                    'description': (
+                        '组合风险+诊断。追加 sector_concentration、name_overlap、'
+                        'defensive_weight、unknown_industry_share 等；其余字段可扩展。'
+                    ),
+                },
                 '400': {'description': '参数错误'},
             },
         },
