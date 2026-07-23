@@ -14,6 +14,9 @@ export interface SSEHandlers {
   onArtifact?: (data: Artifact) => void;
   onAgentProgress?: (data: AgentProgress) => void;
   onReasoning?: (data: { content: string; agent: string }) => void;
+  /** P0-5 HITL 确认面 */
+  onApprovalNeeded?: (data: Record<string, unknown>) => void;
+  onApprovalResolved?: (data: Record<string, unknown>) => void;
   onError?: (data: { code: string; message: string; recoverable?: boolean }) => void;
   onDone?: (data: StreamDone) => void;
   // 流通道关闭时的兜底（无论是否收到 done 事件都会触发，用于强制清理 loading 状态）

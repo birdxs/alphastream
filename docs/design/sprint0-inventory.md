@@ -605,3 +605,18 @@ else:
 | 时间 | 说明 |
 |------|------|
 | 2026-07-23 15:33:50 +08:00 | Sprint0 初版落盘；只读证据；无业务代码 |
+
+## P0-5 HITL 确认面进度（2026-07-23 23:00 +08:00）
+
+**状态：完成**
+
+| 项 | 落点 | 说明 |
+|---|---|---|
+| 后端闸门 | `app/agents/coordinator.py` + `app/agents/hitl.py` | `should_request_hitl` 后 `request_approval`；高风险超时 `timeout_reject` |
+| 事件 | `event_bus` `approval.needed` / alias `approval_needed` | payload.event_type=`approval_needed`；SSE info 转发可读 |
+| pending/submit API | `web_server.py` | GET 返回 approvals+count；POST 改状态；钩子写 `awaiting_approval` |
+| 前端确认卡 | `approval-card.tsx` + `pending-approvals.tsx` | `agent-side-panel` 挂载；3s 轮询 |
+| 契约 | 禁止静默通过高风险 | approve/reject/timeout_reject 均显式；timeout_auto 仅非高风险防御分支 |
+
+验收：单测 `tests/backend/unit/test_hitl_gate.py`；前端 tsc 聚焦改动文件。
+

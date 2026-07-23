@@ -612,6 +612,70 @@ def run_agent_analysis(
                 raise TimeoutError(f"Agent graph 超时（限制 {_agent_graph_timeout}s，stock={stock_code}）")
         logger.info(f"Agent分析完成: {stock_code} (thread_id={thread_id})")
 
+        # P0-5 HITL 确认面：高风险决策阻塞等待人工确认（禁止静默通过）
+        # 放在 final_decision 写出之后、对外发布 completed 之前
+        final_decision = result.get('final_decision')
+        risk_assessment = result.get('risk_assessment') or {}
+        hitl_meta = {'required': False, 'approved': None, 'approval_type': None}
+        try:
+            from app.agents.hitl import (
+                approval_manager,
+                should_request_hitl,
+                build_approval_reason,
+            )
+            if should_request_hitl(final_decision, risk_assessment):
+                hitl_meta['required'] = True
+                gate_task_id = task_id or conversation_id or f"hitl-{stock_code}-{int(time.time())}"
+                risk_level = (
+                    (final_decision or {}).get('risk_level')
+                    or risk_assessment.get('overall_risk')
+                    or risk_assessment.get('risk_level')
+                    or '高'
+                )
+                reason = build_approval_reason(final_decision, risk_assessment)
+                logger.info(
+                    f"HITL 闸门触发: task={gate_task_id} stock={stock_code} risk={risk_level}"
+                )
+                approved_decision = approval_manager.request_approval(
+                    task_id=gate_task_id,
+                    decision=final_decision or {},
+                    risk_level=str(risk_level),
+                    reason=reason,
+                    risk_assessment=risk_assessment,
+                )
+                final_decision = approved_decision
+                result['final_decision'] = approved_decision
+                hitl_meta['approved'] = bool(approved_decision.get('approved'))
+                hitl_meta['approval_type'] = approved_decision.get('approval_type')
+                hitl_meta['reason'] = reason
+                hitl_meta['task_id'] = gate_task_id
+                if not approved_decision.get('approved'):
+                    result['hitl_rejected'] = True
+                    result['errors'] = list(result.get('errors') or []) + [
+                        f"HITL拒绝: {approved_decision.get('human_feedback') or reason}"
+                    ]
+        except Exception as hitl_err:
+            logger.warning(f"HITL 闸门异常: {hitl_err}")
+            try:
+                from app.agents.hitl import should_request_hitl as _should_hitl
+                if _should_hitl(final_decision, risk_assessment):
+                    hitl_meta = {
+                        'required': True,
+                        'approved': False,
+                        'approval_type': 'error_reject',
+                        'error': str(hitl_err)[:200],
+                    }
+                    result['hitl_rejected'] = True
+                    if isinstance(final_decision, dict):
+                        result['final_decision'] = {
+                            **final_decision,
+                            'approved': False,
+                            'approval_type': 'error_reject',
+                        }
+            except Exception:
+                pass
+        result['hitl'] = hitl_meta
+
         # 保存到Agent记忆 + 发布完成事件
         try:
             from app.core.agent_memory import get_agent_memory
@@ -620,6 +684,7 @@ def run_agent_analysis(
             get_event_bus().publish(EVENT_ANALYSIS_COMPLETED, {
                 'stock_code': stock_code,
                 'decision': result.get('final_decision'),
+                'hitl': hitl_meta,
             })
         except Exception:
             pass

@@ -7,5 +7,8 @@ Agent可视化组件目录。
 - `agent-side-panel.tsx` - Mac风格终端Agent实时面板（三点标题栏+等宽字体+树形日志+暗/亮双主题+导出/清空/折叠）
 - `agent-log-drawer.tsx` - Agent执行日志抽屉（右侧Sheet，展示Agent状态+工具调用）
 - `thinking-chain.tsx` - AI思考链展示组件（可折叠）
+- `approval-card.tsx` - HITL 单条确认卡（风险级/理由/批准拒绝）
+- `pending-approvals.tsx` - 轮询 pending API 并挂载确认卡
+
 
 一旦这里的结构发生变化，请务必更新我... 就像重新标记领地一样。

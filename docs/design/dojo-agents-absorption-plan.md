@@ -409,17 +409,18 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 超越 | Artifact「数据血统」折叠 |
 | 风险 | 字段膨胀 → 默认摘要 |
 
-#### P0-5 确认面一等公民（HITL 产品闭合）
+#### P0-5 确认面一等公民（HITL 产品闭合） — **DONE（2026-07-23）**
 
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo 高代价人机；本仓 `hitl.py`+API |
-| 缺口 | API 有、主对话确认体验弱 |
-| 融化 | 审批卡挂主对话/侧栏；状态回写 checkpoint |
-| 契约 | pending/approved/rejected/timeout_* 枚举显式 |
-| 验收 | 高风险 run 必现确认卡；无静默当作用户同意 |
-| 超越 | 与 scorecard/分歧 severity 联动自动升档 |
-| 风险 | 超时默认策略争议 → Comdr 问卷 |
+| 缺口 | ~~主对话确认体验弱~~ 已闭合 |
+| 融化 | 审批卡挂 `agent-side-panel`；`request_approval` 阻塞；任务态 `awaiting_approval`；事件 `approval.needed`/`approval.resolved` |
+| 契约 | pending/approved/rejected/timeout_reject；高风险禁止静默通过；timeout_auto 仅非高风险防御分支 |
+| 验收 | 高风险 → request_approval；GET/POST pending API；侧栏确认卡 3s 轮询；超时 timeout_reject |
+| 超越 | 与 scorecard/分歧 severity 联动自动升档（后续） |
+| 风险 | 超时策略已锁定高风险 timeout_reject |
+| 交付 | hitl/coordinator/web_server/event_bus；approval-card/pending-approvals；test_hitl_gate + test_hitl |
 
 #### P0-6 辩论证据面 + 完成态
 
@@ -708,3 +709,7 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 
 **— 全文完 · 已通过 2026-07-23 Comdr 全权托管 · Sprint0 完成 · 待「可进 Sprint1」· v1.1 —**  
 **绝对路径**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/dojo-agents-absorption-plan.md`
+
+### P0-5 HITL 确认面（2026-07-23）
+
+状态：**完成**。闸门在 `coordinator` final_decision 后 `request_approval`；前端 `ApprovalCard`/`PendingApprovalsPanel` 挂 `agent-side-panel`；高风险超时 `timeout_reject`。详见 `sprint0-inventory.md` 末段。

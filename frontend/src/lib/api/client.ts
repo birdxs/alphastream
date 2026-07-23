@@ -261,6 +261,18 @@ class ApiClient {
               case 'reasoning': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;
               // [UI-Q4] llm_request: 发LLM前的完整prompt/messages → 作为reasoning事件呈现
               case 'llm_request': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;
+              case 'approval_needed':
+              case 'approval.needed':
+                handlers.onApprovalNeeded?.(payload as Record<string, unknown>);
+                break;
+              case 'approval_resolved':
+              case 'approval.resolved':
+              case 'timeout_reject':
+              case 'timeout_auto':
+              case 'approved':
+              case 'rejected':
+                handlers.onApprovalResolved?.(payload as Record<string, unknown>);
+                break;
               case 'error': handlers.onError?.(payload as Parameters<NonNullable<typeof handlers.onError>>[0]); break;
               case 'done':
                 doneEventSeen = true;

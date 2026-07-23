@@ -203,6 +203,35 @@ export function useChatStream() {
             detail: data.content,
           });
         },
+        onApprovalNeeded: (data) => {
+          const d = (data || {}) as Record<string, unknown>;
+          const nested = (d.data && typeof d.data === 'object' ? d.data : {}) as Record<string, unknown>;
+          const content =
+            (typeof nested.content === 'string' && nested.content) ||
+            (typeof d.content === 'string' && d.content) ||
+            `[APPROVAL] 等待人工确认 task=${String(d.task_id || '')}`;
+          agentStore.appendEvent({
+            id: `approval_${String(d.task_id || Date.now())}`,
+            type: 'agent_started',
+            agent: typeof d.agent === 'string' ? d.agent : '审批闸门',
+            title: content,
+            detail: typeof d.reason === 'string' ? d.reason : undefined,
+            ts: Date.now(),
+            meta: { ...d, level: 'warn' },
+          });
+        },
+        onApprovalResolved: (data) => {
+          const d = (data || {}) as Record<string, unknown>;
+          const status = String(d.status || d.approval_type || 'resolved');
+          agentStore.appendEvent({
+            id: `approval_res_${String(d.task_id || Date.now())}`,
+            type: 'agent_completed',
+            agent: typeof d.agent === 'string' ? d.agent : '审批闸门',
+            title: `[APPROVAL] 审批结果: ${status}`,
+            ts: Date.now(),
+            meta: d,
+          });
+        },
         onError: (data) => {
           const errText = typeof data === 'string' ? data : (data?.message || (data as { error?: string })?.error || JSON.stringify(data));
           console.error('Stream error:', errText, data);

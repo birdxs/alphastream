@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAgentStore, type AgentEvent } from "@/lib/stores/agent-store";
 import { ChevronRight, ChevronLeft, Trash2, Download, Circle } from "lucide-react";
+import { PendingApprovalsPanel } from "@/components/agent/pending-approvals";
 
 const STORAGE_KEY = "agent-panel-collapsed";
 
@@ -367,6 +368,11 @@ export function AgentSidePanel() {
       </div>
 
       {/* 终端内容（透明，让毛玻璃容器透过） */}
+      {/* P0-5 HITL 确认面：轮询 pending / 提交 approve|reject */}
+      <div className="px-3 pt-2 shrink-0" data-testid="pending-approvals-host">
+        <PendingApprovalsPanel />
+      </div>
+
       <div
         ref={scrollRef}
         className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-0.5 agent-term-scroll bg-transparent"

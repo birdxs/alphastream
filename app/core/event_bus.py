@@ -123,7 +123,11 @@ EVENT_ANALYSIS_STARTED = 'analysis.started'
 EVENT_ANALYSIS_COMPLETED = 'analysis.completed'
 EVENT_AGENT_STEP_DONE = 'agent.step.done'
 EVENT_RISK_ALERT = 'risk.alert'
+# HITL（P0-5）：bus 主名 approval.needed；payload.event_type / alias = approval_needed
 EVENT_APPROVAL_NEEDED = 'approval.needed'
+EVENT_APPROVAL_NEEDED_ALIAS = 'approval_needed'
+EVENT_APPROVAL_RESOLVED = 'approval.resolved'
+EVENT_APPROVAL_RESOLVED_ALIAS = 'approval_resolved'
 
 # AI流式事件类型
 EVENT_AGENT_STARTED = 'agent.started'

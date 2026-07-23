@@ -647,6 +647,7 @@ TASK_RUNNING = 'running'
 TASK_COMPLETED = 'completed'
 TASK_FAILED = 'failed'
 TASK_CANCELLED = 'cancelled'
+TASK_AWAITING_APPROVAL = 'awaiting_approval'  # P0-5 HITL 确认面阻塞态
 
 
 def generate_task_id():
@@ -3754,22 +3755,37 @@ def _run_new_agent_system(stock_code: str, market_type: str, research_depth: int
         result_state['company_name'] = '名称获取失败'
 
     # 构造前端期望的 decision 格式
-    final_decision = result_state.get('final_decision', {})
+    final_decision = result_state.get('final_decision', {}) or {}
+    hitl_meta = result_state.get('hitl') or {}
     decision_obj = {
         'action': final_decision.get('action', 'HOLD'),
         'reasoning': final_decision.get('reasoning', '分析完成'),
         'confidence': final_decision.get('confidence', 0.5),
-        'risk_score': 1.0 - final_decision.get('confidence', 0.5)
+        'risk_score': 1.0 - float(final_decision.get('confidence', 0.5) or 0.5),
+        'risk_level': final_decision.get('risk_level'),
+        'approved': final_decision.get('approved'),
+        'approval_type': final_decision.get('approval_type'),
+        'approval_status': final_decision.get('approval_status'),
     }
 
-    update_task_status('agent_analysis', task_id, TASK_COMPLETED, progress=100, result={
+    terminal = TASK_FAILED if result_state.get('hitl_rejected') else TASK_COMPLETED
+    step_label = (
+        'HITL 拒绝/超时拒绝'
+        if result_state.get('hitl_rejected')
+        else '多Agent分析完成'
+    )
+    update_task_status('agent_analysis', task_id, terminal, progress=100, result={
         'decision': decision_obj,
         'final_state': result_state,
-        'current_step': '多Agent分析完成',
+        'current_step': step_label,
         'execution_log': result_state.get('execution_log', []),
-        'errors': result_state.get('errors', [])
-    })
-    app.logger.info(f"Agent分析任务 {task_id} 完成 (新系统)")
+        'errors': result_state.get('errors', []),
+        'hitl': hitl_meta,
+    }, error=(
+        (result_state.get('errors') or [None])[-1]
+        if result_state.get('hitl_rejected') else None
+    ))
+    app.logger.info(f"Agent分析任务 {task_id} 完成 (新系统) hitl={hitl_meta}")
 
 
 def _run_old_trading_agents(stock_code: str, market_type: str, selected_analysts: list,
@@ -4036,11 +4052,14 @@ def delete_agent_analysis():
 @app.route('/api/agent_pending_approvals', methods=['GET'])
 @validate_schema(AgentPendingApprovalsSchema)  # S3-G1: schema 校验扩展
 def get_pending_approvals():
-    """获取待人工审批的Agent决策"""
+    """获取待人工审批的Agent决策（P0-5 确认面）"""
     try:
         from app.agents.hitl import approval_manager
+        # 惰性绑定任务状态钩子，使 awaiting_approval 可写入任务查询
+        if getattr(approval_manager, '_task_status_hook', None) is None:
+            approval_manager.set_task_status_hook(update_task_status)
         pending = approval_manager.get_pending_approvals()
-        return jsonify({'approvals': pending})
+        return jsonify({'approvals': pending, 'count': len(pending)})
     except Exception as e:
         return api_error('INTERNAL', '获取待审批任务失败，请稍后重试', details=str(e))
 
@@ -4048,10 +4067,12 @@ def get_pending_approvals():
 @app.route('/api/agent_submit_approval', methods=['POST'])
 @validate_schema(AgentSubmitApprovalSchema, source='json')  # S3-E1: schema 校验扩展
 def submit_agent_approval():
-    """提交人工审批结果"""
+    """提交人工审批结果（P0-5 确认面）"""
     try:
         from app.agents.hitl import approval_manager
-        data = request.json
+        if getattr(approval_manager, '_task_status_hook', None) is None:
+            approval_manager.set_task_status_hook(update_task_status)
+        data = request.json or {}
         task_id = data.get('task_id')
         approved = data.get('approved', False)
         feedback = data.get('feedback', '')
@@ -4059,7 +4080,11 @@ def submit_agent_approval():
             return jsonify({'error': '请提供task_id'}), 400
         success = approval_manager.submit_approval(task_id, approved, feedback)
         if success:
-            return jsonify({'message': '审批已提交', 'approved': approved})
+            return jsonify({
+                'message': '审批已提交',
+                'approved': bool(approved),
+                'task_id': task_id,
+            })
         return jsonify({'error': '未找到待审批任务'}), 404
     except Exception as e:
         return api_error('INTERNAL', '提交审批失败，请稍后重试', details=str(e))

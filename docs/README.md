@@ -19,6 +19,7 @@
 ### 架构与对接
 | 文档 | 功能 |
 |---|---|
+| `design/dojo-agents-absorption-plan.md` | **DojoAgents 吸收·融化设计**（AI 原生贯穿；待 Comdr 审批；禁未授权编码） |
 | `API.md` | 40+ 后端路由对接规范 (含 P3 10 端点) |
 | `FRONTEND_ARCHITECTURE.md` | Next.js 16 + React 19 + Chat/Artifacts 范式蓝图 |
 | `FRONTEND_RESEARCH.md` | 前端技术选型调研 |
