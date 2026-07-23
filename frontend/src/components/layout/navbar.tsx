@@ -1,5 +1,5 @@
 // Input: theme-store状态 + usePathname路由
-// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，品牌色底部边线，当前路径高亮，移动端精简。含7项导航(对话/看板/新闻/选股/持仓/自选/对比)
+// Output: 紧凑导航栏 (h-12)，Dark Glassmorphism风格，品牌色底部边线，当前路径高亮；桌面7项导航+设置齿轮；移动端汉堡抽屉(含设置)
 // Pos: 页面顶部固定导航
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -8,7 +8,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter, Briefcase, Star, BarChart3, Newspaper } from "lucide-react";
+import { MobileDrawer } from "@/components/layout/mobile-drawer";
+import { Sun, Moon, MessageSquare, LayoutDashboard, Search, TrendingUp, TrendingDown, Activity, Filter, Briefcase, Star, BarChart3, Newspaper, Settings } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "对话", icon: MessageSquare },
@@ -26,14 +27,16 @@ export function Navbar() {
   const stockColorScheme = useThemeStore(s => s.stockColorScheme);
   const toggleColorScheme = useThemeStore(s => s.toggleColorScheme);
   const pathname = usePathname();
+  const settingsActive = pathname.startsWith("/settings");
 
   return (
     <nav
       aria-label="主导航"
       className="flex h-12 items-center justify-between bg-card/85 dark:bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-b border-[#3737CC]/20 px-3 shrink-0"
     >
-      {/* Left: Logo + Nav */}
+      {/* Left: Mobile drawer + Logo + Nav */}
       <div className="flex items-center gap-1">
+        <MobileDrawer />
         <Link href="/" className="flex items-center gap-1.5 mr-3 px-1 group">
           <div className="bg-[#3737CC] rounded-lg p-1.5 flex items-center justify-center">
             <Activity className="h-3.5 w-3.5 text-white" />
@@ -96,6 +99,18 @@ export function Navbar() {
         <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]" onClick={toggleTheme} aria-label="切换主题">
           {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </Button>
+        <Link href="/settings" aria-label="设置" title="设置">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] ${
+              settingsActive ? "text-[#3737CC]" : ""
+            }`}
+            aria-current={settingsActive ? "page" : undefined}
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
       </div>
     </nav>
   );
