@@ -7,49 +7,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ApprovalCard, type ApprovalItem } from "@/components/agent/approval-card";
-
-interface PendingApiItem {
-  task_id: string;
-  decision?: Record<string, unknown> | null;
-  risk_level?: string;
-  created_at?: string | null;
-  reason?: string;
-  action_type?: string;
-  confidence?: number | null;
-  /** 后端 timeout_seconds；timeout 为兼容 alias */
-  timeout_seconds?: number;
-  timeout?: number;
-  status?: string;
-}
-
-function toTimeoutAt(createdAt: string | null | undefined, timeoutSec: number): string {
-  const base = createdAt ? Date.parse(createdAt) : Date.now();
-  const ms = Number.isFinite(base) ? base : Date.now();
-  return new Date(ms + Math.max(1, timeoutSec) * 1000).toISOString();
-}
-
-function mapPending(raw: PendingApiItem): ApprovalItem {
-  const timeoutSec = Number(raw.timeout_seconds ?? raw.timeout ?? 300) || 300;
-  const decision = (raw.decision || {}) as Record<string, unknown>;
-  const action =
-    (typeof raw.action_type === "string" && raw.action_type) ||
-    (typeof decision.action === "string" && decision.action) ||
-    (typeof decision.recommendation === "string" && decision.recommendation) ||
-    undefined;
-  return {
-    task_id: raw.task_id,
-    risk_level: raw.risk_level || "high",
-    reason: raw.reason || "",
-    action_type: action,
-    confidence: typeof raw.confidence === "number" ? raw.confidence : undefined,
-    timeout_at: toTimeoutAt(raw.created_at, timeoutSec),
-  };
-}
+import {
+  ApprovalCard,
+  type PendingApproval,
+} from "@/components/agent/approval-card";
 
 export function PendingApprovalsPanel() {
-  const [items, setItems] = useState<ApprovalItem[]>([]);
-  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [items, setItems] = useState<PendingApproval[]>([]);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -63,7 +28,19 @@ export function PendingApprovalsPanel() {
       }
       const data = await res.json();
       const list = Array.isArray(data?.approvals) ? data.approvals : [];
-      setItems(list.map((x: PendingApiItem) => mapPending(x)));
+      setItems(
+        list.map((raw: PendingApproval) => ({
+          task_id: raw.task_id,
+          decision: raw.decision,
+          risk_level: raw.risk_level || "high",
+          created_at: raw.created_at,
+          reason: raw.reason || "",
+          action_type: raw.action_type,
+          confidence: raw.confidence ?? null,
+          timeout_seconds: raw.timeout_seconds,
+          status: raw.status,
+        })),
+      );
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "网络错误");
@@ -76,8 +53,8 @@ export function PendingApprovalsPanel() {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const submit = async (taskId: string, approved: boolean, feedback: string) => {
-    setSubmitting(taskId);
+  const onResolved = async (taskId: string, approved: boolean) => {
+    setSubmittingId(taskId);
     try {
       const res = await fetch("/api/agent_submit_approval", {
         method: "POST",
@@ -86,7 +63,7 @@ export function PendingApprovalsPanel() {
         body: JSON.stringify({
           task_id: taskId,
           approved,
-          feedback,
+          feedback: "",
         }),
       });
       if (!res.ok) {
@@ -105,14 +82,17 @@ export function PendingApprovalsPanel() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败");
     } finally {
-      setSubmitting(null);
+      setSubmittingId(null);
     }
   };
 
   if (items.length === 0 && !error) return null;
 
   return (
-    <div className="space-y-2 px-2 py-2 border-b border-border/40" data-testid="hitl-pending-panel">
+    <div
+      className="space-y-2 px-2 py-2 border-b border-border/40"
+      data-testid="hitl-pending-panel"
+    >
       <div className="text-[11px] font-medium text-muted-foreground px-1">
         待确认决策（HITL）
       </div>
@@ -124,10 +104,9 @@ export function PendingApprovalsPanel() {
       {items.map((item) => (
         <ApprovalCard
           key={item.task_id}
-          item={item}
-          busy={submitting === item.task_id}
-          onApprove={(feedback) => submit(item.task_id, true, feedback)}
-          onReject={(feedback) => submit(item.task_id, false, feedback)}
+          approval={item}
+          submitting={submittingId === item.task_id}
+          onResolved={onResolved}
         />
       ))}
     </div>

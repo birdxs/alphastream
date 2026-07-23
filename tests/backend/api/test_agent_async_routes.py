@@ -206,7 +206,7 @@ class TestAgentSubmitApproval:
         return captured
 
     def test_submit_approval_approved_path(self, flask_client, monkeypatch):
-        """approve 路径：提交 approved=True → 200 + EventBus 推送 EVENT_APPROVAL_NEEDED。"""
+        """approve 路径：提交 approved=True → 200 + EventBus 推送 approval.resolved。"""
         captured = self._spy_eventbus(monkeypatch)
 
         task_id = f"approve-{uuid.uuid4().hex[:8]}"
@@ -223,29 +223,29 @@ class TestAgentSubmitApproval:
             assert body['approved'] is True
             assert '审批已提交' in body.get('message', '')
 
-            # 断言 captured 中有 EVENT_APPROVAL_NEEDED + 关联到本 task_id + 内容含 'approved'
-            from app.core.event_bus import EVENT_APPROVAL_NEEDED
+            # P0-5：submit 发出 approval.resolved（主名），payload 带 status=approved
+            from app.core.event_bus import EVENT_APPROVAL_RESOLVED
             target = [
                 (name, data) for (name, data) in captured
-                if name == EVENT_APPROVAL_NEEDED
+                if name == EVENT_APPROVAL_RESOLVED
             ]
-            assert target, f"未捕获 {EVENT_APPROVAL_NEEDED} 事件，captured={[n for n,_ in captured]}"
+            assert target, f"未捕获 {EVENT_APPROVAL_RESOLVED} 事件，captured={[n for n, _ in captured]}"
             matched = []
             for _, data in target:
                 if not isinstance(data, dict):
                     continue
-                inner = data.get('data') if 'data' in data else data
-                if isinstance(inner, dict) and inner.get('task_id') == task_id \
-                        and 'approved' in (inner.get('content') or ''):
+                if data.get('task_id') == task_id and (
+                    data.get('status') == 'approved' or data.get('approved') is True
+                ):
                     matched.append(data)
             assert matched, (
-                f"approval 事件中未找到 task_id={task_id} 且 content 含 'approved'，target={target}"
+                f"resolved 事件中未找到 task_id={task_id} status=approved，target={target}"
             )
         finally:
             self._cleanup(task_id)
 
     def test_submit_approval_rejected_path(self, flask_client, monkeypatch):
-        """reject 路径：提交 approved=False → 200 且 body.approved=False；事件 content 含 'rejected'。"""
+        """reject 路径：提交 approved=False → 200 且 body.approved=False；resolved status=rejected。"""
         captured = self._spy_eventbus(monkeypatch)
 
         task_id = f"reject-{uuid.uuid4().hex[:8]}"
@@ -261,22 +261,21 @@ class TestAgentSubmitApproval:
             body = resp.get_json()
             assert body['approved'] is False
 
-            from app.core.event_bus import EVENT_APPROVAL_NEEDED
+            from app.core.event_bus import EVENT_APPROVAL_RESOLVED
             target = [
                 (name, data) for (name, data) in captured
-                if name == EVENT_APPROVAL_NEEDED
+                if name == EVENT_APPROVAL_RESOLVED
             ]
-            # 至少有 approval.needed 事件（content 应含 rejected）
             matched_reject = []
             for _, data in target:
                 if not isinstance(data, dict):
                     continue
-                inner = data.get('data') if 'data' in data else data
-                if isinstance(inner, dict) and inner.get('task_id') == task_id \
-                        and 'rejected' in (inner.get('content') or ''):
+                if data.get('task_id') == task_id and (
+                    data.get('status') == 'rejected' or data.get('approved') is False
+                ):
                     matched_reject.append(data)
             assert matched_reject, (
-                f"reject 路径未捕获 task_id={task_id} 含 'rejected' 的事件，target={target}"
+                f"reject 路径未捕获 task_id={task_id} status=rejected，target={target}"
             )
         finally:
             self._cleanup(task_id)
@@ -347,7 +346,9 @@ class TestAgentPendingApprovals:
             resp = flask_client.get('/api/agent_pending_approvals')
             assert resp.status_code == 200
             body = resp.get_json()
-            assert body == {'approvals': []}
+            # P0-5：空列表 + count 计数（兼容字段，前端/OpenAPI 使用）
+            assert body.get('approvals') == []
+            assert body.get('count', 0) == 0
         finally:
             with approval_manager._lock:
                 approval_manager._pending_approvals.update(backup)
