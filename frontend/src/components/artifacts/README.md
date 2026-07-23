@@ -11,3 +11,6 @@ P3 另类数据 Artifact (E4 — 2026-04-15):
 - corporate-network.tsx: 中心公司卡 + 父/子公司 + 董事会 + 司法管辖区国旗标签
 
 一旦这里的结构发生变化，请务必更新我。
+
+G5-G8 (2026-07-23):
+- decision-card.tsx 扩展 scorecard / decision_memo / reflection_summary / memory_context 只读区块；空历史不造假，缺证据显式 missing

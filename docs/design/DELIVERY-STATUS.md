@@ -406,3 +406,36 @@ git checkout HEAD~1 -- app/core/tools.py app/core/intent_router.py \
 2. **默认仍禁 push**；需要同步 origin 时由 Comdr 显式授权。  
 3. 缺口表 §11：优先「provenance[]」或「写仓 harness」二选一审批后开 Sprint4。  
 4. 释放无人托管会话：本交付以本文 + handoff commit 为边界，**不再 gold-plate**。
+
+## G5–G8 Scorecard / Memo / Reflection / Memory（2026-07-23 15:20 +08:00 锚点）
+
+| 项 | 状态 | 落点 |
+|----|------|------|
+| G6 Run scorecard | **done** | `app/agents/scorecard.py` 纯函数 + done 时挂 `state.scorecard` / `final_decision.scorecard`；`EVENT_RUN_SCORECARD` + `publish_run_scorecard`；前端 store/SSE/`decision-card`/`agent-side-panel` |
+| G5 决策备忘 Artifact | **done** | `build_decision_memo` → `decision_memo` 挂 decision_card（action / veto_reasons / evidence_pointers，无假数） |
+| G7 反思可读面 | **done** | `summarize_reflection_readonly` ← `get_past_reflections`；侧栏 + decision-card 只读；**禁止**写生产权重 |
+| G8 Memory 预取 | **done** | `run_agent_analysis` 启动时 `get_history` + `get_semantic_summary` → `memory_context`；空历史 `None` |
+
+验证：`AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/unit/test_agent_scorecard.py`；前端 `tsc --noEmit`。
+
+## 8.5 G1–G4 落地记录（2026-07-24 06:40 +08:00 锚点）
+
+| 项 | 状态 | 落点 | 验证 |
+|---|---|---|---|
+| **G1 provenance[]** | ✅ | `artifact_wrapper` 产出 `{source,tool,ts,digest}`；`ai_client` tool start/result 事件附带；`coordinator` 汇总至 `result/final_decision`；status API 透出；decision-card 可折叠「数据血统」 | unit + tsc |
+| **G2 terminal 态统一** | ✅ | `web_server`：`TASK_*` 扩展 + `normalize_task_status`/`compute_run_terminal`；`/api/agent_analysis_status` 返回 `status/run_terminal/approval_status`；前端 `agent-store` + `agent-status-badge` 映射 HITL 枚举 | unit hitl + tsc |
+| **G3 事件别名** | ✅ | `event_bus`：`agent.role_started|finished` 与 `agent.started|completed` 双发；`canonical_event_name`/`event_dedupe_key`；SSE client 多 case；store `appendEvent` 去重不双计 | event_bus unit |
+| **G4 写意图硬拦矩阵** | ✅ | `tools._WRITE_TOOL_EXACT` + RE 扩展 mutate/system；`TestWriteGuardMatrixG4`：mutate 名拦截 + portfolio_write system_hint 拒绝假成功 | intent/portfolio unit |
+
+**验证（本批）**
+- `pytest` focused：83 passed, 1 xfailed（预存在 H5）
+- `frontend tsc --noEmit`：exit 0
+- 禁 push；未启服务
+
+**Commit 建议标签**：`feat(agent): provenance terminal event-alias write-guard matrix`
+
+**回滚**：`git revert` 本批 commit；或还原  
+`app/core/{artifact_wrapper,event_bus,tools,ai_client}.py`、`app/agents/coordinator.py`、`app/web/web_server.py`、  
+`frontend/src/lib/{types,stores/agent-store,hooks/use-chat-stream,api/client}.ts`、  
+`frontend/src/components/{artifacts/decision-card,agent/agent-status-badge}.tsx` 与相关测试。
+

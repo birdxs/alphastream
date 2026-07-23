@@ -794,3 +794,8 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 | P0-4 / 设计 P0-4 | `agent.tool_call`/`agent.tool_result` 契约字段 | `app/core/ai_client.py` helpers；`app/core/event_bus.py` 常量；`tool-call-card`/`use-chat-stream`/`types` |
 
 验证：`tests/agents/test_debate_summary.py`（含 debate_turn + payload 契约）；相关 import smoke；前端 tsc 改动文件。
+
+### 进度补记（G5–G8，2026-07-23）
+
+- G5 决策备忘 / G6 scorecard / G7 反思只读 / G8 memory 预取：见 `app/agents/scorecard.py` + `coordinator.run_agent_analysis` 接线；前端 decision-card 与 agent-side-panel 只读展示。
+- 单元：`tests/backend/unit/test_agent_scorecard.py` 固定样例。

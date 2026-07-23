@@ -209,3 +209,50 @@ class TestAiChatSchemaPortfolioField:
 
         loaded = AiChatStreamSchema().load({"message": "hello"})
         assert loaded.get("portfolio_snapshot") is None
+
+
+# --- G4 写意图硬拦回归矩阵 ---
+class TestWriteGuardMatrixG4:
+    """mutate 名拦截 + portfolio_write 意图不得假成功。"""
+
+    def test_mutate_name_matrix(self):
+        from app.core.tools import is_write_tool_name, _refuse_write_tool, execute_tool
+        import json
+        mutates = [
+            "mutate",
+            "mutate_state",
+            "system_mutate",
+            "admin_write",
+            "set_holding",
+            "upsert_holding",
+            "rebalance_portfolio",
+            "liquidate",
+            "batch_update_holdings",
+            "force_write",
+        ]
+        for name in mutates:
+            assert is_write_tool_name(name) is True, name
+            blocked = _refuse_write_tool(name)
+            data = json.loads(blocked)
+            assert data.get("error_code") == "WRITE_TOOL_BLOCKED"
+            assert data.get("success") is False
+            assert data.get("executed") is False
+            # execute_tool 不得假成功
+            out = execute_tool(name, {})
+            assert "WRITE_TOOL_BLOCKED" in out
+
+    def test_readonly_still_allowed_names(self):
+        from app.core.tools import is_write_tool_name
+        for name in ("get_stock_data", "get_portfolio_snapshot", "get_fundamental_data", "search_web"):
+            assert is_write_tool_name(name) is False, name
+
+    def test_portfolio_write_intent_system_refuses_success(self):
+        """intent portfolio_write → system_hint 硬拒绝文案，非成功暗示。"""
+        from app.core.intent_router import classify_intent, INTENT_PORTFOLIO_WRITE
+        r = classify_intent("帮我把茅台加进持仓并下单买入")
+        assert r.intent == INTENT_PORTFOLIO_WRITE
+        hint = (r.system_hint or "").lower()
+        assert "拒绝" in r.system_hint or "不得" in r.system_hint or "block" in hint or "不可" in r.system_hint
+        # 不得出现鼓励写仓的假成功措辞
+        for bad in ("已成功下单", "已写入持仓", "order placed", "portfolio updated"):
+            assert bad not in (r.system_hint or "")

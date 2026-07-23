@@ -1,5 +1,6 @@
-// Input: 决策数据（action/confidence/reasoning/risk/price_targets/position/degradations）
-// Output: 增强版决策卡片，含置信度进度条、风险评分、价格目标、决策理由、降级条
+import type { ProvenanceEntry } from '@/lib/types';
+// Input: 决策数据（action/confidence/reasoning/risk/price_targets/position/degradations/scorecard/memo/reflection/memory）
+// Output: 增强版决策卡片，含置信度进度条、风险评分、价格目标、决策理由、降级条、评分卡/备忘/反思只读/记忆预取
 // Pos: artifact-renderer.tsx 的子组件，decision_card 类型 Artifact 渲染器
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -12,6 +13,46 @@ interface DegradationView {
   message?: string;
   confidence_cap?: number;
   source?: string;
+}
+
+interface ScorecardView {
+  data_coverage?: number | null;
+  tool_success_rate?: number | null;
+  role_agreement?: number | null;
+  confidence_cap?: number | null;
+}
+
+interface DecisionMemoView {
+  action?: string;
+  veto_reasons?: string[];
+  risk_reasons?: string[];
+  evidence_pointers?: Array<{ slot: string; label: string; status: string }>;
+  reasoning?: string | null;
+  disclaimer?: string;
+}
+
+interface ReflectionSummaryView {
+  count?: number;
+  items?: Array<{
+    timestamp?: string;
+    accuracy_score?: number | null;
+    lessons?: string | null;
+    what_went_well?: string | null;
+    what_went_wrong?: string | null;
+  }>;
+  note?: string;
+  readonly?: boolean;
+}
+
+interface MemoryContextView {
+  history_count?: number;
+  recent?: Array<{
+    timestamp?: string;
+    action?: string | null;
+    confidence?: number | null;
+    reasoning?: string | null;
+  }>;
+  semantic_context?: string | null;
 }
 
 interface Props {
@@ -30,7 +71,23 @@ interface Props {
     /** P0-2 结构化降级（零假值） */
     degradations?: DegradationView[];
     confidence_cap?: number;
+    /** G1 数据血统摘要（无假行情） */
+    provenance?: ProvenanceEntry[];
+    approval_status?: string;
+    /** G6 */
+    scorecard?: ScorecardView | null;
+    /** G5 */
+    decision_memo?: DecisionMemoView | null;
+    /** G7 只读 */
+    reflection_summary?: ReflectionSummaryView | null;
+    /** G8 空则不展示 */
+    memory_context?: MemoryContextView | null;
   };
+}
+
+function pctLabel(v: number | null | undefined): string {
+  if (typeof v !== 'number' || Number.isNaN(v)) return '—';
+  return `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`;
 }
 
 export function DecisionCardArtifact({ data }: Props) {
@@ -174,6 +231,138 @@ export function DecisionCardArtifact({ data }: Props) {
 
       {/* 决策理由 */}
       {data.reasoning && <p className="text-sm leading-relaxed">{data.reasoning}</p>}
+
+      {/* G1 数据血统（可折叠，仅摘要无假行情） */}
+      {Array.isArray(data.provenance) && data.provenance.length > 0 && (
+        <details className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+            数据血统 · {data.provenance.length} 源
+          </summary>
+          <ul className="mt-2 space-y-1.5 text-[11px] font-mono text-muted-foreground">
+            {data.provenance.map((p, i) => (
+              <li key={`${p.source || ''}-${p.tool || ''}-${p.digest || ''}-${i}`} className="flex flex-wrap gap-x-2 gap-y-0.5">
+                <span className="text-foreground/80">{p.source || p.tool || 'unknown'}</span>
+                {p.tool && p.source && p.tool !== p.source && (
+                  <span className="opacity-70">tool={p.tool}</span>
+                )}
+                {p.digest && <span className="opacity-60">#{p.digest.slice(0, 8)}</span>}
+                {p.ts && <span className="opacity-50">{p.ts}</span>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {/* G6 Run scorecard */}
+      {data.scorecard && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">运行评分卡</div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            {(
+              [
+                ['数据覆盖', data.scorecard.data_coverage],
+                ['工具成功', data.scorecard.tool_success_rate],
+                ['角色一致', data.scorecard.role_agreement],
+                ['置信帽', data.scorecard.confidence_cap],
+              ] as Array<[string, number | null | undefined]>
+            ).map(([label, val]) => (
+              <div key={label} className="rounded-md bg-background/60 px-2 py-1.5">
+                <div className="text-[10px] text-muted-foreground">{label}</div>
+                <div className="font-semibold tabular-nums">{pctLabel(val)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* G5 决策备忘 */}
+      {data.decision_memo && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="text-xs font-medium text-amber-700 dark:text-amber-400">决策备忘</div>
+          {Array.isArray(data.decision_memo.veto_reasons) &&
+            data.decision_memo.veto_reasons.length > 0 && (
+              <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                {data.decision_memo.veto_reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            )}
+          {Array.isArray(data.decision_memo.evidence_pointers) &&
+            data.decision_memo.evidence_pointers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {data.decision_memo.evidence_pointers.map((ep) => (
+                  <span
+                    key={ep.slot}
+                    className={
+                      ep.status === 'present'
+                        ? 'rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400'
+                        : 'rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground'
+                    }
+                  >
+                    {ep.label}:{ep.status === 'present' ? '有' : '缺'}
+                  </span>
+                ))}
+              </div>
+            )}
+          {data.decision_memo.disclaimer && (
+            <p className="text-[10px] text-muted-foreground/80">{data.decision_memo.disclaimer}</p>
+          )}
+        </div>
+      )}
+
+      {/* G7 反思只读 */}
+      {data.reflection_summary &&
+        Array.isArray(data.reflection_summary.items) &&
+        data.reflection_summary.items.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>历史反思（只读）</span>
+              <span className="text-[10px]">{data.reflection_summary.note || '不写生产权重'}</span>
+            </div>
+            <div className="space-y-2">
+              {data.reflection_summary.items.slice(0, 3).map((it, i) => (
+                <div key={i} className="space-y-0.5 border-l-2 border-border pl-2 text-xs">
+                  {it.timestamp && (
+                    <div className="text-[10px] text-muted-foreground">{it.timestamp}</div>
+                  )}
+                  {it.lessons && <p className="text-muted-foreground">{it.lessons}</p>}
+                  {!it.lessons && it.what_went_wrong && (
+                    <p className="text-muted-foreground">问题: {it.what_went_wrong}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      {/* G8 Memory 预取：空历史不渲染假值 */}
+      {data.memory_context &&
+      (data.memory_context.history_count || data.memory_context.semantic_context) ? (
+        <div className="space-y-1.5 rounded-lg border border-border/60 p-3">
+          <div className="text-xs font-medium text-muted-foreground">
+            同标的记忆
+            {typeof data.memory_context.history_count === 'number'
+              ? ` · ${data.memory_context.history_count} 次`
+              : ''}
+          </div>
+          {data.memory_context.semantic_context && (
+            <p className="line-clamp-3 text-xs text-muted-foreground">
+              {data.memory_context.semantic_context}
+            </p>
+          )}
+          {Array.isArray(data.memory_context.recent) && data.memory_context.recent.length > 0 && (
+            <ul className="space-y-1 text-[11px] text-muted-foreground">
+              {data.memory_context.recent.slice(0, 3).map((h, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="font-medium">{h.action || '—'}</span>
+                  <span className="truncate">{h.reasoning || h.timestamp || ''}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
     </div>
   );
 }

@@ -218,6 +218,10 @@ export function AgentSidePanel() {
   const debateTurns = useAgentStore((s) => s.debateTurns);
   const degradations = useAgentStore((s) => s.degradations);
   const confidenceCap = useAgentStore((s) => s.confidenceCap);
+  const scorecard = useAgentStore((s) => s.scorecard);
+  const decisionMemo = useAgentStore((s) => s.decisionMemo);
+  const reflectionSummary = useAgentStore((s) => s.reflectionSummary);
+  const memoryContext = useAgentStore((s) => s.memoryContext);
   const isAnalyzing = useAgentStore((s) => s.isAnalyzing);
   const agentProgresses = useAgentStore((s) => s.agentProgresses);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -377,6 +381,92 @@ export function AgentSidePanel() {
       </div>
 
       {/* P0-2 降级可视化条：有 degradation 时吸顶可见，不渲染假数 */}
+      {/* G6/G5/G7/G8 评分卡与只读上下文 */}
+      {(scorecard ||
+        decisionMemo ||
+        (reflectionSummary && Array.isArray((reflectionSummary as { items?: unknown[] }).items) &&
+          ((reflectionSummary as { items?: unknown[] }).items?.length || 0) > 0) ||
+        (memoryContext &&
+          ((memoryContext as { history_count?: number }).history_count ||
+            (memoryContext as { semantic_context?: string }).semantic_context))) && (
+        <div className="mb-3 space-y-2 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/5 p-2.5 dark:border-[#7F7FFF]/25 dark:bg-[#7F7FFF]/10">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#7F7FFF]">
+            Run Scorecard / 备忘
+          </div>
+          {scorecard && (
+            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+              {(
+                [
+                  ['覆盖', scorecard.data_coverage],
+                  ['工具', scorecard.tool_success_rate],
+                  ['一致', scorecard.role_agreement],
+                  ['置信帽', scorecard.confidence_cap],
+                ] as Array<[string, number | null | undefined]>
+              ).map(([label, v]) => (
+                <div key={label} className="rounded bg-background/50 px-1.5 py-1">
+                  <div className="text-muted-foreground">{label}</div>
+                  <div className="font-semibold tabular-nums">
+                    {typeof v === 'number' && !Number.isNaN(v)
+                      ? `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`
+                      : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {decisionMemo &&
+            Array.isArray((decisionMemo as { veto_reasons?: string[] }).veto_reasons) &&
+            ((decisionMemo as { veto_reasons?: string[] }).veto_reasons?.length || 0) > 0 && (
+              <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                <div className="font-medium text-amber-700 dark:text-amber-400">否决/风险</div>
+                <ul className="list-disc pl-3">
+                  {((decisionMemo as { veto_reasons?: string[] }).veto_reasons || [])
+                    .slice(0, 3)
+                    .map((r, i) => (
+                      <li key={i} className="line-clamp-2">
+                        {r}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+          {reflectionSummary &&
+            Array.isArray((reflectionSummary as { items?: Array<{ lessons?: string }> }).items) &&
+            ((reflectionSummary as { items?: unknown[] }).items?.length || 0) > 0 && (
+              <div className="text-[10px] text-muted-foreground">
+                <div className="mb-0.5 font-medium">反思（只读）</div>
+                <p className="line-clamp-3">
+                  {(
+                    (reflectionSummary as { items?: Array<{ lessons?: string; what_went_wrong?: string }> })
+                      .items || []
+                  )
+                    .map((it) => it.lessons || it.what_went_wrong || '')
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join('；') || '—'}
+                </p>
+              </div>
+            )}
+          {memoryContext &&
+            ((memoryContext as { history_count?: number }).history_count ||
+              (memoryContext as { semantic_context?: string }).semantic_context) && (
+              <div className="text-[10px] text-muted-foreground">
+                <div className="mb-0.5 font-medium">
+                  记忆预取
+                  {typeof (memoryContext as { history_count?: number }).history_count === 'number'
+                    ? ` · ${(memoryContext as { history_count?: number }).history_count} 次`
+                    : ''}
+                </div>
+                {(memoryContext as { semantic_context?: string }).semantic_context && (
+                  <p className="line-clamp-2">
+                    {(memoryContext as { semantic_context?: string }).semantic_context}
+                  </p>
+                )}
+              </div>
+            )}
+        </div>
+      )}
+
       {(degradations.length > 0 || confidenceCap != null) && (
         <div
           className="mx-3 mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 space-y-1"

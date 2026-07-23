@@ -1,10 +1,11 @@
 """
 Input: 工具名称、工具参数、工具执行结果（原始数据或字符串）
-Output: 标准化Artifact JSON（artifact_type + structured data + metadata）
+Output: 标准化Artifact JSON（artifact_type + structured data + metadata + provenance[]）
 Pos: app/core/artifact_wrapper.py - Generative UI后端数据协议层，将工具结果包装为前端可渲染的Artifact
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
+import hashlib
 import json
 import logging
 from typing import Dict, Any, Optional, Tuple, List
@@ -15,6 +16,114 @@ _ASIA_SHANGHAI = timezone(timedelta(hours=8))
 now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# G1 数据血统 provenance[]（零假行情；仅摘要字段，不含原始行情）
+# 条目契约: {source?, tool?, ts?, digest?}
+# ============================================================
+
+def _stable_digest(payload: Any, max_len: int = 16) -> str:
+    """对参数/结果做短 digest（sha256 hex 截断）；失败返回空串。"""
+    try:
+        if payload is None:
+            raw = b''
+        elif isinstance(payload, (bytes, bytearray)):
+            raw = bytes(payload)
+        elif isinstance(payload, str):
+            raw = payload.encode('utf-8', errors='replace')
+        else:
+            raw = json.dumps(payload, sort_keys=True, default=str, ensure_ascii=False).encode(
+                'utf-8', errors='replace'
+            )
+        return hashlib.sha256(raw).hexdigest()[:max_len]
+    except Exception:
+        return ''
+
+
+def build_provenance_entry(
+    *,
+    source: Optional[str] = None,
+    tool: Optional[str] = None,
+    ts: Optional[str] = None,
+    digest: Optional[str] = None,
+    args: Any = None,
+) -> Dict[str, str]:
+    """构造单条 provenance 摘要（无假行情字段）。
+
+    digest 优先用入参；否则对 args 生成短 hash（仅审计，不含价格）。
+    """
+    entry: Dict[str, str] = {}
+    if source:
+        entry['source'] = str(source)[:200]
+    if tool:
+        entry['tool'] = str(tool)[:120]
+    entry['ts'] = ts or now_cn().strftime('%Y-%m-%d %H:%M:%S %z')
+    d = digest if digest is not None else (_stable_digest(args) if args is not None else '')
+    if d:
+        entry['digest'] = str(d)[:64]
+    return entry
+
+
+def provenance_from_sources(
+    sources: Optional[List[Any]],
+    *,
+    tool: Optional[str] = None,
+    args: Any = None,
+) -> List[Dict[str, str]]:
+    """将 artifact sources 列表归一为 provenance[]。
+
+    sources 条目可为 str 或 {name/type/...}；不从源数据抄任何价格字段。
+    """
+    out: List[Dict[str, str]] = []
+    for s in sources or []:
+        if isinstance(s, str) and s.strip():
+            out.append(build_provenance_entry(source=s.strip(), tool=tool, args=args))
+        elif isinstance(s, dict):
+            name = (
+                s.get('name')
+                or s.get('source')
+                or s.get('type')
+                or s.get('provider')
+                or ''
+            )
+            if name:
+                out.append(build_provenance_entry(source=str(name), tool=tool, args=args))
+    if not out and tool:
+        out.append(build_provenance_entry(source=tool, tool=tool, args=args))
+    return out
+
+
+def merge_provenance(*lists: Any, max_items: int = 32) -> List[Dict[str, str]]:
+    """合并多段 provenance，按 (source, tool, digest) 去重，保序截断。"""
+    seen = set()
+    merged: List[Dict[str, str]] = []
+    for lst in lists:
+        if not lst:
+            continue
+        if not isinstance(lst, (list, tuple)):
+            continue
+        for item in lst:
+            if not isinstance(item, dict):
+                continue
+            key = (
+                str(item.get('source') or ''),
+                str(item.get('tool') or ''),
+                str(item.get('digest') or ''),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned = build_provenance_entry(
+                source=item.get('source'),
+                tool=item.get('tool'),
+                ts=item.get('ts'),
+                digest=item.get('digest'),
+            )
+            merged.append(cleaned)
+            if len(merged) >= max_items:
+                return merged
+    return merged
 
 # Artifact类型注册表：工具名称 → artifact_type
 ARTIFACT_TYPE_MAP = {
@@ -119,18 +228,23 @@ def execute_tool_with_artifact(tool_name: str, arguments: dict) -> Tuple[str, Op
                 logger.debug(f"反查{stock_code}名称失败: {e}")
 
     title_prefix = f"{stock_code} {stock_name}".strip() if stock_name else stock_code
+    sources = ARTIFACT_SOURCE_MAP.get(tool_name, [])
+    # G1: provenance[] 仅摘要 source/tool/ts/digest，不嵌入行情数值
+    provenance = provenance_from_sources(sources, tool=tool_name, args=arguments)
     artifact = {
         "type": "artifact",
         "artifact_type": artifact_type,
         "title": f"{title_prefix} {ARTIFACT_TITLE_MAP.get(artifact_type, tool_name)}".strip(),
         "data": structured_data,
         "confidence": ARTIFACT_CONFIDENCE_MAP.get(tool_name, 0.5),
-        "sources": ARTIFACT_SOURCE_MAP.get(tool_name, []),
+        "sources": sources,
+        "provenance": provenance,
         "metadata": {
             "source_tool": tool_name,
             "stock_code": stock_code,
             "stock_name": stock_name,
             "generated_at": now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+            "provenance": provenance,
         }
     }
 
@@ -527,13 +641,17 @@ def _build_p3_artifact(artifact_type: str, title: str, data: Any,
     meta = {"generated_at": now_cn().strftime('%Y-%m-%d %H:%M:%S'), "domain": domain}
     if metadata:
         meta.update(metadata)
+    sources = P3_SOURCE_MAP.get(domain, [])
+    provenance = provenance_from_sources(sources, tool=domain)
+    meta['provenance'] = provenance
     return {
         "type": "artifact",
         "artifact_type": artifact_type,
         "title": title,
         "data": data,
         "confidence": confidence,
-        "sources": P3_SOURCE_MAP.get(domain, []),
+        "sources": sources,
+        "provenance": provenance,
         "metadata": meta,
     }
 

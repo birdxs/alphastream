@@ -223,13 +223,16 @@ def _wrap_with_events(agent_fn, agent_name):
             event_bus = get_event_bus()
             event_bus.publish(EVENT_AGENT_STARTED, {
                 'event_type': 'agent_progress',
+                'agent_name': agent_name,
+                'agent': agent_name,
+                'role': agent_name,
                 'data': {
                     'agent_name': agent_name,
                     'status': 'started',
                     'stock_code': state.get('stock_code', ''),
                     'progress': state.get('progress', 0)
                 }
-            })
+            })  # G3 dual → agent.role_started
             # [UI-Q3 2026-04-15] 推一条 reasoning 事件让终端看起来更生动
             event_bus.publish('reasoning', {
                 'event_type': 'reasoning',
@@ -262,13 +265,16 @@ def _wrap_with_events(agent_fn, agent_name):
                 progress = result.get('progress', state.get('progress', 0))
             event_bus.publish(EVENT_AGENT_COMPLETED, {
                 'event_type': 'agent_progress',
+                'agent_name': agent_name,
+                'agent': agent_name,
+                'role': agent_name,
                 'data': {
                     'agent_name': agent_name,
                     'status': 'completed',
                     'progress': progress,
                     'stock_code': state.get('stock_code', '')
                 }
-            })
+            })  # G3 dual → agent.role_finished
         except Exception:
             pass
 
@@ -601,7 +607,44 @@ def run_agent_analysis(
         'errors': [],
         'degradations': [],
         'confidence_cap': None,
+        'scorecard': None,
+        'decision_memo': None,
+        'reflection_summary': None,
+        'memory_context': None,
     }
+
+    # G8 Memory 预取：同标的历史摘要注入（空历史不造假）
+    try:
+        from app.core.agent_memory import get_agent_memory
+        from app.agents.scorecard import build_memory_prefetch_summary
+        _mem = get_agent_memory()
+        _hist = _mem.get_history(stock_code, limit=5) if stock_code else []
+        _sem = ''
+        try:
+            _sem = _mem.get_semantic_summary(stock_code) or ''
+        except Exception:
+            _sem = ''
+        _mc = build_memory_prefetch_summary(_hist, _sem, limit=5)
+        if _mc:
+            initial_state['memory_context'] = _mc
+            summary_bits = []
+            if _mc.get('history_count'):
+                summary_bits.append(f"历史分析 {_mc['history_count']} 次")
+            if _mc.get('semantic_context'):
+                summary_bits.append(str(_mc['semantic_context'])[:400])
+            if summary_bits:
+                initial_state.setdefault('messages', [])
+                if not isinstance(initial_state['messages'], list):
+                    initial_state['messages'] = []
+                initial_state['messages'].append({
+                    'role': 'system',
+                    'content': (
+                        f"[Memory prefetch for {stock_code}] "
+                        + " | ".join(summary_bits)
+                    ),
+                })
+    except Exception as _mem_err:
+        logger.debug('memory prefetch skipped: %s', _mem_err)
 
     # 注入自适应策略
     try:
@@ -712,6 +755,57 @@ def run_agent_analysis(
         except Exception as _deg_exc:
             logger.debug('degradation post-process skipped: %s', _deg_exc)
 
+        # G1: 汇总工具/报告路径 provenance[] 到 result 与 final_decision（仅摘要，无假行情）
+        try:
+            from app.core.artifact_wrapper import (
+                build_provenance_entry,
+                merge_provenance,
+                provenance_from_sources,
+            )
+            prov_lists = []
+            # 角色报告来源
+            for _role_key, _role_val in (result or {}).items():
+                if isinstance(_role_val, dict):
+                    if _role_val.get('provenance'):
+                        prov_lists.append(_role_val.get('provenance'))
+                    elif _role_val.get('sources'):
+                        prov_lists.append(
+                            provenance_from_sources(
+                                _role_val.get('sources'),
+                                tool=str(_role_key),
+                            )
+                        )
+            # degradations → 标注降级数据源
+            for d in (result.get('degradations') or []):
+                if isinstance(d, dict):
+                    prov_lists.append([
+                        build_provenance_entry(
+                            source=str(d.get('source') or d.get('adapter') or 'degraded'),
+                            tool=str(d.get('tool') or d.get('stage') or 'degradation'),
+                        )
+                    ])
+                elif isinstance(d, str):
+                    prov_lists.append([
+                        build_provenance_entry(source=d, tool='degradation')
+                    ])
+            merged_prov = merge_provenance(*prov_lists)
+            if not merged_prov:
+                # 至少标记一次分析图运行
+                merged_prov = [
+                    build_provenance_entry(
+                        source='langgraph_analysis',
+                        tool='run_stock_analysis',
+                        args={'stock_code': (result or {}).get('stock_code')},
+                    )
+                ]
+            result['provenance'] = merged_prov
+            fd0 = result.get('final_decision')
+            if isinstance(fd0, dict):
+                fd0 = {**fd0, 'provenance': merge_provenance(fd0.get('provenance'), merged_prov)}
+                result['final_decision'] = fd0
+        except Exception as _prov_exc:
+            logger.debug('provenance aggregate skipped: %s', _prov_exc)
+
         # P0-5 HITL 确认面：高风险决策阻塞等待人工确认（禁止静默通过）
         # 放在 final_decision 写出之后、对外发布 completed 之前
         final_decision = result.get('final_decision')
@@ -775,6 +869,64 @@ def run_agent_analysis(
             except Exception:
                 pass
         result['hitl'] = hitl_meta
+
+        # G5/G6/G7：终局 scorecard + 决策备忘 + 反思只读摘要（不写生产权重）
+        try:
+            from app.agents.scorecard import (
+                compute_run_scorecard,
+                build_decision_memo,
+                summarize_reflection_readonly,
+            )
+            from app.core.event_bus import publish_run_scorecard
+            from app.core.agent_memory import get_agent_memory as _gam_g7
+
+            if not result.get('memory_context') and initial_state.get('memory_context'):
+                result['memory_context'] = initial_state.get('memory_context')
+
+            _sc = compute_run_scorecard(
+                result,
+                task_id=task_id or '',
+                stock_code=stock_code,
+            )
+            _memo = build_decision_memo(result, scorecard=_sc)
+            result['scorecard'] = _sc
+            result['decision_memo'] = _memo
+            _fd = result.get('final_decision')
+            if not isinstance(_fd, dict):
+                _fd = {}
+            else:
+                _fd = dict(_fd)
+            _fd['scorecard'] = {
+                'data_coverage': _sc.get('data_coverage'),
+                'tool_success_rate': _sc.get('tool_success_rate'),
+                'role_agreement': _sc.get('role_agreement'),
+                'confidence_cap': _sc.get('confidence_cap'),
+            }
+            _fd['decision_memo'] = _memo
+            if result.get('memory_context') is not None:
+                _fd['memory_context'] = result.get('memory_context')
+            try:
+                _past = _gam_g7().get_past_reflections(stock_code, limit=3)
+                _rs = summarize_reflection_readonly(_past, limit=3)
+                if _rs:
+                    result['reflection_summary'] = _rs
+                    _fd['reflection_summary'] = _rs
+            except Exception as _g7e:
+                logger.debug('reflection summary skipped: %s', _g7e)
+            result['final_decision'] = _fd
+            _pub_payload = dict(_sc)
+            _pub_payload['decision_memo'] = _memo
+            if result.get('reflection_summary') is not None:
+                _pub_payload['reflection_summary'] = result['reflection_summary']
+            if result.get('memory_context') is not None:
+                _pub_payload['memory_context'] = result['memory_context']
+            publish_run_scorecard(
+                _pub_payload,
+                task_id=task_id or '',
+                stock_code=stock_code,
+            )
+        except Exception as _sc_err:
+            logger.warning('scorecard/memo compute failed: %s', _sc_err)
 
         # 保存到Agent记忆 + 发布完成事件
         try:

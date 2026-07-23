@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useChatStore } from '@/lib/stores/chat-store';
 import { useAgentStore } from '@/lib/stores/agent-store';
+// G1/G2/G3 helpers re-exported via store for terminal/provenance/dedupe
 import { usePortfolioStore } from '@/lib/stores/portfolio-store';
 import type { SSEHandlers, ChatMessage, StreamDone } from '@/lib/types';
 
@@ -178,6 +179,11 @@ export function useChatStream() {
         },
         onToolCallResult: (data) => {
           agentStore.setToolCallResult(data.tool_call_id, data);
+          if (Array.isArray((data as any).provenance)) {
+            agentStore.mergeProvenance((data as any).provenance);
+          } else if (Array.isArray((data as any).artifact?.provenance)) {
+            agentStore.mergeProvenance((data as any).artifact.provenance);
+          }
           if (data.artifact) {
             chatStore.addArtifact(data.artifact);
           }
@@ -248,25 +254,99 @@ export function useChatStream() {
             },
           });
         },
+        onRunScorecard: (data) => {
+          const sc = {
+            data_coverage: data.data_coverage ?? null,
+            tool_success_rate: data.tool_success_rate ?? null,
+            role_agreement: data.role_agreement ?? null,
+            confidence_cap: data.confidence_cap ?? null,
+          };
+          agentStore.setScorecard(sc);
+          if (data.decision_memo && typeof data.decision_memo === 'object') {
+            agentStore.setDecisionMemo(data.decision_memo as Record<string, unknown>);
+          }
+          if (data.reflection_summary && typeof data.reflection_summary === 'object') {
+            agentStore.setReflectionSummary(
+              data.reflection_summary as Record<string, unknown>,
+            );
+          }
+          if (data.memory_context && typeof data.memory_context === 'object') {
+            agentStore.setMemoryContext(data.memory_context as Record<string, unknown>);
+          }
+          agentStore.appendEvent({
+            type: 'scorecard',
+            agent: 'system',
+            title: '运行评分卡',
+            detail: [
+              data.data_coverage != null
+                ? `覆盖 ${Math.round(Number(data.data_coverage) * 100)}%`
+                : null,
+              data.tool_success_rate != null
+                ? `工具 ${Math.round(Number(data.tool_success_rate) * 100)}%`
+                : null,
+              data.role_agreement != null
+                ? `角色一致 ${Math.round(Number(data.role_agreement) * 100)}%`
+                : null,
+              data.confidence_cap != null
+                ? `置信帽 ${Math.round(Number(data.confidence_cap) * 100)}%`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            meta: {
+              ...sc,
+              task_id: data.task_id,
+              stock_code: data.stock_code,
+            },
+          });
+        },
+
         onArtifact: (data) => {
           chatStore.addArtifact(data);
         },
         onAgentProgress: (data) => {
-          agentStore.setAgentProgress(data);
-          // 实时数据流：agent状态变化
-          const evType: 'agent_started' | 'agent_progress' | 'agent_completed' =
-            data.status === 'started' ? 'agent_started' :
-            data.status === 'completed' ? 'agent_completed' : 'agent_progress';
+          // G3 payload 可能是 {event_type,data:{...}} 或扁平 AgentProgress
+          const flat: any = (data as any)?.data && typeof (data as any).data === 'object'
+            ? { ...(data as any).data, ...(data as any) }
+            : data;
+          const agentName = flat.agent_name || flat.agent || flat.role || 'agent';
+          const status = flat.status || (
+            String((data as any)?.event_type || '').includes('completed') ||
+            String((data as any)?.event_type || '').includes('finished')
+              ? 'completed'
+              : String((data as any)?.event_type || '').includes('started')
+                ? 'started'
+                : 'started'
+          );
+          const progressNum = typeof flat.progress === 'number' ? flat.progress : (status === 'completed' ? 1 : 0);
+          agentStore.setAgentProgress({
+            agent_name: agentName,
+            status: status === 'error' ? 'error' : status === 'completed' ? 'completed' : 'started',
+            progress: progressNum,
+            message: flat.detail || flat.message,
+            stock_code: flat.stock_code,
+          });
+          // G1: 若进度事件携带 provenance 则合并
+          if (Array.isArray(flat.provenance)) {
+            agentStore.mergeProvenance(flat.provenance);
+          }
+          const rawType = (data as any)?.event_type || (data as any)?.canonical || '';
+          const evType =
+            status === 'completed' || String(rawType).includes('completed') || String(rawType).includes('finished')
+              ? (String(rawType).includes('role') ? 'agent.role_finished' : 'agent.completed')
+              : status === 'started' || String(rawType).includes('started')
+                ? (String(rawType).includes('role') ? 'agent.role_started' : 'agent.started')
+                : 'agent_progress';
           agentStore.appendEvent({
             type: evType,
-            agent: data.agent_name,
-            title: data.status === 'started'
-              ? `${data.agent_name} 启动`
-              : data.status === 'completed'
-                ? `${data.agent_name} 完成`
-                : `${data.agent_name} ${Math.round(data.progress)}%`,
-            detail: data.message,
-            meta: { progress: data.progress, status: data.status },
+            agent: agentName,
+            title: status === 'started'
+              ? `${agentName} 启动`
+              : status === 'completed'
+                ? `${agentName} 完成`
+                : `${agentName} ${Math.round(progressNum * (progressNum <= 1 ? 100 : 1))}%`,
+            detail: flat.detail || flat.message,
+            meta: { progress: progressNum, status, raw_type: rawType, task_id: flat.task_id },
           });
         },
         onReasoning: (data) => {

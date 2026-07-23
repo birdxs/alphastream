@@ -7,6 +7,7 @@
 # web_server.py
 
 import numpy as np
+from typing import Any
 import pandas as pd
 import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, g
@@ -641,12 +642,85 @@ task_lock = threading.Lock()  # 用于线程安全操作
 class TaskCancelledException(Exception):
     pass
 
-# 任务状态常量
+# 任务状态常量（G2：与 HITL/侧栏 terminal 枚举对齐）
 TASK_PENDING = 'pending'
 TASK_RUNNING = 'running'
 TASK_COMPLETED = 'completed'
 TASK_FAILED = 'failed'
 TASK_CANCELLED = 'cancelled'
+TASK_AWAITING_APPROVAL = 'awaiting_approval'
+TASK_TIMEOUT_REJECT = 'timeout_reject'
+TASK_REJECTED = 'rejected'
+TASK_APPROVED = 'approved'
+# terminal / 投影用只读集合
+TASK_TERMINAL_STATUSES = frozenset({
+    TASK_COMPLETED,
+    TASK_FAILED,
+    TASK_CANCELLED,
+    TASK_TIMEOUT_REJECT,
+    TASK_REJECTED,
+    TASK_APPROVED,
+})
+TASK_STATUS_ALIASES = {
+    # 历史/外部别名 → 规范 task.status
+    'done': TASK_COMPLETED,
+    'success': TASK_COMPLETED,
+    'error': TASK_FAILED,
+    'fail': TASK_FAILED,
+    'canceled': TASK_CANCELLED,
+    'cancelled': TASK_CANCELLED,
+    'timeout': TASK_TIMEOUT_REJECT,
+    'timeout_reject': TASK_TIMEOUT_REJECT,
+    'awaiting': TASK_AWAITING_APPROVAL,
+    'awaiting_approval': TASK_AWAITING_APPROVAL,
+    'pending_approval': TASK_AWAITING_APPROVAL,
+    'rejected': TASK_REJECTED,
+    'approved': TASK_APPROVED,
+}
+
+
+def normalize_task_status(status: Any) -> str:
+    """将任意任务/审批态折叠为规范枚举字符串。"""
+    if status is None:
+        return TASK_PENDING
+    s = str(status).strip().lower()
+    if not s:
+        return TASK_PENDING
+    if s in (
+        TASK_PENDING, TASK_RUNNING, TASK_COMPLETED, TASK_FAILED, TASK_CANCELLED,
+        TASK_AWAITING_APPROVAL, TASK_TIMEOUT_REJECT, TASK_REJECTED, TASK_APPROVED,
+    ):
+        return s
+    return TASK_STATUS_ALIASES.get(s, s)
+
+
+def compute_run_terminal(
+    task_status: Any,
+    approval_status: Any = None,
+) -> str:
+    """G2 统一 terminal 投影（sprint0-inventory §2.5）。
+
+    返回 completed / failed / awaiting_approval / timeout_reject /
+    rejected / approved / cancelled / running / pending。
+    """
+    ts = normalize_task_status(task_status)
+    appr = (str(approval_status).strip().lower() if approval_status else '') or ''
+    if appr in ('pending', 'awaiting_approval') or ts == TASK_AWAITING_APPROVAL:
+        return TASK_AWAITING_APPROVAL
+    if appr == 'timeout_reject' or ts == TASK_TIMEOUT_REJECT:
+        return TASK_TIMEOUT_REJECT
+    if appr == 'rejected' or ts == TASK_REJECTED:
+        return TASK_REJECTED
+    if appr == 'approved' and ts in (TASK_COMPLETED, TASK_APPROVED, TASK_RUNNING):
+        # 审批通过后若任务仍 running 则保持 running；完成则 completed
+        if ts == TASK_RUNNING:
+            return TASK_RUNNING
+        return TASK_COMPLETED if ts == TASK_COMPLETED else TASK_APPROVED
+    if ts in TASK_TERMINAL_STATUSES:
+        return ts
+    if ts == TASK_RUNNING:
+        return TASK_RUNNING
+    return TASK_PENDING
 TASK_AWAITING_APPROVAL = 'awaiting_approval'  # P0-5 HITL 确认面阻塞态
 
 
@@ -3783,6 +3857,27 @@ def _run_new_agent_system(stock_code: str, market_type: str, research_depth: int
             if final_decision.get('confidence_cap') is not None
             else result_state.get('confidence_cap')
         ),
+        # G5/G6/G7/G8：决策备忘 / scorecard / 反思只读 / memory 预取（空则 None）
+        'scorecard': (
+            final_decision.get('scorecard')
+            if final_decision.get('scorecard') is not None
+            else result_state.get('scorecard')
+        ),
+        'decision_memo': (
+            final_decision.get('decision_memo')
+            if final_decision.get('decision_memo') is not None
+            else result_state.get('decision_memo')
+        ),
+        'reflection_summary': (
+            final_decision.get('reflection_summary')
+            if final_decision.get('reflection_summary') is not None
+            else result_state.get('reflection_summary')
+        ),
+        'memory_context': (
+            final_decision.get('memory_context')
+            if final_decision.get('memory_context') is not None
+            else result_state.get('memory_context')
+        ),
     }
 
     terminal = TASK_FAILED if result_state.get('hitl_rejected') else TASK_COMPLETED
@@ -3952,27 +4047,55 @@ def start_agent_analysis():
 @app.route('/api/agent_analysis_status/<task_id>', methods=['GET'])
 @validate_schema(AgentAnalysisStatusSchema)  # S3-J(A): schema 校验扩展
 def get_agent_analysis_status(task_id):
-    """获取智能体分析任务的状态"""
+    """获取智能体分析任务的状态（G2：归一 status + run_terminal + provenance）"""
     task = agent_session_manager.load_task(task_id)
 
     if not task:
         return jsonify({'error': '找不到指定的智能体分析任务'}), 404
-    
-    # 准备要返回的数据
+
+    raw_status = task.get('status', 'unknown')
+    norm_status = normalize_task_status(raw_status)
+    result_raw = task.get('result')
+    result = result_raw if isinstance(result_raw, dict) else {}
+    final_decision = None
+    if isinstance(result, dict):
+        final_decision = result.get('final_decision') or result.get('decision')
+    approval_status = None
+    if isinstance(final_decision, dict):
+        approval_status = final_decision.get('approval_status')
+    if approval_status is None:
+        approval_status = task.get('approval_status')
+    run_terminal = compute_run_terminal(norm_status, approval_status)
+    provenance = []
+    if isinstance(result, dict) and result.get('provenance'):
+        provenance = result.get('provenance') or []
+    elif isinstance(final_decision, dict) and final_decision.get('provenance'):
+        provenance = final_decision.get('provenance') or []
+    else:
+        provenance = task.get('provenance') or []
+
     response_data = {
         'id': task['id'],
-        'status': task['status'],
+        'status': norm_status,
+        'status_raw': raw_status,
+        'run_terminal': run_terminal,
+        'approval_status': approval_status,
         'progress': task.get('progress', 0),
         'created_at': task['created_at'],
         'updated_at': task['updated_at'],
-        'params': task.get('params', {})
+        'params': task.get('params', {}),
+        'provenance': provenance,
     }
-    
+
     if 'result' in task:
          response_data['result'] = convert_messages_to_dict(task['result'])
+         if final_decision:
+             response_data['decision'] = final_decision
     if 'error' in task:
          response_data['error'] = task['error']
-         
+    elif norm_status in (TASK_FAILED, TASK_TIMEOUT_REJECT, TASK_REJECTED):
+         response_data['error'] = task.get('error', '未知错误')
+
     return custom_jsonify(response_data)
 
 
@@ -4878,6 +5001,24 @@ def ai_agent_analyze_stream():
                         final_decision = {**final_decision, 'degradations': degs}
                     if cap is not None and final_decision.get('confidence_cap') is None:
                         final_decision = {**final_decision, 'confidence_cap': cap}
+                    # G5/G6/G7/G8：决策备忘 / scorecard / 反思只读 / memory 预取（空不造假）
+                    for _k in (
+                        'scorecard', 'decision_memo', 'reflection_summary', 'memory_context'
+                    ):
+                        if result.get(_k) is not None and final_decision.get(_k) is None:
+                            final_decision = {**final_decision, _k: result.get(_k)}
+                else:
+                    final_decision = {
+                        'action': 'HOLD',
+                        'reasoning': '分析完成',
+                        'confidence': None,
+                        'degradations': degs,
+                        'confidence_cap': cap,
+                        'scorecard': result.get('scorecard'),
+                        'decision_memo': result.get('decision_memo'),
+                        'reflection_summary': result.get('reflection_summary'),
+                        'memory_context': result.get('memory_context'),
+                    }
                 yield emit('artifact', {
                     'type': 'artifact',
                     'artifact_type': 'decision_card',

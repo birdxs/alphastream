@@ -270,8 +270,22 @@ class ApiClient {
               case 'agent_degraded':
                 handlers.onAgentDegraded?.(payload as Parameters<NonNullable<typeof handlers.onAgentDegraded>>[0]);
                 break;
+              // G6 Run scorecard
+              case 'run.scorecard':
+              case 'run_scorecard':
+                handlers.onRunScorecard?.(payload as Parameters<NonNullable<typeof handlers.onRunScorecard>>[0]);
+                break;
               case 'artifact': handlers.onArtifact?.(payload as Parameters<NonNullable<typeof handlers.onArtifact>>[0]); break;
-              case 'agent_progress': handlers.onAgentProgress?.(payload as Parameters<NonNullable<typeof handlers.onAgentProgress>>[0]); break;
+                            case 'agent_progress':
+              case 'agent.started':
+              case 'agent.completed':
+              case 'agent.role_started':
+              case 'agent.role_finished':
+              case 'agent_started':
+              case 'agent_completed':
+              case 'role_started':
+              case 'role_finished':
+                handlers.onAgentProgress?.(payload as Parameters<NonNullable<typeof handlers.onAgentProgress>>[0]); break;
               case 'reasoning': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;
               // [UI-Q4] llm_request: 发LLM前的完整prompt/messages → 作为reasoning事件呈现
               case 'llm_request': handlers.onReasoning?.(payload as Parameters<NonNullable<typeof handlers.onReasoning>>[0]); break;

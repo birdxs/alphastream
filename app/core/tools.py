@@ -736,13 +736,29 @@ _WRITE_TOOL_EXACT = frozenset({
     "modify_order",
     "portfolio_write",
     "portfolio_update",
+    # G4 扩展矩阵：通用 mutate / system 假成功名
+    "mutate",
+    "mutate_state",
+    "system_mutate",
+    "admin_write",
+    "force_write",
+    "set_holding",
+    "insert_holding",
+    "upsert_holding",
+    "batch_update_holdings",
+    "liquidates",
+    "liquidate",
+    "rebalance_portfolio",
+    "transfer_position",
 })
 
 _WRITE_TOOL_NAME_RE = re.compile(
-    r"(?:^|_)(add|remove|delete|update|write|save|create|place|execute|submit|mutate)"
+    r"(?:^|_)(add|remove|delete|update|write|save|create|place|execute|submit|mutate|upsert|insert|set)"
     r"(?:_|$)"
-    r"|(?:portfolio|holding|order|trade).*(?:write|mutat|update|add|remove|delete|save)"
-    r"|^(?:buy|sell)$",
+    r"|(?:portfolio|holding|order|trade|position).*(?:write|mutat|update|add|remove|delete|save|upsert|liquidat)"
+    r"|^(?:buy|sell|mutate|liquidate)$"
+    r"|mutat(?:e|ion|ing)"
+    r"|system[_-]?(?:write|mutat)",
     re.I,
 )
 

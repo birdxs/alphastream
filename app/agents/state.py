@@ -58,3 +58,18 @@ class StockAnalysisState(TypedDict):
     # P0 降级可视化（零假值）：结构化 degradation + confidence 上界帽
     degradations: Annotated[List[Dict[str, Any]], operator.add]
     confidence_cap: Optional[float]  # 全 run 最紧上界；None=不封顶
+
+    # G6 Run scorecard（data_coverage / tool_success_rate / role_agreement / confidence_cap）
+    scorecard: Optional[Dict[str, Any]]
+    # G5 决策备忘（action / 否决·风险理由 / evidence 指针，非假数）
+    decision_memo: Optional[Dict[str, Any]]
+    # G7 反思只读摘要（禁止写生产权重）
+    reflection_summary: Optional[Dict[str, Any]]
+    # G8 Memory 预取（同标的历史；空历史 None，不造假）
+    memory_context: Optional[Dict[str, Any]]
+
+    # HITL（人工审批）状态字段 — 与 hitl.py 节点对齐
+    hitl: Optional[Dict[str, Any]]
+    hitl_pending: bool
+    hitl_rejected: bool
+    human_feedback: Optional[str]

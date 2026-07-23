@@ -331,3 +331,14 @@ class TestWrapAltData:
         result = wrap_alt_data_v2("600519")
         assert result["stock_code"] == "600519"
         assert result["stock_code"] is not None
+
+
+def test_provenance_entry_no_price_fields():
+    from app.core.artifact_wrapper import build_provenance_entry, provenance_from_sources, merge_provenance
+    e = build_provenance_entry(source='akshare', tool='get_stock_data', args={'code': '600519'})
+    assert set(e.keys()) <= {'source', 'tool', 'ts', 'digest'}
+    assert 'price' not in e and 'close' not in e
+    lst = provenance_from_sources(['akshare', {'name': 'eastmoney'}], tool='get_stock_data')
+    assert len(lst) == 2
+    m = merge_provenance(lst, lst)
+    assert len(m) == 2  # dedupe

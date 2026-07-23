@@ -6,20 +6,106 @@
  */
 
 import { create } from 'zustand';
-import type { AgentProgress, ToolCallStart, ToolCallResult, DebateTurn } from '@/lib/types';
+import type { AgentProgress, ToolCallStart, ToolCallResult, DebateTurn, RunTerminalStatus, ProvenanceEntry } from "@/lib/types";
+
+/** G2: 后端 task/run_terminal 与侧栏 status 映射 */
+const TASK_STATUS_ALIASES: Record<string, RunTerminalStatus | string> = {
+  done: "completed",
+  success: "completed",
+  error: "failed",
+  fail: "failed",
+  canceled: "cancelled",
+  cancelled: "cancelled",
+  timeout: "timeout_reject",
+  timeout_reject: "timeout_reject",
+  awaiting: "awaiting_approval",
+  awaiting_approval: "awaiting_approval",
+  pending_approval: "awaiting_approval",
+  rejected: "rejected",
+  approved: "approved",
+  pending: "pending",
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+};
+
+export function normalizeTaskStatus(status?: string | null): string {
+  if (!status) return "pending";
+  const s = String(status).trim().toLowerCase();
+  return TASK_STATUS_ALIASES[s] || s;
+}
+
+export function computeRunTerminal(
+  taskStatus?: string | null,
+  approvalStatus?: string | null,
+): string {
+  const ts = normalizeTaskStatus(taskStatus);
+  const appr = (approvalStatus || "").trim().toLowerCase();
+  if (appr === "pending" || appr === "awaiting_approval" || ts === "awaiting_approval") {
+    return "awaiting_approval";
+  }
+  if (appr === "timeout_reject" || ts === "timeout_reject") return "timeout_reject";
+  if (appr === "rejected" || ts === "rejected") return "rejected";
+  if (appr === "approved" && ts === "running") return "running";
+  if (appr === "approved" && ts === "completed") return "completed";
+  if (["completed", "failed", "cancelled", "timeout_reject", "rejected", "approved"].includes(ts)) {
+    return ts;
+  }
+  if (ts === "running") return "running";
+  return "pending";
+}
+
+/** G3 事件去重：role_started ↔ agent.started 等 */
+export function canonicalAgentEventName(eventType?: string | null): string {
+  const et = (eventType || "").trim();
+  const map: Record<string, string> = {
+    "agent.role_started": "agent.started",
+    "agent.role_finished": "agent.completed",
+    agent_role_started: "agent.started",
+    agent_role_finished: "agent.completed",
+    role_started: "agent.started",
+    role_finished: "agent.completed",
+    agent_started: "agent.started",
+    agent_completed: "agent.completed",
+    "agent.started": "agent.started",
+    "agent.completed": "agent.completed",
+  };
+  return map[et] || et;
+}
+
+export function agentEventDedupeKey(
+  eventType: string | undefined | null,
+  data: { agent_name?: string; agent?: string; role?: string; task_id?: string; conversation_id?: string; progress?: number | string } = {},
+): string {
+  const canon = canonicalAgentEventName(eventType);
+  const agent = data.agent_name || data.agent || data.role || "";
+  const task = data.task_id || data.conversation_id || "";
+  const seq = data.progress ?? "";
+  return `${canon}|${agent}|${task}|${seq}`;
+}
+
 
 // 实时数据流事件 — 用于AgentProgressPanel时间线视图
 export type AgentEventType =
   | 'agent_started'
   | 'agent_progress'
   | 'agent_completed'
+  // G3 bus aliases (canonicalized on append, but accepted as input)
+  | 'agent.started'
+  | 'agent.completed'
+  | 'agent.role_started'
+  | 'agent.role_finished'
+  | 'role_started'
+  | 'role_finished'
   | 'tool_call_start'
   | 'tool_call_result'
   | 'reasoning'
   | 'debate_turn'
   | 'degraded'
+  | 'scorecard'
   | 'done'
-  | 'error';
+  | 'error'
+  | string;
 
 export interface AgentEvent {
   id: string;             // 唯一id（时间戳+随机）
@@ -54,11 +140,43 @@ interface AgentState {
   degradations: DegradationItem[];
   /** 本 run 最紧 confidence 上界；undefined=未封顶 */
   confidenceCap?: number;
+  /** G6 Run scorecard */
+  scorecard: {
+    data_coverage?: number | null;
+    tool_success_rate?: number | null;
+    role_agreement?: number | null;
+    confidence_cap?: number | null;
+  } | null;
+  /** G5 决策备忘 */
+  decisionMemo: Record<string, unknown> | null;
+  /** G7 反思只读摘要 */
+  reflectionSummary: Record<string, unknown> | null;
+  /** G8 Memory 预取 */
+  memoryContext: Record<string, unknown> | null;
   events: AgentEvent[];
+  /** G3 双发去重键集合（agent.role_* ↔ agent.started/completed） */
+  seenEventKeys: string[];
+  /** G2 任务 terminal 投影 */
+  runTerminal?: string;
+  taskStatus?: string;
+  approvalStatus?: string;
+  /** G1 聚合 provenance */
+  provenance: ProvenanceEntry[];
   overallProgress: number;
   isAnalyzing: boolean;
 
   setAgentProgress: (progress: AgentProgress) => void;
+  setScorecard: (sc: {
+    data_coverage?: number | null;
+    tool_success_rate?: number | null;
+    role_agreement?: number | null;
+    confidence_cap?: number | null;
+  } | null) => void;
+  setDecisionMemo: (m: Record<string, unknown> | null) => void;
+  setReflectionSummary: (r: Record<string, unknown> | null) => void;
+  setMemoryContext: (m: Record<string, unknown> | null) => void;
+  setTaskTerminal: (taskStatus?: string | null, approvalStatus?: string | null) => void;
+  mergeProvenance: (entries?: ProvenanceEntry[] | null) => void;
   addToolCall: (tc: ToolCallStart) => void;
   setToolCallResult: (id: string, result: ToolCallResult) => void;
   addDebateTurn: (turn: DebateTurn) => void;
@@ -90,19 +208,62 @@ export const useAgentStore = create<AgentState>((set) => ({
   debateTurns: [],
   degradations: [],
   confidenceCap: undefined,
+  scorecard: null,
+  decisionMemo: null,
+  reflectionSummary: null,
+  memoryContext: null,
   events: [],
+  seenEventKeys: [],
+  provenance: [],
   overallProgress: 0,
   isAnalyzing: false,
 
   setAgentProgress: (progress) =>
     set((s) => {
+      const normalized: AgentProgress = {
+        ...progress,
+        status: (normalizeTaskStatus(progress.status) as AgentProgress['status']) || progress.status,
+      };
+      // map completed/failed aliases for role bar
+      if (progress.status === 'started' || progress.status === 'running') {
+        normalized.status = progress.status === 'running' ? 'started' : progress.status;
+      }
       const existing = s.agentProgresses.findIndex(
-        (a) => a.agent_name === progress.agent_name
+        (a) => a.agent_name === normalized.agent_name
       );
       const updated = [...s.agentProgresses];
-      if (existing >= 0) updated[existing] = progress;
-      else updated.push(progress);
-      return { agentProgresses: updated, overallProgress: progress.progress };
+      if (existing >= 0) updated[existing] = { ...updated[existing], ...normalized };
+      else updated.push(normalized);
+      return { agentProgresses: updated, overallProgress: normalized.progress };
+    }),
+  setScorecard: (sc) => set({ scorecard: sc }),
+  setDecisionMemo: (m) => set({ decisionMemo: m }),
+  setReflectionSummary: (r) => set({ reflectionSummary: r }),
+  setMemoryContext: (m) => set({ memoryContext: m }),
+  setTaskTerminal: (taskStatus, approvalStatus) =>
+    set((s) => {
+      const ts = taskStatus ?? s.taskStatus;
+      const ap = approvalStatus ?? s.approvalStatus;
+      return {
+        taskStatus: ts ? normalizeTaskStatus(ts) : s.taskStatus,
+        approvalStatus: ap ?? s.approvalStatus,
+        runTerminal: computeRunTerminal(ts, ap),
+      };
+    }),
+  mergeProvenance: (entries) =>
+    set((s) => {
+      if (!entries || !entries.length) return {};
+      const seen = new Set(
+        s.provenance.map((e) => `${e.source||''}|${e.tool||''}|${e.digest||''}`),
+      );
+      const next = [...s.provenance];
+      for (const e of entries) {
+        const k = `${e.source||''}|${e.tool||''}|${e.digest||''}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        next.push(e);
+      }
+      return { provenance: next.slice(-64) };
     }),
   addToolCall: (tc) =>
     set((s) => {
@@ -178,20 +339,31 @@ export const useAgentStore = create<AgentState>((set) => ({
     }),
   appendEvent: (ev) =>
     set((s) => {
+      // G3: role_started/finished 与 agent.started/completed 双发不双计
+      const dedupeKey = agentEventDedupeKey(ev.type, {
+        agent_name: ev.agent,
+        agent: ev.agent,
+        progress: (ev.meta as { progress?: number } | undefined)?.progress,
+        task_id: (ev.meta as { task_id?: string } | undefined)?.task_id,
+      });
+      if (dedupeKey && s.seenEventKeys.includes(dedupeKey)) {
+        return {};
+      }
       const full: AgentEvent = {
         id: ev.id ?? nextId(),
         ts: ev.ts ?? Date.now(),
-        type: ev.type,
+        type: (canonicalAgentEventName(ev.type) || ev.type) as AgentEventType,
         agent: ev.agent,
         title: ev.title,
         detail: ev.detail,
-        meta: ev.meta,
+        meta: { ...(ev.meta || {}), dedupe_key: dedupeKey, raw_type: ev.type },
       };
       const next =
         s.events.length >= MAX_EVENTS
           ? [...s.events.slice(s.events.length - MAX_EVENTS + 1), full]
           : [...s.events, full];
-      return { events: next };
+      const keys = [...s.seenEventKeys, dedupeKey].slice(-MAX_EVENTS);
+      return { events: next, seenEventKeys: keys };
     }),
   appendReasoningToken: (agent, token, finalize = false) =>
     set((s) => {
@@ -234,7 +406,16 @@ export const useAgentStore = create<AgentState>((set) => ({
       debateTurns: [],
       degradations: [],
       confidenceCap: undefined,
+      scorecard: null,
+      decisionMemo: null,
+      reflectionSummary: null,
+      memoryContext: null,
       events: [],
+      seenEventKeys: [],
+      provenance: [],
+      runTerminal: undefined,
+      taskStatus: undefined,
+      approvalStatus: undefined,
       overallProgress: 0,
       isAnalyzing: false,
     }),

@@ -116,15 +116,25 @@ def _args_digest(arguments):
 
 
 def _tool_call_start_payload(tool_call_id, tool_name, arguments, agent_name=None, source=None):
-    """P0-4 契约：name / args_digest / source；保留 tool_name+arguments 兼容旧前端。"""
+    """P0-4 契约：name / args_digest / source；G1 附 provenance 摘要。"""
+    src = source or (agent_name or 'chat_with_tools')
+    digest = _args_digest(arguments)
+    try:
+        from app.core.artifact_wrapper import build_provenance_entry
+        provenance = [
+            build_provenance_entry(source=str(src), tool=str(tool_name or ''), digest=digest)
+        ]
+    except Exception:
+        provenance = [{'source': str(src)[:200], 'tool': str(tool_name or '')[:120], 'digest': digest or ''}]
     return {
         'tool_call_id': tool_call_id,
         'name': tool_name,
         'tool_name': tool_name,
-        'args_digest': _args_digest(arguments),
+        'args_digest': digest,
         'arguments': arguments if isinstance(arguments, dict) else {},
-        'source': source or (agent_name or 'chat_with_tools'),
+        'source': src,
         'agent': agent_name or '',
+        'provenance': provenance,
     }
 
 
@@ -150,6 +160,22 @@ def _tool_call_result_payload(tool_call_id, tool_name, result, duration_ms, agen
             pass
     if ok is not None:
         inferred_ok = bool(ok)
+    src = source or (agent_name or 'chat_with_tools')
+    # G1 provenance 摘要（digest 基于摘要文本，不含完整行情）
+    try:
+        from app.core.artifact_wrapper import build_provenance_entry
+        provenance = [
+            build_provenance_entry(
+                source=str(src),
+                tool=str(tool_name or ''),
+                digest=_args_digest(summary) if summary else None,
+            )
+        ]
+    except Exception:
+        provenance = [{
+            'source': str(src)[:200],
+            'tool': str(tool_name or '')[:120],
+        }]
     return {
         'tool_call_id': tool_call_id,
         'name': tool_name,
@@ -159,8 +185,9 @@ def _tool_call_result_payload(tool_call_id, tool_name, result, duration_ms, agen
         'duration_ms': int(duration_ms or 0),
         'result_summary': summary,
         'result': summary,
-        'source': source or (agent_name or 'chat_with_tools'),
+        'source': src,
         'agent': agent_name or '',
+        'provenance': provenance,
     }
 
 

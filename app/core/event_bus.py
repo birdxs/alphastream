@@ -50,8 +50,28 @@ class EventBus:
             self._subscribers[event_name].append(callback)
             logger.debug(f"订阅事件: {event_name}")
 
-    def publish(self, event_name: str, data: Any = None) -> None:
-        """发布事件"""
+    def publish(self, event_name: str, data: Any = None, *, dual: bool = True) -> None:
+        """发布事件。
+
+        G3 dual=True：对角色/工具主题按 EVENT_ALIASES 双发等价别名；
+        消费端用 event_dedupe_key / canonical_event_name 去重（不双计）。
+        """
+        topics = [event_name]
+        if dual:
+            try:
+                aliases = EVENT_ALIASES.get(event_name) or EVENT_ALIASES.get(
+                    canonical_event_name(event_name)
+                )
+            except Exception:
+                aliases = None
+            if aliases:
+                topics = list(dict.fromkeys(aliases))
+
+        for topic in topics:
+            self._publish_one(topic, data)
+
+    def _publish_one(self, event_name: str, data: Any = None) -> None:
+        """单主题实际派发（handler + SSE bridge）。"""
         with self._sub_lock:
             subscribers = self._subscribers.get(event_name, []).copy()
 
@@ -70,16 +90,40 @@ class EventBus:
                 if (now - t) < self._SSE_BRIDGE_TTL
             ]
             bridges = self._sse_bridges.copy()
+
+        payload_data = data if data is not None else {}
+        dedupe = ''
+        canon = event_name
+        try:
+            canon = canonical_event_name(event_name)
+            dedupe = event_dedupe_key(event_name, payload_data if isinstance(payload_data, dict) else {})
+        except Exception:
+            pass
+
         for bridge_queue, filter_events, _created_at in bridges:
-            if filter_events is None or event_name in filter_events:
-                try:
-                    bridge_queue.put_nowait({
-                        'event': event_name,
-                        'data': data,
-                        'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S %z')
-                    })
-                except queue.Full:
-                    logger.warning(f"SSE桥接队列已满，丢弃事件: {event_name}")
+            allowed = True
+            if filter_events is not None:
+                allowed = event_name in filter_events
+                if not allowed:
+                    try:
+                        for a in EVENT_ALIASES.get(event_name, [event_name]):
+                            if a in filter_events:
+                                allowed = True
+                                break
+                    except Exception:
+                        pass
+            if not allowed:
+                continue
+            try:
+                bridge_queue.put_nowait({
+                    'event': event_name,
+                    'data': data,
+                    'timestamp': now_cn().strftime('%Y-%m-%d %H:%M:%S %z'),
+                    'canonical': canon,
+                    'dedupe_key': dedupe,
+                })
+            except queue.Full:
+                logger.warning(f"SSE桥接队列已满，丢弃事件: {event_name}")
 
     def unsubscribe(self, event_name: str, callback: Callable) -> None:
         """取消订阅"""
@@ -132,6 +176,11 @@ EVENT_APPROVAL_RESOLVED_ALIAS = 'approval_resolved'
 # AI流式事件类型
 EVENT_AGENT_STARTED = 'agent.started'
 EVENT_AGENT_COMPLETED = 'agent.completed'
+# G3 角色生命周期别名（与 agent.started/completed 双发不双计）
+EVENT_AGENT_ROLE_STARTED = 'agent.role_started'
+EVENT_AGENT_ROLE_FINISHED = 'agent.role_finished'
+# 前端 timeline 常用 underscore 别名（canonical 仍为 agent.started / agent.completed）
+EVENT_AGENT_PROGRESS = 'agent_progress'  # payload.event_type 字段名，非 bus 主题
 # P0-4：总线主题（历史名）+ Sprint1 契约名 agent.tool_* 同构 payload
 EVENT_TOOL_CALL_START = 'tool.call.start'
 EVENT_TOOL_CALL_RESULT = 'tool.call.result'
@@ -143,11 +192,83 @@ EVENT_TOKEN_GENERATED = 'token.generated'
 EVENT_STREAM_DONE = 'stream.done'
 EVENT_REASONING = 'reasoning'
 
-# P0-3 辩论结构化事件（与 P0-2 降级并列，同总线）
-
 # P0 降级可视化（零假值）：bus 主名 agent.degraded；payload.event_type 同名供 SSE 解包
 EVENT_AGENT_DEGRADED = 'agent.degraded'
 EVENT_AGENT_DEGRADED_ALIAS = 'agent_degraded'
+
+# G6 Run scorecard（done 时四维指标；主名 run.scorecard）
+EVENT_RUN_SCORECARD = 'run.scorecard'
+EVENT_RUN_SCORECARD_ALIAS = 'run_scorecard'
+
+# G3 事件别名映射：bus 主题 → 等价规范主题列表（canonical 优先列在首位）
+EVENT_ALIASES: Dict[str, List[str]] = {
+    EVENT_AGENT_STARTED: [EVENT_AGENT_STARTED, EVENT_AGENT_ROLE_STARTED],
+    EVENT_AGENT_ROLE_STARTED: [EVENT_AGENT_STARTED, EVENT_AGENT_ROLE_STARTED],
+    EVENT_AGENT_COMPLETED: [EVENT_AGENT_COMPLETED, EVENT_AGENT_ROLE_FINISHED],
+    EVENT_AGENT_ROLE_FINISHED: [EVENT_AGENT_COMPLETED, EVENT_AGENT_ROLE_FINISHED],
+    EVENT_TOOL_CALL_START: [EVENT_TOOL_CALL_START, EVENT_AGENT_TOOL_CALL],
+    EVENT_AGENT_TOOL_CALL: [EVENT_TOOL_CALL_START, EVENT_AGENT_TOOL_CALL],
+    EVENT_TOOL_CALL_RESULT: [EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT],
+    EVENT_AGENT_TOOL_RESULT: [EVENT_TOOL_CALL_RESULT, EVENT_AGENT_TOOL_RESULT],
+    EVENT_AGENT_DEGRADED: [EVENT_AGENT_DEGRADED, EVENT_AGENT_DEGRADED_ALIAS],
+    EVENT_AGENT_DEGRADED_ALIAS: [EVENT_AGENT_DEGRADED, EVENT_AGENT_DEGRADED_ALIAS],
+    EVENT_APPROVAL_NEEDED: [EVENT_APPROVAL_NEEDED, EVENT_APPROVAL_NEEDED_ALIAS],
+    EVENT_APPROVAL_NEEDED_ALIAS: [EVENT_APPROVAL_NEEDED, EVENT_APPROVAL_NEEDED_ALIAS],
+    EVENT_APPROVAL_RESOLVED: [EVENT_APPROVAL_RESOLVED, EVENT_APPROVAL_RESOLVED_ALIAS],
+    EVENT_APPROVAL_RESOLVED_ALIAS: [EVENT_APPROVAL_RESOLVED, EVENT_APPROVAL_RESOLVED_ALIAS],
+    EVENT_RUN_SCORECARD: [EVENT_RUN_SCORECARD, EVENT_RUN_SCORECARD_ALIAS],
+    EVENT_RUN_SCORECARD_ALIAS: [EVENT_RUN_SCORECARD, EVENT_RUN_SCORECARD_ALIAS],
+}
+
+# 别名 → 规范名（用于双计去重）
+_CANONICAL_ALIAS_MAP = {
+    EVENT_AGENT_ROLE_STARTED: EVENT_AGENT_STARTED,
+    EVENT_AGENT_ROLE_FINISHED: EVENT_AGENT_COMPLETED,
+    EVENT_AGENT_TOOL_CALL: EVENT_TOOL_CALL_START,
+    EVENT_AGENT_TOOL_RESULT: EVENT_TOOL_CALL_RESULT,
+    EVENT_AGENT_DEGRADED_ALIAS: EVENT_AGENT_DEGRADED,
+    EVENT_APPROVAL_NEEDED_ALIAS: EVENT_APPROVAL_NEEDED,
+    EVENT_APPROVAL_RESOLVED_ALIAS: EVENT_APPROVAL_RESOLVED,
+    EVENT_RUN_SCORECARD_ALIAS: EVENT_RUN_SCORECARD,
+    'agent_started': EVENT_AGENT_STARTED,
+    'agent_completed': EVENT_AGENT_COMPLETED,
+    'agent_role_started': EVENT_AGENT_STARTED,
+    'agent_role_finished': EVENT_AGENT_COMPLETED,
+    'role_started': EVENT_AGENT_STARTED,
+    'role_finished': EVENT_AGENT_COMPLETED,
+}
+
+
+def canonical_event_name(event_type: str) -> str:
+    """将别名折叠为规范主题名（双计去重用）。role_started → agent.started。"""
+    if not event_type:
+        return event_type
+    et = str(event_type).strip()
+    if et in _CANONICAL_ALIAS_MAP:
+        return _CANONICAL_ALIAS_MAP[et]
+    if et in EVENT_ALIASES:
+        return EVENT_ALIASES[et][0]
+    return et
+
+
+def event_dedupe_key(event_type: str, data: Optional[Dict[str, Any]] = None) -> str:
+    """G3 去重键：canonical(event) + agent + task 标识。用于 SSE/前端「双发不双计」。"""
+    data = data or {}
+    canon = canonical_event_name(event_type)
+    agent = (
+        data.get('agent_name')
+        or data.get('agent')
+        or data.get('role')
+        or ''
+    )
+    task = (
+        data.get('task_id')
+        or data.get('conversation_id')
+        or data.get('thread_id')
+        or ''
+    )
+    seq = data.get('seq') or data.get('step') or data.get('progress') or ''
+    return f'{canon}|{agent}|{task}|{seq}'
 
 # 机器可读 cause 枚举（任务契约 + inventory §1.6 兼容）
 DEGRADATION_CAUSES = frozenset({
@@ -284,6 +405,47 @@ def publish_agent_degraded(
         get_event_bus().publish(EVENT_AGENT_DEGRADED, payload)
     except Exception as e:
         logger.debug('publish agent.degraded failed: %s', e)
+    return payload
+
+
+def publish_run_scorecard(
+    scorecard: dict,
+    *,
+    task_id: str = '',
+    stock_code: str = '',
+    correlation_id: str = '',
+) -> dict:
+    """发布 G6 run.scorecard（done 时四维；不携带假行情字段）。
+
+    scorecard 至少含 data_coverage / tool_success_rate / role_agreement / confidence_cap。
+    """
+    if not isinstance(scorecard, dict):
+        scorecard = {}
+    payload = {
+        'event_type': EVENT_RUN_SCORECARD,
+        'data_coverage': scorecard.get('data_coverage'),
+        'tool_success_rate': scorecard.get('tool_success_rate'),
+        'role_agreement': scorecard.get('role_agreement'),
+        'confidence_cap': scorecard.get('confidence_cap'),
+    }
+    for k in ('evidence', 'task_id', 'stock_code', 'decision_memo',
+              'reflection_summary', 'memory_context'):
+        if scorecard.get(k) is not None and k not in payload:
+            payload[k] = scorecard[k]
+    if task_id:
+        payload['task_id'] = str(task_id)
+    elif scorecard.get('task_id'):
+        payload['task_id'] = str(scorecard['task_id'])
+    if stock_code:
+        payload['stock_code'] = str(stock_code)
+    elif scorecard.get('stock_code'):
+        payload['stock_code'] = str(scorecard['stock_code'])
+    if correlation_id:
+        payload['correlation_id'] = str(correlation_id)
+    try:
+        get_event_bus().publish(EVENT_RUN_SCORECARD, payload)
+    except Exception as e:
+        logger.debug('publish run.scorecard failed: %s', e)
     return payload
 
 

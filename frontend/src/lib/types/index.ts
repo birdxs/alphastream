@@ -21,6 +21,8 @@ export interface SSEHandlers {
   onDebateTurn?: (data: DebateTurn) => void;
   /** P0-2 降级可视化（零假值）：agent.degraded */
   onAgentDegraded?: (data: AgentDegradedEvent) => void;
+  /** G6 Run scorecard（done 时四维） */
+  onRunScorecard?: (data: RunScorecardEvent) => void;
   /** Sprint2: chat 意图路由 meta（无假行情数） */
   onMeta?: (data: ChatIntentMeta) => void;
   onError?: (data: { code: string; message: string; recoverable?: boolean }) => void;
@@ -48,6 +50,28 @@ export interface ArtifactSource {
   type: string;
 }
 
+/** G1 数据血统摘要 — 仅 source/tool/ts/digest，禁止嵌入假行情 */
+export interface ProvenanceEntry {
+  source?: string;
+  tool?: string;
+  ts?: string;
+  digest?: string;
+}
+
+/** G2 统一 terminal 态（与 HITL / web_server 对齐） */
+export type RunTerminalStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'awaiting_approval'
+  | 'timeout_reject'
+  | 'rejected'
+  | 'approved';
+
+export type AgentTaskStatus = RunTerminalStatus | 'unknown' | string;
+
 export interface Artifact {
   type: 'artifact';
   artifact_type: ArtifactType;
@@ -55,7 +79,16 @@ export interface Artifact {
   data: Record<string, unknown>;
   confidence?: number;
   sources?: ArtifactSource[];
-  metadata?: { source_tool: string; stock_code: string; generated_at: string };
+  /** G1 数据血统摘要列表 */
+  provenance?: ProvenanceEntry[];
+  metadata?: {
+    source_tool?: string;
+    stock_code?: string;
+    stock_name?: string;
+    generated_at?: string;
+    provenance?: ProvenanceEntry[];
+    [key: string]: unknown;
+  };
 }
 
 export type ArtifactType =
@@ -81,7 +114,7 @@ export type ArtifactType =
 // Agent进度
 export interface AgentProgress {
   agent_name: string;
-  status: 'started' | 'completed' | 'error';
+  status: 'started' | 'completed' | 'error' | 'running' | 'awaiting_approval' | 'timeout_reject' | 'rejected' | 'approved';
   progress: number;
   message?: string;
   stock_code?: string;
@@ -113,6 +146,71 @@ export interface AgentDegradedEvent {
   correlation_id?: string;
 }
 
+/** G6 Run scorecard 事件（run.scorecard）— 无假行情 */
+export interface RunScorecardEvent {
+  event_type?: 'run.scorecard' | string;
+  data_coverage?: number | null;
+  tool_success_rate?: number | null;
+  role_agreement?: number | null;
+  confidence_cap?: number | null;
+  task_id?: string;
+  stock_code?: string;
+  evidence?: Record<string, unknown> | null;
+  decision_memo?: DecisionMemo | null;
+  reflection_summary?: ReflectionSummary | null;
+  memory_context?: MemoryPrefetch | null;
+  [key: string]: unknown;
+}
+
+/** G5 决策备忘（action / 否决·风险理由 / evidence 指针） */
+export interface DecisionMemo {
+  action?: 'BUY' | 'SELL' | 'HOLD' | string;
+  confidence?: number | null;
+  confidence_cap?: number | null;
+  risk_level?: string | null;
+  reasoning?: string | null;
+  veto_reasons?: string[];
+  risk_reasons?: string[];
+  evidence_pointers?: Array<{ slot: string; label: string; status: 'present' | 'missing' | string }>;
+  scorecard?: {
+    data_coverage?: number | null;
+    tool_success_rate?: number | null;
+    role_agreement?: number | null;
+    confidence_cap?: number | null;
+  } | null;
+  disclaimer?: string;
+  stock_code?: string;
+  [key: string]: unknown;
+}
+
+/** G7 反思只读摘要 */
+export interface ReflectionSummary {
+  count?: number;
+  items?: Array<{
+    timestamp?: string;
+    accuracy_score?: number | null;
+    lessons?: string | null;
+    what_went_well?: string | null;
+    what_went_wrong?: string | null;
+    prediction_summary?: string | null;
+  }>;
+  readonly?: boolean;
+  note?: string;
+}
+
+/** G8 Memory 预取（空历史不造假，null 表示无） */
+export interface MemoryPrefetch {
+  history_count?: number;
+  recent?: Array<{
+    timestamp?: string;
+    action?: string | null;
+    confidence?: number | null;
+    reasoning?: string | null;
+  }>;
+  semantic_context?: string | null;
+  empty?: boolean;
+}
+
 // 工具调用
 /** P0-4 工具时间线契约：name/args_digest/ok/error/duration_ms/source（兼容旧 tool_name/arguments/result） */
 export interface ToolCallStart {
@@ -125,6 +223,7 @@ export interface ToolCallStart {
   source?: string;
   status?: "running" | "done" | "error";
   agent?: string;
+  provenance?: ProvenanceEntry[];
 }
 
 export interface ToolCallResult {
@@ -140,6 +239,7 @@ export interface ToolCallResult {
   source?: string;
   agent?: string;
   artifact?: Artifact;
+  provenance?: ProvenanceEntry[];
 }
 
 /** P0-3 辩论轮次（bull / bear / summary） */
@@ -189,4 +289,7 @@ export interface StockDecision {
   reasoning: string;
   risk_score: number;
   price_targets?: { support: number; resistance: number; target: number };
+  /** G1 数据血统 */
+  provenance?: ProvenanceEntry[];
+  approval_status?: string;
 }

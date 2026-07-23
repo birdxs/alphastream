@@ -328,3 +328,33 @@ class TestAgentDegraded:
         assert eb_mod.infer_degradation_cause_from_text('ReadTimeout on adapter') == 'tool_timeout'
         assert eb_mod.infer_degradation_cause_from_text('ProxyError connection reset') == 'network'
         assert eb_mod.infer_degradation_cause_from_text('empty response from upstream') == 'upstream_empty'
+
+
+# --- G3 event alias + dedupe ---
+def test_canonical_event_name_role_aliases():
+    from app.core.event_bus import (
+        canonical_event_name,
+        event_dedupe_key,
+        EVENT_AGENT_STARTED,
+        EVENT_AGENT_ROLE_STARTED,
+        EVENT_AGENT_COMPLETED,
+        EVENT_AGENT_ROLE_FINISHED,
+    )
+    assert canonical_event_name(EVENT_AGENT_ROLE_STARTED) == EVENT_AGENT_STARTED
+    assert canonical_event_name(EVENT_AGENT_ROLE_FINISHED) == EVENT_AGENT_COMPLETED
+    assert canonical_event_name('agent_started') == EVENT_AGENT_STARTED
+    k1 = event_dedupe_key(EVENT_AGENT_STARTED, {'agent_name': 'market', 'task_id': 't1'})
+    k2 = event_dedupe_key(EVENT_AGENT_ROLE_STARTED, {'agent_name': 'market', 'task_id': 't1'})
+    assert k1 == k2
+
+
+def test_publish_dual_role_aliases(monkeypatch):
+    from app.core import event_bus as eb
+    bus = eb.EventBus()
+    seen = []
+    bus.subscribe(eb.EVENT_AGENT_STARTED, lambda d: seen.append(('started', d)))
+    bus.subscribe(eb.EVENT_AGENT_ROLE_STARTED, lambda d: seen.append(('role_started', d)))
+    bus.publish(eb.EVENT_AGENT_STARTED, {'agent_name': 'x', 'task_id': '1'})
+    kinds = {k for k, _ in seen}
+    assert 'started' in kinds
+    assert 'role_started' in kinds

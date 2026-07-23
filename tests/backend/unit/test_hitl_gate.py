@@ -192,3 +192,24 @@ def test_approval_event_payload_has_event_type():
     payload = seen[0]
     assert payload.get("event_type") in ("approval_needed", "approval_resolved") or payload.get("type")
     assert payload.get("task_id") == "t-hitl-5"
+
+
+def test_compute_run_terminal_matrix():
+    """G2: task+approval → run_terminal 统一投影。"""
+    # 惰性导入：web_server 较重，但函数为纯映射
+    from app.web.web_server import (
+        compute_run_terminal,
+        normalize_task_status,
+        TASK_AWAITING_APPROVAL,
+        TASK_TIMEOUT_REJECT,
+        TASK_COMPLETED,
+        TASK_FAILED,
+        TASK_RUNNING,
+    )
+    assert normalize_task_status('DONE') == TASK_COMPLETED
+    assert normalize_task_status('timeout') == TASK_TIMEOUT_REJECT
+    assert compute_run_terminal(TASK_RUNNING, 'pending') == TASK_AWAITING_APPROVAL
+    assert compute_run_terminal(TASK_COMPLETED, 'timeout_reject') == TASK_TIMEOUT_REJECT
+    assert compute_run_terminal(TASK_COMPLETED, 'rejected') == 'rejected'
+    assert compute_run_terminal(TASK_FAILED, None) == TASK_FAILED
+    assert compute_run_terminal(TASK_COMPLETED, 'approved') == TASK_COMPLETED
