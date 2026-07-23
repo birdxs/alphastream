@@ -75,8 +75,21 @@ def execute_tool_with_artifact(tool_name: str, arguments: dict) -> Tuple[str, Op
     """
     from app.core.tools import execute_tool
 
-    # 执行工具获取字符串结果
+    # 执行工具获取字符串结果（P0-1 经 execute_tool 统一护栏）
     raw_result = execute_tool(tool_name, arguments)
+
+    # 护栏 block/halt：禁止再走底层分析器拉结构化数据（避免旁路绕过 + 假 Artifact）
+    if isinstance(raw_result, str) and '"guardrail"' in raw_result:
+        try:
+            import json as _json
+            _payload = _json.loads(raw_result)
+            if isinstance(_payload, dict) and _payload.get("guardrail") in (
+                "block",
+                "halt",
+            ):
+                return raw_result, None
+        except (TypeError, ValueError):
+            pass
 
     # 尝试获取结构化数据
     structured_data = _get_structured_data(tool_name, arguments)

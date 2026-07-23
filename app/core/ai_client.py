@@ -168,6 +168,19 @@ def chat_with_tools(client, messages, tools_schema, tool_executor=None,
         from app.core.tools import execute_tool
         tool_executor = execute_tool
 
+    # P0-1：turn 级工具失败护栏（同签名连续失败 → block；与 FallbackManager 超时层解耦）
+    from app.core.tool_guardrails import turn_guardrails
+
+    with turn_guardrails(correlation_id=agent_name or "chat_with_tools"):
+        return _chat_with_tools_body(
+            client, messages, tools_schema, tool_executor,
+            max_tool_rounds, temperature, max_tokens, agent_name,
+        )
+
+
+def _chat_with_tools_body(client, messages, tools_schema, tool_executor,
+                          max_tool_rounds, temperature, max_tokens, agent_name):
+    """chat_with_tools 主体（已在 turn_guardrails 上下文中）。"""
     tool_calls_log = []
     model = get_ai_model()
 
@@ -467,6 +480,21 @@ def chat_with_tools_stream(client, messages, tools_schema, tool_executor=None,
         from app.core.tools import execute_tool
         tool_executor = execute_tool
 
+    # P0-1：流式 FC 同样挂 turn 级失败护栏（/api/ai/chat 主路径）
+    from app.core.tool_guardrails import turn_guardrails
+
+    with turn_guardrails(correlation_id=agent_name or "chat_with_tools_stream"):
+        return _chat_with_tools_stream_body(
+            client, messages, tools_schema, tool_executor,
+            max_tool_rounds, temperature, max_tokens, event_callback, agent_name,
+        )
+
+
+def _chat_with_tools_stream_body(
+    client, messages, tools_schema, tool_executor,
+    max_tool_rounds, temperature, max_tokens, event_callback, agent_name,
+):
+    """chat_with_tools_stream 主体（已在 turn_guardrails 上下文中）。"""
     tool_calls_log = []
 
     # [FIX-5 2026-05-18] 引入 provider adapter 处理 reasoning_content 多轮兼容

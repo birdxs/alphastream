@@ -7,4 +7,5 @@
 - conversation.py(对话上下文持久化，多轮AI分析对话管理，JSON文件存储)
 - database.py(数据库), fallback_manager.py(降级管理)
 - wind_budget.py(Wind数据源省积分底座：WindCache持久化缓存 + WindQuota日配额闸门S/A/B硬隔离，独立sqlite引擎与业务库隔离) [NEW-FILE:#20260529-WIND-01]
+- tool_guardrails.py(P0-1 turn 级工具失败护栏：同 tool+归一化 args 连续失败 block/halt；ContextVar 挂 execute_tool / chat FC) [NEW-FILE:#20260723-P01]
 - 一旦这里的结构发生变化，请务必更新我

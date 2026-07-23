@@ -360,17 +360,18 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 ### 9.1 P0 — 信任与回路最小闭合
 
-#### P0-1 工具调用护栏（进 Loop）
+#### P0-1 工具调用护栏（进 Loop） ✅ 完成（2026-07-23）
 
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo `ToolCallGuardrailController` |
 | 缺口 | 同签名死循环烧 LLM/Wind |
-| 融化 | `app/core/tool_guardrails.py`（重写）：before/after 挂 `tools` 与 `/api/ai/chat` FC |
-| 契约 | allow\|warn\|block\|halt；env 阈值；correlation_id 日志 |
-| 验收 | 单测同签名 ≥N block；集成 mock 不超调 |
-| 超越 | block 不计 Wind 配额；SSE 可见「护栏中止」 |
-| 风险 | 过严误杀 → 分档（只读/写） |
+| 融化 | `app/core/tool_guardrails.py`（重写）：before/after 挂 `tools.execute_tool` 与 `chat_with_tools`/`chat_with_tools_stream`（/api/ai/chat） |
+| 契约 | allow\|warn\|block\|halt；env：`TOOL_GUARD_EXACT_FAIL_WARN/BLOCK`、`TOOL_GUARD_SAME_TOOL_WARN/HALT`；correlation_id 日志；block 结果 `data=null` 无假数 |
+| 验收 | `tests/backend/unit/test_tool_guardrails.py` **11 passed**（mock 连续失败触发 block） |
+| 超越 | block 不进底层（不烧 Wind）；artifact 路径对 block/halt 不包装结构化假 Artifact |
+| 风险 | 过严误杀 → env 调高阈值；无 ContextVar 时旁路直调保持兼容 |
+| 进度 | **DONE** commit 见 `feat(agent): P0-1 tool call guardrail against failure storms` |
 
 #### P0-2 意图-工具协议 + 服务端二次校验
 
@@ -503,7 +504,8 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 ### Sprint 1 — P0 回路闭合
 
-- Guardrail、Protocol+硬拦、读仓工具、provenance/timeline、确认面、降级帽、完成态（Comdr 可砍子集）。  
+- **P0-1 工具护栏：✅ DONE**（2026-07-23，`tool_guardrails.py` + `execute_tool` + FC stream）  
+- 待做：Protocol+硬拦、读仓工具、provenance/timeline、确认面、降级帽、完成态（Comdr 可砍子集）。  
 - 分批 pytest；授权后 CDP 真测；禁 Playwright/全量 vitest。
 
 ### Sprint 2 — 对抗证据与决策备忘

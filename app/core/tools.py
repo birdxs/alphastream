@@ -1,7 +1,7 @@
 """
 Input: 各分析模块的方法调用、OpenAI Function Calling工具调用请求
 Output: LangChain @tool 包装的标准工具函数 + OpenAI Function Calling格式schema + 工具执行分发
-Pos: app/core/tools.py - 所有Agent共享的工具函数注册表，支持LangChain和OpenAI双格式
+Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 turn 护栏（tool_guardrails）
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -377,22 +377,8 @@ TOOL_EXECUTORS = {
 }
 
 
-def execute_tool(tool_name: str, arguments: dict) -> str:
-    """
-    执行指定工具并返回结果字符串。
-
-    通过LangChain工具的 .invoke() 方法调用，兼容 @tool 装饰器的调用约定。
-
-    Args:
-        tool_name: 工具名称（需与TOOL_EXECUTORS中的key匹配）
-        arguments: 工具参数字典
-
-    Returns:
-        str: 工具执行结果的字符串表示
-
-    Raises:
-        ValueError: 未知的工具名称
-    """
+def _raw_execute_tool(tool_name: str, arguments: dict) -> str:
+    """底层工具执行（无护栏）。未知工具抛 ValueError（保持既有契约）。"""
     executor = TOOL_EXECUTORS.get(tool_name)
     if executor is None:
         available = ', '.join(TOOL_EXECUTORS.keys())
@@ -406,3 +392,39 @@ def execute_tool(tool_name: str, arguments: dict) -> str:
         error_msg = f"工具 {tool_name} 执行失败: {str(e)}"
         logger.error(error_msg)
         return error_msg
+
+
+def execute_tool(tool_name: str, arguments: dict) -> str:
+    """
+    执行指定工具并返回结果字符串。
+
+    通过LangChain工具的 .invoke() 方法调用，兼容 @tool 装饰器的调用约定。
+    P0-1：若当前 ContextVar 绑定了 turn 护栏，则同 tool+归一化 args 连续失败
+    达阈值时返回结构化 JSON（guardrail=block|halt|warn），不造假金融数据。
+
+    Args:
+        tool_name: 工具名称（需与TOOL_EXECUTORS中的key匹配）
+        arguments: 工具参数字典
+
+    Returns:
+        str: 工具执行结果的字符串表示；被护栏拦截时为含 guardrail 字段的 JSON
+
+    Raises:
+        ValueError: 未知的工具名称（仅裸路径；护栏开启时未知工具仍 raise，由调用方捕获）
+    """
+    try:
+        from app.core.tool_guardrails import get_turn_guardrails, guarded_execute
+
+        if get_turn_guardrails() is not None:
+            # 未知工具仍 raise，与既有契约一致（ai_client 已 try/except 包装）
+            return guarded_execute(
+                tool_name,
+                arguments or {},
+                lambda n, a: _raw_execute_tool(n, a),
+            )
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("tool_guardrails unavailable, fallback raw execute: %s", e)
+
+    return _raw_execute_tool(tool_name, arguments or {})
