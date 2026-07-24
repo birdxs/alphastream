@@ -1,6 +1,7 @@
 // Input: Next.js App Router子页面（children）
-// Output: 全局HTML骨架：Navbar + main content area
+// Output: 全局HTML骨架：Navbar + main content area；S-UI-3 主题 FOUC 预置
 // Pos: 应用最顶层布局入口
+// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="prefetch" href="/api/market_indices" as="fetch" crossOrigin="anonymous" />
         {/* P2: 预热 /health Route Handler，让浏览器在 NetworkStatus 探针发起前完成后端冷启动连接 */}
         <link rel="prefetch" href="/health" as="fetch" crossOrigin="anonymous" />
-        {/* S-UI-3: 同步 localStorage 主题/涨跌色方案，降低 FOUC 与 hydration 闪烁 */}
+        {/* S-UI-3: 同步读取 theme-storage，避免亮暗切换首屏闪白 */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var r=localStorage.getItem('theme-storage');if(!r)return;var j=JSON.parse(r);var t=(j&&j.state&&j.state.theme)||'dark';var s=(j&&j.state&&j.state.stockColorScheme)||'cn';var el=document.documentElement;if(t==='dark')el.classList.add('dark');else el.classList.remove('dark');el.setAttribute('data-color-scheme',s);}catch(e){}})();`,
