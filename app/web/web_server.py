@@ -2571,7 +2571,8 @@ def _fetch_market_indices_data():
 
     _PRIMARY_TIMEOUT = int(os.getenv('INDEX_PRIMARY_TIMEOUT_S', '5'))
     _FALLBACK_TIMEOUT = int(os.getenv('INDEX_FALLBACK_TIMEOUT_S', '15'))  # 新浪约 9s
-    _CACHE_TTL = int(os.getenv('INDEX_CACHE_TTL_S', '30'))
+    # 与 get_market_indices / 预热默认一致：120s 新鲜窗（过期仍可由路由层 stale 回退）
+    _CACHE_TTL = int(os.getenv('INDEX_CACHE_TTL_S', '120'))
 
     # 快路径：无锁检查缓存
     _cache = _market_indices_cache
@@ -2755,38 +2756,62 @@ def get_market_indices():
     Output: JSON {'indices': [...], 'source': str}
     Pos: 首页/Dashboard 实时指数端点，三级兜底链，S2-A3 5s 缓存 header
     B23: 添加快速超时路径（FAST_TIMEOUT_MS env）——缓存为空时先返回 degraded，
-    避免 Playwright / 浏览器首屏在 loading 状态卡住
+    避免首屏在 loading 状态卡住。
+    2026-07-24: TTL 过期或快速超时后优先回退 stale_cache（有真数就返，不造假），
+    避免 1.5s 快超时把已有缓存清空成 503 空态。
     """
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+    from concurrent.futures import TimeoutError as FuturesTimeout
 
-    # 快速超时（默认 1.5s）——缓存命中时忽略超时，直接返回
-    _fast_ms = int(os.getenv('INDEX_FAST_TIMEOUT_MS', '1500'))
+    # 快速超时（默认 8s，env 可调）——新鲜缓存命中时跳过
+    _fast_ms = int(os.getenv('INDEX_FAST_TIMEOUT_MS', '8000'))
+    _ttl = int(os.getenv('INDEX_CACHE_TTL_S', '120'))
 
-    # 快路径：缓存命中时跳过 ThreadPoolExecutor 开销
+    def _stale_from_cache(cache_dict):
+        """有过期缓存且含 indices 时返回 source=stale_cache 副本；否则 None。"""
+        if not cache_dict.get('data'):
+            return None
+        payload = cache_dict['data']
+        if not payload.get('indices'):
+            return None
+        stale = dict(payload)
+        stale['source'] = 'stale_cache'
+        return stale
+
+    # 快路径：TTL 内缓存命中时跳过线程池
     _cache = _market_indices_cache
-    if _cache.get('data') and (time.time() - _cache.get('ts', 0)) < int(os.getenv('INDEX_CACHE_TTL_S', '30')):
+    if _cache.get('data') and (time.time() - _cache.get('ts', 0)) < _ttl:
         cached = dict(_cache['data'])
         cached['source'] = 'cache'
         data = cached
     else:
-        # 慢路径：在线程池里调用，限时 _fast_ms
-        # BD-3: 改用全局线程池
+        # 慢路径：在全局线程池限时拉取；失败/超时优先 stale，杜绝空 503 闪屏
         fut = _GLOBAL_THREAD_POOL.submit(_fetch_market_indices_data)
-        _timed_out = False
         try:
-            data = fut.result(timeout=_fast_ms / 1000)
+            data = fut.result(timeout=_fast_ms / 1000.0)
+            if (not data.get('indices')) and (stale := _stale_from_cache(_cache)):
+                app.logger.warning(
+                    "get_market_indices 上游空结果，返回过期缓存 source=stale_cache"
+                )
+                data = stale
         except FuturesTimeout:
-            # 全局池不需要手动 shutdown，只取消 future
-            _timed_out = True
             fut.cancel()
-            app.logger.warning(f"get_market_indices 快速超时 {_fast_ms}ms，返回 degraded")
-            data = {'indices': [], 'source': 'degraded'}
+            stale = _stale_from_cache(_cache)
+            if stale is not None:
+                app.logger.warning(
+                    f"get_market_indices 快速超时 {_fast_ms}ms，返回过期缓存 source=stale_cache"
+                )
+                data = stale
+            else:
+                app.logger.warning(
+                    f"get_market_indices 快速超时 {_fast_ms}ms 且无缓存，返回 degraded"
+                )
+                data = {'indices': [], 'source': 'degraded'}
 
     source = data.get('source', 'unknown')
 
     # B2-4: 标注行情时效性
     _dq_map = {
-        'cache':       'cached_30s',
+        'cache':       'cached_fresh',
         'eastmoney':   'realtime',
         'sina':        'realtime',
         'daily':       'delayed_15min',
@@ -2796,7 +2821,7 @@ def get_market_indices():
     data_quality = _dq_map.get(source, 'unknown')
     data.setdefault('meta', {})['data_quality'] = data_quality
 
-    # B2-5: 完全 degraded 时返回 503（无任何有效数据）
+    # B2-5: 完全 degraded 时返回 503（无任何有效数据，仍禁止假数）
     if source == 'degraded' and not data.get('indices'):
         resp = jsonify({'success': False, 'error_code': 'DEGRADED',
                         'message': '所有上游数据源均不可用', 'meta': {'data_quality': 'stale_cache'}})
@@ -2810,7 +2835,7 @@ def get_market_indices():
     if source == 'cache':
         resp.headers['X-Cache'] = 'HIT'
     elif source in ('degraded', 'stale_cache'):
-        resp.headers['X-Cache'] = 'DEGRADED'
+        resp.headers['X-Cache'] = 'STALE' if source == 'stale_cache' else 'DEGRADED'
     else:
         resp.headers['X-Cache'] = 'MISS'
     return resp
@@ -6520,7 +6545,8 @@ if _startup_background_enabled():
 def _preload_market_indices():
     # 首次等 0.5s 让端口绑定完成
     time.sleep(0.5)
-    _refresh_interval = int(os.getenv('INDEX_REFRESH_INTERVAL_S', '25'))
+    # 默认 45s：低于 INDEX_CACHE_TTL_S=120，给上游慢路径留窗；可用 env 覆盖
+    _refresh_interval = int(os.getenv('INDEX_REFRESH_INTERVAL_S', '45'))
 
     while True:
         try:
@@ -6532,7 +6558,7 @@ def _preload_market_indices():
         except Exception as e:
             app.logger.warning(f"指数缓存刷新异常: {e}")
 
-        # 等待下次刷新（缓存 TTL 30s，刷新间隔 25s，确保缓存始终有效）
+        # 等待下次刷新（默认 TTL 120s / 刷新 45s，TTL 过期仍可 stale 回退）
         time.sleep(_refresh_interval)
 
 if _startup_background_enabled():

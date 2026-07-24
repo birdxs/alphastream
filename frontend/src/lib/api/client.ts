@@ -13,8 +13,16 @@ import type { SSEHandlers } from '@/lib/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-// 前端 fetch 默认超时（由 NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS 驱动，默认 60s）
-const API_DEFAULT_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS) || 60000;
+// 前端 fetch 默认超时（NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS，默认 180s；下限 180s 防误配砍断）
+// Comdr 2026-07-24：单次 HTTP/工具调用客户端不得以 25–60s 硬杀长链路
+const _API_TIMEOUT_RAW = Number(process.env.NEXT_PUBLIC_API_DEFAULT_TIMEOUT_MS);
+const API_DEFAULT_TIMEOUT_MS = Number.isFinite(_API_TIMEOUT_RAW) && _API_TIMEOUT_RAW > 0
+  ? Math.max(_API_TIMEOUT_RAW, 180_000)
+  : 180_000;
+
+// SSE 空闲心跳超时下限 180s、默认 360s（3–6 分钟），禁止 120s/25s 类客户端砍断长流
+const SSE_IDLE_TIMEOUT_FLOOR_MS = 180_000;
+const SSE_IDLE_TIMEOUT_DEFAULT_MS = 360_000;
 
 // ── CSRF Token 管理 ────────────────────────────────────────────────────────
 // sessionStorage key，浏览器 session 级别缓存（标签页关闭即清除）
@@ -206,10 +214,14 @@ class ApiClient {
 
         // FIX-E1+E3: SSE idle timeout — 仅监控"连续无 chunk"时长，不限制总时长
         // 后端每 15s 会发心跳 `: heartbeat ...\n\n`，正常应远低于 idleMs
-        // 优先读 NEXT_PUBLIC_SSE_HEARTBEAT_TIMEOUT_MS，兜底 NEXT_PUBLIC_STREAM_IDLE_TIMEOUT_MS
-        const idleMs = Number(process.env.NEXT_PUBLIC_SSE_HEARTBEAT_TIMEOUT_MS)
+        // 优先 NEXT_PUBLIC_SSE_HEARTBEAT_TIMEOUT_MS → STREAM_IDLE → 默认 360s；
+        // 硬性下限 180s（Comdr 2026-07-24：禁 25s/60s/120s 客户端砍断长 SSE）
+        const _idleRaw = Number(process.env.NEXT_PUBLIC_SSE_HEARTBEAT_TIMEOUT_MS)
           || Number(process.env.NEXT_PUBLIC_STREAM_IDLE_TIMEOUT_MS)
-          || 120000;
+          || SSE_IDLE_TIMEOUT_DEFAULT_MS;
+        const idleMs = Number.isFinite(_idleRaw) && _idleRaw > 0
+          ? Math.max(_idleRaw, SSE_IDLE_TIMEOUT_FLOOR_MS)
+          : SSE_IDLE_TIMEOUT_DEFAULT_MS;
         let lastChunkAt = Date.now();
         let idleAborted = false;
         const idleTimer = setInterval(() => {

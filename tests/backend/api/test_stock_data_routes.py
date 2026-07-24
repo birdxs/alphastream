@@ -586,6 +586,8 @@ class TestMarketIndicesRoute:
         from app.web import web_server
 
         monkeypatch.setenv("INDEX_FAST_TIMEOUT_MS", "50")
+        # 无缓存：超时后只能 degraded 503
+        web_server._market_indices_cache.clear()
 
         def slow_fetch():
             time.sleep(1.0)
@@ -602,6 +604,42 @@ class TestMarketIndicesRoute:
         data = _json(resp)
         assert data["success"] is False
         assert data["error_code"] == "DEGRADED"
+
+    def test_market_indices_timeout_returns_stale_cache_when_available(self, flask_client, monkeypatch):
+        """TTL 过期/快超时但有过期真数缓存 → 200 + source=stale_cache（非空 503）。"""
+        from app.web import web_server
+
+        monkeypatch.setenv("INDEX_FAST_TIMEOUT_MS", "50")
+        monkeypatch.setenv("INDEX_CACHE_TTL_S", "1")
+        web_server._market_indices_cache.clear()
+        web_server._market_indices_cache.update({
+            "data": {
+                "indices": [
+                    {"name": "上证指数", "code": "000001", "price": 3500.0, "change_pct": 0.1},
+                ],
+                "source": "sina",
+            },
+            "ts": time.time() - 999,  # 明确过期
+            "source": "sina",
+        })
+
+        def slow_fetch():
+            time.sleep(1.0)
+            return {"indices": [{"code": "000001"}], "source": "slow"}
+
+        monkeypatch.setattr(web_server, "_fetch_market_indices_data", slow_fetch)
+
+        start = time.perf_counter()
+        resp = flask_client.get("/api/market_indices")
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 0.5
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data.get("source") == "stale_cache"
+        assert len(data.get("indices") or []) == 1
+        assert data["indices"][0]["code"] == "000001"
+        assert resp.headers.get("X-Cache") == "STALE"
 
 
 # --------------------------------------------------------------------------- #
