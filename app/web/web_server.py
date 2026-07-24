@@ -4857,12 +4857,20 @@ def ai_chat_stream():
                 event_queue: _queue.Queue = _queue.Queue()
 
                 def event_callback(event_type, data):
-                    """worker 线程回调：把 token 推入主线程队列"""
+                    """worker 线程回调：token/tool/error 推入主线程队列。
+
+                    仅转发 token 会导致工具进度与流中错误被静默丢弃，
+                    前端只看到心跳，误判为"还在跑"。
+                    """
                     nonlocal full_content
                     if event_type == 'token' and data.get('content'):
                         full_content += data['content']
                         # 立即把增量内容入队，主线程 yield 给客户端
                         event_queue.put(('token_delta', data['content']))
+                    elif event_type in (
+                        'tool_call_start', 'tool_call_result', 'thinking', 'error',
+                    ):
+                        event_queue.put((event_type, data or {}))
 
                 # 执行流式AI对话（带工具调用，模型不支持时降级）
                 check_timeout()
@@ -4908,20 +4916,50 @@ def ai_chat_stream():
                         # 实时推送增量 token 给前端
                         yield emit('token', {'content': payload, 'finish_reason': None})
                         last_event_ts = time.time()
+                    elif kind in (
+                        'tool_call_start', 'tool_call_result', 'thinking', 'error',
+                    ):
+                        # 透传工具链/错误事件，避免仅心跳掩盖真实进度或失败
+                        yield emit(
+                            kind,
+                            payload if isinstance(payload, dict) else {'data': payload},
+                        )
+                        last_event_ts = time.time()
                     elif kind == 'worker_done':
                         worker_done = True
 
                 if worker_result['exc'] is not None:
                     tool_err = worker_result['exc']
                     app.logger.warning(f"带工具的流式调用失败，降级为普通对话: {tool_err}")
-                    error = None  # 清除错误，尝试降级
+                    # 必须写入 error 才能进入降级分支；原 error=None 会静默 emit done 空内容
+                    error = f"tool stream exception: {tool_err}"
+                    content = None
+                    tools_log = []
                 else:
                     content = worker_result['content']
                     tools_log = worker_result['tools_log']
                     error = worker_result['error']
 
                 # 工具调用失败时降级为不带tools的普通对话
-                if error and ('400' in str(error) or 'tool' in str(error).lower()):
+                # 限流/超时/鉴权不降级（同样会失败，浪费配额）
+                _err_s = str(error) if error else ''
+                _err_l = _err_s.lower()
+                _no_degrade = (
+                    '限流' in _err_s or '超时' in _err_s or '鉴权' in _err_s
+                    or '429' in _err_s or 'ratelimit' in _err_l or 'timeout' in _err_l
+                    or 'authentication' in _err_l or 'api key' in _err_l
+                )
+                _should_degrade = (
+                    bool(error)
+                    and not _no_degrade
+                    and (
+                        '400' in _err_s
+                        or 'tool' in _err_l
+                        or 'function calling' in _err_l
+                        or 'not support' in _err_l
+                    )
+                )
+                if _should_degrade:
                     app.logger.info("降级为不带工具的普通对话")
                     full_content = ""
                     from app.core.ai_client import chat_completion_stream, get_completion_content

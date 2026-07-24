@@ -339,6 +339,52 @@ def test_T016_chat_with_tools_stream_smoke(ai_client_mod):
     assert result is not None
 
 
+# ============ T017 map_ai_exception 覆盖 httpx ReadTimeout / 429 status ============
+def test_T017_map_ai_exception_read_timeout(ai_client_mod):
+    """流式 for-chunk 时 httpx.ReadTimeout 类名≠APITimeoutError，须映射为超时友好文案。"""
+    import httpx
+
+    msg = ai_client_mod.map_ai_exception(httpx.ReadTimeout('read timed out'))
+    assert msg == 'AI分析超时，请稍后重试'
+
+    msg2 = ai_client_mod.map_ai_exception(httpx.ConnectTimeout('connect timed out'))
+    assert msg2 == '无法连接AI服务，请检查网络'
+
+
+def test_T017b_map_ai_exception_status_429(ai_client_mod):
+    """APIStatusError 带 status_code=429 须映射为限流文案。"""
+
+    class APIStatusError(Exception):
+        def __init__(self, message, status_code):
+            super().__init__(message)
+            self.status_code = status_code
+
+    msg = ai_client_mod.map_ai_exception(APIStatusError('Too Many Requests', 429))
+    assert msg == '服务繁忙，请稍后重试（API限流）'
+
+
+def test_T017c_chat_with_tools_stream_read_timeout_maps(ai_client_mod):
+    """chat_with_tools_stream 迭代中 ReadTimeout 须返回友好超时，而非原始 traceback 文案。"""
+    import httpx
+
+    client = mock.MagicMock()
+
+    def _boom(**kwargs):
+        raise httpx.ReadTimeout('The read operation timed out')
+
+    client.chat.completions.create.side_effect = _boom
+    content, tools_log, err = ai_client_mod.chat_with_tools_stream(
+        client,
+        [{'role': 'user', 'content': 'q'}],
+        tools_schema=[],
+        tool_executor=None,
+        max_tool_rounds=1,
+    )
+    assert content is None
+    assert err == 'AI分析超时，请稍后重试'
+    assert tools_log == []
+
+
 # ============ T017 _truncate_large 大文本截断 ============
 def test_T017_truncate_large(ai_client_mod):
     fn = ai_client_mod._truncate_large

@@ -17,23 +17,87 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# 友好错误消息映射
+# 友好错误消息映射（按异常类名；流式 httpx 超时类名也覆盖）
 ERROR_MESSAGES = {
     'RateLimitError': '服务繁忙，请稍后重试（API限流）',
     'APITimeoutError': 'AI分析超时，请稍后重试',
     'APIConnectionError': '无法连接AI服务，请检查网络',
     'AuthenticationError': 'AI服务认证失败，请检查API密钥配置',
+    'PermissionDeniedError': 'AI服务认证失败，请检查API密钥配置',
     'APIStatusError': 'AI服务暂时不可用，请稍后重试',
+    # httpx 原生超时（流式 for chunk in stream 时可能直接冒泡，类名≠APITimeoutError）
+    'ReadTimeout': 'AI分析超时，请稍后重试',
+    'ConnectTimeout': '无法连接AI服务，请检查网络',
+    'WriteTimeout': 'AI分析超时，请稍后重试',
+    'PoolTimeout': '服务繁忙，请稍后重试（连接池耗尽）',
+    'TimeoutException': 'AI分析超时，请稍后重试',
+    'ConnectError': '无法连接AI服务，请检查网络',
+    'RemoteProtocolError': '无法连接AI服务，请检查网络',
 }
 
 
+def map_ai_exception(exc: Exception, *, prefix: str = 'AI分析出错') -> str:
+    """将 OpenAI/httpx 异常映射为前端可展示的友好文案。
+
+    覆盖：类名表、status_code=429、消息含 timeout/429、httpx.TimeoutException 子树。
+    """
+    if exc is None:
+        return f'{prefix}: 未知错误'
+    error_type = type(exc).__name__
+    msg = str(exc) if exc is not None else ''
+    msg_l = msg.lower()
+
+    # 1) status_code 优先（APIStatusError 等通用类名需按码细分）
+    status = getattr(exc, 'status_code', None)
+    if status is None and getattr(exc, 'response', None) is not None:
+        status = getattr(exc.response, 'status_code', None)
+    try:
+        if status is not None and int(status) == 429:
+            return ERROR_MESSAGES['RateLimitError']
+        if status is not None and int(status) in (401, 403):
+            return ERROR_MESSAGES['AuthenticationError']
+    except (TypeError, ValueError):
+        pass
+
+    # 2) 显式类名表
+    if error_type in ERROR_MESSAGES:
+        return ERROR_MESSAGES[error_type]
+
+    # 3) httpx 超时基类（含未列名的子类）
+    try:
+        if isinstance(exc, httpx.TimeoutException):
+            return ERROR_MESSAGES['APITimeoutError']
+        if isinstance(exc, (httpx.ConnectError, httpx.NetworkError)):
+            return ERROR_MESSAGES['APIConnectionError']
+    except Exception:
+        pass
+
+    # 4) 类名/消息启发式
+    type_l = error_type.lower()
+    if 'ratelimit' in type_l or '429' in msg_l or 'rate limit' in msg_l or 'too many requests' in msg_l:
+        return ERROR_MESSAGES['RateLimitError']
+    if 'timeout' in type_l or 'timed out' in msg_l or 'timeout' in msg_l:
+        return ERROR_MESSAGES['APITimeoutError']
+    if 'auth' in type_l or 'unauthorized' in msg_l or 'invalid api key' in msg_l:
+        return ERROR_MESSAGES['AuthenticationError']
+    if 'connect' in type_l or 'connection' in type_l:
+        return ERROR_MESSAGES['APIConnectionError']
+
+    return f'{prefix}: {msg}' if msg else f'{prefix}: {error_type}'
+
+
 def get_ai_client():
-    """获取配置好的OpenAI客户端（带超时和重试）"""
+    """获取配置好的OpenAI客户端（带超时和重试）。
+
+    无 OPENAI_API_KEY 时返回 None（不抛），调用方降级/503。
+    历史契约：chat_completion / web_server / BaseStockAgent / 单测 T002 均按 None 处理。
+    """
     api_key = os.getenv('OPENAI_API_KEY', None)
     base_url = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1')
 
     if not api_key:
-        raise EnvironmentError("OPENAI_API_KEY 未设置，AI 功能不可用")
+        logger.error("OPENAI_API_KEY 未设置，AI 功能不可用")
+        return None
 
     _ai_http_timeout = float(os.getenv('AI_HTTP_TIMEOUT', '600'))
     _ai_http_connect = float(os.getenv('AI_HTTP_CONNECT_TIMEOUT', '15'))
@@ -74,7 +138,7 @@ def chat_completion(client, messages, temperature=0.7, max_tokens=4096, tools=No
         return response, None
     except Exception as e:
         error_type = type(e).__name__
-        friendly_msg = ERROR_MESSAGES.get(error_type, f'AI分析出错: {str(e)}')
+        friendly_msg = map_ai_exception(e, prefix='AI分析出错')
         logger.error(f"AI调用失败 [{error_type}]: {str(e)}")
         return None, friendly_msg
 
@@ -400,7 +464,7 @@ def _chat_with_tools_body(client, messages, tools_schema, tool_executor,
                     pass
         except Exception as e:
             error_type = type(e).__name__
-            friendly_msg = ERROR_MESSAGES.get(error_type, f'AI流式读取出错: {str(e)}')
+            friendly_msg = map_ai_exception(e, prefix='AI流式读取出错')
             logger.error(f"AI流式读取失败 [{error_type}]: {str(e)}")
             return None, tool_calls_log, friendly_msg
 
@@ -561,7 +625,7 @@ def chat_completion_stream(client, messages, temperature=0.7, max_tokens=4096, t
         return stream, None
     except Exception as e:
         error_type = type(e).__name__
-        friendly_msg = ERROR_MESSAGES.get(error_type, f'AI分析出错: {str(e)}')
+        friendly_msg = map_ai_exception(e, prefix='AI流式分析出错')
         logger.error(f"AI流式调用失败 [{error_type}]: {str(e)}")
         return None, friendly_msg
 
@@ -726,7 +790,7 @@ def _chat_with_tools_stream_body(
                     pass
         except Exception as e:
             error_type = type(e).__name__
-            friendly_msg = ERROR_MESSAGES.get(error_type, f'AI流式读取出错: {str(e)}')
+            friendly_msg = map_ai_exception(e, prefix='AI流式读取出错')
             logger.error(f"AI流式读取失败 [{error_type}]: {str(e)}")
             if event_callback:
                 event_callback('error', {'message': friendly_msg})
