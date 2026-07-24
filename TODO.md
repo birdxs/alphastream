@@ -1,5 +1,47 @@
 # TODO
 
+## 2026-07-24 — UI 改造 A–D 跟踪（待审批）
+
+> **状态**：**待 Comdr 审批** · 设计草案已落盘 · **未开工编码** · **仍禁 push**  
+> **计划文档**：`docs/design/ui-renovation-plan.md`（commit `9cbabae`）  
+> **对标**：`docs/FRONTEND_REDESIGN_PLAN.md` v3.0 + 当前 Next.js 16.2.9  
+> **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright（WebBridge）· #3 批内不启全量 build/服务；只改原件、禁 `frontend-v2/`
+
+### 门禁链（审批通过后按序）
+
+```
+S-UI-A Foundation ──gate──► S-UI-B Core IA ──gate──► S-UI-C Agent+Secondary ──gate──► S-UI-D Polish
+```
+
+| ID | 阶段 | 范围摘要 | 状态 | 依赖 |
+|----|------|----------|------|------|
+| S-UI-A | Design System 固化 | Token 收口 / GlassCard·Skeleton·EmptyState / SafeResponsiveContainer / 涨跌语义色 | **待审批** | 无 |
+| S-UI-B | 主路径信息架构 | 首页三栏 / 仪表盘 Bento / 个股 Tab 序 / 导航收敛 | **待审批** | Gate-A |
+| S-UI-C | AI 工作区 + 次要页 | 产物面板 / 工具时间线 / 审批卡 / portfolio·compare·screener | **待审批** | Gate-B |
+| S-UI-D | 抛光与无障碍 | Settings IA / reduced-motion / a11y / 图表动态 import / 文档收口 | **待审批** | Gate-C |
+
+### 阶段验收勾选（审批后开工再勾）
+
+- [ ] **Gate-A**：tsc/eslint 0 · 暗亮主题不破版 · 无新假数据路径
+- [ ] **Gate-B**：WebBridge `/` `/dashboard` `/stock/600519` · 指数条吸顶 · 名称/503 降级合规
+- [ ] **Gate-C**：SSE 产物区不抖动 · 工具失败非白屏 · 1280/375 次要页可用 · 定时器 cleanup
+- [ ] **Gate-D**：键盘主路径 · Wind 配额入口 · 对比度扫尾 · CHANGELOG/TODO/design README 同步
+
+### 明确不做（防范围漂移）
+
+- [ ] 不重写后端 API / OpenAPI / schema
+- [ ] 不引入新 UI 框架；不替换 Recharts
+- [ ] 不扩 agent 协议（属 dojo-agents-absorption-plan）
+- [ ] 未审批前不改品牌主色数值、不改 `frontend/` 源码
+
+### 下一步（Comdr）
+
+- [ ] 审批 `docs/design/ui-renovation-plan.md`（通过 / 修改意见 / 搁置）
+- [ ] 通过后授权 **S-UI-A** 开工（仅 Foundation，禁跳阶段）
+- [ ] **仍禁 push**
+
+---
+
 ## 2026-07-23 — 方案复审·文档对齐（Top1）
 
 - [x] 检索 CLAUDE.md / docs/design 中 Skills/Plan/Memory/压缩/Checkpoint/provenance 过时句
