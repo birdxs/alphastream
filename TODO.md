@@ -1,43 +1,46 @@
 # TODO
 
-## 2026-07-24 — UI 改造 A–D 跟踪（待审批）
+## UI改造A-D（待审批）
 
-> **状态**：**待 Comdr 审批** · 设计草案已落盘 · **未开工编码** · **仍禁 push**  
-> **计划文档**：`docs/design/ui-renovation-plan.md`（commit `9cbabae`）  
-> **对标**：`docs/FRONTEND_REDESIGN_PLAN.md` v3.0 + 当前 Next.js 16.2.9  
-> **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright（WebBridge）· #3 批内不启全量 build/服务；只改原件、禁 `frontend-v2/`
+> **状态**：**待 Comdr 审批** · 蓝图 v1.0-draft-for-approval 已落盘 · **未开工编码** · **仍禁 push**  
+> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`  
+> **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
+> **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright（WebBridge）· #3 批内不启全量 build/服务；只改原件；**未批禁止改 `frontend/src/**`**
 
 ### 门禁链（审批通过后按序）
 
 ```
-S-UI-A Foundation ──gate──► S-UI-B Core IA ──gate──► S-UI-C Agent+Secondary ──gate──► S-UI-D Polish
+S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C ──► S-UI-3 D皮肤 ──► S-UI-4 回归
 ```
 
 | ID | 阶段 | 范围摘要 | 状态 | 依赖 |
 |----|------|----------|------|------|
-| S-UI-A | Design System 固化 | Token 收口 / GlassCard·Skeleton·EmptyState / SafeResponsiveContainer / 涨跌语义色 | **待审批** | 无 |
-| S-UI-B | 主路径信息架构 | 首页三栏 / 仪表盘 Bento / 个股 Tab 序 / 导航收敛 | **待审批** | Gate-A |
-| S-UI-C | AI 工作区 + 次要页 | 产物面板 / 工具时间线 / 审批卡 / portfolio·compare·screener | **待审批** | Gate-B |
-| S-UI-D | 抛光与无障碍 | Settings IA / reduced-motion / a11y / 图表动态 import / 文档收口 | **待审批** | Gate-C |
+| S-UI-0 | Token 冻结 + 截图基线 | plan §5 定稿；`/` `/dashboard` `/stock` 工位 `/settings` 基线 | **待审批** | Comdr 通过 |
+| S-UI-1 | **A** 设计系统 | `globals.css` Token + `components/ui/*` + navbar/theme | **待审批** | S-UI-0 |
+| S-UI-2 | **B+C** 首页三态 + Agent 工位 | page 三态；步骤条/日志折叠/HITL/Plan/Artifact | **待审批** | S-UI-1 |
+| S-UI-3 | **D** 视觉皮肤 | 亮暗/涨跌色/artifacts·charts·业务页对齐 | **待审批** | S-UI-2 |
+| S-UI-4 | 回归 | WebBridge 矩阵 + 无假数 + tsc/eslint + TODO/CHANGELOG 闭环 | **待审批** | S-UI-3 |
 
 ### 阶段验收勾选（审批后开工再勾）
 
-- [ ] **Gate-A**：tsc/eslint 0 · 暗亮主题不破版 · 无新假数据路径
-- [ ] **Gate-B**：WebBridge `/` `/dashboard` `/stock/600519` · 指数条吸顶 · 名称/503 降级合规
-- [ ] **Gate-C**：SSE 产物区不抖动 · 工具失败非白屏 · 1280/375 次要页可用 · 定时器 cleanup
-- [ ] **Gate-D**：键盘主路径 · Wind 配额入口 · 对比度扫尾 · CHANGELOG/TODO/design README 同步
+- [ ] **S-UI-0**：Token 表无 TBD；基线截图路径已登记；审批栏已勾通过
+- [ ] **S-UI-1 A**：tsc/eslint 0 · Token 单源 · 抽 5 页无视觉方言 · 无新假数路径
+- [ ] **S-UI-2 B+C**：首页三态可辨 · 指数栏不丢 · Agent 五件套可达 · Hydration 无红字
+- [ ] **S-UI-3 D**：亮/暗对比度 · 图表无 width(-1) · 与基线对比可接受
+- [ ] **S-UI-4**：plan §8 总清单全勾 · dojo 映射无未标注冲突 · **仍禁 push**（除非 Comdr 另行授权）
 
 ### 明确不做（防范围漂移）
 
-- [ ] 不重写后端 API / OpenAPI / schema
-- [ ] 不引入新 UI 框架；不替换 Recharts
-- [ ] 不扩 agent 协议（属 dojo-agents-absorption-plan）
-- [ ] 未审批前不改品牌主色数值、不改 `frontend/` 源码
+- [ ] 不换 Next / 不上 Vite / 不推倒 dojo 能力
+- [ ] 不重写后端 API / OpenAPI / schema；不扩 agent 协议（属 dojo-agents-absorption-plan）
+- [ ] 不引入新 UI 框架全家桶；不替换 Recharts 核心
+- [ ] 未审批前不改品牌主色数值、不改 `frontend/` 实现源码
 
 ### 下一步（Comdr）
 
-- [ ] 审批 `docs/design/ui-renovation-plan.md`（通过 / 修改意见 / 搁置）
-- [ ] 通过后授权 **S-UI-A** 开工（仅 Foundation，禁跳阶段）
+- [ ] 审批 `docs/design/ui-renovation-plan.md` §1（通过 / 驳回 / 修改后重批）
+- [ ] 通过后授权 **S-UI-0**（仅 Token 冻结+基线，禁跳阶段、禁直接改业务组件）
+- [ ] 跟踪单源：勾选只改本节；实现 commit 必须引用 plan 章节与 sprint 编号
 - [ ] **仍禁 push**
 
 ---
@@ -187,3 +190,13 @@ gantt
 - [x] 后续治理：资金流 Eastmoney 上游 `ProxyError/RemoteDisconnected` 属预期降级时，不应输出完整 Traceback；改为受控 WARNING 降级日志与可测试返回（2026-05-29，见 CHANGELOG）。
 - [x] 后续治理：Recharts 图表容器 `width(-1)/height(-1)` 警告，已新增 `SafeResponsiveContainer` 统一封装，容器实测尺寸 ≤0 时渲染 Skeleton 占位（2026-05-29，见 CHANGELOG）。
 - [ ] 下次手动测试：继续同步观测前后端日志，重点复核 `/api/ai/chat`、`/api/individual_fund_flow`、`/api/market_indices` 与图表页面切换。
+
+## UI 改造 A–D（待审批）
+- 方案：docs/design/ui-renovation-plan.md
+- 状态：待 Comdr 审批 · 未开始编码
+- [ ] S-UI-0 Token 冻结
+- [ ] S-UI-1 A 设计系统
+- [ ] S-UI-2 B+C 首页IA+Agent工位
+- [ ] S-UI-3 D 皮肤
+- [ ] S-UI-4 回归验收
+

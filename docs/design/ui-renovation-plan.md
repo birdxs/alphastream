@@ -1,310 +1,357 @@
-# UI Renovation Plan A–D（精简版）
+# StockAnal UI 改造方案 A–D（待审批稿）
 
-> **文档状态**：**待 Comdr 审批**  
-> **编制时间**：2026-07-24 18:21:05 +08:00  
-> **性质**：设计草案（docs only）；**禁止**在本轮修改 `frontend/` 源码、**禁止 push**  
-> **对标基线**：`docs/FRONTEND_REDESIGN_PLAN.md`（2026-03-26 v3.0）+ 当前实现（Next.js 16.2.9 / Dark Glassmorphism 部分落地）  
-> **约束铁律**：#1 金融零假值 · #2 禁用 Playwright（真测用 WebBridge）· #3 不启全量 build/服务于 worker 批内
-
----
-
-## 0. 目标与非目标
-
-### 0.1 目标
-
-| # | 目标 | 验收口径 |
-|---|------|----------|
-| G1 | 统一视觉语言（Dark Glass + 钴蓝品牌 + 语义涨跌色） | 全站 token 一致，无硬编码色块散落 |
-| G2 | 信息架构清晰：首页对话 / 仪表盘 / 个股 / 组合 四主场景 | 导航 ≤ 1 次跳转达主任务 |
-| G3 | AI 工作区可读：进度 / 工具调用 / 产物卡片分层 | 流式中无布局抖动、产物可折叠 |
-| G4 | 金融数据呈现专业化：骨架态 / 空态 / 降级态三态完备 | 无假数占位（铁律 #1） |
-| G5 | 移动端可用：底栏 + Drawer，核心路径可完成 | 375px 宽无横向溢出 |
-
-### 0.2 非目标（本轮不做）
-
-- 不重写后端 API / OpenAPI / schema
-- 不引入新 UI 框架（保持 shadcn + Tailwind + Recharts）
-- 不做品牌重塑（Logo/命名）与营销落地页
-- 不扩 agent 能力（Plan/Skills/Memory 属 `dojo-agents-absorption-plan`）
-- 不启全量 `npm run build` 作为默认验证（优先 tsc + eslint + 定点 WebBridge）
+**审批状态：待 Comdr 审批**  
+**未批禁止编码实现 A–D**  
+版本：`v1.0-draft-for-approval` · 日期：`2026-07-24`  
+作者：香草少校（PM 方案稿）· 范围：本地开发 · **禁止 push** · **禁止未批改 frontend 源码**
 
 ---
 
-## 1. 现状快照（只读盘点）
+## 1. 审批栏
 
-### 1.1 已有资产（可复用，禁止推倒重来）
+| 项 | 勾选 | 说明 |
+|---|---|---|
+| **通过（允许进入 S-UI-0 起编码）** | [ ] | Comdr 签字后，方可改 frontend |
+| **驳回（退回修订）** | [ ] | 须写明驳回条款与修订要求 |
+| **有条件通过** | [ ] | 仅允许 Token 冻结，A–D 仍锁 |
+| 审批人 | | Comdr |
+| 审批时间（+08:00） | | |
+| 批注意见 | | |
 
-| 层 | 路径 | 状态 |
-|----|------|------|
-| Design tokens | `frontend/src/app/globals.css` | Dark/Light 双主题 + 毛玻璃变量已部分落地 |
-| 布局壳 | `layout.tsx` + `navbar` + `mobile-tab-bar` + `mobile-drawer` | main 为全站滚动容器 |
-| 市场条 | `components/market/market-overview.tsx` | sticky 指数栏 + SSE |
-| AI 对话 | `components/chat/*` + `components/agent/*` | 流式 / 工具卡 / 审批 / 进度 |
-| 产物 | `components/artifacts/*` + `charts/*` | K线 / 资金流 / 雷达 / ESG 等 |
-| 状态 | `lib/stores/*` + hooks | zustand persist + 名称缓存守卫 |
-
-### 1.2 主要缺口（驱动 A–D 分期）
-
-| ID | 缺口 | 影响场景 | 建议阶段 |
-|----|------|----------|----------|
-| U1 | token 使用不均，局部硬编码色/间距 | 全站 | A |
-| U2 | 卡片/空态/骨架态模式不统一 | dashboard / stock | A |
-| U3 | 首页三栏比例与 Bento 模块未固化 | `/` | B |
-| U4 | 个股页 tab 信息密度与降级占位不齐 | `/stock/[code]` | B |
-| U5 | Agent 产物区折叠/固定/全屏交互弱 | chat artifact-panel | C |
-| U6 | 组合/对比/筛选视觉次要页不一致 | portfolio/compare/screener | C |
-| U7 | 设置页信息架构扁平、风控开关难找 | `/settings` | D |
-| U8 | 动效与可访问性（focus/reduced-motion）未系统化 | 全站 | D |
+**硬锁**：本文件未标注「通过」前，禁止实现范围 A/B/C/D 任一编码；禁止启动 `next dev`/`npm run build` 做「顺手改造」。
 
 ---
 
-## 2. 设计原则（审批后写死）
+## 2. 第一性原理
 
-1. **只改原件优先**：token → 共用组件 → 页面；禁止平行新建“v2 页面树”。
-2. **数据诚实**：loading = Skeleton/Spinner；无数据 = "—"/"暂无"；禁止 mock 数值（铁律 #1）。
-3. **密度可调**：专业默认高密度；移动端降密度，不删关键数字。
-4. **AI 与行情分离**：行情条始终可见；AI 流不阻塞指数/报价刷新。
-5. **渐进交付**：每阶段可独立合并、可独立回滚；阶段门禁未过不得开下阶段。
+### 2.1 产品不是「行情看板」，是 **Agent 决策工位**
 
----
+用户主任务链：
 
-## 3. 阶段 A — Design System 固化（Foundation）
+1. **看见可信市场上下文**（指数/自选/持仓，铁律 #1 零假值）
+2. **发起/续聊 Agent 分析**（SSE、工具调用、进度）
+3. **审阅可追溯结论**（provenance、scorecard、artifact）
+4. **HITL 批准/驳回**（Plan 状态机节点上的人机闸门）
+5. **沉淀到工位**（会话、任务历史、对比、组合）
 
-**工期建议**：2–3 人日 · **风险**：Low · **依赖**：无
+UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆叠更多卡片。
 
-### 3.1 范围
+### 2.2 可信数据优先于视觉炫技
 
-| 项 | 动作 | 触达文件（预期） |
-|----|------|------------------|
-| A1 Token 收口 | 补齐/对齐 glass、涨跌、AI 紫、间距 scale；禁止页面内魔法数字色 | `globals.css` |
-| A2 共用原语 | 统一 `GlassCard` / `StatsCard` / `Skeleton` / 空态 EmptyState 用法 | `components/common/*` `ui/*` |
-| A3 图表安全壳 | 全站图表经 `SafeResponsiveContainer`；零尺寸不挂载 Recharts | `components/charts/*` |
-| A4 语义色映射 | 涨 `color-up` / 跌 `color-down` 全站替换散落 green/red | 组件类名扫尾 |
-| A5 文档 | 本文件 §3 验收勾选 + `docs/design/README.md` 领地更新 | docs only |
+- 加载：Skeleton /「—」/「加载中」；禁止 demo 股价与假指数。
+- 降级：503/空 indices 安静占位，不闪假数。
+- 来源：关键数字旁可挂 `source` / provenance 轻量标识（C 工位重点）。
 
-### 3.2 验收
+### 2.3 信息架构（IA）服务决策，不服务页面目录
 
-- [ ] `tsc --noEmit` 0 错误
-- [ ] 关键组件 eslint 0 error
-- [ ] 视觉：暗/亮主题切换无破版
-- [ ] 无新增假数据路径（grep mock/fallback 数值）
-
-### 3.3 回滚
-
-`git checkout -- frontend/src/app/globals.css frontend/src/components/common frontend/src/components/ui`（按实际 diff 收窄）
+首页 = **工位入口**（上下文条 + 对话/Agent 主舞台 + 结果坞），  
+二级页 = 工具间（个股/组合/扫描/设置），  
+禁止首页同时当「产品官网 + 仪表盘 + 聊天室」。
 
 ---
 
-## 4. 阶段 B — 主路径信息架构（Core IA）
+## 3. 现状诊断
 
-**工期建议**：3–4 人日 · **风险**：Medium · **依赖**：A 门禁通过
+### 3.1 视觉方言分裂
 
-### 4.1 范围
+| 区域 | 现象 | 影响 |
+|---|---|---|
+| `globals.css` + Tailwind | token 半齐，语义色与图表色未冻结 | 同语义不同灰阶 |
+| `market/*` | ticker sticky 后仍与卡片圆角/间距不统一 | 「行情条」像另一产品 |
+| `chat/*` + `agent/*` | 气泡、进度、侧栏密度不一致 | Agent 流难扫读 |
+| `artifacts/*` | 卡片边框/标题层级随意 | 结论可信度被稀释 |
+| charts | SafeResponsiveContainer 已治 -1 警告，主题色未统一 | 日/夜切换跳动 |
 
-| 项 | 动作 | 触达 |
-|----|------|------|
-| B1 首页 | 固化「指数条 + 对话主区 + 产物侧栏」；比例可拖拽复用 `resizable-panel` | `app/page.tsx` chat/* |
-| B2 仪表盘 | 自选 / 持仓 / 市场概览 Bento 栅格；空自选引导，不填假行情 | `app/dashboard/*` |
-| B3 个股 | Tab 顺序：报价 → K线 → 基本面 → 资金流 → 另类/ESG；缺数 Skeleton | `app/stock/[code]/*` |
-| B4 导航 | Navbar 主入口收敛；次要入口进「更多」 | `layout/navbar.tsx` mobile-* |
+### 3.2 IA 叠层
 
-### 4.2 验收
+- 首页同时承载：指数栏、AI 工作区、入口导航、局部 dashboard 语义。
+- Dashboard / Watchlist / Portfolio 与首页信息重复，用户不知「默认工位」在哪。
+- Agent 侧栏、会话侧栏、artifact 面板三层可同时开，宽度争抢。
 
-- [ ] WebBridge：`/` `/dashboard` `/stock/600519` 三页无 Hydration 报错
-- [ ] 指数条滚动吸顶仍可见
-- [ ] 缺名股票显示 code 占位，不把 code 写入 name 持久化
-- [ ] 离线/503 市场指数安静降级（"—"），无 error toast 刷屏
+### 3.3 日志态 / 运行态 UI
 
-### 4.3 回滚
+- 503 降级、名称缺省 `null`、Wind 配额告警等，前端多为 console 或弱文案。
+- 缺少统一 **SystemToast / InlineStatus** 语义（info/warn/degraded/error）。
+- 开发态噪音与用户态提示未分层（铁律 #1 相关降级必须用户可见且不吓人）。
 
-按页面文件粒度 revert；不触 stores schema 时无需 migrate 回滚。
+### 3.4 高度链与滚动
 
----
-
-## 5. 阶段 C — AI 工作区与次要页（Agent UX + Secondary）
-
-**工期建议**：3–5 人日 · **风险**：Medium · **依赖**：B 门禁通过
-
-### 5.1 范围
-
-| 项 | 动作 | 触达 |
-|----|------|------|
-| C1 产物面板 | 折叠 / 固定宽度 / 全屏；标题精简（已有「结果」文案） | `artifact-panel.tsx` |
-| C2 工具时间线 | ToolCall 时间线与进度条对齐；失败态可重试文案 | `agent/*` `chat/tool-call-*` |
-| C3 审批卡 | Pending approval 视觉优先级高于普通消息 | `approval-card.tsx` |
-| C4 组合/对比/筛选 | 视觉对齐 GlassCard + 统一表格密度 | portfolio/compare/screener |
-| C5 新闻/扫描 | 列表空态与加载骨架统一 | `app/news` 相关 |
-
-### 5.2 验收
-
-- [ ] SSE 流式中产物区不抖动（固定 min-height 策略）
-- [ ] 工具失败展示错误摘要，不抛白屏
-- [ ] portfolio / compare 在 1280px / 375px 两档可用
-- [ ] 定时器均有 cleanup（防 HA-5 回归）
-
-### 5.3 回滚
-
-分模块 revert；agent 面板与次要页可拆两次 commit 降低风险。
+- 已修：`html/body height:100%` + `main overflow-y-auto` + 指数 sticky。
+- 风险残留：嵌套 `overflow-y-auto`（BM-4 类）、modal 滚动锁（BM-3 类）在部分路由仍可能复发。
+- 改造时 **禁止** 破坏 main 作为全站滚动祖先的约定。
 
 ---
 
-## 6. 阶段 D — 抛光、无障碍与设置（Polish）
+## 4. 范围与非目标
 
-**工期建议**：2–3 人日 · **风险**：Low–Medium · **依赖**：C 门禁通过
+### 4.1 范围 A–D
 
-### 6.1 范围
+| 代号 | 名称 | 目标一句话 |
+|---|---|---|
+| **A** | 设计系统 | 冻结 Token + 基础组件皮肤，消灭视觉方言 |
+| **B** | 首页 IA | 首页收敛为「上下文条 + Agent 主舞台 + 结果坞」 |
+| **C** | Agent 工位 | 对话/进度/HITL/provenance/scorecard/artifact 一体工位 |
+| **D** | 皮肤 | 日/夜（及可选高对比）主题，仅换肤不改 IA |
 
-| 项 | 动作 |
-|----|------|
-| D1 Settings IA | 分组：账户/模型/数据源(Wind)/通知/实验；危险操作二次确认 |
-| D2 Motion | 尊重 `prefers-reduced-motion`；数字 count-up 可关 |
-| D3 A11y | focus-visible 环、对话框滚动锁（BM-3）、aria-label 扫尾 |
-| D4 性能 | 重图表路由动态 import；避免首页同步拉全量产物组件 |
-| D5 文档收口 | 更新本计划验收勾选 + CHANGELOG + TODO；同步 `docs/design/README.md` |
+### 4.2 非目标（本方案明确不做）
 
-### 6.2 验收
-
-- [ ] 键盘可完成：搜索股票 → 加入自选 → 打开个股
-- [ ] Settings 中 Wind 配额入口可见且链到既有 `/api/wind/quota` 展示
-- [ ] Lighthouse/手工：无严重对比度问题（暗色主路径）
-- [ ] 无新 eslint/tsc 债
-
-### 6.3 回滚
-
-设置页与动效开关独立 revert；token 不动则视觉回退成本低。
+- 不改后端路由契约、OpenAPI、schema 校验逻辑。
+- 不接真券商、不改 Wind 积分策略、不做 Plan 真 step 运行时（见 dojo 未做清单）。
+- 不引入 Playwright；真测仅 CDP / Kimi WebBridge / curl。
+- 不重写图表库、不换 Zustand、不升级 Next major。
+- 不新建大型 UI 框架目录；优先改现有 `frontend/src/**`。
+- 未批前 **零** frontend 业务编码。
 
 ---
 
-## 7. 里程碑与门禁
+## 5. Token 草案表
 
-```
-A Foundation ──gate──► B Core IA ──gate──► C Agent+Secondary ──gate──► D Polish
-     │                    │                      │                        │
-   tsc/eslint          WebBridge×3            SSE+次要页               a11y+docs
-```
+> 冻结后写入 `frontend/src/app/globals.css` `@theme` / CSS 变量；数值可 ±1 档微调，**语义名不可随意改**。
 
-| 门禁 | 必过项 | 失败处置 |
-|------|--------|----------|
-| Gate-A | token 一致 + tsc/eslint | 停 B，修 A |
-| Gate-B | 三主路径 WebBridge + 铁律 #1 | 停 C |
-| Gate-C | 流式稳定 + 次要页可用 | 停 D |
-| Gate-D | a11y + 文档同步 + TODO 清项 | 标记完成待 Comdr 终验 |
+### 5.1 色（语义）
+
+| Token | 日间 | 夜间 | 用途 |
+|---|---|---|---|
+| `--bg-canvas` | `#F7F8FA` | `#06060F` | 页面底 |
+| `--bg-surface` | `#FFFFFF` | `#0E0E1A` | 卡片/面板 |
+| `--bg-elevated` | `#FFFFFF` | `#16162A` | 浮层/sticky |
+| `--border-subtle` | `#E6E8EF` | `#2A2A3D` | 分割 |
+| `--text-primary` | `#0F172A` | `#F1F5F9` | 主文 |
+| `--text-secondary` | `#64748B` | `#94A3B8` | 次文 |
+| `--text-muted` | `#94A3B8` | `#64748B` | 占位/— |
+| `--accent` | `#4F46E5` | `#818CF8` | 主行动 |
+| `--accent-muted` | `#EEF2FF` | `#1E1B4B` | 选中底 |
+| `--up` | `#DC2626` | `#F87171` | 涨（A 股红） |
+| `--down` | `#16A34A` | `#4ADE80` | 跌（A 股绿） |
+| `--warn` | `#D97706` | `#FBBF24` | 降级/配额 |
+| `--danger` | `#B91C1C` | `#FCA5A5` | 错误 |
+| `--ok` | `#059669` | `#34D399` | 成功/HITL 通过 |
+
+### 5.2 字号
+
+| Token | 值 | 场景 |
+|---|---|---|
+| `--fs-xs` | 12px | 来源标签、provenance |
+| `--fs-sm` | 13px | 辅助说明 |
+| `--fs-md` | 14px | 正文/对话 |
+| `--fs-lg` | 16px | 面板标题 |
+| `--fs-xl` | 20px | 页面标题 |
+| `--fs-num` | 15px tabular | 价格/涨跌幅 |
+
+### 5.3 间距 / 圆角 / 阴影
+
+| Token | 值 |
+|---|---|
+| `--space-1`…`--space-8` | 4 / 8 / 12 / 16 / 24 / 32 / 40 / 48 px |
+| `--radius-sm/md/lg` | 6 / 10 / 16 px |
+| `--shadow-elev` | `0 8px 24px rgba(0,0,0,.08)`（夜：更高透明度） |
+| `--z-sticky` | 20 |
+| `--z-modal` | 50 |
+| `--z-toast` | 60 |
+
+### 5.4 运动
+
+| Token | 值 | 约束 |
+|---|---|---|
+| `--ease-std` | `cubic-bezier(.2,.8,.2,1)` | 面板展开 |
+| `--dur-fast` | 120ms | hover |
+| `--dur-med` | 200ms | 侧栏 |
+| 禁止 | 无意义 loop 动画 | 金融场景克制 |
 
 ---
 
-## 8. 风险与缓解
+## 6. 文件落点（实现时只改下列既有路径）
 
-| 风险 | 等级 | 缓解 |
-|------|------|------|
-| 大面积 className 替换引入回归 | M | 按组件域分 commit；每域 tsc |
-| 暗色 token 改动导致图表对比度下降 | M | 图表色走 CSS 变量，改后 WebBridge 截图 |
-| 布局改动触发 Hydration mismatch | H | 动态状态仅 mount 后读（既有模式） |
-| 内存压力（本地 16G） | H | 禁全量 vitest/build；单 spec + tsc |
-| 与 dojo-agents 文档交叉冲突 | L | UI 不改 agent 协议；只动呈现层 |
+| 落点 | 角色 |
+|---|---|
+| `frontend/src/app/globals.css` | Token 源、高度链、滚动约定 |
+| `frontend/src/app/layout.tsx` | shell、main 滚动、字体、prefetch |
+| `frontend/src/app/page.tsx` | **B** 首页 IA |
+| `frontend/src/app/dashboard/page.tsx` | 与首页职责对齐/降噪 |
+| `frontend/src/app/settings/**` | D 主题开关、Wind 等设置视觉 |
+| `frontend/src/app/portfolio/**` | 二级工具间皮肤 |
+| `frontend/src/app/stock/**` | 个股页密度与 token |
+| `frontend/src/components/chat/**` | **C** 对话主舞台 |
+| `frontend/src/components/agent/**` | **C** 进度/侧栏/HITL |
+| `frontend/src/components/market/**` | 指数栏/概览 |
+| `frontend/src/components/artifacts/**` | 结果坞、scorecard 视觉 |
+| `frontend/src/components/layout/**` | 顶栏/导航/抽屉 |
+| `frontend/src/components/charts/**` | 图表色绑定 token |
+| `frontend/src/lib/stores/**` | 仅主题 preference（若需），禁脏 name 回潮 |
+| `docs/design/ui-renovation-plan.md` | 本方案（唯一 UI 改造权威） |
+| `TODO.md` | 「UI 改造 A–D」跟踪 |
 
----
-
-## 9. 明确不做清单（防范围漂移）
-
-1. 不新建 `frontend-v2/` 或平行路由树  
-2. 不替换 Recharts 为其他图表库（本轮）  
-3. 不改 Flask 路由契约 / OpenAPI  
-4. 不把 Playwright 重新引入 CI  
-5. 不在未审批前改 `globals.css` 品牌主色数值（可提案，先批后改）
-
----
-
-## 10. 与历史文档关系
-
-| 文档 | 关系 |
-|------|------|
-| `docs/FRONTEND_REDESIGN_PLAN.md` | 上游详细规范；本文件是**可执行分期裁剪** |
-| `docs/FRONTEND_ARCHITECTURE.md` | 架构事实源；改布局前必读 |
-| `docs/design/dojo-agents-absorption-plan.md` | Agent 能力边界；UI 只消费不扩展协议 |
-| `docs/design/DELIVERY-STATUS.md` | 交付真相表；阶段完成后回写 UI 行项 |
+**禁止**：新建平行 `frontend/src/ui-v2/**` 整树替换；特例须走附录 C 审批。
 
 ---
 
-## 11. 审批栏
+## 7. Sprint 计划 S-UI-0 ~ S-UI-4
+
+### 7.0 S-UI-0 Token 冻结
 
 | 项 | 内容 |
-|----|------|
-| 状态 | **待 Comdr 审批** |
-| 请求批准 | 阶段 A→D 范围、门禁、非目标 |
-| 批准后首动 | 仅开阶段 A（token + 共用原语），仍禁 push 除非另令 |
-| 驳回时 | 标注驳回条款号，修订本文件后再次呈批 |
-| 起草人 | 香草少校（PM） |
-| 起草时间 | 2026-07-24 18:21:05 +08:00 |
+|---|---|
+| **目标** | 审批通过后，将 §5 写入 CSS 变量并文档化；无业务 UI 大改 |
+| **文件** | `globals.css`、本方案 §5 定稿、`TODO.md` 勾选 |
+| **验收** | 变量可在 DevTools 见；日/夜 class 切换变量生效；无视觉回归强制 |
+| **回滚** | 还原 `globals.css` token 段 |
+| **依赖** | Comdr 审批通过 |
 
-**Comdr 批注区**（手填）：
+### 7.1 S-UI-1 范围 A 设计系统
 
-```
-[ ] 批准全部 A–D
-[ ] 批准仅 A（其余再议）
-[ ] 有条件批准：________________
-[ ] 驳回：________________
-签名/时间：________________
-```
+| 项 | 内容 |
+|---|---|
+| **目标** | 按钮/输入/卡片/Badge/Status/Skeleton 统一；涨跌色绑定 `--up/--down` |
+| **文件** | `components/ui/*`（若存在）、`layout/*`、`charts/*` 色引用、`globals.css` |
+| **验收** | tsc 0；eslint 改动文件 0 error；抽样 3 页无裸 hex 扩散（允许图表临时 map） |
+| **回滚** | 按文件 `git checkout -- <paths>` |
+| **非目标** | 不改首页 IA、不改 Agent 流程 |
 
----
+### 7.2 S-UI-2 范围 B+C 首页 IA + Agent 工位
 
-## 12. TODO（执行清单 · 审批前仅文档态）
+| 项 | 内容 |
+|---|---|
+| **目标** | 首页 = 上下文条（指数 sticky）+ 主对话/Agent + 右侧/底部结果坞；HITL/Plan 节点可见 |
+| **文件** | `page.tsx`、`chat/*`、`agent/*`、`artifacts/*`、`market/market-overview.tsx` |
+| **验收** | ① 滚动时指数栏仍可见 ② 无假数 ③ Agent 进行中进度与 artifact 不互相遮死 ④ HITL 入口可发现 ⑤ 高度链不破 |
+| **回滚** | 还原 B/C 涉及文件；保留 A token 可选 |
+| **风险** | 侧栏宽度争抢；须定义 z-index 与折叠优先级 |
 
-### 12.1 审批前（docs only）
+### 7.3 S-UI-3 范围 D 皮肤
 
-- [x] 创建 `docs/design/ui-renovation-plan.md` 精简版 A–D
-- [ ] Comdr 填写 §11 审批栏
-- [ ] 审批结果同步 `TODO.md` / `CHANGELOG.md` / `docs/design/README.md`
+| 项 | 内容 |
+|---|---|
+| **目标** | 日/夜（可选高对比）一键切换；图表与涨跌色跟随 |
+| **文件** | `layout.tsx`、主题 provider/store、`settings`、charts token map |
+| **验收** | 切换无闪白；localStorage 主题 key 可迁移；对比度可读 |
+| **回滚** | 移除主题切换，固定现网默认夜/日之一 |
 
-### 12.2 阶段 A（批准后解锁）
+### 7.4 S-UI-4 回归验收
 
-- [ ] A1 Token 收口审计表（列出硬编码色命中）
-- [ ] A2 EmptyState / Skeleton 用法统一 PR
-- [ ] A3 图表 SafeResponsive 覆盖核对
-- [ ] A4 涨跌语义色扫尾
-- [ ] Gate-A 证据落盘（tsc/eslint 日志路径）
+| 项 | 内容 |
+|---|---|
+| **目标** | 路由矩阵 + 铁律 #1/#2/#3 合规复验 |
+| **文件** | 无新功能；文档与截图证据目录 `/tmp/stockanal_ui/**` |
+| **验收** | 见 §8 总清单全勾；聚焦 tsc/eslint；禁全量 vitest/Playwright |
+| **回滚** | 标签回退到审批前 commit |
 
-### 12.3 阶段 B
-
-- [ ] B1 首页比例与产物侧栏
-- [ ] B2 Dashboard Bento
-- [ ] B3 个股 Tab 顺序与降级
-- [ ] B4 导航收敛
-- [ ] Gate-B WebBridge 三页证据
-
-### 12.4 阶段 C
-
-- [ ] C1 产物面板交互
-- [ ] C2 工具时间线
-- [ ] C3 审批卡优先级
-- [ ] C4 portfolio/compare/screener 对齐
-- [ ] C5 新闻/扫描空态
-- [ ] Gate-C SSE 稳定证据
-
-### 12.5 阶段 D
-
-- [ ] D1 Settings IA
-- [ ] D2 reduced-motion
-- [ ] D3 a11y 扫尾
-- [ ] D4 图表路由动态 import
-- [ ] D5 文档收口
-- [ ] Gate-D 终验 → 标记完成
-
-### 12.6 持续约束
-
-- [ ] 全程禁 push（除非 Comdr 书面解除）
-- [ ] 全程禁 Playwright
-- [ ] 全程禁假数据占位
-- [ ] free pages < 5000 停手
+**建议顺序**：S-UI-0 → 1 → 2 → 3 → 4；**禁止**跳过 0 直接做 2。
 
 ---
 
-## 13. 变更记录
+## 8. 验收总清单
 
-| 时间 | 版本 | 说明 |
-|------|------|------|
-| 2026-07-24 18:21:05 +08:00 | v0.1-draft | 初稿 A–D 精简版，呈 Comdr 审批 |
+### 8.1 产品/视觉
+
+- [ ] 首页职责一句话可解释（工位，非官网）
+- [ ] Token 语义色全站一致；涨红跌绿（A 股）无反
+- [ ] 指数 sticky 在 main 滚动下可见
+- [ ] Agent 工位：输入 → 流式 → 工具/进度 → 结论/artifact 路径清晰
+- [ ] HITL 批准/驳回控件可达、状态可读
+- [ ] provenance 轻量展示（来源/时间）不挡主结论
+- [ ] scorecard 维度可读（coverage/agreement/tool/confidence）
+- [ ] 空态/降级仅 Skeleton 或「—」，无假行情
+- [ ] 日/夜切换无布局塌陷
+
+### 8.2 工程/纪律
+
+- [ ] 未批零编码（本条归档时已满足）
+- [ ] 改动仅 frontend 既有文件 + 本文档/TODO
+- [ ] `tsc --noEmit` = 0；改动文件 eslint 0 error
+- [ ] 未启 Playwright；未全量 vitest；vm_stat free pages 监控
+- [ ] **未 push**
+- [ ] 铁证：关键页前后截图 + curl 真数对照
+
+### 8.3 回归路由矩阵（真测）
+
+| 路由 | 检查点 |
+|---|---|
+| `/` | 工位 IA、指数、对话 |
+| `/dashboard` | 与首页不打架 |
+| `/stock/600519` | 名/价/K 线无假数 |
+| `/portfolio` | 皮肤 + 滚动 |
+| `/settings` | 主题/Wind 配额展示 |
+| `/api-docs` 或兼容入口 | 不回归 404 |
 
 ---
 
-*一旦本设计目录结构变化，请更新 `docs/design/README.md` 领地标记。*
+## 9. 与 `dojo-agents-absorption-plan` 映射
+
+权威：`docs/design/dojo-agents-absorption-plan.md` + `DELIVERY-STATUS.md` 能力真相表。
+
+| Dojo / 能力项 | 后端状态（文档口径） | **UI 视觉形态（本方案）** | 落点 Sprint |
+|---|---|---|---|
+| **Plan 状态机** | 状态机存在；真 step 未做 | 顶部/侧栏 **Plan Stepper**（只读节点 + 当前态高亮）；未实现 step 不假装可点穿 | C / S-UI-2 |
+| **HITL** | 主切片已有批准回路 | **Approval Card**：通过/驳回/反馈；warn 色待批；ok/danger 结果 | C / S-UI-2 |
+| **provenance** | 已强制 normalize | 结论脚注式 **Source Chips**（源、时间、tier）；xs 字号 | C / S-UI-2 |
+| **scorecard** | `scorecard.py` + UI 已有 | **Scorecard Strip**：四维条/分；低分升风险色 `--warn` | C + artifacts |
+| **Skills** | system_hint，非运行时插件市场 | 设置/提示区说明性文案，不做假商店 | 非目标（文案级） |
+| **Memory 预取** | 启动预取常开 | 无单独炫技 UI；冷启动用 Skeleton | A 空态 |
+| **context compress** | 未做 | 不展示「已压缩」伪状态 | 禁止 |
+| **Checkpoint 回放** | 未做 HTTP+前端 | 不画回放时间轴；预留禁用入口样式即可 | 禁止装作成 |
+| **辩论/时间线** | Sprint1 主切片 | 时间线密度用 `--fs-sm` + 左轨 | C |
+| **Wind 配额** | 配额 API + 鉴权 | Settings 配额条 + warn>70%/danger>90% 语义 | D/Settings |
+| **铁律 #1** | 全局 | 任何卡片禁止 fallback 假 K 线 | 全 Sprint |
+
+**映射原则**：UI 只可视化 **已真实存在** 的能力；对「故意未做」项，界面保持隐藏或 disabled+说明，禁止营销式「即将上线」假入口。
+
+---
+
+## 10. TODO 跟踪
+
+- 跟踪段落：根目录 `TODO.md` → **「UI 改造 A–D（待审批）」**
+- 方案路径：`docs/design/ui-renovation-plan.md`
+- 状态机：`待 Comdr 审批` → `已通过` → 按 S-UI-0…4 勾选 → `关闭`
+- 任何编码 PR/commit 信息须引用：`ui-renovation-plan.md §x` + 审批状态
+
+---
+
+## 11. 回滚
+
+| 层级 | 动作 |
+|---|---|
+| 文档 | 删除本文件段落/文件；还原 `TODO.md` UI 段；还原 `docs/design/README.md` 行 |
+| S-UI-0/1 | `git checkout -- frontend/src/app/globals.css` 及相关 UI 文件 |
+| S-UI-2 | 还原 `page.tsx` + `components/chat|agent|artifacts|market` 改动集 |
+| S-UI-3 | 还原主题 store/layout；清 localStorage 主题 key（可选 migrate） |
+| 整包 | 回退到审批前 tag/commit；不涉及 DB 迁移 |
+| 运行态 | 无服务端 schema 变更；回滚无数据修复脚本 |
+
+---
+
+## 12. 变更记录
+
+| 版本 | 时间（+08:00） | 说明 |
+|---|---|---|
+| v0.1-draft | 2026-07-24 | 精简版 A–D 初稿（已落盘） |
+| v1.0-draft-for-approval | 2026-07-24 | 按审批模板重排：审批栏/第一性原理/现状诊断/Token/S-UI-0~4/dojo 映射；**待 Comdr 审批，未批禁止编码** |
+
+---
+
+## 附录 A · 决策摘要（给 Comdr 快读）
+
+1. **为什么改**：视觉方言 + IA 叠层削弱「Agent 决策工位」主路径。  
+2. **改什么**：A 系统 → B 首页 IA → C 工位（HITL/provenance/scorecard）→ D 皮肤。  
+3. **不改什么**：后端契约、未交付 dojo 能力装作成、Playwright、大重构目录。  
+4. **怎么控**：审批栏硬锁 + Sprint 回滚点 + 铁律 #1/#2/#3。  
+5. **你需要做的唯一动作**：在 §1 勾选通过/驳回并批注。
+
+## 附录 B · 与历史修复的兼容
+
+- 高度链 / sticky 指数 / SafeResponsiveContainer / 名称 code 污染清洗 / market 503 安静降级：**改造时必须回归，禁止回退。**  
+- OpenAPI / 鉴权 / CSRF：**UI 不触后端。**
+
+## 附录 C · 风险登记
+
+| 风险 | 等级 | 缓解 |
+|---|---|---|
+| 未批抢跑编码 | High | 本文硬锁 + TODO 状态 |
+| 侧栏过宽挤死对话 | Med | S-UI-2 折叠优先级表 |
+| 主题闪白 | Med | CSS 变量 + 默认跟随系统可选 |
+| 假能力入口 | High | §9 映射禁止装作成 |
+| 内存/OOM | High | 铁律 #3；禁全量 vitest/build |
+
+---
+
+**文末声明**：本文为设计与治理文档，不包含可执行业务补丁。  
+**审批状态：待 Comdr 审批 · 未批禁止编码实现 A–D。**
