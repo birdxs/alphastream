@@ -93,6 +93,48 @@ function pctLabel(v: number | null | undefined): string {
   return `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`;
 }
 
+/** 与后端 normalize_provenance_list 对齐：仅 source/tool/ts/digest，拒绝裸 string / 假行情字段 */
+const PROVENANCE_FAKE_KEYS = new Set([
+  'price', 'close', 'open', 'high', 'low', 'last', 'last_price',
+  'change_pct', 'pct_chg', 'amount', 'volume', 'turnover',
+  'pe', 'pb', 'roe', 'market_cap', 'mv', 'fake_price', 'quote', 'ohlcv',
+]);
+
+function normalizeProvenanceList(raw: unknown, limit = 32): ProvenanceEntry[] {
+  if (raw == null) return [];
+  const items: unknown[] = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'object'
+      ? [raw]
+      : [];
+  const out: ProvenanceEntry[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (item == null || typeof item === 'string' || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const source = String(rec.source ?? '').trim();
+    if (!source) continue;
+    const entry: ProvenanceEntry = { source: source.slice(0, 200) };
+    const tool = String(rec.tool ?? '').trim();
+    if (tool) entry.tool = tool.slice(0, 120);
+    const ts = rec.ts != null ? String(rec.ts).trim() : '';
+    if (ts) entry.ts = ts.slice(0, 64);
+    const digest = rec.digest != null ? String(rec.digest).trim() : '';
+    if (digest) entry.digest = digest.slice(0, 64);
+    for (const k of Object.keys(entry)) {
+      if (PROVENANCE_FAKE_KEYS.has(k)) {
+        delete (entry as Record<string, unknown>)[k];
+      }
+    }
+    const key = `${entry.source}|${entry.tool || ''}|${entry.digest || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 export function DecisionCardArtifact({ data }: Props) {
   if (!data || Object.keys(data).length === 0) {
     return (
@@ -249,9 +291,9 @@ export function DecisionCardArtifact({ data }: Props) {
       {/* 决策理由 */}
       {data.reasoning && <p className="text-sm leading-relaxed">{data.reasoning}</p>}
 
-      {/* G1 数据血统（可折叠，仅摘要无假行情；memo.provenance 与顶层对齐） */}
+      {/* G1 数据血统（可折叠，仅摘要无假行情；memo.provenance 与顶层对齐，经 normalize 同一 schema） */}
       {(() => {
-        const prov =
+        const raw =
           (Array.isArray(data.provenance) && data.provenance.length > 0
             ? data.provenance
             : null) ||
@@ -260,7 +302,8 @@ export function DecisionCardArtifact({ data }: Props) {
           data.decision_memo.provenance.length > 0
             ? data.decision_memo.provenance
             : null);
-        if (!prov) return null;
+        const prov = normalizeProvenanceList(raw);
+        if (!prov.length) return null;
         return (
           <details className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
             <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">

@@ -250,6 +250,72 @@ function EventStream() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const lastLenRef = useRef(0);
+  // 折叠组默认展开写仓终态 / 计划最近一组；用户可折叠
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  type TimelineItem =
+    | { kind: 'single'; event: AgentEvent; prevTs?: number; key: string }
+    | {
+        kind: 'group';
+        groupType: 'plan' | 'write_proposal';
+        events: AgentEvent[];
+        label: string;
+        key: string;
+        prevTs?: number;
+      };
+
+  const timelineItems = useMemo((): TimelineItem[] => {
+    const items: TimelineItem[] = [];
+    let i = 0;
+    while (i < events.length) {
+      const ev = events[i];
+      const prevTs = i > 0 ? events[i - 1].ts : undefined;
+      const isPlan = ev.type === 'plan.created' || ev.type === 'plan.step';
+      const isWp = ev.type === 'write_proposal';
+      if (!isPlan && !isWp) {
+        items.push({ kind: 'single', event: ev, prevTs, key: ev.id });
+        i += 1;
+        continue;
+      }
+      // 连续同类折叠为一组
+      const groupType: 'plan' | 'write_proposal' = isPlan ? 'plan' : 'write_proposal';
+      const groupEvents: AgentEvent[] = [ev];
+      let j = i + 1;
+      while (j < events.length) {
+        const n = events[j];
+        const nPlan = n.type === 'plan.created' || n.type === 'plan.step';
+        const nWp = n.type === 'write_proposal';
+        if (groupType === 'plan' && nPlan) {
+          groupEvents.push(n);
+          j += 1;
+        } else if (groupType === 'write_proposal' && nWp) {
+          groupEvents.push(n);
+          j += 1;
+        } else {
+          break;
+        }
+      }
+      // 单条仍可直接展示，多条才折叠
+      if (groupEvents.length === 1) {
+        items.push({ kind: 'single', event: groupEvents[0], prevTs, key: groupEvents[0].id });
+      } else {
+        const label =
+          groupType === 'plan'
+            ? `计划 (${groupEvents.length})`
+            : `写仓提案 (${groupEvents.length})`;
+        items.push({
+          kind: 'group',
+          groupType,
+          events: groupEvents,
+          label,
+          key: `grp-${groupType}-${groupEvents[0].id}-${groupEvents.length}`,
+          prevTs,
+        });
+      }
+      i = j;
+    }
+    return items;
+  }, [events]);
 
   // 自动滚到底部（仅当autoFollow开启且有新事件）
   useEffect(() => {
@@ -294,9 +360,62 @@ function EventStream() {
           className="max-h-80 overflow-y-auto pr-1 -mr-1 scrollbar-thin"
         >
           <div className="space-y-0.5">
-            {events.map((ev, i) => (
-              <EventRow key={ev.id} ev={ev} prevTs={i > 0 ? events[i - 1].ts : undefined} />
-            ))}
+            {timelineItems.map((item) => {
+              if (item.kind === 'single') {
+                return (
+                  <EventRow key={item.key} ev={item.event} prevTs={item.prevTs} />
+                );
+              }
+              const isCollapsed = collapsedGroups[item.key] ?? false;
+              const latest = item.events[item.events.length - 1];
+              const cfg =
+                item.groupType === 'plan'
+                  ? EVENT_VISUAL['plan.created']
+                  : EVENT_VISUAL.write_proposal;
+              const Icon = cfg.Icon;
+              return (
+                <div key={item.key} className="relative pl-7 pr-1">
+                  <div
+                    className={`absolute left-[10px] top-2 flex items-center justify-center w-4 h-4 rounded-full ${cfg.bg} border ${cfg.border}`}
+                  >
+                    <Icon className={`w-2.5 h-2.5 ${cfg.color}`} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsedGroups((prev) => ({
+                        ...prev,
+                        [item.key]: !(prev[item.key] ?? false),
+                      }))
+                    }
+                    className="flex items-center gap-1.5 w-full text-left py-1 group"
+                  >
+                    <span className={`text-[9px] px-1 py-0 rounded ${cfg.bg} ${cfg.color} font-medium`}>
+                      {item.label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/70 truncate flex-1">
+                      {latest?.title || ''}
+                    </span>
+                    <ChevronDown
+                      className={`h-3 w-3 text-muted-foreground/50 shrink-0 transition-transform ${
+                        isCollapsed ? '' : 'rotate-180'
+                      }`}
+                    />
+                  </button>
+                  {!isCollapsed && (
+                    <div className="ml-0 border-l border-foreground/5 pl-0 space-y-0.5 pb-1">
+                      {item.events.map((ev, gi) => (
+                        <EventRow
+                          key={ev.id}
+                          ev={ev}
+                          prevTs={gi > 0 ? item.events[gi - 1].ts : item.prevTs}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

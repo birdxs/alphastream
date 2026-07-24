@@ -334,11 +334,39 @@ class TestWrapAltData:
 
 
 def test_provenance_entry_no_price_fields():
-    from app.core.artifact_wrapper import build_provenance_entry, provenance_from_sources, merge_provenance
+    from app.core.artifact_wrapper import (
+        build_provenance_entry,
+        provenance_from_sources,
+        merge_provenance,
+        normalize_provenance_item,
+        normalize_provenance_list,
+    )
     e = build_provenance_entry(source='akshare', tool='get_stock_data', args={'code': '600519'})
     assert set(e.keys()) <= {'source', 'tool', 'ts', 'digest'}
     assert 'price' not in e and 'close' not in e
     lst = provenance_from_sources(['akshare', {'name': 'eastmoney'}], tool='get_stock_data')
     assert len(lst) == 2
+    # 输出全部为结构化 dict（输入可接受 string，输出禁止裸 string）
+    assert all(isinstance(x, dict) and x.get('source') for x in lst)
     m = merge_provenance(lst, lst)
     assert len(m) == 2  # dedupe
+    # 与 scorecard 同一 schema：拒绝裸 string / 假价字段
+    assert normalize_provenance_item("akshare") is None
+    dirty = {"source": "akshare", "price": 1174.06, "last_price": 1, "tool": "kline"}
+    clean = normalize_provenance_item(dirty)
+    assert clean is not None
+    assert "price" not in clean and "last_price" not in clean
+    assert clean.get("source") == "akshare"
+    mixed = normalize_provenance_list(
+        ["bare", {"source": "a"}, {"source": "a"}, {"source": "b", "pe": 12}, None],
+        max_items=10,
+    )
+    assert all(isinstance(x, dict) for x in mixed)
+    assert [x["source"] for x in mixed] == ["a", "b"]
+    # merge 混入裸 string 不泄漏
+    m2 = merge_provenance(lst, ["should-drop", {"source": "wind", "price": 9.9}])
+    assert all(isinstance(x, dict) for x in m2)
+    assert not any("price" in x for x in m2)
+    sources = {x["source"] for x in m2}
+    assert "wind" in sources
+    assert "should-drop" not in sources

@@ -20,8 +20,18 @@ logger = logging.getLogger(__name__)
 
 # ============================================================
 # G1 数据血统 provenance[]（零假行情；仅摘要字段，不含原始行情）
-# 条目契约: {source?, tool?, ts?, digest?}
+# 权威 schema: List[{source, tool?, ts?, digest?}]
+# 与 scorecard.normalize_provenance_* / decision_memo 同一契约
+# 禁止 price/ohlcv/pe/last_price 等假值；最终数组禁止裸 string
 # ============================================================
+
+_PROVENANCE_ALLOWED_KEYS = frozenset({"source", "tool", "ts", "digest"})
+_PROVENANCE_FAKE_PRICE_KEYS = frozenset({
+    "price", "close", "open", "high", "low", "last", "last_price",
+    "change_pct", "pct_chg", "amount", "volume", "turnover",
+    "pe", "pb", "roe", "market_cap", "mv", "fake_price", "quote", "ohlcv",
+})
+
 
 def _stable_digest(payload: Any, max_len: int = 16) -> str:
     """对参数/结果做短 digest（sha256 hex 截断）；失败返回空串。"""
@@ -41,6 +51,76 @@ def _stable_digest(payload: Any, max_len: int = 16) -> str:
         return ''
 
 
+def normalize_provenance_item(raw: Any) -> Optional[Dict[str, str]]:
+    """单条 provenance 归一：仅 dict + 非空 source；剥离假行情字段；拒绝裸 string。
+
+    契约（decision_memo / scorecard / artifact 共用）：
+    - 输入非 dict → None（裸 str / int / None 一律丢弃）
+    - source 必填且 strip 后非空
+    - 仅保留 source / tool / ts / digest
+    - 显式丢弃 price / last_price / pe / change_pct 等假行情字段
+    """
+    if raw is None or isinstance(raw, str) or not isinstance(raw, dict):
+        return None
+    src = str(raw.get("source") or "").strip()
+    if not src:
+        return None
+    entry: Dict[str, str] = {"source": src[:200]}
+    tool = str(raw.get("tool") or "").strip()
+    if tool:
+        entry["tool"] = tool[:120]
+    digest = str(raw.get("digest") or "").strip()
+    if digest:
+        entry["digest"] = digest[:64]
+    ts_val = raw.get("ts")
+    if ts_val is not None and str(ts_val).strip():
+        entry["ts"] = str(ts_val).strip()[:64]
+    for k in list(entry.keys()):
+        if k not in _PROVENANCE_ALLOWED_KEYS or k in _PROVENANCE_FAKE_PRICE_KEYS:
+            entry.pop(k, None)
+    return entry
+
+
+def normalize_provenance_list(
+    raw: Any,
+    max_items: int = 32,
+    *,
+    limit: Optional[int] = None,
+) -> List[Dict[str, str]]:
+    """列表归一：跳过非 dict / 空 source；按 (source, tool, digest) 去重；截断。
+
+    max_items 与 limit 等价（limit 优先，兼容 scorecard 既有调用）。
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, dict):
+        items: List[Any] = [raw]
+    elif isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        return []
+    cap = limit if limit is not None else max_items
+    max_n = max(1, min(int(cap or 32), 64))
+    seen = set()
+    out: List[Dict[str, str]] = []
+    for item in items:
+        cleaned = normalize_provenance_item(item)
+        if not cleaned:
+            continue
+        key = (
+            cleaned.get("source") or "",
+            cleaned.get("tool") or "",
+            cleaned.get("digest") or "",
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(cleaned)
+        if len(out) >= max_n:
+            break
+    return out
+
+
 def build_provenance_entry(
     *,
     source: Optional[str] = None,
@@ -52,8 +132,9 @@ def build_provenance_entry(
     """构造单条 provenance 摘要（无假行情字段）。
 
     digest 优先用入参；否则对 args 生成短 hash（仅审计，不含价格）。
+    输出经 normalize_provenance_item，与 decision/scorecard 同一 schema。
     """
-    entry: Dict[str, str] = {}
+    entry: Dict[str, Any] = {}
     if source:
         entry['source'] = str(source)[:200]
     if tool:
@@ -62,7 +143,21 @@ def build_provenance_entry(
     d = digest if digest is not None else (_stable_digest(args) if args is not None else '')
     if d:
         entry['digest'] = str(d)[:64]
-    return entry
+    cleaned = normalize_provenance_item(entry)
+    if cleaned is not None:
+        return cleaned
+    # source 缺失时仍返回 tool 侧可审计骨架（调用方应保证 source）
+    fallback: Dict[str, str] = {}
+    if tool:
+        fallback['source'] = str(tool)[:200]
+        fallback['tool'] = str(tool)[:120]
+    else:
+        fallback['source'] = 'unknown'
+    if entry.get('ts'):
+        fallback['ts'] = str(entry['ts'])[:64]
+    if entry.get('digest'):
+        fallback['digest'] = str(entry['digest'])[:64]
+    return fallback
 
 
 def provenance_from_sources(
@@ -71,9 +166,10 @@ def provenance_from_sources(
     tool: Optional[str] = None,
     args: Any = None,
 ) -> List[Dict[str, str]]:
-    """将 artifact sources 列表归一为 provenance[]。
+    """将 artifact sources 列表归一为 provenance[]（结构化 dict，非裸 string）。
 
-    sources 条目可为 str 或 {name/type/...}；不从源数据抄任何价格字段。
+    sources 条目可为 str 或 {name/type/...}；string 仅作输入，输出一律 dict。
+    不从源数据抄任何价格字段。
     """
     out: List[Dict[str, str]] = []
     for s in sources or []:
@@ -91,39 +187,20 @@ def provenance_from_sources(
                 out.append(build_provenance_entry(source=str(name), tool=tool, args=args))
     if not out and tool:
         out.append(build_provenance_entry(source=tool, tool=tool, args=args))
-    return out
+    return normalize_provenance_list(out)
 
 
 def merge_provenance(*lists: Any, max_items: int = 32) -> List[Dict[str, str]]:
-    """合并多段 provenance，按 (source, tool, digest) 去重，保序截断。"""
-    seen = set()
-    merged: List[Dict[str, str]] = []
+    """合并多段 provenance，经 normalize 后按 (source, tool, digest) 去重，保序截断。"""
+    flat: List[Any] = []
     for lst in lists:
         if not lst:
             continue
-        if not isinstance(lst, (list, tuple)):
-            continue
-        for item in lst:
-            if not isinstance(item, dict):
-                continue
-            key = (
-                str(item.get('source') or ''),
-                str(item.get('tool') or ''),
-                str(item.get('digest') or ''),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            cleaned = build_provenance_entry(
-                source=item.get('source'),
-                tool=item.get('tool'),
-                ts=item.get('ts'),
-                digest=item.get('digest'),
-            )
-            merged.append(cleaned)
-            if len(merged) >= max_items:
-                return merged
-    return merged
+        if isinstance(lst, (list, tuple)):
+            flat.extend(lst)
+        elif isinstance(lst, dict):
+            flat.append(lst)
+    return normalize_provenance_list(flat, max_items=max_items)
 
 # Artifact类型注册表：工具名称 → artifact_type
 ARTIFACT_TYPE_MAP = {

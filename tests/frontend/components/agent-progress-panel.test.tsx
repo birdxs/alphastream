@@ -68,4 +68,40 @@ describe('AgentProgressPanel 组件', () => {
     render(<AgentProgressPanel />);
     expect(screen.getByText(/2 事件 · 实时/)).toBeTruthy();
   });
+
+  it('连续 plan / write_proposal 事件 → 折叠分组标签', () => {
+    const now = Date.now();
+    act(() => {
+      useAgentStore.setState({
+        isAnalyzing: true,
+        overallProgress: 40,
+        events: [
+          { id: 'p1', ts: now, type: 'plan.created', title: '计划创建' },
+          { id: 'p2', ts: now + 1, type: 'plan.step', title: '步骤1' },
+          { id: 'p3', ts: now + 2, type: 'plan.step', title: '步骤2' },
+          {
+            id: 'w1',
+            ts: now + 3,
+            type: 'write_proposal',
+            title: '写仓提案',
+            data: { status: 'pending', proposal_id: 'prop-1', kind: 'portfolio_write_proposal' },
+          },
+          {
+            id: 'w2',
+            ts: now + 4,
+            type: 'write_proposal',
+            title: '写仓已批准',
+            data: { status: 'approved', proposal_id: 'prop-1', kind: 'portfolio_write_proposal' },
+          },
+          { id: 't1', ts: now + 5, type: 'tool_call_end', title: '工具结束' },
+        ],
+      });
+    });
+    render(<AgentProgressPanel />);
+    expect(screen.getByText(/6 事件 · 实时/)).toBeTruthy();
+    // 连续 3 条 plan → 分组
+    expect(screen.getByText(/计划 \(3\)/)).toBeTruthy();
+    // 连续 2 条 write_proposal → 分组
+    expect(screen.getByText(/写仓提案 \(2\)/)).toBeTruthy();
+  });
 });

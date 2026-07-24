@@ -7,10 +7,12 @@
  */
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useAgentStore } from "@/lib/stores/agent-store";
+import type { AgentEvent } from "@/lib/stores/agent-store";
 
 /** 与后端 HITLManager.get_pending_approvals 的 kind 对齐 */
 export type ApprovalKind = "agent_decision" | "portfolio_write_proposal" | string;
@@ -75,6 +77,47 @@ function shortId(id: string | null | undefined, head = 14): string {
   return id.length > head ? `${id.slice(0, head)}…` : id;
 }
 
+/** 外部 status / timeline write_proposal 事件 → 卡片 phase（不依赖 3s 轮询） */
+type CardPhase = "pending" | "approved_waiting_apply" | "applied" | "rejected";
+
+function mapStatusToPhase(status?: string | null): CardPhase | null {
+  const s = (status || "").toLowerCase().trim();
+  if (!s || s === "pending" || s === "awaiting_approval") return null;
+  if (s === "approved") return "approved_waiting_apply";
+  if (s === "rejected" || s === "timeout_reject") return "rejected";
+  if (s === "applied" || s === "applied_local") return "applied";
+  return null;
+}
+
+function pickWriteProposalStatus(ev: AgentEvent): string {
+  const d = (ev.meta || {}) as Record<string, unknown>;
+  return String(d.status || d.resolution || "").toLowerCase().trim();
+}
+
+function matchesWriteProposalEvent(ev: AgentEvent, approval: PendingApproval): boolean {
+  if (ev.type !== "write_proposal") return false;
+  const d = (ev.meta || {}) as Record<string, unknown>;
+  const pid = String(d.proposal_id || d.id || "").trim();
+  const aid = String(d.approval_id || "").trim();
+  const targets = [approval.proposal_id, approval.approval_id, approval.task_id]
+    .filter(Boolean)
+    .map((x) => String(x));
+  if (pid && targets.includes(pid)) return true;
+  if (aid && targets.includes(aid)) return true;
+  if (approval.task_id && String(d.task_id || "") === approval.task_id) {
+    const st = pickWriteProposalStatus(ev);
+    return ["approved", "rejected", "applied", "applied_local", "timeout_reject"].includes(st);
+  }
+  return false;
+}
+
+function phaseRank(p: CardPhase): number {
+  if (p === "pending") return 0;
+  if (p === "approved_waiting_apply") return 1;
+  if (p === "rejected") return 2;
+  return 3; // applied
+}
+
 export function ApprovalCard({
   approval,
   onResolved,
@@ -133,7 +176,9 @@ export function ApprovalCard({
       ? approval.decision.weight
       : null;
 
-  const [phase, setPhase] = useState<"pending" | "approved_waiting_apply" | "applied" | "rejected">("pending");
+  const [phase, setPhase] = useState<CardPhase>(
+    () => mapStatusToPhase(approval.status) || "pending",
+  );
   const [applyBusy, setApplyBusy] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
   const [applyMeta, setApplyMeta] = useState<{
@@ -141,6 +186,32 @@ export function ApprovalCard({
     local_mark_only: boolean;
     status?: string | null;
   } | null>(null);
+  const storeEvents = useAgentStore((s) => s.events);
+  const lastSyncedEventId = useRef<string>("");
+
+  // sticky / 父组件 status 推进时即时刷新 phase（不依赖轮询）
+  useEffect(() => {
+    const mapped = mapStatusToPhase(approval.status);
+    if (!mapped) return;
+    setPhase((prev) => (phaseRank(mapped) >= phaseRank(prev) ? mapped : prev));
+  }, [approval.status]);
+
+  // 订阅 store 最近 write_proposal 终态事件（approved / rejected / applied_local）
+  // 仅推进 phase，不触发 onResolved（避免重复 submitApproval）
+  useEffect(() => {
+    if (!storeEvents.length) return;
+    for (let i = storeEvents.length - 1; i >= 0; i--) {
+      const ev = storeEvents[i];
+      if (!matchesWriteProposalEvent(ev, approval)) continue;
+      const mapped = mapStatusToPhase(pickWriteProposalStatus(ev));
+      if (!mapped) continue;
+      const eid = String(ev.id || `${ev.type}-${ev.ts}-${mapped}`);
+      if (lastSyncedEventId.current === eid) break;
+      lastSyncedEventId.current = eid;
+      setPhase((prev) => (phaseRank(mapped) >= phaseRank(prev) ? mapped : prev));
+      break;
+    }
+  }, [storeEvents, approval]);
 
   const handle = async (approved: boolean) => {
     if (busy || submitting || phase !== "pending") return;

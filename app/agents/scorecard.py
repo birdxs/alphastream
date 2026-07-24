@@ -9,6 +9,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+# G1 provenance 权威实现在 artifact_wrapper；此处 re-export 保持既有 import 路径稳定
+try:
+    from app.core.artifact_wrapper import (
+        normalize_provenance_item as _aw_normalize_provenance_item,
+        normalize_provenance_list as _aw_normalize_provenance_list,
+    )
+except Exception:  # pragma: no cover - 极早期 import 失败兜底
+    _aw_normalize_provenance_item = None  # type: ignore[assignment]
+    _aw_normalize_provenance_list = None  # type: ignore[assignment]
+
 
 # 用于 data_coverage 的核心报告槽位（存在且非空即覆盖）
 _COVERAGE_SLOTS: Tuple[str, ...] = (
@@ -193,43 +203,51 @@ def compute_run_scorecard(
     return scorecard
 
 
-# 假字段：金融行情/假价格类，严禁进入 provenance 输出（铁律#1）
+# 假字段集合保留给测试/文档引用；实际剥离逻辑在 artifact_wrapper
 _PROVENANCE_FAKE_PRICE_KEYS = frozenset({
     "price", "close", "open", "high", "low", "last", "last_price",
     "change_pct", "pct_chg", "amount", "volume", "turnover",
-    "pe", "pb", "roe", "market_cap", "mv", "fake_price", "quote",
+    "pe", "pb", "roe", "market_cap", "mv", "fake_price", "quote", "ohlcv",
 })
 
 
 def normalize_provenance_item(raw: Any) -> Optional[Dict[str, Any]]:
     """
     将任意 provenance 原始项规范为 {source, tool?, ts?, digest?} 结构。
+    权威实现：app.core.artifact_wrapper.normalize_provenance_item（同一 schema）。
     - 拒绝裸 string / 非 dict（返回 None）
     - 拒绝 price 等假行情字段混入输出
     - source 必填非空
     """
+    if _aw_normalize_provenance_item is not None:
+        return _aw_normalize_provenance_item(raw)
+    # import 失败兜底（契约等价）
     if raw is None or isinstance(raw, str) or not isinstance(raw, dict):
         return None
     src = str(raw.get("source") or "").strip()
     if not src:
         return None
-    entry: Dict[str, Any] = {"source": src[:120]}
+    entry: Dict[str, Any] = {"source": src[:200]}
     tool = str(raw.get("tool") or "").strip()
     if tool:
-        entry["tool"] = tool[:80]
+        entry["tool"] = tool[:120]
     digest = str(raw.get("digest") or "").strip()
     if digest:
-        entry["digest"] = digest[:200]
+        entry["digest"] = digest[:64]
     if raw.get("ts") is not None and str(raw.get("ts")).strip():
         entry["ts"] = str(raw.get("ts")).strip()[:64]
-    # 明确丢弃假价格/行情字段（即便入参有也不写出）
     for k in _PROVENANCE_FAKE_PRICE_KEYS:
         entry.pop(k, None)
     return entry
 
 
 def normalize_provenance_list(raw: Any, *, limit: int = 32) -> List[Dict[str, Any]]:
-    """归一 provenance：仅结构化 dict，去重，上限 limit。裸 string/假价字段一律剔除。"""
+    """归一 provenance：仅结构化 dict，去重，上限 limit。裸 string/假价字段一律剔除。
+
+    权威实现：app.core.artifact_wrapper.normalize_provenance_list（同一 schema）。
+    """
+    if _aw_normalize_provenance_list is not None:
+        return list(_aw_normalize_provenance_list(raw, limit=limit))
     if raw is None:
         return []
     if isinstance(raw, dict):

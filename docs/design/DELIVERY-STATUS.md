@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.8-write-proposal-resolve-provenance` |
-| **交付锚点** | **2026-07-24 13:20:00 +08:00**（write_proposal decide/apply 终态事件 + provenance schema 硬化；禁启服/禁 push） |
+| **文档版本** | `v1.9-approval-sticky-provenance-groups` |
+| **交付锚点** | **2026-07-24 13:40:00 +08:00**（sticky ApprovalCard 与 timeline 联动 + provenance 统一 schema + progress 折叠分组；禁启服/禁 push） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -149,10 +149,33 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 
 ### 下一批建议
 
-1. approve 后 sticky 卡片与 timeline `approved`/`applied_local` 联动刷新（UI 再验）
-2. Artifact wrapper 对齐同一 provenance schema
+1. ~~approve 后 sticky 卡片与 timeline 联动~~ → **v1.9 已落地**
+2. ~~Artifact wrapper 对齐同一 provenance schema~~ → **v1.9 已落地**
 3. SSE 桥对多 tab 订阅面压测（不启服可用 unit 模拟 bridge queue）
-4. Plan advance 与 write_proposal 事件在同一 progress panel 折叠分组
+4. ~~Plan advance 与 write_proposal 事件折叠分组~~ → **v1.9 已落地**
+
+
+## 2e. v1.9 approval sticky sync + artifact provenance + progress groups（本轮）
+
+| 项 | 说明 |
+|----|------|
+| sticky 联动 | `ApprovalCard` 监听 `approval.status` + store `write_proposal` 终态；`pending-approvals` sticky 跟 `approved`/`rejected`/`applied_local` 即时更新（不单靠 3s 轮询） |
+| provenance 统一 | 权威 `normalize_provenance_*` 落 `artifact_wrapper`；`scorecard` re-export；decision 路径同源 |
+| decision UI | `decision-card` 渲染前 `normalizeProvenanceList`（拒裸 string / 假行情字段） |
+| progress 分组 | 连续 `plan.*` / `write_proposal` 折叠为「计划 (N)」「写仓提案 (N)」可展开组 |
+| 聚焦测 | `test_artifact_wrapper_p3` provenance + `test_agent_scorecard` + `agent-progress-panel.test` 分组 + tsc |
+| 约束 | 禁 push；禁启服；铁律#1；优先改现有文件 |
+
+### 本轮验证（离线）
+
+- 见本节 commit 与下方测试末行
+- 8888/3000 本轮未监听
+
+### 下一批建议
+
+1. Agent 真路径 plan/write_proposal → chat SSE 端到端（真启服 + Kimi WebBridge）
+2. sticky 多审批卡并发时的 match 优先级单测（proposal_id vs task_id）
+3. SSE 桥多 tab 订阅面 unit 模拟
 
 
 ---

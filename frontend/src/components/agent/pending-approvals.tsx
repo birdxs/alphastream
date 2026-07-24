@@ -13,6 +13,8 @@ import {
   type ApprovalKind,
   type PendingApproval,
 } from "@/components/agent/approval-card";
+import { useAgentStore } from "@/lib/stores/agent-store";
+import type { AgentEvent } from "@/lib/stores/agent-store";
 
 function normalizePending(raw: unknown): PendingApproval | null {
   if (!raw || typeof raw !== "object") return null;
@@ -150,6 +152,64 @@ export function PendingApprovalsPanel({
       window.clearInterval(id);
     };
   }, [pollMs, refresh]);
+
+  // timeline write_proposal 终态 → sticky 即时同步（不只依赖 3s 轮询）
+  const storeEvents = useAgentStore((s) => s.events);
+  useEffect(() => {
+    if (!storeEvents.length) return;
+    for (let i = storeEvents.length - 1; i >= 0; i--) {
+      const ev = storeEvents[i] as AgentEvent;
+      if (ev.type !== "write_proposal") continue;
+      const d = (ev.meta || {}) as Record<string, unknown>;
+      const st = String(d.status || d.resolution || "").toLowerCase().trim();
+      if (!["approved", "rejected", "applied", "applied_local", "timeout_reject"].includes(st)) {
+        continue;
+      }
+      const pid = String(d.proposal_id || d.id || "").trim();
+      const aid = String(d.approval_id || "").trim();
+      const tid = String(d.task_id || "").trim();
+      const matchKey = (x: PendingApproval) => {
+        const keys = [x.proposal_id, x.approval_id, x.task_id].filter(Boolean).map(String);
+        return (
+          (pid && keys.includes(pid)) ||
+          (aid && keys.includes(aid)) ||
+          (tid && (x.task_id === tid || x.approval_id === tid))
+        );
+      };
+
+      if (st === "approved") {
+        setStickyItems((prev) => {
+          const existing = prev.find(matchKey);
+          const fromList = items.find(matchKey);
+          const base = existing || fromList;
+          if (!base) return prev;
+          const key = base.approval_id || base.task_id;
+          const filtered = prev.filter((x) => (x.approval_id || x.task_id) !== key);
+          return [
+            ...filtered,
+            {
+              ...base,
+              status: "approved",
+              kind: base.kind || "portfolio_write_proposal",
+            },
+          ];
+        });
+      } else if (st === "applied" || st === "applied_local") {
+        setStickyItems((prev) =>
+          prev.map((x) =>
+            matchKey(x)
+              ? { ...x, status: st === "applied_local" ? "applied_local" : "applied" }
+              : x,
+          ),
+        );
+      } else if (st === "rejected" || st === "timeout_reject") {
+        setStickyItems((prev) => prev.filter((x) => !matchKey(x)));
+        setItems((prev) => prev.filter((x) => !matchKey(x)));
+      }
+      // 只处理最新一条匹配终态
+      break;
+    }
+  }, [storeEvents, items]);
 
   const onResolved = useCallback(
     async (taskId: string, approved: boolean) => {
