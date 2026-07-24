@@ -145,10 +145,15 @@ function writeProposalSummaryBits(meta?: Record<string, unknown> | null): string
   if (approvalId) bits.push(`appr ${approvalId.slice(0, 12)}`);
   const proposalId = meta.proposal_id != null ? String(meta.proposal_id) : '';
   if (proposalId) bits.push(`prop ${proposalId.slice(0, 12)}`);
-  const status = meta.status != null ? String(meta.status) : '';
-  if (status) bits.push(status);
-  if (meta.executed === true) bits.push('已标记');
-  else if (meta.executed === false) bits.push('未成交');
+  // 生命周期 status 中文标签（pending/approved/rejected/applied_local）
+  let status = meta.status != null ? String(meta.status).toLowerCase() : 'pending';
+  if (status === 'applied') status = 'applied_local';
+  if (status === 'approved') bits.push('已通过');
+  else if (status === 'rejected') bits.push('已拒绝');
+  else if (status === 'applied_local') bits.push('本地标记');
+  else bits.push(status || 'pending');
+  // 铁律#1：永不展示成交语义；executed 恒按未成交呈现
+  bits.push('未成交');
   return bits;
 }
 

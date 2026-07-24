@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.7-skills-meta-proposal-timeline` |
-| **交付锚点** | **2026-07-24 13:00:00 +08:00**（skills 元数据热读 + write_proposal timeline UX 对齐；校时双源 Date ≤100s） |
+| **文档版本** | `v1.8-write-proposal-resolve-provenance` |
+| **交付锚点** | **2026-07-24 13:20:00 +08:00**（write_proposal decide/apply 终态事件 + provenance schema 硬化；禁启服/禁 push） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -34,7 +34,7 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 | P0-1 工具护栏 | **DONE** |
 | P0-2 意图协议 + 写工具硬拦 | **DONE**（`execute_tool` 白名单 + 写名 no-op；拟写仓 intent `portfolio_write_blocked` + system_hint 硬拒绝） |
 | P0-3 真仓只读 | **DONE** |
-| P0-4 工具时间线 | **DONE**（`provenance[]` 结构化数组仍属**已知缺口**，见 §8） |
+| P0-4 工具时间线 | **DONE**（`decision_memo.provenance` 已强制 `List[{source,tool?,ts?,digest?}]`，见 v1.8） |
 | P0-5 HITL 确认面 | **DONE** |
 | P0-6 辩论证据面 | **DONE**（terminal 完成态可再统一，非阻塞） |
 | P0-7 降级帽 | **DONE**（`degradations` + `confidence_cap` + `agent.degraded` 事件 + DecisionCard/SidePanel 横幅；真机压测为可选补验） |
@@ -118,26 +118,28 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 2. Plan list UI：filter chips（status / 当前 conversation）
 3. Skills：更多 builtin 或目录热加载文档化；勿放密钥
 4. atexit：若仍见 market_indices 守护噪声，核对 **import 前** 环境变量顺序（门控只在 import 期求值）
-5. provenance[] 结构化数组（P0-4 已知缺口）
+5. provenance[] memo 路径已硬化（v1.8）；Artifact 全量 schema 对齐仍可做
 
 
 ## 2b. v1.6.1 plan SSE 前端桥 + PlanList filters + pytest gate（已入库）
 
 见基线 `bcd2060` 及 v1.6 文档。
 
-## 2c. v1.7 本轮落地（skills 元数据热读 + write_proposal timeline UX 对齐）
+## 2c. v1.7 skills 元数据热读 + write_proposal timeline UX 对齐
 
-| 维度 | 说明 |
-|------|------|
-| 时间锚点 | 2026-07-24（系统 + 网络 Date 校验通过，偏差 ≤100s） |
-| Skills | `skill_loader.list_skills` **热读** `data/skills`（优先于同 id builtin）；元数据 `id/title/source/kind/has_hint/format/path(文件名)` |
-| list 工具 | `list_agent_skills` 返回完整元数据 + `by_source` 统计 |
-| builtin 样例 | 新增 `tool_discipline`（无密钥）；文件 `data/skills/tool_discipline.md`（热读优先） |
-| Event | `EVENT_WRITE_PROPOSAL` 载荷：`kind`/`approval_id`/`proposal_id`/`task_id`/`summary`/`status`/`executed=false` |
-| HITL | `register_non_blocking_pending` + `get_pending_approvals` 回填 `approval_id`/`proposal_id`/`kind` |
-| Timeline | `use-chat-stream` onWriteProposal meta 对齐；`agent-progress-panel` 展示 kind/appr/prop/summary 徽章 |
-| ApprovalCard | 展示 `kind:` / `approval_id:` / `proposal_id:` + 只读 summary（零假数） |
-| pytest 门控 | 根 + `tests/backend` conftest：`STOCKANAL_DISABLE_BACKGROUND=1` 强制写 + `pytest_configure` 再强制 |
+见基线 `30c9866`。
+
+## 2d. v1.8 write-proposal resolve events + provenance schema harden（本轮）
+
+| 项 | 说明 |
+|----|------|
+| resolve 事件 | `decide_approval` / `apply_proposal` 成功后 publish `EVENT_WRITE_PROPOSAL` |
+| status 序列 | `pending` → `approved`\|`rejected` → `applied_local`（内部 prop 仍 `applied`） |
+| 字段 | `kind=portfolio_write_proposal` / `approval_id` / `proposal_id` / `task_id` / `status` / **`executed=false` 恒** |
+| 前端 SSE | `onWriteProposal` 按 status 追加 timeline；dedupe key 含 `approval_id\|status` |
+| timeline UX | `agent-progress-panel` 按 status 着色徽章（通过/拒绝/本地标记/待审），一律「未成交」 |
+| provenance | `normalize_provenance_item/list`：拒裸 string、拒 price/pe 等假字段；`build_decision_memo` 强制结构化 |
+| 聚焦测 | `test_plan_dag_hitl_bridge.py`（resolve 事件）+ `test_agent_scorecard.py`（provenance 硬化）+ tsc |
 | 约束 | 禁 push；禁启服；铁律#1；优先改现有文件 |
 
 ### 本轮验证（离线）
@@ -145,6 +147,17 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 - 见本节 commit 消息与下方测试末行
 - 8888/3000 本轮未监听
 
+### 下一批建议
+
+1. approve 后 sticky 卡片与 timeline `approved`/`applied_local` 联动刷新（UI 再验）
+2. Artifact wrapper 对齐同一 provenance schema
+3. SSE 桥对多 tab 订阅面压测（不启服可用 unit 模拟 bridge queue）
+4. Plan advance 与 write_proposal 事件在同一 progress panel 折叠分组
+
+
+---
+
+## 3. 如何启动（本地开发）
 ### 下一批建议
 
 1. Agent 真路径下 plan/write_proposal 事件到 chat SSE 端到端（真启服 + Kimi）
@@ -257,7 +270,7 @@ CDP 备注：settings 硬刷后可见 Wind 配额真数（S/A/B 剩余，与 `/a
 
 1. **P0-7（合约 DONE）**：`degradations` + `confidence_cap` + `agent.degraded` + DecisionCard/SidePanel 已接；真机断网压测证据包仍可选。  
 2. **P0-2（handoff DONE）**：只读白名单 + 写工具名 `WRITE_TOOL_BLOCKED` no-op；拟写意图 `portfolio_write_blocked` + system_hint 硬拒绝；**真写 harness 未做**（Sprint4）。  
-3. **provenance[]（已知缺口）**：工具时间线字段已规范；完整数据血统折叠 Artifact / `provenance[]` 数组未 schema 化。  
+3. **provenance[]**：`decision_memo.provenance` 已强制 `List[{source,tool?,ts?,digest?}]`（v1.8）；Artifact wrapper 全量对齐仍可做。  
 4. **Sprint3 未含 P1 Skills/Plan/Memory/回放**；仅组合诊断 + 观察 mode。  
 5. **Wind**：无 `WIND_API_KEY` 时付费工具全降级；配额页不应显示造假剩余积分（空 key 时 remaining=满额未消费，属闸门初值非假交易结果）。  
 6. **auth**：`AUTH_REQUIRED=false` 仅本地；生产须开启鉴权 + CSRF。  

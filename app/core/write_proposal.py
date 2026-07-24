@@ -59,6 +59,88 @@ class WriteProposalStore:
             self._proposals.clear()
             self._approvals.clear()
 
+    def _build_summary(
+        self,
+        action: str = "",
+        code: str = "",
+        shares: Any = None,
+        weight: Any = None,
+    ) -> str:
+        """只读摘要（零假数）：动作 + 代码 + 可选 shares/weight，无价格。"""
+        parts: List[str] = [str(action or "write").strip() or "write"]
+        code_s = str(code or "").strip()
+        if code_s:
+            parts.append(code_s)
+        if shares is not None:
+            parts.append(f"×{shares}")
+        if weight is not None:
+            parts.append(f"w={weight}")
+        return " ".join(parts)
+
+    def _publish_write_proposal_event(
+        self,
+        *,
+        proposal_id: str,
+        approval_id: str,
+        status: str,
+        action: str = "",
+        code: str = "",
+        name: str = "",
+        shares: Any = None,
+        weight: Any = None,
+        reason: str = "",
+        conversation_id: str = "",
+        summary: Optional[str] = None,
+        apply_mode: Optional[str] = None,
+        message: str = "",
+    ) -> None:
+        """
+        timeline / SSE：EVENT_WRITE_PROPOSAL 生命周期事件。
+        status: pending | approved | rejected | applied_local
+        executed 恒 False（铁律#1：永不声明成交/已下单）。
+        """
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_WRITE_PROPOSAL
+
+            status_s = str(status or "pending").strip().lower() or "pending"
+            # 本地模拟 applied 对外契约用 applied_local（与 prop 内部 status=applied 区分语义）
+            if status_s == "applied":
+                status_s = "applied_local"
+            summary_s = (summary or "").strip() or self._build_summary(
+                action, code, shares, weight
+            )
+            payload: Dict[str, Any] = {
+                "event_type": EVENT_WRITE_PROPOSAL,
+                "kind": "portfolio_write_proposal",
+                "proposal_id": proposal_id,
+                "approval_id": approval_id,
+                "task_id": approval_id,  # HITL task_id == approval_id
+                "status": status_s,
+                "action": action or None,
+                "code": (code or None) or None,
+                "name": (name or None) or None,
+                "shares": shares,
+                "weight": weight,
+                "reason": (reason or "")[:500] or None,
+                "conversation_id": conversation_id or "",
+                "executed": False,  # 铁律#1：永不 true
+                "apply_mode": apply_mode,
+                "summary": summary_s,
+                "message": message
+                or f"写仓提案 {summary_s}（status={status_s}，未成交）".strip(),
+            }
+            get_event_bus().publish(EVENT_WRITE_PROPOSAL, payload)
+        except Exception as e:
+            try:
+                logger.debug(
+                    "WRITE_PROPOSAL event publish skipped proposal_id=%s status=%s: %s",
+                    proposal_id,
+                    status,
+                    e,
+                )
+            except Exception:
+                pass
+
     def create_proposal(
         self,
         action: str,
@@ -180,51 +262,19 @@ class WriteProposalStore:
             pass
 
         # timeline / SSE / ApprovalCard：字段与 pending 审批对齐（kind/approval_id/proposal_id）
-        try:
-            from app.core.event_bus import get_event_bus, EVENT_WRITE_PROPOSAL
-
-            # 只读摘要（零假数）：动作 + 代码 + 可选 shares/weight，无价格
-            _sum_parts = [act or "write"]
-            if code_s:
-                _sum_parts.append(str(code_s))
-            if shares is not None:
-                _sum_parts.append(f"×{shares}")
-            if weight is not None:
-                _sum_parts.append(f"w={weight}")
-            summary = " ".join(_sum_parts)
-
-            get_event_bus().publish(
-                EVENT_WRITE_PROPOSAL,
-                {
-                    "event_type": EVENT_WRITE_PROPOSAL,
-                    "kind": "portfolio_write_proposal",
-                    "proposal_id": proposal_id,
-                    "approval_id": approval_id,
-                    "task_id": approval_id,  # HITL task_id == approval_id
-                    "status": "pending",
-                    "action": act,
-                    "code": code_s or None,
-                    "name": name or None,
-                    "shares": shares,
-                    "weight": weight,
-                    "reason": reason or "",
-                    "risk_level": "high",
-                    "conversation_id": conversation_id or "",
-                    "executed": False,
-                    "apply_mode": None,
-                    "summary": summary,
-                    "message": f"写仓提案 {summary}（待审批，未执行）".strip(),
-                },
-            )
-        except Exception as e:
-            try:
-                logger.debug(
-                    "WRITE_PROPOSAL event publish skipped proposal_id=%s: %s",
-                    proposal_id,
-                    e,
-                )
-            except Exception:
-                pass
+        self._publish_write_proposal_event(
+            proposal_id=proposal_id,
+            approval_id=approval_id,
+            status="pending",
+            action=act,
+            code=code_s,
+            name=proposal.get("name") or "",
+            shares=shares,
+            weight=weight,
+            reason=reason or "",
+            conversation_id=conversation_id or "",
+            message=f"写仓提案 {self._build_summary(act, code_s, shares, weight)}（待审批，未成交）",
+        )
 
         return {
             "success": True,
@@ -261,7 +311,8 @@ class WriteProposalStore:
         approved: bool,
         feedback: str = "",
     ) -> Dict[str, Any]:
-        """审批提案（不执行写仓）。"""
+        """审批提案（不执行写仓）。成功后发布 write_proposal 终态事件（executed=false）。"""
+        snapshot: Optional[Dict[str, Any]] = None
         with self._lock:
             ap = self._approvals.get(approval_id)
             if not ap:
@@ -288,6 +339,20 @@ class WriteProposalStore:
             ap["status"] = "approved" if approved else "rejected"
             ap["decided_at"] = now_cn().isoformat()
             ap["feedback"] = (feedback or "")[:500]
+            prop = self._proposals.get(ap.get("proposal_id") or "")
+            snapshot = {
+                "proposal_id": ap.get("proposal_id") or "",
+                "approval_id": approval_id,
+                "status": ap["status"],
+                "action": (prop or {}).get("action") or "",
+                "code": (prop or {}).get("code") or "",
+                "name": (prop or {}).get("name") or "",
+                "shares": (prop or {}).get("shares"),
+                "weight": (prop or {}).get("weight"),
+                "reason": (prop or {}).get("reason") or "",
+                "conversation_id": (prop or {}).get("conversation_id") or "",
+                "feedback": ap.get("feedback") or "",
+            }
             result = {
                 "success": True,
                 "executed": False,
@@ -322,6 +387,30 @@ class WriteProposalStore:
                 )
             except Exception:
                 pass
+
+        # timeline：终态 event（approved | rejected），executed 恒 False
+        if snapshot:
+            st = "approved" if approved else "rejected"
+            self._publish_write_proposal_event(
+                proposal_id=str(snapshot.get("proposal_id") or ""),
+                approval_id=approval_id,
+                status=st,
+                action=str(snapshot.get("action") or ""),
+                code=str(snapshot.get("code") or ""),
+                name=str(snapshot.get("name") or ""),
+                shares=snapshot.get("shares"),
+                weight=snapshot.get("weight"),
+                reason=str(snapshot.get("reason") or ""),
+                conversation_id=str(snapshot.get("conversation_id") or ""),
+                message=(
+                    f"写仓提案已{('通过' if approved else '拒绝')}（status={st}，未成交）"
+                    + (
+                        f"：{str(snapshot.get('feedback'))[:120]}"
+                        if snapshot.get("feedback")
+                        else ""
+                    )
+                ),
+            )
 
         return result
 
@@ -422,6 +511,7 @@ class WriteProposalStore:
             prop["broker"] = None
             prop["apply_mode"] = "local_mark_only"
             prop["local_marked"] = True
+            snap = deepcopy(prop)
 
             try:
                 logger.info(
@@ -433,23 +523,42 @@ class WriteProposalStore:
             except Exception:
                 pass
 
-            return {
-                "success": True,
-                "executed": False,
-                "applied": True,
-                "local_marked": True,
-                "apply_mode": "local_mark_only",
-                "broker": None,
-                "error_code": None,
-                "message": (
-                    "提案已本地标记为 applied（模拟完成，非成交）。"
-                    "executed=false；broker=null；用户持仓 JSON 未自动改写。"
-                    "禁止将本响应解读为交易所成交或已下单。"
-                ),
-                "proposal": deepcopy(prop),
-                "data": None,
-                "disclaimer": DISCLAIMER,
-            }
+        # 锁外发布 timeline：status=applied_local，executed 恒 False（铁律#1）
+        self._publish_write_proposal_event(
+            proposal_id=proposal_id,
+            approval_id=approval_id,
+            status="applied_local",
+            action=str(snap.get("action") or ""),
+            code=str(snap.get("code") or ""),
+            name=str(snap.get("name") or ""),
+            shares=snap.get("shares"),
+            weight=snap.get("weight"),
+            reason=str(snap.get("reason") or ""),
+            conversation_id=str(snap.get("conversation_id") or ""),
+            apply_mode="local_mark_only",
+            message=(
+                "提案已本地标记 applied_local（模拟完成，非成交；"
+                "executed=false，broker=null）"
+            ),
+        )
+
+        return {
+            "success": True,
+            "executed": False,
+            "applied": True,
+            "local_marked": True,
+            "apply_mode": "local_mark_only",
+            "broker": None,
+            "error_code": None,
+            "message": (
+                "提案已本地标记为 applied（模拟完成，非成交）。"
+                "executed=false；broker=null；用户持仓 JSON 未自动改写。"
+                "禁止将本响应解读为交易所成交或已下单。"
+            ),
+            "proposal": deepcopy(snap),
+            "data": None,
+            "disclaimer": DISCLAIMER,
+        }
 
     def list_proposals(self, limit: int = 50) -> List[Dict[str, Any]]:
         with self._lock:

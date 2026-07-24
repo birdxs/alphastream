@@ -92,6 +92,8 @@ export function agentEventDedupeKey(
     plan_id?: string;
     step_id?: string;
     proposal_id?: string;
+    approval_id?: string;
+    status?: string;
     id?: string;
   } = {},
 ): string {
@@ -101,9 +103,18 @@ export function agentEventDedupeKey(
     data.task_id ||
     data.plan_id ||
     data.proposal_id ||
+    data.approval_id ||
     data.id ||
     data.conversation_id ||
     "";
+  // write_proposal 生命周期：同 approval_id 会发 pending→approved/rejected→applied_local
+  // 必须把 status 纳入 dedupe key，否则终态事件被 pending 吞掉
+  if (canon === "write_proposal") {
+    const st = String(data.status ?? "").trim().toLowerCase() || "pending";
+    const appr = String(data.approval_id || data.task_id || "").trim();
+    const prop = String(data.proposal_id || data.id || "").trim();
+    return `write_proposal|${appr || prop || task}|${st}`;
+  }
   const seq = data.step_id ?? data.progress ?? "";
   return `${canon}|${agent}|${task}|${seq}`;
 }
@@ -367,11 +378,28 @@ export const useAgentStore = create<AgentState>((set) => ({
   appendEvent: (ev) =>
     set((s) => {
       // G3: role_started/finished 与 agent.started/completed 双发不双计
+      // write_proposal：status/approval_id/proposal_id 必须参与 dedupe（终态可追加）
+      const meta = (ev.meta || {}) as {
+        progress?: number;
+        task_id?: string;
+        approval_id?: string;
+        proposal_id?: string;
+        status?: string;
+        id?: string;
+        plan_id?: string;
+        step_id?: string;
+      };
       const dedupeKey = agentEventDedupeKey(ev.type, {
         agent_name: ev.agent,
         agent: ev.agent,
-        progress: (ev.meta as { progress?: number } | undefined)?.progress,
-        task_id: (ev.meta as { task_id?: string } | undefined)?.task_id,
+        progress: meta.progress,
+        task_id: meta.task_id,
+        approval_id: meta.approval_id,
+        proposal_id: meta.proposal_id,
+        status: meta.status,
+        id: meta.id,
+        plan_id: meta.plan_id,
+        step_id: meta.step_id,
       });
       if (dedupeKey && s.seenEventKeys.includes(dedupeKey)) {
         return {};

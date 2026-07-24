@@ -260,9 +260,33 @@ def canonical_event_name(event_type: str) -> str:
 
 
 def event_dedupe_key(event_type: str, data: Optional[Dict[str, Any]] = None) -> str:
-    """G3 去重键：canonical(event) + agent + task 标识。用于 SSE/前端「双发不双计」。"""
+    """G3 去重键：canonical(event) + agent + task 标识。用于 SSE/前端「双发不双计」。
+
+    write_proposal 生命周期：pending → approved|rejected → applied_local 须按 status 区分，
+    否则终态事件被 pending 去重吞掉。
+    """
     data = data or {}
     canon = canonical_event_name(event_type)
+    # write_proposal / write-proposal 统一用 status 区分终态
+    if canon in ('write_proposal',) or str(event_type).strip() in (
+        'write_proposal',
+        'write-proposal',
+        EVENT_WRITE_PROPOSAL,
+    ):
+        st = str(data.get('status') or '').strip().lower() or 'pending'
+        if st == 'applied':
+            st = 'applied_local'
+        appr = str(
+            data.get('approval_id')
+            or data.get('task_id')
+            or ''
+        ).strip()
+        prop = str(
+            data.get('proposal_id')
+            or data.get('id')
+            or ''
+        ).strip()
+        return f'write_proposal|{appr or prop}|{st}'
     agent = (
         data.get('agent_name')
         or data.get('agent')
@@ -273,9 +297,11 @@ def event_dedupe_key(event_type: str, data: Optional[Dict[str, Any]] = None) -> 
         data.get('task_id')
         or data.get('conversation_id')
         or data.get('thread_id')
+        or data.get('plan_id')
+        or data.get('proposal_id')
         or ''
     )
-    seq = data.get('seq') or data.get('step') or data.get('progress') or ''
+    seq = data.get('seq') or data.get('step') or data.get('progress') or data.get('step_id') or ''
     return f'{canon}|{agent}|{task}|{seq}'
 
 # 机器可读 cause 枚举（任务契约 + inventory §1.6 兼容）

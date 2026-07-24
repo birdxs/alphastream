@@ -193,44 +193,77 @@ def compute_run_scorecard(
     return scorecard
 
 
-def _collect_memo_provenance(state: Dict[str, Any], fd: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """汇总 state/final_decision 的 provenance（仅摘要字段，去重，无假行情）。"""
+# 假字段：金融行情/假价格类，严禁进入 provenance 输出（铁律#1）
+_PROVENANCE_FAKE_PRICE_KEYS = frozenset({
+    "price", "close", "open", "high", "low", "last", "last_price",
+    "change_pct", "pct_chg", "amount", "volume", "turnover",
+    "pe", "pb", "roe", "market_cap", "mv", "fake_price", "quote",
+})
+
+
+def normalize_provenance_item(raw: Any) -> Optional[Dict[str, Any]]:
+    """
+    将任意 provenance 原始项规范为 {source, tool?, ts?, digest?} 结构。
+    - 拒绝裸 string / 非 dict（返回 None）
+    - 拒绝 price 等假行情字段混入输出
+    - source 必填非空
+    """
+    if raw is None or isinstance(raw, str) or not isinstance(raw, dict):
+        return None
+    src = str(raw.get("source") or "").strip()
+    if not src:
+        return None
+    entry: Dict[str, Any] = {"source": src[:120]}
+    tool = str(raw.get("tool") or "").strip()
+    if tool:
+        entry["tool"] = tool[:80]
+    digest = str(raw.get("digest") or "").strip()
+    if digest:
+        entry["digest"] = digest[:200]
+    if raw.get("ts") is not None and str(raw.get("ts")).strip():
+        entry["ts"] = str(raw.get("ts")).strip()[:64]
+    # 明确丢弃假价格/行情字段（即便入参有也不写出）
+    for k in _PROVENANCE_FAKE_PRICE_KEYS:
+        entry.pop(k, None)
+    return entry
+
+
+def normalize_provenance_list(raw: Any, *, limit: int = 32) -> List[Dict[str, Any]]:
+    """归一 provenance：仅结构化 dict，去重，上限 limit。裸 string/假价字段一律剔除。"""
+    if raw is None:
+        return []
+    if isinstance(raw, dict):
+        items: List[Any] = [raw]
+    elif isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        return []
     rows: List[Dict[str, Any]] = []
     seen: set = set()
-
-    def _push(items: Any) -> None:
-        if not isinstance(items, list):
-            return
-        for p in items:
-            if not isinstance(p, dict):
-                continue
-            src = str(p.get("source") or "").strip()
-            tool = str(p.get("tool") or "").strip()
-            digest = str(p.get("digest") or "").strip()
-            key = (src, tool, digest)
-            if key in seen:
-                continue
-            # 必须有非空 source 才收录（可追溯数据源；无 source 的弱项丢弃）
-            # 允许额外 tool/digest/ts；绝不写入行情数值字段
-            if not src:
-                continue
-            seen.add(key)
-            entry: Dict[str, Any] = {"source": src}
-            if tool:
-                entry["tool"] = tool
-            if digest:
-                entry["digest"] = digest
-            if p.get("ts") is not None:
-                entry["ts"] = p.get("ts")
-            if p.get("as_of") is not None:
-                entry["as_of"] = p.get("as_of")
-            if p.get("fetched_at") is not None:
-                entry["fetched_at"] = p.get("fetched_at")
-            rows.append(entry)
-
-    _push(fd.get("provenance"))
-    _push(state.get("provenance"))
+    max_n = max(1, min(int(limit or 32), 64))
+    for p in items:
+        n = normalize_provenance_item(p)
+        if not n:
+            continue
+        key = (n.get("source"), n.get("tool") or "", n.get("digest") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(n)
+        if len(rows) >= max_n:
+            break
     return rows
+
+
+def _collect_memo_provenance(state: Dict[str, Any], fd: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """汇总 state/final_decision 的 provenance（强制 List[{source,tool?,ts?,digest?}]，无假行情）。"""
+    bucket: List[Any] = []
+    for src in (fd.get("provenance"), state.get("provenance")):
+        if isinstance(src, list):
+            bucket.extend(src)
+        elif src is not None:
+            bucket.append(src)
+    return normalize_provenance_list(bucket, limit=32)
 
 
 def build_decision_memo(

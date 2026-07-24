@@ -599,3 +599,87 @@ def test_write_proposal_publishes_event():
     )
 
 
+def test_write_proposal_decide_and_apply_publish_resolve_events():
+    """decide_approval / apply_proposal 发布终态 write_proposal 事件（timeline 同步）。
+
+    字段：kind / approval_id / proposal_id / status / executed=false
+    status 序列：pending → approved|rejected → applied_local
+    """
+    from app.core.event_bus import get_event_bus, EVENT_WRITE_PROPOSAL
+    from app.core.write_proposal import get_write_proposal_store
+
+    bus = get_event_bus()
+    seen: list = []
+
+    def _on(data):
+        payload = data.get("data") if isinstance(data, dict) and "data" in data and isinstance(data.get("data"), dict) else data
+        if isinstance(payload, dict):
+            seen.append(payload)
+
+    bus.subscribe(EVENT_WRITE_PROPOSAL, _on)
+    store = get_write_proposal_store()
+    store.reset()
+
+    created = store.create_proposal(
+        action="add_holding",
+        code="000001",
+        shares=10,
+        reason="resolve-event unit",
+        conversation_id="conv_wp_resolve",
+    )
+    assert created.get("success") is True
+    aid = created["approval_id"]
+    pid = created["proposal_id"]
+
+    statuses = [e.get("status") for e in seen if isinstance(e, dict)]
+    assert "pending" in statuses
+    for e in seen:
+        assert e.get("kind") == "portfolio_write_proposal"
+        assert e.get("executed") is False
+        assert e.get("approval_id") == aid
+        assert e.get("proposal_id") == pid
+        assert "1174.06" not in json.dumps(e, ensure_ascii=False)
+
+    # decide → approved
+    seen.clear()
+    decided = store.decide_approval(aid, approved=True, feedback="lgtm")
+    assert decided.get("success") is True
+    assert decided.get("executed") is False
+    assert any(e.get("status") == "approved" for e in seen)
+    appr_ev = next(e for e in seen if e.get("status") == "approved")
+    assert appr_ev.get("kind") == "portfolio_write_proposal"
+    assert appr_ev.get("approval_id") == aid
+    assert appr_ev.get("proposal_id") == pid
+    assert appr_ev.get("executed") is False
+    assert appr_ev.get("task_id") == aid
+
+    # apply → applied_local（prop 内部 status=applied，事件对外 applied_local）
+    seen.clear()
+    applied = store.apply_proposal(pid, aid)
+    assert applied.get("success") is True
+    assert applied.get("executed") is False
+    assert applied.get("applied") is True
+    assert applied.get("apply_mode") == "local_mark_only"
+    assert any(e.get("status") == "applied_local" for e in seen)
+    applied_ev = next(e for e in seen if e.get("status") == "applied_local")
+    assert applied_ev.get("kind") == "portfolio_write_proposal"
+    assert applied_ev.get("approval_id") == aid
+    assert applied_ev.get("proposal_id") == pid
+    assert applied_ev.get("executed") is False
+    assert applied_ev.get("apply_mode") == "local_mark_only"
+    assert "1174" not in json.dumps(applied_ev, ensure_ascii=False)
+
+    # reject 路径：另建一条
+    seen.clear()
+    created2 = store.create_proposal(action="remove_holding", code="600519", shares=1)
+    aid2 = created2["approval_id"]
+    seen.clear()
+    rejected = store.decide_approval(aid2, approved=False, feedback="no")
+    assert rejected.get("success") is True
+    assert rejected.get("executed") is False
+    assert any(e.get("status") == "rejected" for e in seen)
+    rej_ev = next(e for e in seen if e.get("status") == "rejected")
+    assert rej_ev.get("executed") is False
+    assert rej_ev.get("approval_id") == aid2
+
+

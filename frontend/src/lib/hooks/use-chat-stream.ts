@@ -434,7 +434,7 @@ export function useChatStream() {
             d.data && typeof d.data === 'object'
               ? (d.data as Record<string, unknown>)
               : d;
-          // 与 EVENT_WRITE_PROPOSAL / ApprovalCard 对齐：kind / approval_id / proposal_id
+          // 与 EVENT_WRITE_PROPOSAL / ApprovalCard 对齐：kind / approval_id / proposal_id / status
           const proposalId = String(
             nested.proposal_id || nested.id || '',
           );
@@ -448,6 +448,9 @@ export function useChatStream() {
             nested.action || nested.side || 'write',
           );
           const code = String(nested.stock_code || nested.code || '');
+          // 生命周期 status：pending | approved | rejected | applied_local
+          let status = String(nested.status ?? 'pending').trim().toLowerCase() || 'pending';
+          if (status === 'applied') status = 'applied_local';
           // 只读摘要（零假数）：优先服务端 summary，否则 action+code，不拼价格
           const summaryFromServer =
             typeof nested.summary === 'string' && nested.summary.trim()
@@ -457,19 +460,36 @@ export function useChatStream() {
           const summary = summaryFromServer || summaryLocal;
           const reason =
             typeof nested.reason === 'string' ? nested.reason : '';
+          const statusLabel =
+            status === 'approved'
+              ? '已通过 · 未成交'
+              : status === 'rejected'
+                ? '已拒绝 · 未成交'
+                : status === 'applied_local'
+                  ? '本地标记 applied · 未成交'
+                  : '待审批 · 未成交';
+          const titlePrefix =
+            status === 'approved'
+              ? '提案已通过'
+              : status === 'rejected'
+                ? '提案已拒绝'
+                : status === 'applied_local'
+                  ? '提案已本地标记'
+                  : '写仓提案';
+          // id 含 status，配合 store dedupe key 允许同 proposal 终态并存
           agentStore.appendEvent({
-            id: `write_proposal_${proposalId || approvalId || Date.now()}`,
+            id: `write_proposal_${proposalId || approvalId || Date.now()}_${status}`,
             type: 'write_proposal',
             agent: '写仓',
             title: summary
-              ? `写仓提案 ${summary}`
-              : `写仓提案${proposalId ? ` #${proposalId.slice(0, 8)}` : ''}`,
+              ? `${titlePrefix} ${summary}`
+              : `${titlePrefix}${proposalId ? ` #${proposalId.slice(0, 8)}` : ''}`,
             detail: [
               reason || undefined,
               summary && summary !== reason ? summary : undefined,
               approvalId && `审批 ${approvalId.slice(0, 14)}`,
               proposalId && `提案 ${proposalId.slice(0, 14)}`,
-              '待审批 · 未成交',
+              statusLabel,
             ]
               .filter(Boolean)
               .join(' · '),
@@ -479,12 +499,19 @@ export function useChatStream() {
               kind,
               proposal_id: proposalId || undefined,
               approval_id: approvalId || undefined,
+              task_id: approvalId || undefined,
               action: action || undefined,
               code: code || undefined,
               summary: summary || undefined,
-              status:
-                nested.status != null ? String(nested.status) : 'pending',
+              status,
+              // 铁律#1：apply 永不 executed=true 成交语义
               executed: false,
+              apply_mode:
+                nested.apply_mode != null
+                  ? String(nested.apply_mode)
+                  : status === 'applied_local'
+                    ? 'local_mark_only'
+                    : undefined,
             },
           });
         },

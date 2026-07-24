@@ -19,6 +19,8 @@ from app.agents.scorecard import (
     compute_run_scorecard,
     compute_tool_success_rate,
     extract_confidence_cap,
+    normalize_provenance_item,
+    normalize_provenance_list,
     summarize_reflection_readonly,
 )
 
@@ -251,6 +253,100 @@ def test_decision_memo_provenance_items_are_structured_dicts():
     assert "sina" in sources
     # tool-only / 非 dict 不入库
     assert all(isinstance(p, dict) and p.get("source") for p in prov)
+
+
+def test_normalize_provenance_rejects_bare_strings_and_price_fields():
+    """强制 List[{source,tool?,ts?,digest?}]：拒绝裸 string 列表与 price 假字段混入。"""
+    assert normalize_provenance_item("akshare") is None
+    assert normalize_provenance_item(None) is None
+    assert normalize_provenance_item(42) is None
+    assert normalize_provenance_item({"tool": "kline"}) is None  # 缺 source
+    assert normalize_provenance_item({"source": ""}) is None
+
+    dirty = {
+        "source": "akshare",
+        "tool": "kline",
+        "digest": "abc",
+        "price": 1174.06,  # 假价必须剔除
+        "pe": 20.1,
+        "last_price": 99.9,
+        "change_pct": 1.2,
+    }
+    clean = normalize_provenance_item(dirty)
+    assert clean is not None
+    assert clean == {
+        "source": "akshare",
+        "tool": "kline",
+        "digest": "abc",
+    }
+    assert "price" not in clean
+    assert "pe" not in clean
+    assert "last_price" not in clean
+    assert "change_pct" not in clean
+
+    lst = normalize_provenance_list(
+        [
+            "legacy-string",
+            {"source": "sina", "tool": "indices", "price": 4057.74},
+            {"source": "sina", "tool": "indices"},  # 去重（同 source+tool+digest）
+            {"source": "wind", "tool": "fundamentals", "ts": "2026-07-23T12:00:00+08:00"},
+            None,
+            3.14,
+        ]
+    )
+    assert all(isinstance(x, dict) and x.get("source") for x in lst)
+    assert not any(isinstance(x, str) for x in lst)
+    sources = {x["source"] for x in lst}
+    assert sources == {"sina", "wind"}
+    for x in lst:
+        assert "price" not in x
+        assert "pe" not in x
+        assert set(x.keys()) <= {"source", "tool", "ts", "digest"}
+
+
+def test_decision_memo_provenance_strips_price_from_raw_entries():
+    """decision_memo.provenance 即便上游塞入 price 也不输出假行情字段。"""
+    state = {
+        "stock_code": "600519",
+        "final_decision": {
+            "action": "BUY",
+            "confidence": 0.6,
+            "provenance": [
+                {
+                    "source": "eastmoney",
+                    "tool": "spot",
+                    "digest": "em1",
+                    "price": 1680.5,
+                    "pe": 22.3,
+                },
+                "should-not-appear",
+            ],
+        },
+        "provenance": [{"source": "baostock", "tool": "basic", "price": 1}],
+        "technical_report": {"summary": "ok"},
+        "fundamental_report": None,
+        "hitl": {"required": False},
+        "risk_assessment": {},
+        "degradations": [],
+        "scorecard": {
+            "data_coverage": 0.5,
+            "tool_success_rate": 1.0,
+            "role_agreement": 0.7,
+            "confidence_cap": 0.8,
+        },
+    }
+    memo = build_decision_memo(state)
+    prov = memo.get("provenance")
+    assert isinstance(prov, list)
+    assert len(prov) == 2
+    for p in prov:
+        assert isinstance(p, dict)
+        assert p.get("source") in {"eastmoney", "baostock"}
+        assert "price" not in p
+        assert "pe" not in p
+        assert set(p.keys()) <= {"source", "tool", "ts", "digest"}
+    # 裸 string 绝不能进入
+    assert all(not isinstance(p, str) for p in prov)
 
 
 def test_reflection_summary_empty_is_none():
