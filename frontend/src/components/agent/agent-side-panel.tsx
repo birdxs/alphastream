@@ -410,19 +410,19 @@ export function AgentSidePanel() {
             <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
               {agentProgresses.slice(0, 10).map((p) => (
                 <span
-                  key={p.agent}
+                  key={p.agent_name}
                   className={`text-[9px] px-1.5 py-0.5 rounded border ${
                     p.status === "completed"
                       ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                      : p.status === "running"
+                      : p.status === "running" || p.status === "started"
                         ? "border-[#3737CC]/40 text-[#3737CC] dark:text-[#9aa0ff]"
                         : p.status === "error"
                           ? "border-rose-500/30 text-rose-600"
                           : "border-border/50 text-muted-foreground"
                   }`}
-                  title={`${p.agent}: ${p.status}`}
+                  title={`${p.agent_name}: ${p.status}`}
                 >
-                  {p.agent}
+                  {p.agent_name}
                 </span>
               ))}
             </div>

@@ -375,7 +375,7 @@ export function ChatInput({ onSend, onStop }: Props) {
 
           {isStreaming ? (
             <button
-              className="rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center bg-gradient-to-r from-[#3737CC] to-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/25 transition-all duration-200 hover:scale-105 active:scale-95"
+              className="rounded-[var(--radius-lg)] h-10 w-10 shrink-0 flex items-center justify-center bg-[var(--accent)] text-white shadow-[var(--shadow-md)] transition-all duration-200 hover:scale-105 active:scale-95"
               onClick={onStop}
               aria-label="停止生成"
               title="停止生成"
@@ -386,7 +386,7 @@ export function ChatInput({ onSend, onStop }: Props) {
             <button
               className={`rounded-2xl h-10 w-10 shrink-0 flex items-center justify-center transition-all duration-200 ${
                 input.trim()
-                  ? 'bg-gradient-to-r from-[#3737CC] to-[#4F4FE6] text-white shadow-lg shadow-[#3737CC]/25 hover:scale-105 transition-transform active:scale-95'
+                  ? 'bg-[var(--accent)] text-white shadow-[var(--shadow-md)] hover:scale-105 transition-transform active:scale-95'
                   : 'bg-muted text-muted-foreground/40 cursor-not-allowed'
               }`}
               onClick={handleSend}

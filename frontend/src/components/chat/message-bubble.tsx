@@ -128,10 +128,10 @@ export const MessageBubble = memo(function MessageBubble({ message, onRegenerate
             </button>
           )}
         <div
-          className={`text-sm px-4 py-2.5 shadow-sm ${
+          className={`px-4 py-2.5 shadow-sm ${
             isUser
-              ? "bg-gradient-to-br from-[#3737CC] to-[#4F4FE6] text-white rounded-2xl rounded-br-md"
-              : "glass-gradient-border bg-foreground/[0.03] dark:bg-white/[0.04] backdrop-blur-sm text-foreground rounded-2xl rounded-bl-md"
+              ? "ui-bubble-user"
+              : "ui-bubble-ai"
           }`}
         >
           {isUser ? (
