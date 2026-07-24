@@ -1,9 +1,9 @@
 # TODO
 
-## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · 浏览器终验部分完成）
+## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · S-UI-4 部分完成 · 终态文档对齐 v1.6）
 
-> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 残余（主题/api-docs）已做** · **§8.1 sticky/Agent/HITL 等仍未全勾** · **仍禁 push**  
-> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.5-sui4-residual`）  
+> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 主题已做 · swagger 代理已修（`8cdfe24`）** · **§8.1 sticky/Agent/HITL 等仍未全勾** · **仍禁 push**  
+> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.6-sui4-final-snapshot`）  
 > **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
 > **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright · #3 资源红线；只改原件
 
@@ -75,7 +75,8 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | 主题切换 | light→dark→light→dark 可逆；`theme-storage` 同步；`flashWhite=false`；FOUC 内联守卫存在（reload 后 class=storage） |
 | sticky | 指数栏 DOM sticky 存在；首页 `main.canScroll=false` → **内容未溢出无法强测 sticky** |
 | `/api-docs` curl | BE `302 Location:/api/docs/`；BE `/api/docs/` 200 title=股票智能分析系统 API文档；FE `/api-docs` 200 同 title |
-| `/api-docs` 浏览器 | BE Swagger UI `opCount=17`；FE shell 加载后报 `Fetch error Not Found /static/swagger.json`（rewrite 缺口，入口非 404） |
+| `/api-docs` 浏览器（v1.5 当时） | BE Swagger UI `opCount=17`；FE shell 当时报 `Fetch error Not Found /static/swagger.json`（rewrite 缺口） |
+| `/api-docs` 定义代理（`8cdfe24` 后） | 开发 rewrite `/static/:path*`→`:8888`；curl `:3000/static/swagger.json` **200**（14483B）；**已修 404**；浏览器 Swagger 点选交互仍未强测 |
 | `market_indices`（本轮） | cache HIT；上证 3814.1978 / 深证 13774.676 / 创业板 3480.87 / 沪深300 4649.1917（真 API，非 UI 假数） |
 | Agent 真路径 | **跳过**：`MOCK_LLM=1` 启动；deep health `llm.skipped=true reason=MOCK_LLM=1`；mock `/api/ai/chat` 仍返回 SSE meta（非真 LLM 路径） |
 | 截图新增 | `sui4_theme_before_light.png` · `sui4_theme_after_dark.png` · `sui4_theme_light.png` · `sui4_api_docs_fe.png` · `sui4_api_docs_be.png` |
@@ -94,9 +95,9 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | 服务 | 验收后已 stop 8888/3000 |
 
 **遗留（阻塞 §8 产品全勾）**
-- sticky 在可滚内容下的吸顶强测
+- sticky 在可滚内容下的吸顶强测（内容未溢出 → 本轮无法强测）
 - Agent/HITL/provenance/scorecard 真 SSE（需 `MOCK_LLM=0` + 可用 LLM）
-- FE `/api-docs` 经 3000 时 `/static/swagger.json` 404（入口 200，定义代理缺口）
+- FE `/api-docs` 浏览器内 Swagger 交互点选（curl 定义 **200 已修** `8cdfe24`，交互未强测）
 - 涨跌色全站有数帧对照
 - **仍禁 push**
 
@@ -113,7 +114,9 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 - [x] **S-UI-charts** 绑 token 提交 `8ba801a`
 - [x] **S-UI-4 curl/启服预检**落盘
 - [x] **S-UI-4 CDP 五路由矩阵 + 假数双窗**落盘
-- [ ] **S-UI-4 残余**：亮暗切换 / sticky 滚动 / Agent·HITL 真路径 / api-docs 浏览器
+- [x] **S-UI-4 残余 · 主题切换**落盘
+- [x] **S-UI-4 残余 · api-docs curl + swagger 代理修复**（`8cdfe24`，`:3000/static/swagger.json` 200）
+- [ ] **S-UI-4 仍未勾**：sticky 强滚 / Agent·HITL 真 SSE / api-docs 浏览器交互 / 涨跌色有数帧 / §8.1 产品全勾
 - [ ] 跟踪单源：勾选只改本节；实现 commit 必须引用 plan 章节与 sprint 编号
 - [ ] **仍禁 push**
 

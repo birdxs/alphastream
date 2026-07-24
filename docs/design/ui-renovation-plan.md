@@ -1,8 +1,8 @@
 # StockAnal UI 改造方案 A–D
 
 **审批状态：已通过 2026-07-24 Comdr 全量 A–D**  
-**代码状态：S-UI-0~3 + S-UI-charts 已落地 · S-UI-4 curl + CDP 五路由 + 残余验收（主题/api-docs）已做 · §8.1 Agent/HITL 等仍未勾（仍禁 push）**  
-版本：`v1.5-sui4-residual` · 日期：`2026-07-24`  
+**代码状态：S-UI-0~3 + S-UI-charts 已落地 · S-UI-4 curl + CDP 五路由 + 主题已做 · api-docs swagger 代理已修（`8cdfe24`） · §8.1 sticky/Agent/HITL 等仍未勾（仍禁 push）**  
+版本：`v1.6-sui4-final-snapshot` · 日期：`2026-07-24`  
 作者：香草少校（PM 方案稿）· 范围：本地开发 · **禁止 push**
 
 ---
@@ -18,7 +18,7 @@
 | 审批时间（+08:00） | 2026-07-24 | 全量 A–D 一次通过 |
 | 批注意见 | 全部审批通过，立即执行 | |
 
-**锁已解除**：Comdr 已通过；S-UI-0~3 + charts token 代码已落地。S-UI-4 **curl + CDP 五路由/假数双窗 + 残余（主题切换/api-docs curl+浏览器）已完成**；剩余 **§8.1 sticky 强滚、Agent/HITL/provenance/scorecard 真 SSE**。仍禁止 push；禁止启动全量 `npm run build` 做无关改造。
+**锁已解除**：Comdr 已通过；S-UI-0~3 + charts token 代码已落地。S-UI-4 **curl + CDP 五路由/假数双窗 + 主题切换**已完成；**api-docs** BE 302/200 + FE shell + **`:3000/static/swagger.json` 代理 200（`8cdfe24`，此前 404 已修）**；剩余 **§8.1 sticky 强滚、Agent/HITL/provenance/scorecard 真 SSE、浏览器 Swagger 点选、涨跌色有数帧**。仍禁止 push；禁止启动全量 `npm run build` 做无关改造。
 
 ---
 
@@ -241,11 +241,12 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 
 ## 8. 验收总清单
 
-> **分层口径（禁止虚构完成 · 2026-07-24 S-UI-4 v1.5 残余验收）**  
+> **分层口径（禁止虚构完成 · 2026-07-24 S-UI-4 v1.6 终态快照）**  
 > - **代码层**：S-UI-0~3 + **S-UI-charts** 已交付（charts/artifacts 绑 design tokens，commit `8ba801a`）。  
 > - **工程 + curl 启服**：`tsc --noEmit` 0；长页滚动代码审；**真启** 8888/3000 并 curl 路由矩阵。  
 > - **CDP 浏览器路由矩阵（已做）**：Chrome `:9222`；五路由 + 首页 5s/15s；`market_indices` 对照无假价。  
-> - **残余（v1.5）**：亮/暗切换截图 + 切换后 bg 亮度采样（无 class=dark 且 L>200）；`/api-docs` curl+浏览器；sticky **未强测**（首页内容未溢出）；Agent 真 SSE **诚实跳过**（本轮 `MOCK_LLM=1`）。
+> - **残余（v1.5）**：亮/暗切换截图 + 切换后 bg 亮度采样；`/api-docs` curl+浏览器 shell（当时 FE swagger.json **404**）。  
+> - **代理修复（`8cdfe24` / v1.6）**：`next.config.ts` 开发 rewrite `/static/:path*`→`:8888`；curl `:3000/static/swagger.json` **200**（14483B）；浏览器 Swagger **交互点选仍未强测**。sticky **未强测**（首页内容未溢出）；Agent 真 SSE **诚实跳过**（本轮 `MOCK_LLM=1`）。
 
 ### 8.1 产品/视觉（浏览器 · **部分完成**）
 
@@ -278,7 +279,7 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 | `/stock/600519` | 名/价/K 线无假数 | charts token 已绑 | [x] 200 | [x] CDP：贵州茅台 + K 线 loading；无假价 |
 | `/portfolio` | 皮肤 + 滚动 | 长页滚动代码审通过 | [x] 200 | [x] CDP：— 空态；main 可滚 |
 | `/settings` | 主题/Wind 配额展示 | 空/错态代码已落地 | [x] 200 | [x] CDP：设置页 + 主题切换终验 |
-| `/api-docs` 或兼容入口 | 不回归 404 | 后端 302→`/api/docs/` | [x] BE `/api-docs` 302→200；FE `/api-docs` 200 HTML | [x] BE `:8888/api/docs/` Swagger 17 ops；FE shell 200 但 `/static/swagger.json` **404**（定义加载失败，入口非 404） |
+| `/api-docs` 或兼容入口 | 不回归 404 | 后端 302→`/api/docs/`；dev 代理 `/static/*`（`8cdfe24`） | [x] BE 302→200；FE `/api-docs` 200；**`:3000/static/swagger.json` 200**（curl） | [x] BE Swagger 17 ops；FE shell 200；定义代理已修（交互点选未强测） |
 | `/health`（前后端） | 存活 | — | [x] 8888+3000 200 | — |
 
 ---
@@ -307,9 +308,9 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 
 ## 10. TODO 跟踪
 
-- 跟踪段落：根目录 `TODO.md` → **「UI改造A-D … S-UI-4 residual v1.5 · sticky/Agent 仍开」**
-- 方案路径：`docs/design/ui-renovation-plan.md`（`v1.5-sui4-residual`）
-- 状态机：`待 Comdr 审批` → `已通过` → **S-UI-0~3 代码已落地** → **S-UI-charts 已落地** → `S-UI-4 curl/启服完成` → `S-UI-4 CDP 五路由+假数双窗完成` → `S-UI-4 主题/api-docs 残余` → `sticky/Agent/HITL 仍开` → `关闭`
+- 跟踪段落：根目录 `TODO.md` → **「UI改造A-D … S-UI-4 final snapshot v1.6 · swagger 已修 · sticky/Agent 仍开」**
+- 方案路径：`docs/design/ui-renovation-plan.md`（`v1.6-sui4-final-snapshot`）
+- 状态机：`待 Comdr 审批` → `已通过` → **S-UI-0~3 代码已落地** → **S-UI-charts 已落地** → `S-UI-4 curl/启服完成` → `S-UI-4 CDP 五路由+假数双窗完成` → `S-UI-4 主题/api-docs 残余` → `swagger 代理修复 8cdfe24` → `sticky/Agent/HITL/Swagger 交互仍开` → `关闭`
 - 任何编码 PR/commit 信息须引用：`ui-renovation-plan.md §x` + 审批状态
 
 ---
@@ -338,7 +339,8 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 | v1.2-sui-code-landed | 2026-07-24 | **S-UI-0~3 实现 commit 已齐**：`972f3b8`（S-UI-0 tokens）· `8ac9012`/`9ec81f2`（S-UI-1）· `f8d0fe3`/`ddf1d50`（S-UI-2）· `3a5c6c7`/`6ee6409`（S-UI-3 等）；终验**不再**阻塞于 0~3，**仅待 S-UI-4 WebBridge**；§8 工程项已勾静态预检真完成项 |
 | v1.3-sui4-partial | 2026-07-24 | S-UI-4 **curl/启服**完成；当时 CDP 无 tab，浏览器列未勾 |
 | v1.4-sui4-browser | 2026-07-24 23:13 +08:00 | **CDP 五路由矩阵 + 首页 5s/15s 假数对照**完成；截图 `/tmp/stockanal_ui/sui4_*.png`；§8.1 空态/首页工位已勾；亮暗/Agent/HITL/sticky/`/api-docs` 仍 `[ ]`；验收后停 8888/3000 |
-| v1.5-sui4-residual | 2026-07-24 23:18~23:32 +08:00 | **残余**：主题亮↔暗 `flashWhite=false` + 截图；`/api-docs` BE 302/200 + FE shell 200（FE swagger.json 404）；sticky 未强测；Agent 真 SSE 因 MOCK_LLM=1 跳过；截图 theme/api-docs 增补；停 8888/3000 |
+| v1.5-sui4-residual | 2026-07-24 23:18~23:32 +08:00 | **残余**：主题亮↔暗 `flashWhite=false` + 截图；`/api-docs` BE 302/200 + FE shell 200（当时 FE swagger.json 404）；sticky 未强测；Agent 真 SSE 因 MOCK_LLM=1 跳过；截图 theme/api-docs 增补；停 8888/3000 |
+| v1.6-sui4-final-snapshot | 2026-07-24 | **终态文档对齐**：`8cdfe24` 修 FE `:3000/static/swagger.json` 404→200；TODO/plan/CHANGELOG 与「已代理已修」一致；仍未勾 sticky 强测 / Agent 真 SSE / Swagger 交互 / 涨跌色有数帧；仍禁 push |
 
 ---
 
@@ -348,7 +350,7 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 2. **改什么**：A 系统 → B 首页 IA → C 工位（HITL/provenance/scorecard）→ D 皮肤。  
 3. **不改什么**：后端契约、未交付 dojo 能力装作成、Playwright、大重构目录。  
 4. **怎么控**：审批栏硬锁 + Sprint 回滚点 + 铁律 #1/#2/#3。  
-5. **审批与交付状态（2026-07-24）**：§1 已勾选通过；**S-UI-0~3 代码已落地**；S-UI-4 **curl + CDP 五路由 + 主题/api-docs 残余已完成**；§8.1 sticky 强测/Agent/HITL/provenance/scorecard 仍开。
+5. **审批与交付状态（2026-07-24）**：§1 已勾选通过；**S-UI-0~3 代码已落地**；S-UI-4 **curl + CDP 五路由 + 主题**已完成；**api-docs swagger 代理已修（`8cdfe24`）**；§8.1 sticky 强测/Agent/HITL/provenance/scorecard/Swagger 交互/涨跌色有数帧仍开。
 
 ## 附录 B · 与历史修复的兼容
 
@@ -369,4 +371,4 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 
 **文末声明**：本文为设计与治理文档，不包含可执行业务补丁。  
 **审批状态：已通过 2026-07-24 Comdr 全量 A–D。**  
-**代码状态：S-UI-0~3 + charts 已落地 · S-UI-4 v1.5 主题/api-docs 残余已勾 · sticky/Agent 仍开 · 仍禁 push。**
+**代码状态：S-UI-0~3 + charts 已落地 · S-UI-4 v1.6 主题已勾 · swagger 代理已修（`8cdfe24`） · sticky/Agent/Swagger 交互仍开 · 仍禁 push。**
