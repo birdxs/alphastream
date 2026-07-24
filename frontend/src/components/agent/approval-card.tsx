@@ -1,7 +1,7 @@
 /**
  * Input: 待审批项（task_id / kind / approval_id / reason / risk_level / action / confidence / decision）
- * Output: 确认卡 UI + approve/reject 回调（区分 agent_decision 与 portfolio_write_proposal）
- * Pos: Agent 侧栏 / 主对话区 HITL 确认面（P0-5 一等公民）
+ * Output: 确认卡 UI + approve/reject；写仓批准后二次「本地标记应用」（executed=false，禁止已成交文案）
+ * Pos: Agent 侧栏 / 主对话区 HITL 确认面（P0-5 一等公民 + Sprint4 apply）
  *
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的 md。
  */
@@ -133,13 +133,91 @@ export function ApprovalCard({
       ? approval.decision.weight
       : null;
 
+  const [phase, setPhase] = useState<"pending" | "approved_waiting_apply" | "applied" | "rejected">("pending");
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyMsg, setApplyMsg] = useState<string | null>(null);
+  const [applyMeta, setApplyMeta] = useState<{
+    executed: boolean;
+    local_mark_only: boolean;
+    status?: string | null;
+  } | null>(null);
+
   const handle = async (approved: boolean) => {
-    if (busy || submitting) return;
+    if (busy || submitting || phase !== "pending") return;
     setBusy(approved ? "approve" : "reject");
     try {
       await onResolved?.(approval.task_id, approved);
+      if (approved && isWriteProposal) {
+        setPhase("approved_waiting_apply");
+        setApplyMsg("已批准（未下单）。可调用 apply_portfolio_proposal 做本地标记应用。");
+      } else if (approved) {
+        setPhase("applied");
+      } else {
+        setPhase("rejected");
+      }
     } finally {
       setBusy(null);
+    }
+  };
+
+  const handleLocalApply = async () => {
+    if (!proposalId || applyBusy || phase === "applied") return;
+    setApplyBusy(true);
+    setApplyMsg(null);
+    try {
+      const res = await fetch("/api/agent_apply_portfolio_proposal", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          proposal_id: proposalId,
+          ...(approvalId ? { approval_id: approvalId } : {}),
+        }),
+      });
+      let body: Record<string, unknown> = {};
+      try {
+        body = (await res.json()) as Record<string, unknown>;
+      } catch {
+        body = {};
+      }
+      const data =
+        body && typeof body.data === "object" && body.data
+          ? (body.data as Record<string, unknown>)
+          : body;
+      const executed = Boolean(data.executed ?? body.executed);
+      const localMark = Boolean(
+        data.local_mark_only ?? body.local_mark_only ?? true,
+      );
+      // 硬守卫：UI 永远按未成交展示
+      const safeExecuted = false;
+      const status =
+        (typeof data.status === "string" && data.status) ||
+        (typeof body.status === "string" && body.status) ||
+        null;
+      const msg =
+        (typeof data.message === "string" && data.message) ||
+        (typeof body.message === "string" && body.message) ||
+        (typeof data.error === "string" && data.error) ||
+        (res.ok ? "本地标记已应用（未下单、未成交）" : `HTTP ${res.status}`);
+      setApplyMeta({
+        executed: safeExecuted,
+        local_mark_only: localMark || !executed,
+        status,
+      });
+      if (res.ok && body.success !== false && data.success !== false) {
+        setPhase("applied");
+        setApplyMsg(
+          `${msg} · executed=${String(safeExecuted)} · local_mark_only=true`,
+        );
+      } else {
+        setApplyMsg(`本地标记失败：${msg}（仍未下单）`);
+      }
+    } catch (e) {
+      setApplyMsg(
+        `本地标记失败：${e instanceof Error ? e.message : "网络错误"}（仍未下单）`,
+      );
+    } finally {
+      setApplyBusy(false);
     }
   };
 
@@ -152,6 +230,7 @@ export function ApprovalCard({
       data-kind={kind || "agent_decision"}
       data-approval-id={approvalId || undefined}
       data-proposal-id={proposalId || undefined}
+      data-phase={phase}
       className={cn(
         "rounded-lg border p-3 space-y-2 shadow-sm",
         isWriteProposal
@@ -245,29 +324,71 @@ export function ApprovalCard({
         {approval.created_at ? <span>at: {approval.created_at}</span> : null}
       </div>
 
-      <div className="flex gap-2 pt-1">
-        <Button
-          size="sm"
-          variant="default"
-          disabled={!!busy || submitting}
-          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-          onClick={() => void handle(true)}
+      {phase === "pending" ? (
+        <div className="flex gap-2 pt-1">
+          <Button
+            size="sm"
+            variant="default"
+            disabled={!!busy || submitting}
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => void handle(true)}
+          >
+            {busy === "approve" ? "提交中…" : "批准"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!!busy || submitting}
+            className="flex-1 border-rose-400/50 text-rose-700 dark:text-rose-300 hover:bg-rose-500/10"
+            onClick={() => void handle(false)}
+          >
+            {busy === "reject" ? "提交中…" : "拒绝"}
+          </Button>
+        </div>
+      ) : null}
+
+      {isWriteProposal && phase === "approved_waiting_apply" ? (
+        <div
+          className="space-y-2 rounded-md border border-violet-500/30 bg-violet-500/10 p-2"
+          data-testid="approval-apply-confirm"
         >
-          {busy === "approve" ? "提交中…" : "批准"}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!!busy || submitting}
-          className="flex-1 border-rose-400/50 text-rose-700 dark:text-rose-300 hover:bg-rose-500/10"
-          onClick={() => void handle(false)}
+          <p className="text-[11px] text-violet-900 dark:text-violet-100 leading-relaxed">
+            已批准，仍未下单。可调用 apply_portfolio_proposal，或点击下方二次确认做
+            <span className="font-semibold">本地标记应用</span>
+            （executed=false / local_mark_only）。
+          </p>
+          <Button
+            size="sm"
+            variant="default"
+            disabled={applyBusy || !proposalId}
+            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+            data-testid="approval-local-apply-btn"
+            onClick={() => void handleLocalApply()}
+          >
+            {applyBusy ? "标记中…" : "本地标记应用"}
+          </Button>
+          {!proposalId ? (
+            <p className="text-[10px] text-rose-600">缺少 proposal_id，无法本地标记。</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {applyMsg ? (
+        <p
+          className="text-[10px] font-mono text-muted-foreground whitespace-pre-wrap"
+          data-testid="approval-apply-result"
+          data-executed={String(applyMeta?.executed ?? false)}
+          data-local-mark-only={String(applyMeta?.local_mark_only ?? true)}
         >
-          {busy === "reject" ? "提交中…" : "拒绝"}
-        </Button>
-      </div>
+          {applyMsg}
+        </p>
+      ) : null}
+
       <p className="text-[10px] text-muted-foreground">
         {isWriteProposal
-          ? "写仓提案未批准前不会改组合；超时默认拒绝（timeout_reject）。"
+          ? phase === "applied"
+            ? "本地标记完成：未成交、未下单（local_mark_only）。"
+            : "写仓提案批准≠成交；须二次本地标记应用；超时默认拒绝（timeout_reject）。"
           : "高风险路径不会静默通过；超时默认拒绝（timeout_reject）。"}
       </p>
     </div>

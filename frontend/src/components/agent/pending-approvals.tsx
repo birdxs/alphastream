@@ -153,13 +153,31 @@ export function PendingApprovalsPanel({
     async (taskId: string, approved: boolean) => {
       setSubmittingId(taskId);
       try {
+        const item = items.find(
+          (x) => x.task_id === taskId || x.approval_id === taskId,
+        );
+        const isWrite =
+          item?.kind === "portfolio_write_proposal" ||
+          Boolean(item?.proposal_id);
         await submitApproval(taskId, approved);
-        await refresh();
+        // 写仓批准后保留卡片，供 ApprovalCard 二次「本地标记应用」；拒绝/普通决策立即刷新
+        if (!(approved && isWrite)) {
+          await refresh();
+        } else {
+          // 仅从 pending 语义上标掉，但本地仍展示该卡直到 apply / 下次轮询自然消失
+          setItems((prev) =>
+            prev.map((x) =>
+              x.task_id === taskId || x.approval_id === taskId
+                ? { ...x, status: "approved" }
+                : x,
+            ),
+          );
+        }
       } finally {
         setSubmittingId(null);
       }
     },
-    [refresh],
+    [items, refresh],
   );
 
   if (!loading && items.length === 0) return null;

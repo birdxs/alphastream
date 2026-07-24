@@ -325,6 +325,17 @@ class AgentSubmitApprovalSchema(Schema):
     feedback = fields.Str(load_default='', validate=mv.Length(max=2000))
 
 
+class AgentPlansSchema(Schema):
+    """GET /api/agent_plans — 只读包装 plan_dag.list_plans"""
+    limit = fields.Int(load_default=20, validate=mv.Range(min=1, max=100))
+
+
+class ApplyPortfolioProposalSchema(Schema):
+    """POST /api/agent_apply_portfolio_proposal — 本地标记 apply，不撮合、不广播已成交"""
+    proposal_id = fields.Str(required=True, validate=mv.Length(min=1, max=100))
+    approval_id = fields.Str(load_default='', validate=mv.Length(max=100))
+
+
 class McpCallSchema(Schema):
     """POST /api/mcp/call"""
     tool = fields.Str(required=True, validate=mv.Length(min=1, max=100))

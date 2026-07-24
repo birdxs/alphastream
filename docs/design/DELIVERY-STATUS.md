@@ -715,3 +715,54 @@ git revert <本批 commit>
 - submit 顶层 + data 含 kind=portfolio_write_proposal、approval_id、proposal_id、status=approved
 - 聚焦 pytest：**37 passed**（cache_control + plan_dag + agent pending/submit）
 
+
+## Plan list 只读 UI + 写仓 apply 本地标记确认（2026-07-24 11:42:00 +08:00）
+
+基线：`dc06100`（OpenAPI pending 双写 + `list_analysis_plans`）。
+
+### 落地摘要
+
+| # | 项 | 状态 | 说明 |
+|---|----|------|------|
+| 1 | GET `/api/agent_plans` | ✅ | 只读包装 `plan_dag.list_plans`；limit 1–100；无抓数/不执行 step |
+| 2 | POST `/api/agent_apply_portfolio_proposal` | ✅ | `apply_proposal`；`proposal_id` 必填，`approval_id` 可缺省回查；**executed 恒 false / local_mark_only=true** |
+| 3 | OpenAPI + schema | ✅ | `AgentPlansSchema` / `ApplyPortfolioProposalSchema` + Response schemas + 路径 |
+| 4 | Plan 只读 UI | ✅ | `plan-list-panel.tsx` 挂载 `agent-side-panel`；轮询 8s；空态无假数 |
+| 5 | 审批卡 apply 二次确认 | ✅ | 写仓批准后保留卡；提示可调 `apply_portfolio_proposal`；按钮「本地标记应用」；禁「已成交/已下单」正向宣称 |
+
+### 关键契约
+
+- 列表：`{success, plans, count, limit, data}`
+- apply：`{success, executed:false, local_mark_only:true, proposal_id, status, message, data}`
+- UI `data-executed="false"` / `data-local-mark-only="true"`
+
+### 验证（真跑）
+
+```bash
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q \
+  tests/backend/api/test_cache_control_headers.py::test_openapi_json_includes_agent_plans_and_apply \
+  tests/backend/api/test_cache_control_headers.py::test_agent_plans_list_empty_ok \
+  tests/backend/api/test_cache_control_headers.py::test_agent_apply_portfolio_proposal_local_mark_only \
+  tests/backend/unit/test_plan_dag_hitl_bridge.py \
+  tests/backend/unit/test_sprint2_intent_portfolio.py \
+  --tb=line
+# → 53 passed, 13 warnings
+
+cd frontend && node node_modules/typescript/bin/tsc --noEmit
+# → exit 0
+```
+
+### 未纳入
+
+- 启服浏览器复验 Plan 列表 / apply 按钮
+- Plan step 真执行 / Skills 内容包 / 真券商
+- 自动 apply / 自动下单（明确禁止）
+
+### 回滚
+
+```bash
+git revert <本批 commit>
+# 或还原：web_server/schema/openapi_spec/test_cache_control_headers + 前端 agent 三文件 + plan-list-panel
+```
+
+**代表 commit message**：`feat(ui): plan list readonly + write-proposal apply confirm`

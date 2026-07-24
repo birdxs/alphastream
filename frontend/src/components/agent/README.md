@@ -9,5 +9,6 @@ Agent可视化组件目录。
 - `thinking-chain.tsx` - AI思考链展示组件（可折叠）
 - `approval-card.tsx` - HITL 单条确认卡（kind / approval_id / 写仓提案摘要 / 风险级 / 批准拒绝）
 - `pending-approvals.tsx` - 轮询 pending API（归一化 kind/approval_id/proposal_id）并挂载确认卡
+- `plan-list-panel.tsx` - 只读 GET /api/agent_plans（PlanDAG list，不抓数不执行）
 
 一旦这里的结构发生变化，请务必更新我... 就像重新标记领地一样。

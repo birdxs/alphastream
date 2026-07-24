@@ -715,3 +715,106 @@ def test_openapi_json_g10_hot_route_parameters(flask_client):
     assert "stock_code" in agent_schema.get("required", [])
     depth = agent_schema["properties"]["research_depth"]
     assert depth.get("minimum") == 1 and depth.get("maximum") == 5
+
+
+def test_openapi_json_includes_agent_plans_and_apply(flask_client):
+    """Plan list 只读 + apply 本地标记 OpenAPI 契约。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    paths = body["paths"]
+    schemas = body["components"]["schemas"]
+
+    assert "/api/agent_plans" in paths
+    plans_get = paths["/api/agent_plans"]["get"]
+    assert "Agent" in plans_get.get("tags", [])
+    assert plans_get.get("operationId") == "listAgentPlans"
+    content = plans_get["responses"]["200"]["content"]["application/json"]
+    ref = content["schema"].get("$ref", "")
+    assert ref.endswith("AgentPlansResponse")
+    assert "AgentPlansResponse" in schemas
+
+    assert "/api/agent_apply_portfolio_proposal" in paths
+    apply_post = paths["/api/agent_apply_portfolio_proposal"]["post"]
+    assert "Agent" in apply_post.get("tags", [])
+    assert apply_post.get("operationId") == "applyPortfolioProposalLocalMark"
+    body_schema = apply_post["requestBody"]["content"]["application/json"]["schema"]
+    assert "proposal_id" in body_schema.get("required", [])
+    apply_ref = apply_post["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    assert apply_ref.endswith("ApplyPortfolioProposalResponse")
+    assert "ApplyPortfolioProposalResponse" in schemas
+    props = schemas["ApplyPortfolioProposalResponse"]["properties"]
+    assert props["executed"]["example"] is False
+    assert props["local_mark_only"]["example"] is True
+
+
+def test_agent_plans_list_empty_ok(flask_client):
+    """GET /api/agent_plans 只读空列表（无假数）。"""
+    resp = flask_client.get("/api/agent_plans?limit=5")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("success") is True
+    assert isinstance(data.get("plans"), list)
+    assert data.get("count") == len(data["plans"])
+    assert data.get("limit") == 5
+
+
+def test_agent_apply_portfolio_proposal_local_mark_only(flask_client):
+    """写仓 approve 后 apply：executed=false / local_mark_only，禁止成交语义。"""
+    from app.core.write_proposal import get_write_proposal_store
+
+    store = get_write_proposal_store()
+    created = store.create_proposal(
+        action="add_holding",
+        code="600519",
+        name="贵州茅台",
+        shares=100,
+        reason="unit-test-local-apply",
+        conversation_id="task_ui_apply_1",
+        source="unit_test",
+    )
+    assert created.get("success") is True, created
+    # response shape: data.proposal_id / approval_id or nested proposal/approval
+    data = created.get("data") if isinstance(created.get("data"), dict) else created
+    proposal = created.get("proposal") or (data or {}).get("proposal") or data
+    approval = created.get("approval") or (data or {}).get("approval") or data
+    proposal_id = (
+        (proposal or {}).get("proposal_id")
+        or created.get("proposal_id")
+        or (data or {}).get("proposal_id")
+    )
+    approval_id = (
+        (approval or {}).get("approval_id")
+        or created.get("approval_id")
+        or (data or {}).get("approval_id")
+    )
+    assert proposal_id and approval_id, created
+
+    # 先批准
+    decided = store.decide_approval(approval_id, approved=True, feedback="ok")
+    assert decided.get("success") is True
+    assert decided.get("executed") is False
+
+    resp = flask_client.post(
+        "/api/agent_apply_portfolio_proposal",
+        json={"proposal_id": proposal_id},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    assert body.get("success") is True
+    assert body.get("executed") is False
+    assert body.get("local_mark_only") is True
+    assert body.get("proposal_id") == proposal_id
+    # 禁止“已成交/已下单”作为正向宣称；disclaimer 中的「禁止…已下单」允许
+    blob = str(body)
+    assert "executed=false" in blob.lower() or body.get("executed") is False
+    assert "local_mark_only" in blob
+    # 正向宣称模式（非否定句）
+    import re
+    assert not re.search(r"(?<!禁止)(?<!禁止将本响应解读为交易所成交或)已下单", blob)
+    assert "order_placed" not in blob.lower()
+    assert "filled_qty" not in blob.lower()
+    data = body.get("data") or {}
+    assert data.get("executed") is False
+    assert data.get("local_mark_only") is True

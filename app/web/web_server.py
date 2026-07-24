@@ -112,6 +112,8 @@ from app.web.schema import (
     RegistryStatsSchema,
     AgentPendingApprovalsSchema,
     ActiveTasksSchema,
+    AgentPlansSchema,
+    ApplyPortfolioProposalSchema,
     # S3-J(A): +15 schema（45→60/87 = 69%）
     AnalysisStatusSchema,
     CancelAnalysisSchema,
@@ -4346,6 +4348,113 @@ def submit_agent_approval():
         })
     except Exception as e:
         return api_error('INTERNAL', '提交审批失败，请稍后重试', details=str(e))
+
+
+@app.route('/api/agent_plans', methods=['GET'])
+@validate_schema(AgentPlansSchema)
+def list_agent_plans():
+    """只读列出内存 PlanDAG（包装 plan_dag.list_plans；不抓数、不执行 step）。"""
+    try:
+        raw_limit = request.args.get('limit', 20)
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            limit = 20
+        limit = max(1, min(limit, 100))
+        from app.core.plan_dag import get_plan_dag_store
+
+        plans = get_plan_dag_store().list_plans(limit=limit)
+        body = {
+            'plans': plans,
+            'count': len(plans),
+            'limit': limit,
+        }
+        return jsonify({
+            'success': True,
+            'plans': plans,
+            'count': len(plans),
+            'limit': limit,
+            'data': body,
+        })
+    except Exception as e:
+        return api_error('INTERNAL', '获取分析计划列表失败，请稍后重试', details=str(e))
+
+
+@app.route('/api/agent_apply_portfolio_proposal', methods=['POST'])
+@validate_schema(ApplyPortfolioProposalSchema, source='json')
+def apply_portfolio_proposal_api():
+    """本地标记写仓提案已应用：executed 恒为 false，绝不声称已成交/已下单。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        proposal_id = (data.get('proposal_id') or '').strip()
+        approval_id = (data.get('approval_id') or '').strip()
+        if not proposal_id:
+            return jsonify({
+                'success': False,
+                'error': '缺少 proposal_id',
+                'executed': False,
+                'local_mark_only': True,
+            }), 400
+
+        from app.core.write_proposal import get_write_proposal_store
+
+        store = get_write_proposal_store()
+        # apply_proposal 需要 approval_id；允许仅传 proposal_id，从 store 回查
+        if not approval_id:
+            with store._lock:
+                prop = store._proposals.get(proposal_id) or {}
+                approval_id = str(prop.get('approval_id') or '').strip()
+        if not approval_id:
+            return jsonify({
+                'success': False,
+                'error': '缺少 approval_id，且无法从 proposal 回查',
+                'error_code': 'APPROVAL_REQUIRED',
+                'executed': False,
+                'local_mark_only': True,
+                'proposal_id': proposal_id,
+            }), 400
+
+        result = store.apply_proposal(proposal_id, approval_id)
+        # 防御：即便底层未来改动，API 层也不得对外声称已成交
+        executed = bool(result.get('executed')) if isinstance(result, dict) else False
+        if executed:
+            app.logger.error(
+                'apply_proposal unexpected executed=True proposal_id=%s — forcing False',
+                proposal_id,
+            )
+            executed = False
+
+        ok = bool(result.get('success')) if isinstance(result, dict) else False
+        prop = result.get('proposal') if isinstance(result, dict) else None
+        status = prop.get('status') if isinstance(prop, dict) else None
+        msg = ''
+        if isinstance(result, dict):
+            msg = str(result.get('message') or result.get('error') or '')
+        if ok and not msg:
+            msg = '本地标记已应用（未下单、未成交）'
+        if not ok and not msg:
+            msg = '应用失败'
+
+        payload = {
+            'success': ok,
+            'executed': False,
+            'local_mark_only': True,
+            'proposal_id': proposal_id,
+            'status': status,
+            'message': msg,
+            'error': None if ok else (result.get('error') if isinstance(result, dict) else 'apply_failed'),
+        }
+        if not ok:
+            return jsonify({
+                **payload,
+                'data': payload,
+            }), 400
+        return jsonify({
+            **payload,
+            'data': payload,
+        })
+    except Exception as e:
+        return api_error('INTERNAL', '本地标记写仓提案失败，请稍后重试', details=str(e))
 
 
 @app.route('/api/active_tasks', methods=['GET'])

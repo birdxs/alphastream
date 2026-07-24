@@ -266,6 +266,68 @@ _COMPONENTS: Dict[str, Any] = {
             'required': ['success', 'data'],
             'additionalProperties': True,
         },
+
+        'AgentPlansResponse': {
+            'type': 'object',
+            'description': (
+                'GET /api/agent_plans 只读计划列表（plan_dag 内存 store）。'
+                '不抓取行情、不执行 step。'
+            ),
+            'properties': {
+                'success': {'type': 'boolean'},
+                'plans': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'additionalProperties': True,
+                        'properties': {
+                            'plan_id': {'type': 'string'},
+                            'goal': {'type': 'string'},
+                            'status': {'type': 'string'},
+                            'stock_code': {'type': 'string', 'nullable': True},
+                            'created_at': {'type': 'string'},
+                            'updated_at': {'type': 'string'},
+                        },
+                    },
+                },
+                'count': {'type': 'integer'},
+                'limit': {'type': 'integer'},
+                'data': {
+                    'type': 'object',
+                    'additionalProperties': True,
+                },
+            },
+            'additionalProperties': True,
+        },
+        'ApplyPortfolioProposalResponse': {
+            'type': 'object',
+            'description': (
+                'POST /api/agent_apply_portfolio_proposal 本地标记响应。'
+                'executed 恒为 false；禁止解读为已成交/已下单。'
+            ),
+            'properties': {
+                'success': {'type': 'boolean'},
+                'executed': {
+                    'type': 'boolean',
+                    'description': '恒为 false：不撮合、不真实成交',
+                    'example': False,
+                },
+                'local_mark_only': {
+                    'type': 'boolean',
+                    'description': 'true 表示仅本地状态标记',
+                    'example': True,
+                },
+                'proposal_id': {'type': 'string'},
+                'status': {'type': 'string', 'nullable': True},
+                'message': {'type': 'string'},
+                'error': {'type': 'string', 'nullable': True},
+                'data': {
+                    'type': 'object',
+                    'additionalProperties': True,
+                },
+            },
+            'additionalProperties': True,
+        },
     },
     'securitySchemes': {
         'ApiKeyAuth': {
@@ -1513,6 +1575,102 @@ _PATHS: Dict[str, Any] = {
                     },
                 },
                 '400': {'description': '参数校验失败'},
+            },
+        },
+    },
+
+    '/api/agent_plans': {
+        'get': {
+            'tags': ['Agent'],
+            'summary': '只读列出分析计划（PlanDAG）',
+            'description': (
+                '包装 plan_dag.list_plans；内存 store 只读视图。'
+                '不抓取行情、不执行 step。'
+            ),
+            'operationId': 'listAgentPlans',
+            'parameters': [
+                {
+                    'name': 'limit',
+                    'in': 'query',
+                    'required': False,
+                    'schema': {
+                        'type': 'integer',
+                        'minimum': 1,
+                        'maximum': 100,
+                        'default': 20,
+                    },
+                    'description': '返回条数上限（1-100，默认 20）',
+                },
+            ],
+            'responses': {
+                '200': {
+                    'description': '计划列表（可为空数组）',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                '$ref': '#/components/schemas/AgentPlansResponse',
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    '/api/agent_apply_portfolio_proposal': {
+        'post': {
+            'tags': ['Agent'],
+            'summary': '本地标记写仓提案已应用（不撮合）',
+            'description': (
+                '调用 write_proposal.apply_proposal 做本地状态标记。'
+                '响应 executed 恒为 false，local_mark_only=true；'
+                '禁止解读为已成交/已下单。'
+            ),
+            'operationId': 'applyPortfolioProposalLocalMark',
+            'requestBody': {
+                'required': True,
+                'content': {
+                    'application/json': {
+                        'schema': {
+                            'type': 'object',
+                            'required': ['proposal_id'],
+                            'properties': {
+                                'proposal_id': {
+                                    'type': 'string',
+                                    'minLength': 1,
+                                    'maxLength': 100,
+                                    'description': '写仓提案 ID（prop_*）',
+                                },
+                                'approval_id': {
+                                    'type': 'string',
+                                    'maxLength': 100,
+                                    'description': '可选；缺省时从 proposal 回查 approval_id',
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            'responses': {
+                '200': {
+                    'description': '本地标记成功（仍未下单）',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                '$ref': '#/components/schemas/ApplyPortfolioProposalResponse',
+                            },
+                        },
+                    },
+                },
+                '400': {
+                    'description': 'proposal 不存在/未批准/状态不允许',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                '$ref': '#/components/schemas/ApplyPortfolioProposalResponse',
+                            },
+                        },
+                    },
+                },
             },
         },
     },
