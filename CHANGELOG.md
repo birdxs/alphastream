@@ -1,10 +1,16 @@
 # Changelog
 
+## 2026-07-24 — [S-UI-docs] 对齐 S-UI-0~3 已落地口径（docs only）
+
+- 修正滞后表述：S-UI-0~3 **代码已落地**（样例 commit：`972f3b8` / `9ec81f2` / `f8d0fe3` / `ddf1d50` / `3a5c6c7` 等）；**S-UI-4 终验待 WebBridge**（非「阻塞于 0~3」）。
+- `docs/design/ui-renovation-plan.md` → `v1.2-sui-code-landed`：文末审批栏、§8 验收分层、§12 commit 样例、附录决策摘要同步。
+- `TODO.md` UI 节已与「0~3 已落地 / 4 终验待」一致；未改业务代码；未启服务；**未 push**。
+
 ## 2026-07-24 — S-UI-4 静态预检 + 改造进度跟踪
 
-- Comdr 已全批 A–D；S-UI-0 进行中（`globals.css` 等 WIP 未并入本 commit）。
-- S-UI-4 静态预检：`tsc --noEmit` / 关键路由 eslint exit 0；dashboard/settings/portfolio 长页滚动代码审通过；终验阻塞于 S-UI-0~3 交付与 WebBridge。
-- 文档：`TODO.md` UI 节、`docs/design/ui-renovation-plan.md` §12（v1.1-sui4-static）。**仍禁 push**。
+- Comdr 已全批 A–D；**（历史条目）** 当时记 S-UI-0 WIP；**现口径以本节上方 [S-UI-docs] 与 plan v1.2 为准：0~3 已落地**。
+- S-UI-4 静态预检：`tsc --noEmit` / 关键路由 eslint exit 0；dashboard/settings/portfolio 长页滚动代码审通过；**终验待 WebBridge**（0~3 已不构成阻塞）。
+- 文档：`TODO.md` UI 节、`docs/design/ui-renovation-plan.md` §12。**仍禁 push**。
 
 ## 2026-07-23 — 方案复审·文档对齐（docs only）
 
