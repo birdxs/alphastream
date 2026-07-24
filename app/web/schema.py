@@ -328,6 +328,16 @@ class AgentSubmitApprovalSchema(Schema):
 class AgentPlansSchema(Schema):
     """GET /api/agent_plans — 只读包装 plan_dag.list_plans"""
     limit = fields.Int(load_default=20, validate=mv.Range(min=1, max=100))
+    status = fields.String(
+        load_default='',
+        validate=mv.Length(max=32),
+        metadata={'description': '可选：draft|ready|running|completed|failed|cancelled'},
+    )
+    conversation_id = fields.String(
+        load_default='',
+        validate=mv.Length(max=100),
+        metadata={'description': '可选：按会话 ID 精确过滤'},
+    )
 
 
 class ApplyPortfolioProposalSchema(Schema):

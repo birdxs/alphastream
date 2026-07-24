@@ -231,6 +231,17 @@ class PlanDagStore:
             )
         except Exception:
             pass
+        _emit_plan_event(
+            "plan.created",
+            {
+                "plan_id": plan_id,
+                "status": status,
+                "steps": len(norm),
+                "conversation_id": conversation_id or "",
+                "stock_code": (stock_code or "").strip(),
+                "title": plan.get("title") or "",
+            },
+        )
         return {
             "success": True,
             "error_code": None,
@@ -244,14 +255,106 @@ class PlanDagStore:
             p = self._plans.get(plan_id)
             return deepcopy(p) if p else None
 
-    def list_plans(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_plans(
+        self,
+        limit: int = 50,
+        *,
+        conversation_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """只读列出近期 plan；可选 conversation_id / status 过滤（不抓数、不执行）。"""
+        try:
+            lim = int(limit)
+        except (TypeError, ValueError):
+            lim = 50
+        lim = max(1, min(lim, 200))
+        cid_f = (conversation_id or "").strip()
+        st_f = (status or "").strip().lower()
         with self._lock:
-            items = sorted(
-                self._plans.values(),
-                key=lambda x: x.get("created_at") or "",
-                reverse=True,
+            items = list(self._plans.values())
+        if cid_f:
+            items = [p for p in items if (p.get("conversation_id") or "") == cid_f]
+        if st_f:
+            items = [p for p in items if (p.get("status") or "").lower() == st_f]
+        items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        return [deepcopy(p) for p in items[:lim]]
+
+    def advance_step(
+        self,
+        plan_id: str,
+        step_id: str,
+        *,
+        action: str = "start",
+        error: str = "",
+        result: Any = None,
+    ) -> Dict[str, Any]:
+        """状态机推进单 step（仅 start|complete|fail；不抓数、不调 LLM）。"""
+        act = (action or "start").strip().lower()
+        if act in ("start", "run", "begin"):
+            out = self.start_step(plan_id, step_id)
+            if out.get("success"):
+                _emit_plan_event(
+                    "plan.step",
+                    {
+                        "plan_id": plan_id,
+                        "step_id": step_id,
+                        "action": "start",
+                        "status": "running",
+                        "conversation_id": (out.get("plan") or {}).get(
+                            "conversation_id"
+                        )
+                        or "",
+                    },
+                )
+            return out
+        if act in ("complete", "done", "finish", "success"):
+            out = self.complete_step(plan_id, step_id, result=result, failed=False)
+            if out.get("success"):
+                _emit_plan_event(
+                    "plan.step",
+                    {
+                        "plan_id": plan_id,
+                        "step_id": step_id,
+                        "action": "complete",
+                        "status": "completed",
+                        "plan_status": (out.get("plan") or {}).get("status"),
+                        "conversation_id": (out.get("plan") or {}).get(
+                            "conversation_id"
+                        )
+                        or "",
+                    },
+                )
+            return out
+        if act in ("fail", "failed"):
+            out = self.complete_step(
+                plan_id,
+                step_id,
+                result=result,
+                failed=True,
+                error=error or "step failed",
             )
-            return [deepcopy(p) for p in items[: max(1, min(limit, 200))]]
+            if out.get("success"):
+                _emit_plan_event(
+                    "plan.step",
+                    {
+                        "plan_id": plan_id,
+                        "step_id": step_id,
+                        "action": "fail",
+                        "status": "failed",
+                        "error": (error or "")[:200],
+                        "conversation_id": (out.get("plan") or {}).get(
+                            "conversation_id"
+                        )
+                        or "",
+                    },
+                )
+            return out
+        return {
+            "success": False,
+            "error_code": "INVALID_ACTION",
+            "message": f"未知 action: {action!r}（允许 start|complete|fail）",
+            "plan": self.get_plan(plan_id),
+        }
 
     def _get_mut(self, plan_id: str) -> Dict[str, Any]:
         p = self._plans.get(plan_id)
@@ -456,6 +559,19 @@ class PlanDagStore:
             },
             "plan": plan,
         }
+
+
+def _emit_plan_event(event_type: str, data: Dict[str, Any]) -> None:
+    """向 event_bus 发 plan.* 事件；失败静默（不阻断状态机）。"""
+    try:
+        from app.core.event_bus import get_event_bus
+
+        get_event_bus().publish(event_type, dict(data or {}))
+    except Exception as e:
+        try:
+            logger.debug("plan event publish skipped: %s", e)
+        except Exception:
+            pass
 
 
 _store: Optional[PlanDagStore] = None

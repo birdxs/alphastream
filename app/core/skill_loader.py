@@ -86,10 +86,27 @@ class SkillLoader:
                 sid = p.stem
                 if any(x["id"] == sid for x in items):
                     continue
+                title = sid
+                # 尝试从文件取标题（无敏感内容、失败则回退 stem）
+                try:
+                    if p.suffix.lower() == ".json":
+                        raw = json.loads(p.read_text(encoding="utf-8"))
+                        if isinstance(raw, dict) and raw.get("title"):
+                            title = str(raw["title"])[:80]
+                    else:
+                        # markdown: 首行 # 标题
+                        first = p.read_text(encoding="utf-8").splitlines()[:3]
+                        for line in first:
+                            s = line.strip()
+                            if s.startswith("#"):
+                                title = s.lstrip("#").strip()[:80] or sid
+                                break
+                except Exception:
+                    title = sid
                 items.append(
                     {
                         "id": sid,
-                        "title": sid,
+                        "title": title,
                         "source": "data/skills",
                         "path": str(p),
                     }

@@ -179,6 +179,33 @@ class WriteProposalStore:
         except Exception:
             pass
 
+        # timeline / SSE：写仓提案事件（不宣称已成交）
+        try:
+            from app.core.event_bus import get_event_bus, EVENT_WRITE_PROPOSAL
+
+            get_event_bus().publish(
+                EVENT_WRITE_PROPOSAL,
+                {
+                    "event_type": EVENT_WRITE_PROPOSAL,
+                    "proposal_id": proposal_id,
+                    "approval_id": approval_id,
+                    "action": act,
+                    "code": code_s,
+                    "conversation_id": conversation_id or "",
+                    "executed": False,
+                    "message": f"写仓提案 {act} {code_s or ''}（待审批，未执行）".strip(),
+                },
+            )
+        except Exception as e:
+            try:
+                logger.debug(
+                    "WRITE_PROPOSAL event publish skipped proposal_id=%s: %s",
+                    proposal_id,
+                    e,
+                )
+            except Exception:
+                pass
+
         return {
             "success": True,
             "executed": False,

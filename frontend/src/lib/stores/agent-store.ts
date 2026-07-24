@@ -105,6 +105,9 @@ export type AgentEventType =
   | 'scorecard'
   | 'done'
   | 'error'
+  | 'plan.created'
+  | 'plan.step'
+  | 'write_proposal'
   | string;
 
 export interface AgentEvent {

@@ -488,8 +488,21 @@ industry_analyzer = IndustryAnalyzer()
 
 
 def _startup_background_enabled():
-    """测试/离线环境不启动导入期后台任务；默认开发启动保持开启。"""
-    return os.getenv("DISABLE_NETWORK") != "1"
+    """测试/离线环境不启动导入期后台任务；默认开发启动保持开启。
+
+    门控：DISABLE_NETWORK=1 / PYTEST_CURRENT_TEST / STOCKANAL_DISABLE_BACKGROUND=1
+    任一成立则不启 news_scheduler / 名称与指数预热守护线程，降低 pytest atexit 噪声。
+    """
+    if os.getenv("DISABLE_NETWORK") == "1":
+        return False
+    if os.getenv("STOCKANAL_DISABLE_BACKGROUND") == "1":
+        return False
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return False
+    # 常见 pytest 插件环境标记
+    if os.getenv("PYTEST_VERSION") or os.getenv("_PYTEST_RAISE"):
+        return False
+    return True
 
 
 if _startup_background_enabled():
@@ -4353,7 +4366,10 @@ def submit_agent_approval():
 @app.route('/api/agent_plans', methods=['GET'])
 @validate_schema(AgentPlansSchema)
 def list_agent_plans():
-    """只读列出内存 PlanDAG（包装 plan_dag.list_plans；不抓数、不执行 step）。"""
+    """只读列出内存 PlanDAG（包装 plan_dag.list_plans；不抓数、不执行 step）。
+
+    Query: limit (1-100)、status、conversation_id（可选过滤）。
+    """
     try:
         raw_limit = request.args.get('limit', 20)
         try:
@@ -4361,19 +4377,29 @@ def list_agent_plans():
         except (TypeError, ValueError):
             limit = 20
         limit = max(1, min(limit, 100))
+        status = (request.args.get('status') or '').strip()
+        conversation_id = (request.args.get('conversation_id') or '').strip()
         from app.core.plan_dag import get_plan_dag_store
 
-        plans = get_plan_dag_store().list_plans(limit=limit)
+        plans = get_plan_dag_store().list_plans(
+            limit=limit,
+            conversation_id=conversation_id or None,
+            status=status or None,
+        )
         body = {
             'plans': plans,
             'count': len(plans),
             'limit': limit,
+            'status': status or None,
+            'conversation_id': conversation_id or None,
         }
         return jsonify({
             'success': True,
             'plans': plans,
             'count': len(plans),
             'limit': limit,
+            'status': status or None,
+            'conversation_id': conversation_id or None,
             'data': body,
         })
     except Exception as e:

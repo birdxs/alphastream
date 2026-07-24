@@ -818,3 +818,35 @@ def test_agent_apply_portfolio_proposal_local_mark_only(flask_client):
     data = body.get("data") or {}
     assert data.get("executed") is False
     assert data.get("local_mark_only") is True
+
+
+def test_agent_plans_status_and_conversation_filter(flask_client):
+    """GET /api/agent_plans 支持 status / conversation_id 过滤。"""
+    from app.core.plan_dag import get_plan_dag_store
+
+    store = get_plan_dag_store()
+    store.reset()
+    store.create_plan(
+        steps=[{"name": "only"}],
+        conversation_id="conv_api_filt",
+        title="api-filt",
+        auto_ready=True,
+    )
+    store.create_plan(
+        steps=[{"name": "drafty"}],
+        conversation_id="other",
+        title="drafty",
+        auto_ready=False,
+    )
+    r1 = flask_client.get("/api/agent_plans?conversation_id=conv_api_filt&limit=10")
+    assert r1.status_code == 200
+    j1 = r1.get_json()
+    assert j1.get("success") is True
+    assert j1.get("count") == 1
+    assert j1["plans"][0]["conversation_id"] == "conv_api_filt"
+
+    r2 = flask_client.get("/api/agent_plans?status=draft&limit=10")
+    assert r2.status_code == 200
+    j2 = r2.get_json()
+    assert j2.get("success") is True
+    assert any(p.get("title") == "drafty" for p in j2.get("plans") or [])

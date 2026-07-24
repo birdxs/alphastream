@@ -572,9 +572,14 @@ def get_plan_status(plan_id: str) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)
 
 @tool
-def list_analysis_plans(limit: int = 20) -> str:
+def list_analysis_plans(
+    limit: int = 20,
+    conversation_id: str = "",
+    status: str = "",
+) -> str:
     """列出近期 analysis plan 状态摘要（只读，不抓数）。
 
+    可选 conversation_id / status 过滤。
     返回 JSON：success / count / plans[{plan_id,title,status,steps_summary,created_at}]。
     进程内 store；不触上游行情。
     """
@@ -585,9 +590,13 @@ def list_analysis_plans(limit: int = 20) -> str:
         lim = int(limit) if limit is not None else 20
     except (TypeError, ValueError):
         lim = 20
-    lim = max(1, min(lim, 50))
+    lim = max(1, min(lim, 100))
     store = get_plan_dag_store()
-    plans = store.list_plans(limit=lim)
+    plans = store.list_plans(
+        limit=lim,
+        conversation_id=(conversation_id or "").strip() or None,
+        status=(status or "").strip() or None,
+    )
     items = []
     for p in plans:
         steps = p.get("steps") or []
@@ -597,30 +606,68 @@ def list_analysis_plans(limit: int = 20) -> str:
                 "title": p.get("title"),
                 "status": p.get("status"),
                 "current_step_id": p.get("current_step_id"),
+                "steps_summary": [
+                    {
+                        "step_id": s.get("id") or s.get("step_id"),
+                        "name": s.get("name"),
+                        "status": s.get("status"),
+                    }
+                    for s in steps
+                ],
                 "created_at": p.get("created_at"),
-                "updated_at": p.get("updated_at"),
-                "steps_summary": {
-                    "pending": [s.get("id") for s in steps if s.get("status") == "pending"],
-                    "running": [s.get("id") for s in steps if s.get("status") == "running"],
-                    "completed": [s.get("id") for s in steps if s.get("status") == "completed"],
-                    "failed": [s.get("id") for s in steps if s.get("status") == "failed"],
-                },
-                "step_count": len(steps),
+                "conversation_id": p.get("conversation_id") or "",
+                "stock_code": p.get("stock_code") or "",
             }
         )
     return json.dumps(
         {
             "success": True,
-            "error_code": None,
-            "message": "ok",
             "count": len(items),
             "plans": items,
-            "note": "只读 plan 状态；不抓取行情/不改持仓。",
+            "note": "只读列表，不抓数、不推进 step",
         },
         ensure_ascii=False,
         default=str,
     )
 
+
+@tool
+def advance_plan_step(
+    plan_id: str,
+    step_id: str,
+    action: str = "start",
+    error: str = "",
+) -> str:
+    """推进 plan step 状态机（仅 start|complete|fail；不抓数、不调 LLM）。
+
+    Args:
+        plan_id: 计划 ID
+        step_id: 步骤 ID
+        action: start | complete | fail
+        error: action=fail 时的错误摘要（可选）
+    """
+    import json
+    from app.core.plan_dag import get_plan_dag_store
+
+    pid = (plan_id or "").strip()
+    sid = (step_id or "").strip()
+    if not pid or not sid:
+        return json.dumps(
+            {
+                "success": False,
+                "error_code": "INVALID_INPUT",
+                "message": "plan_id 与 step_id 必填",
+            },
+            ensure_ascii=False,
+        )
+    store = get_plan_dag_store()
+    out = store.advance_step(
+        pid,
+        sid,
+        action=(action or "start"),
+        error=(error or ""),
+    )
+    return json.dumps(out, ensure_ascii=False, default=str)
 
 
 def _offline_or_disabled() -> bool:
@@ -1173,19 +1220,60 @@ OPENAI_TOOLS_SCHEMA = [
             "name": "list_analysis_plans",
             "description": (
                 "列出近期 analysis plan 及其步骤状态摘要（只读，不抓数）。"
-                "用于回顾/续跑前查看 plan_id 与 pending/running/completed。"
+                "可按 conversation_id / status 过滤；用于回顾/续跑前查看 plan_id。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "limit": {
                         "type": "integer",
-                        "description": "最多返回条数，默认 20，上限 50",
+                        "description": "最多返回条数，默认 20，上限 100",
                         "minimum": 1,
-                        "maximum": 50,
-                    }
+                        "maximum": 100,
+                    },
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "可选：按会话 ID 精确过滤",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "可选：draft|ready|running|completed|failed|cancelled",
+                    },
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "advance_plan_step",
+            "description": (
+                "推进分析计划中某 step 的状态机（start|complete|fail）。"
+                "仅改 plan_dag 状态，不抓行情、不调 LLM、不下单。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "plan_id": {
+                        "type": "string",
+                        "description": "create_analysis_plan 返回的 plan_id",
+                    },
+                    "step_id": {
+                        "type": "string",
+                        "description": "目标 step_id（如 s1）",
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "start | complete | fail",
+                        "enum": ["start", "complete", "fail"],
+                    },
+                    "error": {
+                        "type": "string",
+                        "description": "action=fail 时的错误摘要（可选）",
+                    },
+                },
+                "required": ["plan_id", "step_id"],
             },
         },
     },
@@ -1343,6 +1431,7 @@ TOOL_EXECUTORS = {
     "create_analysis_plan": create_analysis_plan,
     "get_plan_status": get_plan_status,
     "list_analysis_plans": list_analysis_plans,
+    "advance_plan_step": advance_plan_step,
     "load_agent_skill": load_agent_skill,
     "list_agent_skills": list_agent_skills,
     "get_market_overview_brief": get_market_overview_brief,

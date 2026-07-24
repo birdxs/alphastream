@@ -305,7 +305,188 @@ def test_list_analysis_plans_tool_readonly_summary():
     assert hit is not None
     assert hit.get("status")
     assert "steps_summary" in hit
-    assert "pending" in hit["steps_summary"]
+    assert any(
+        (isinstance(s, dict) and s.get("status") == "pending") or s == "pending"
+        for s in (hit.get("steps_summary") or [])
+    )
     assert "note" in body
     assert "不抓" in body["note"] or "只读" in body["note"]
+
+
+
+def test_list_plans_conversation_and_status_filter():
+    """list_plans 支持 conversation_id + status 过滤。"""
+    from app.core.plan_dag import get_plan_dag_store
+
+    store = get_plan_dag_store()
+    store.reset()
+    store.create_plan(
+        steps=[{"step_id": "s1", "name": "A"}],
+        conversation_id="conv_filter_a",
+        title="A",
+        auto_ready=True,
+    )
+    store.create_plan(
+        steps=[{"step_id": "s1", "name": "B"}],
+        conversation_id="conv_filter_b",
+        title="B",
+        auto_ready=False,
+    )
+    only_a = store.list_plans(limit=20, conversation_id="conv_filter_a")
+    assert len(only_a) == 1
+    assert only_a[0]["conversation_id"] == "conv_filter_a"
+    drafts = store.list_plans(limit=20, status="draft")
+    assert any(p["title"] == "B" for p in drafts)
+    ready = store.list_plans(limit=20, status="ready", conversation_id="conv_filter_a")
+    assert len(ready) == 1
+    empty = store.list_plans(limit=20, conversation_id="no_such_conv")
+    assert empty == []
+
+
+
+def test_advance_plan_step_state_machine_and_event():
+    """advance_step start→complete 发 plan.step 事件；不抓数。"""
+    from app.core.event_bus import get_event_bus
+    from app.core.plan_dag import get_plan_dag_store
+    from app.core.tools import advance_plan_step, create_analysis_plan
+    import json
+
+    bus = get_event_bus()
+    seen = []
+
+    def _on_step(data):
+        seen.append(("plan.step", data))
+
+    def _on_created(data):
+        seen.append(("plan.created", data))
+
+    bus.subscribe("plan.step", _on_step)
+    bus.subscribe("plan.created", _on_created)
+    store = get_plan_dag_store()
+    store.reset()
+    raw = create_analysis_plan.invoke(
+        {
+            "steps": json.dumps(
+                [
+                    {"step_id": "s1", "name": "collect"},
+                    {"step_id": "s2", "name": "decide", "depends_on": ["s1"]},
+                ],
+                ensure_ascii=False,
+            ),
+            "title": "adv",
+            "conversation_id": "conv_adv",
+            "auto_ready": True,
+        }
+    )
+    data = json.loads(raw)
+    assert data.get("success") is True
+    plan_id = data["plan_id"]
+    steps = data["plan"]["steps"]
+    s1 = steps[0].get("id") or steps[0].get("step_id") or "s1"
+    assert s1
+
+    r1 = json.loads(
+        advance_plan_step.invoke(
+            {"plan_id": plan_id, "step_id": s1, "action": "start"}
+        )
+    )
+    assert r1.get("success") is True
+    assert r1["plan"]["steps"][0]["status"] == "running"
+
+    r2 = json.loads(
+        advance_plan_step.invoke(
+            {"plan_id": plan_id, "step_id": s1, "action": "complete"}
+        )
+    )
+    assert r2.get("success") is True
+    assert r2["plan"]["steps"][0]["status"] == "completed"
+
+    names = [n for n, _ in seen]
+    assert "plan.created" in names
+    assert "plan.step" in names
+    assert any(
+        isinstance(d, dict) and d.get("action") in ("start", "complete")
+        for n, d in seen
+        if n == "plan.step"
+    )
+
+
+
+def test_list_analysis_plans_filter_kwargs():
+    """list_analysis_plans 工具接受 conversation_id / status。"""
+    import json
+    from app.core.plan_dag import get_plan_dag_store
+    from app.core.tools import create_analysis_plan, list_analysis_plans
+
+    store = get_plan_dag_store()
+    store.reset()
+    create_analysis_plan.invoke(
+        {
+            "steps": '[{"name":"x"}]',
+            "title": "filt",
+            "conversation_id": "conv_tool_filt",
+            "auto_ready": True,
+        }
+    )
+    raw = list_analysis_plans.invoke(
+        {"limit": 10, "conversation_id": "conv_tool_filt", "status": "ready"}
+    )
+    data = json.loads(raw)
+    assert data["success"] is True
+    assert data["count"] >= 1
+    assert all(p.get("conversation_id") == "conv_tool_filt" for p in data["plans"])
+
+
+def test_file_skills_from_data_dir():
+    """data/skills 样例可被 list/load（无假数）。"""
+    from app.core.skill_loader import SkillLoader
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    skills_dir = root / "data" / "skills"
+    assert skills_dir.is_dir(), skills_dir
+    loader = SkillLoader(skills_dir=skills_dir)
+    items = loader.list_skills()
+    ids = {x["id"] for x in items}
+    assert "research_depth" in ids
+    assert "hitl_checklist" in ids
+    rd = loader.load_skill("research_depth")
+    assert rd.get("success") is True
+    rd_hint = rd.get("system_hint") or (rd.get("skill") or {}).get("system_hint") or ""
+    assert "research_depth" in rd_hint
+    hc = loader.load_skill("hitl_checklist")
+    assert hc.get("success") is True
+    hint = hc.get("system_hint") or (hc.get("skill") or {}).get("system_hint") or ""
+    assert "审批" in hint or "HITL" in hint or "executed" in hint
+
+
+
+def test_write_proposal_publishes_event():
+    """create_proposal 发布 write_proposal 事件。"""
+    from app.core.event_bus import get_event_bus, EVENT_WRITE_PROPOSAL
+    from app.core.write_proposal import get_write_proposal_store
+
+    bus = get_event_bus()
+    seen = []
+
+    def _on(data):
+        seen.append((EVENT_WRITE_PROPOSAL, data))
+
+    bus.subscribe(EVENT_WRITE_PROPOSAL, _on)
+    store = get_write_proposal_store()
+    store.reset()
+    out = store.create_proposal(
+        action="add_holding",
+        code="600519",
+        shares=100,
+        reason="unit test proposal",
+        conversation_id="conv_wp_evt",
+    )
+    assert out.get("success") is True
+    assert out.get("executed") is False
+    assert any(n == EVENT_WRITE_PROPOSAL or n == "write_proposal" for n, _ in seen)
+    assert any(
+        isinstance(d, dict) and d.get("executed") is False for _, d in seen
+    )
+
 

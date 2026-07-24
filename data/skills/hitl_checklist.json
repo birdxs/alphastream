@@ -1,0 +1,5 @@
+{
+  "id": "hitl_checklist",
+  "title": "HITL 审批检查清单",
+  "system_hint": "【Skill: hitl_checklist】人工审批前核对：1) 提案含 code/action/shares 或 weight 且未标记 executed=true；2) 理由非空且无「已成交」措辞；3) 拒绝时给出可复述 feedback；4) 批准后仅允许 local_mark_only 应用，禁止宣称券商成交。缺字段则要求补充，禁止假数填充。"
+}

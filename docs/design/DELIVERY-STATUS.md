@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.5-plan-list-apply-confirm` |
-| **交付锚点** | **2026-07-24 11:45:00 +08:00**（plan list 只读 + 写仓二次 local_mark apply；校时锚点沿用双源 Date ≤100s） |
+| **文档版本** | `v1.6-plan-advance-skills-timeline` |
+| **交付锚点** | **2026-07-24 12:45:00 +08:00**（plan 过滤/advance + skills 样例 + timeline 事件；校时双源 Date ≤100s） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -88,6 +88,38 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
   -d '{"proposal_id":"prop_xxx","approval_id":"appr_xxx"}'
 # 期望：success=true, executed=false, local_mark_only=true
 ```
+
+
+---
+
+## 2c. Plan 增强 / Skills 样例 / Timeline（v1.6，2026-07-24）
+
+| 项 | 说明 |
+|----|------|
+| Plan 过滤 | `GET /api/agent_plans?status=&conversation_id=&limit=`；`list_analysis_plans` 同参；不抓数 |
+| Step 推进 | 工具 `advance_plan_step`（start\|complete\|fail）仅状态机；`PlanDagStore.advance_step` |
+| Plan 事件 | `plan.created` / `plan.step` → event_bus（失败静默） |
+| 写仓事件 | `write_proposal` 在 create_proposal 成功后 publish（executed 恒 false） |
+| Skills 样例 | [NEW-FILE:#20260724-SKILL] `data/skills/research_depth.md`、`hitl_checklist.json`（force-add，无敏感信息） |
+| 前端 timeline | `agent-progress-panel` EVENT_VISUAL 增 `plan.created` / `plan.step` / `write_proposal`；store 类型并入 |
+| Startup 门控 | `_startup_background_enabled`：DISABLE_NETWORK / PYTEST_CURRENT_TEST / STOCKANAL_DISABLE_BACKGROUND |
+| 聚焦测 | `test_plan_dag_hitl_bridge.py` + `test_cache_control_headers.py` plan filter；tsc 前端改动文件 |
+| 铁律 #1 | 零假数；skills 仅 system_hint；advance 不拉行情/LLM |
+
+### 本轮验证（离线）
+
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 STOCKANAL_DISABLE_BACKGROUND=1 pytest -q tests/backend/unit/test_plan_dag_hitl_bridge.py tests/backend/api/test_cache_control_headers.py`
+- `cd frontend && node node_modules/typescript/bin/tsc --noEmit`
+- 8888/3000 本轮未监听（禁启服务）
+
+### 下一批建议
+
+1. SSE：`event_bus` bridge 将 `plan.step`/`write_proposal` 推到前端 EventSource（若现网订阅面未含）
+2. Plan list UI：filter chips（status / 当前 conversation）
+3. Skills：更多 builtin 或目录热加载文档化；勿放密钥
+4. atexit：若仍见 market_indices 守护噪声，核对 **import 前** 环境变量顺序（门控只在 import 期求值）
+5. provenance[] 结构化数组（P0-4 已知缺口）
+
 
 ## 3. 如何启动（本地）
 

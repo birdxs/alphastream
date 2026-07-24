@@ -1585,6 +1585,7 @@ _PATHS: Dict[str, Any] = {
             'summary': '只读列出分析计划（PlanDAG）',
             'description': (
                 '包装 plan_dag.list_plans；内存 store 只读视图。'
+                '支持 status / conversation_id / limit 过滤。'
                 '不抓取行情、不执行 step。'
             ),
             'operationId': 'listAgentPlans',
@@ -1600,6 +1601,20 @@ _PATHS: Dict[str, Any] = {
                         'default': 20,
                     },
                     'description': '返回条数上限（1-100，默认 20）',
+                },
+                {
+                    'name': 'status',
+                    'in': 'query',
+                    'required': False,
+                    'schema': {'type': 'string', 'maxLength': 32},
+                    'description': '可选过滤 draft|ready|running|completed|failed|cancelled',
+                },
+                {
+                    'name': 'conversation_id',
+                    'in': 'query',
+                    'required': False,
+                    'schema': {'type': 'string', 'maxLength': 100},
+                    'description': '可选：按会话 ID 精确过滤',
                 },
             ],
             'responses': {

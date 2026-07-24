@@ -98,6 +98,28 @@ const EVENT_VISUAL: Record<AgentEventType, EventVisualConfig> = {
     border: 'border-[#FF8767]/30',
     label: '错误',
   },
+  // Plan DAG / 写仓提案 timeline 条目（Sprint4+）
+  'plan.created': {
+    Icon: Bot,
+    color: 'text-[#A78BFA]',
+    bg: 'bg-[#A78BFA]/10',
+    border: 'border-[#A78BFA]/30',
+    label: '计划',
+  },
+  'plan.step': {
+    Icon: Activity,
+    color: 'text-[#3737CC]',
+    bg: 'bg-[#3737CC]/10',
+    border: 'border-[#3737CC]/30',
+    label: '计划步骤',
+  },
+  write_proposal: {
+    Icon: Scale,
+    color: 'text-[#F59E0B]',
+    bg: 'bg-[#F59E0B]/10',
+    border: 'border-[#F59E0B]/30',
+    label: '写仓提案',
+  },
 };
 
 function fmtTs(ts: number): string {
