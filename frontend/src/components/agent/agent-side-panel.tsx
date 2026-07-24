@@ -389,11 +389,11 @@ export function AgentSidePanel() {
       {/* S-UI-2：进度区 */}
       {(isAnalyzing || overallProgress > 0) && (
         <div
-          className="mx-2 mt-1 mb-2 shrink-0 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/[0.06] dark:bg-[#3737CC]/10 px-2.5 py-2 space-y-1.5"
+          className="mx-2 mt-1 mb-2 shrink-0 rounded-lg border border-[var(--accent)]/25 bg-[var(--accent-muted)] px-2.5 py-2 space-y-1.5"
           data-testid="agent-workspace-progress"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#9aa0ff]">
+            <span className="ui-section-title">
               进度
             </span>
             <span className="text-[10px] tabular-nums text-muted-foreground">
@@ -402,7 +402,7 @@ export function AgentSidePanel() {
           </div>
           <div className="h-1.5 rounded-full bg-foreground/[0.06] dark:bg-white/[0.08] overflow-hidden">
             <div
-              className="h-full rounded-full bg-[#3737CC]/80 transition-all duration-500"
+              className="h-full rounded-full bg-[var(--accent)]/80 transition-all duration-500"
               style={{ width: `${Math.min(100, Math.max(2, overallProgress || (isAnalyzing ? 6 : 0)))}%` }}
             />
           </div>
@@ -415,7 +415,7 @@ export function AgentSidePanel() {
                     p.status === "completed"
                       ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                       : p.status === "running" || p.status === "started"
-                        ? "border-[#3737CC]/40 text-[#3737CC] dark:text-[#9aa0ff]"
+                        ? "border-[var(--accent)]/40 text-[var(--accent)]"
                         : p.status === "error"
                           ? "border-rose-500/30 text-rose-600"
                           : "border-border/50 text-muted-foreground"
@@ -439,8 +439,8 @@ export function AgentSidePanel() {
         (memoryContext &&
           ((memoryContext as { history_count?: number }).history_count ||
             (memoryContext as { semantic_context?: string }).semantic_context))) && (
-        <div className="mx-2 mb-3 space-y-2 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/5 p-2.5 dark:border-[#7F7FFF]/25 dark:bg-[#7F7FFF]/10 max-h-[28%] min-h-0 overflow-y-auto overscroll-contain shrink-0">
-          <div className="text-xs font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#7F7FFF]">
+        <div className="mx-2 mb-3 space-y-2 rounded-lg border border-[var(--accent)]/25 bg-[var(--accent-muted)] p-2.5 max-h-[28%] min-h-0 overflow-y-auto overscroll-contain shrink-0">
+          <div className="ui-section-title">
             洞察
           </div>
           {scorecard && (
@@ -550,7 +550,7 @@ export function AgentSidePanel() {
           className="px-3 pb-2 shrink-0 border-b border-foreground/[0.06] space-y-1.5"
           data-testid="debate-turns-strip"
         >
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">辩论</div>
+          <div className="ui-section-title text-[var(--text-muted)]">辩论</div>
           <div className="grid grid-cols-2 gap-1.5">
             {(["bull", "bear"] as const).map((side) => {
               const turn = debateTurns.find((t) => t.side === side);
