@@ -83,6 +83,80 @@ export interface ProvenanceEntry {
   digest?: string;
 }
 
+/** 假行情/估值字段黑名单（与后端 _PROVENANCE_FAKE_PRICE_KEYS 对齐） */
+const PROVENANCE_FAKE_PRICE_KEYS = new Set([
+  'price',
+  'last_price',
+  'close',
+  'open',
+  'high',
+  'low',
+  'change_pct',
+  'pct_chg',
+  'volume',
+  'amount',
+  'turnover',
+  'volume_ratio',
+  'pe',
+  'pb',
+  'pe_ttm',
+  'pb_mrq',
+  'market_cap',
+]);
+
+/**
+ * 单条 provenance 归一：仅 dict + 非空 source；剥离假行情字段；拒绝裸 string。
+ * 所有前端消费方必须走此函数，禁止直接渲染/合并未清洗条目。
+ */
+export function normalizeProvenanceItem(raw: unknown): ProvenanceEntry | null {
+  if (raw == null || typeof raw === 'string' || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const src = String(obj.source ?? '').trim();
+  if (!src) return null;
+  const entry: ProvenanceEntry = { source: src.slice(0, 200) };
+  const tool = String(obj.tool ?? '').trim();
+  if (tool) entry.tool = tool.slice(0, 120);
+  const digest = String(obj.digest ?? '').trim();
+  if (digest) entry.digest = digest.slice(0, 64);
+  const ts = obj.ts;
+  if (ts != null && String(ts).trim()) entry.ts = String(ts).trim().slice(0, 64);
+  // 防御：若上游把假价字段误塞进 allowed 名以外，已只取四字段；额外断言不回写黑名单
+  for (const k of Object.keys(entry)) {
+    if (PROVENANCE_FAKE_PRICE_KEYS.has(k)) {
+      delete (entry as Record<string, unknown>)[k];
+    }
+  }
+  return entry;
+}
+
+/** 列表归一 + (source,tool,digest) 去重；截断 maxItems */
+export function normalizeProvenanceList(
+  raw: unknown,
+  maxItems = 32,
+): ProvenanceEntry[] {
+  if (raw == null) return [];
+  const items: unknown[] = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'object'
+      ? [raw]
+      : [];
+  const cap = Math.max(1, Math.min(maxItems || 32, 64));
+  const seen = new Set<string>();
+  const out: ProvenanceEntry[] = [];
+  for (const item of items) {
+    const cleaned = normalizeProvenanceItem(item);
+    if (!cleaned?.source) continue;
+    const key = `${cleaned.source}|${cleaned.tool ?? ''}|${cleaned.digest ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
 /** G2 统一 terminal 态（与 HITL / web_server 对齐） */
 export type RunTerminalStatus =
   | 'pending'

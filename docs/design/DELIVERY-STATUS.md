@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.10-sticky-match-priority-eventbus-multisub` |
-| **交付锚点** | **2026-07-24 14:05:00 +08:00**（sticky 匹配优先级单测 + EventBus 多订阅/SSE 多 tab unit；禁启服/禁 push） |
+| **文档版本** | `v1.11-provenance-consumers-normalize` |
+| **交付锚点** | **2026-07-24 14:20:00 +08:00**（provenance 消费方强制 normalize；停服可做已基本穷尽） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -207,11 +207,37 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 
 1. Agent 真路径下 plan/write_proposal 事件到 chat SSE 端到端（真启服 + Kimi）
 2. 若 atexit 仍噪声：确认 pytest 未复用已加载旧 `web_server` sys.modules
-3. provenance[] 结构化数组（P0-4 已知缺口）
-4. apply 成功/拒绝后 timeline 事件更新 status 同步
+3. apply 成功/拒绝后 timeline 事件更新 status 同步
 
 
 ## 3. 如何启动（本地）
+
+### 3.0 停服可做穷尽 / 启服依赖清单（2026-07-24 14:20:00 +08:00；收尾修订 2026-07-24 14:35:00 +08:00）
+
+**停服可做已穷尽（本轮 provenance 消费方 + 前序）**
+
+| 项 | 状态 | 证据/落点 |
+|----|------|-----------|
+| provenance 生产端 normalize（scorecard / artifact_wrapper / coordinator） | DONE | `app/core/artifact_wrapper.py` / `scorecard.py` / `coordinator.py` |
+| status API 顶层 + 嵌套 `result.provenance` / `final_decision.provenance` | DONE | `app/web/web_server.py` `get_agent_analysis_status`；pytest `test_status_normalizes_dirty_provenance` |
+| ai_client tool start/result payload 强制 normalize | DONE | `app/core/ai_client.py`；pytest `test_tool_call_payloads_normalize_provenance` |
+| 前端 merge / 渲染统一 `normalizeProvenanceList` | DONE | `agent-store.mergeProvenance` / `decision-card` / `types/index.ts`；vitest `provenance.test.ts` |
+| sticky match 优先级单测 | DONE | 既有 unit |
+| EventBus multi-sub / SSE multi-tab unit | DONE | 既有 unit |
+| HITL / 写仓硬拦 / 意图路由 / 观察 mode | DONE | 既有 |
+| 离线 pytest 聚焦回归（api/unit 分批） | DONE 路径可用 | 本轮聚焦 status + ai_client |
+
+**启服依赖清单（未完成，须真启服 + 真网/真 LLM；禁本轮执行）**
+
+1. chat SSE 端到端：plan / write_proposal / tool timeline 真推流（Kimi WebBridge）
+2. apply 成功/拒绝后 timeline status 与 sticky 二次 apply 真机联调
+3. Wind 真机配额路径 + 缓存命中 0 积分复测（积分预算内）
+4. 前后端连调：`/compare` `/portfolio` 市场扫描 未测页面
+5. `/api/health/deep` 与 market_indices 真网降级边界复验
+6. 真重启铁证三件套（uptime_s&lt;60 + 前后截图 + curl 真数据）
+7. status/SSE 在真实 agent 跑完后 provenance 面板视觉验收（无假价字段）
+
+**一句话状态**：`PROVENANCE_CONSUMERS_NORMALIZE_OFFLINE_DONE | 启服依赖见 §3.0`
 
 ### 3.1 环境要点
 

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProvenanceEntry } from '@/lib/types';
+import { normalizeProvenanceList } from '@/lib/types';
 // Input: 决策数据（action/confidence/reasoning/risk/price_targets/position/degradations/scorecard/memo/reflection/memory）
 // Output: 增强版决策卡片，含置信度进度条、风险评分、价格目标、决策理由、降级条、评分卡/备忘/反思只读/记忆预取
 // Pos: artifact-renderer.tsx 的子组件，decision_card 类型 Artifact 渲染器
@@ -93,47 +94,7 @@ function pctLabel(v: number | null | undefined): string {
   return `${Math.round(Math.max(0, Math.min(1, v)) * 100)}%`;
 }
 
-/** 与后端 normalize_provenance_list 对齐：仅 source/tool/ts/digest，拒绝裸 string / 假行情字段 */
-const PROVENANCE_FAKE_KEYS = new Set([
-  'price', 'close', 'open', 'high', 'low', 'last', 'last_price',
-  'change_pct', 'pct_chg', 'amount', 'volume', 'turnover',
-  'pe', 'pb', 'roe', 'market_cap', 'mv', 'fake_price', 'quote', 'ohlcv',
-]);
-
-function normalizeProvenanceList(raw: unknown, limit = 32): ProvenanceEntry[] {
-  if (raw == null) return [];
-  const items: unknown[] = Array.isArray(raw)
-    ? raw
-    : typeof raw === 'object'
-      ? [raw]
-      : [];
-  const out: ProvenanceEntry[] = [];
-  const seen = new Set<string>();
-  for (const item of items) {
-    if (item == null || typeof item === 'string' || typeof item !== 'object') continue;
-    const rec = item as Record<string, unknown>;
-    const source = String(rec.source ?? '').trim();
-    if (!source) continue;
-    const entry: ProvenanceEntry = { source: source.slice(0, 200) };
-    const tool = String(rec.tool ?? '').trim();
-    if (tool) entry.tool = tool.slice(0, 120);
-    const ts = rec.ts != null ? String(rec.ts).trim() : '';
-    if (ts) entry.ts = ts.slice(0, 64);
-    const digest = rec.digest != null ? String(rec.digest).trim() : '';
-    if (digest) entry.digest = digest.slice(0, 64);
-    for (const k of Object.keys(entry)) {
-      if (PROVENANCE_FAKE_KEYS.has(k)) {
-        delete (entry as Record<string, unknown>)[k];
-      }
-    }
-    const key = `${entry.source}|${entry.tool || ''}|${entry.digest || ''}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(entry);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
+// G1：normalize 统一走 @/lib/types.normalizeProvenanceList，禁止本地重复实现绕过
 
 export function DecisionCardArtifact({ data }: Props) {
   if (!data || Object.keys(data).length === 0) {

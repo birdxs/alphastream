@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import type { AgentProgress, ToolCallStart, ToolCallResult, DebateTurn, RunTerminalStatus, ProvenanceEntry } from "@/lib/types";
+import { normalizeProvenanceList } from "@/lib/types";
 
 /** G2: 后端 task/run_terminal 与侧栏 status 映射 */
 const TASK_STATUS_ALIASES: Record<string, RunTerminalStatus | string> = {
@@ -290,13 +291,16 @@ export const useAgentStore = create<AgentState>((set) => ({
     }),
   mergeProvenance: (entries) =>
     set((s) => {
-      if (!entries || !entries.length) return {};
-      const seen = new Set(
-        s.provenance.map((e) => `${e.source||''}|${e.tool||''}|${e.digest||''}`),
-      );
-      const next = [...s.provenance];
-      for (const e of entries) {
-        const k = `${e.source||''}|${e.tool||''}|${e.digest||''}`;
+      // G1：两侧均先 normalize（剥假价/拒裸 string），禁止绕过直接合并
+      const base = normalizeProvenanceList(s.provenance, 64);
+      const add = normalizeProvenanceList(entries as unknown, 64);
+      if (!add.length) return { provenance: base };
+      const keyOf = (e: ProvenanceEntry) =>
+        `${e.source || ''}|${e.tool || ''}|${e.digest || ''}`;
+      const seen = new Set(base.map(keyOf));
+      const next = [...base];
+      for (const e of add) {
+        const k = keyOf(e);
         if (seen.has(k)) continue;
         seen.add(k);
         next.push(e);

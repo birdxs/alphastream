@@ -4081,13 +4081,28 @@ def get_agent_analysis_status(task_id):
     if approval_status is None:
         approval_status = task.get('approval_status')
     run_terminal = compute_run_terminal(norm_status, approval_status)
-    provenance = []
+    # G1 铁律：出口强制 normalize，禁止绕过把假价字段/裸 string 透传前端
+    raw_provenance = []
     if isinstance(result, dict) and result.get('provenance'):
-        provenance = result.get('provenance') or []
+        raw_provenance = result.get('provenance') or []
     elif isinstance(final_decision, dict) and final_decision.get('provenance'):
-        provenance = final_decision.get('provenance') or []
+        raw_provenance = final_decision.get('provenance') or []
     else:
-        provenance = task.get('provenance') or []
+        raw_provenance = task.get('provenance') or []
+    try:
+        from app.core.artifact_wrapper import normalize_provenance_list
+        provenance = normalize_provenance_list(raw_provenance)
+    except Exception:
+        provenance = []
+    # decision 内嵌 provenance 同步清洗（decision-card 消费侧双保险，出口先净）
+    if isinstance(final_decision, dict) and final_decision.get('provenance') is not None:
+        try:
+            from app.core.artifact_wrapper import normalize_provenance_list as _npl
+            final_decision = dict(final_decision)
+            final_decision['provenance'] = _npl(final_decision.get('provenance'))
+        except Exception:
+            final_decision = dict(final_decision)
+            final_decision['provenance'] = []
 
     response_data = {
         'id': task['id'],
@@ -4103,9 +4118,25 @@ def get_agent_analysis_status(task_id):
     }
 
     if 'result' in task:
-         response_data['result'] = convert_messages_to_dict(task['result'])
-         if final_decision:
-             response_data['decision'] = final_decision
+        result_payload = convert_messages_to_dict(task['result'])
+        # 嵌套 result.provenance / final_decision 不得绕过 normalize 透传脏字段
+        if isinstance(result_payload, dict):
+            result_payload['provenance'] = provenance
+            if final_decision is not None:
+                result_payload['final_decision'] = final_decision
+            elif isinstance(result_payload.get('final_decision'), dict):
+                try:
+                    from app.core.artifact_wrapper import normalize_provenance_list as _npl2
+                    _fd = dict(result_payload['final_decision'])
+                    _fd['provenance'] = _npl2(_fd.get('provenance'))
+                    result_payload['final_decision'] = _fd
+                except Exception:
+                    _fd = dict(result_payload['final_decision'])
+                    _fd['provenance'] = []
+                    result_payload['final_decision'] = _fd
+        response_data['result'] = result_payload
+        if final_decision:
+            response_data['decision'] = final_decision
     if 'error' in task:
          response_data['error'] = task['error']
     elif norm_status in (TASK_FAILED, TASK_TIMEOUT_REJECT, TASK_REJECTED):

@@ -116,16 +116,24 @@ def _args_digest(arguments):
 
 
 def _tool_call_start_payload(tool_call_id, tool_name, arguments, agent_name=None, source=None):
-    """P0-4 契约：name / args_digest / source；G1 附 provenance 摘要。"""
+    """P0-4 契约：name / args_digest / source；G1 附 provenance 摘要（强制 normalize）。"""
     src = source or (agent_name or 'chat_with_tools')
     digest = _args_digest(arguments)
     try:
-        from app.core.artifact_wrapper import build_provenance_entry
-        provenance = [
+        from app.core.artifact_wrapper import build_provenance_entry, normalize_provenance_list
+        provenance = normalize_provenance_list([
             build_provenance_entry(source=str(src), tool=str(tool_name or ''), digest=digest)
-        ]
+        ])
     except Exception:
-        provenance = [{'source': str(src)[:200], 'tool': str(tool_name or '')[:120], 'digest': digest or ''}]
+        try:
+            from app.core.artifact_wrapper import normalize_provenance_list as _npl
+            provenance = _npl([{
+                'source': str(src)[:200],
+                'tool': str(tool_name or '')[:120],
+                'digest': digest or '',
+            }])
+        except Exception:
+            provenance = []
     return {
         'tool_call_id': tool_call_id,
         'name': tool_name,
@@ -161,21 +169,26 @@ def _tool_call_result_payload(tool_call_id, tool_name, result, duration_ms, agen
     if ok is not None:
         inferred_ok = bool(ok)
     src = source or (agent_name or 'chat_with_tools')
-    # G1 provenance 摘要（digest 基于摘要文本，不含完整行情）
+    # G1 provenance 摘要（digest 基于摘要文本，不含完整行情；强制 normalize）
     try:
-        from app.core.artifact_wrapper import build_provenance_entry
-        provenance = [
+        from app.core.artifact_wrapper import build_provenance_entry, normalize_provenance_list
+        provenance = normalize_provenance_list([
             build_provenance_entry(
                 source=str(src),
                 tool=str(tool_name or ''),
                 digest=_args_digest(summary) if summary else None,
             )
-        ]
+        ])
     except Exception:
-        provenance = [{
-            'source': str(src)[:200],
-            'tool': str(tool_name or '')[:120],
-        }]
+        # 兜底仍强制走 normalize，避免 except 路径泄漏未清洗字段
+        try:
+            from app.core.artifact_wrapper import normalize_provenance_list as _npl
+            provenance = _npl([{
+                'source': str(src)[:200],
+                'tool': str(tool_name or '')[:120],
+            }])
+        except Exception:
+            provenance = []
     return {
         'tool_call_id': tool_call_id,
         'name': tool_name,

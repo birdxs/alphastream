@@ -611,3 +611,23 @@ def test_T028_chat_with_tools_stream_bad_json_recover(ai_client_mod):
     )
     assert err is None
     assert seen['a'] == {'a': 1}  # 提取首个有效 JSON
+
+
+# ============ G1 provenance consumer: tool payload 强制 normalize ============
+def test_tool_call_payloads_normalize_provenance(ai_client_mod):
+    """start/result 两条 payload 出口 provenance 必须走 normalize（无假价字段）。"""
+    start = ai_client_mod._tool_call_start_payload(
+        'tc1', 'get_stock_data', {'code': '600519'}, agent_name='analyst', source='akshare',
+    )
+    result = ai_client_mod._tool_call_result_payload(
+        'tc1', 'get_stock_data', '{"ok": true}', 12, agent_name='analyst', source='akshare',
+    )
+    for payload in (start, result):
+        prov = payload.get('provenance') or []
+        assert isinstance(prov, list)
+        assert len(prov) >= 1
+        for e in prov:
+            assert isinstance(e, dict)
+            assert e.get('source')
+            assert 'price' not in e and 'close' not in e and 'pe' not in e
+            assert set(e.keys()) <= {'source', 'tool', 'ts', 'digest'}

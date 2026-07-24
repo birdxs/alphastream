@@ -151,6 +151,73 @@ class TestAgentAnalysisStatus:
         body = resp.get_json()
         assert _has_error(body)
 
+    def test_status_normalizes_dirty_provenance(self, flask_client):
+        """G1 消费方：status 出口强制 strip 假价字段，拒绝裸 string 透传。"""
+        from app.web import web_server as ws
+
+        task_id = f"test-prov-{uuid.uuid4().hex[:8]}"
+        dirty = [
+            "bare-string-source",
+            {
+                "source": "akshare",
+                "tool": "get_stock_data",
+                "price": 1174.06,
+                "last_price": 1.0,
+                "pe": 20.1,
+            },
+            {"source": "akshare", "tool": "get_stock_data"},  # 去重
+            {"tool": "no-source"},  # 无 source 丢弃
+            None,
+        ]
+        task_data = {
+            'id': task_id,
+            'status': 'completed',
+            'progress': 100,
+            'created_at': '2026-07-24 10:00:00',
+            'updated_at': '2026-07-24 10:05:00',
+            'params': {'stock_code': '600519', 'market_type': 'A'},
+            'result': {
+                'final_decision': {
+                    'action': 'buy',
+                    'provenance': [
+                        {"source": "wind", "price": 99.9, "tool": "fundamentals"},
+                    ],
+                },
+                'provenance': dirty,
+            },
+        }
+        ws.agent_session_manager.save_task(task_data)
+        try:
+            resp = flask_client.get(f'/api/agent_analysis_status/{task_id}')
+            assert resp.status_code == 200
+            body = resp.get_json()
+            prov = body.get('provenance') or []
+            assert isinstance(prov, list)
+            assert len(prov) == 1
+            assert prov[0].get('source') == 'akshare'
+            assert prov[0].get('tool') == 'get_stock_data'
+            for e in prov:
+                assert isinstance(e, dict)
+                assert 'price' not in e and 'last_price' not in e and 'pe' not in e
+                assert 'source' in e
+            decision = body.get('decision') or {}
+            dprov = decision.get('provenance') or []
+            assert len(dprov) == 1
+            assert dprov[0].get('source') == 'wind'
+            assert 'price' not in dprov[0]
+            # 嵌套 result 不得透传脏 provenance
+            result = body.get('result') or {}
+            assert isinstance(result, dict)
+            assert result.get('provenance') == prov
+            rfd = result.get('final_decision') or {}
+            assert isinstance(rfd, dict)
+            rprov = rfd.get('provenance') or []
+            assert len(rprov) == 1
+            assert rprov[0].get('source') == 'wind'
+            assert 'price' not in rprov[0]
+        finally:
+            ws.agent_session_manager.delete_task(task_id)
+
 
 # --------------------------------------------------------------------------- #
 # 3. GET /api/agent_analysis_result/<task_id>  —— 路由不存在                  #
