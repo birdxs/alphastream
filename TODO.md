@@ -1,9 +1,9 @@
 # TODO
 
-## UI改造A-D（进行中）
+## UI改造A-D（S-UI-0~3 代码已落地 · 终验待办）
 
-> **状态**：**进行中** · Comdr **已通过 2026-07-24 全量 A–D** · S-UI-0 进行中 · **仍禁 push**  
-> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`  
+> **状态**：**S-UI-0~3 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 终验待 WebBridge** · **仍禁 push**  
+> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.1-approved`）  
 > **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
 > **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright（WebBridge）· #3 批内不启全量 build/服务；只改原件
 
@@ -15,50 +15,45 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 
 | ID | 阶段 | 范围摘要 | 状态 | 依赖 |
 |----|------|----------|------|------|
-| S-UI-0 | Token 冻结 + 截图基线 | plan §5 写入 `globals.css`；语义 token 单源 | **进行中** | Comdr 通过 ✅ |
-| S-UI-1 | **A** 设计系统 | Token + navbar/chat/agent 高频表面统一 | 待 S-UI-0 | S-UI-0 |
-| S-UI-2 | **B+C** 首页三态 + Agent 工位 | page 三态；步骤条/日志折叠/HITL/Plan/Artifact | 待办 | S-UI-1 |
-| S-UI-3 | **D** 视觉皮肤 | 亮/暗涨跌色/artifacts·charts·业务页对齐 | 待办 | S-UI-2 |
-| S-UI-4 | 回归 | WebBridge 矩阵 + 无假数 + tsc/eslint + TODO/CHANGELOG 闭环 | **静态预检完成**（终验待 S-UI-3） | S-UI-3 |
+| S-UI-0 | Token 冻结 + 截图基线 | plan §5 写入 `globals.css`；语义 token 单源 | **代码已落地** | Comdr 通过 ✅ |
+| S-UI-1 | **A** 设计系统 | Token + navbar/badge/button 高频表面统一 | **代码已落地** | S-UI-0 |
+| S-UI-2 | **B+C** 首页三态 + Agent 工位 | page 三态；agent 侧栏/进度/HITL/Plan | **代码已落地** | S-UI-1 |
+| S-UI-3 | **D** 视觉皮肤 + 空/错态 | alert warn/degraded；settings 空错统一 | **代码已落地** | S-UI-2 |
+| S-UI-4 | 回归 | WebBridge 矩阵 + 无假数 + tsc/eslint + TODO/CHANGELOG 闭环 | **静态预检完成**（终验待） | S-UI-3 |
 
 ### 阶段验收勾选
 
-- [ ] **S-UI-0**：Token 表无 TBD；`globals.css` 语义变量可见；审批栏已勾通过 ✅（工作区 WIP：`globals.css` / `settings` / `alert` 未提交）
-- [ ] **S-UI-1 A**：tsc/eslint 0 · Token 单源 · 抽 5 页无视觉方言 · 无新假数路径
-- [ ] **S-UI-2 B+C**：首页三态可辨 · 指数栏不丢 · Agent 五件套可达 · Hydration 无红字
-- [ ] **S-UI-3 D**：亮/暗对比度 · 图表无 width(-1) · 与基线对比可接受
-- [x] **S-UI-4（静态预检 2026-07-24 20:06 +08:00）**：tsc/eslint 0 · 长页滚动代码审通过 · **终验未勾**（依赖 S-UI-0~3 交付 + WebBridge 矩阵）
+- [x] **S-UI-0**：Token 表写入 `globals.css`（含 `--up`/`--down`/`--fs-md`/`--bg-surface` 等）；审批栏已勾通过 ✅
+- [x] **S-UI-1 A（代码）**：navbar/badge/button 走 token；表面 polish 已提交 · **视觉抽 5 页 WebBridge 仍待 S-UI-4**
+- [x] **S-UI-2 B+C（代码）**：首页 IA + Agent 工位（side-panel/progress/plan/approvals）已提交 · **Hydration/浏览器终验待 S-UI-4**
+- [x] **S-UI-3 D（代码）**：`alert` warn/degraded + settings 空/错态 + ui-empty/ui-dash · **亮暗/图表 WebBridge 终验待 S-UI-4**
+- [x] **S-UI-4（静态预检 2026-07-24 20:06 +08:00）**：tsc/eslint 0 · 长页滚动代码审通过 · **终验未勾**
 - [ ] **S-UI-4 终验**：plan §8 总清单全勾 · dojo 映射无未标注冲突 · WebBridge · **仍禁 push**（除非 Comdr 另行授权）
 
-### S-UI-4 静态预检证据（2026-07-24 20:06:47 +08:00）
+### S-UI-0~3 落地文件（本批）
 
-**相关 commits（`git log --oneline -15` 核对）**
-- `ff53083` / `9cbabae` / `c71069d`：renovation plan + TODO 跟踪（文档）
-- `21fa223`：page scroll restore + UI hunt fixes（滚动基线）
-- `6e74738` / `1b73c90` / `b7d5718`：agent 工位 sticky/plan/apply 相关 UI（非 A–D 皮肤）
-- **无** `S-UI-0` / `S-UI-1` / `S-UI-2` / `S-UI-3` 已提交实现 hash（实现仍在工作区或未开工）
+| Sprint | 文件 |
+|--------|------|
+| S-UI-0/1 | `frontend/src/app/globals.css` · `layout/navbar.tsx` · `ui/badge.tsx` · `ui/button.tsx` |
+| S-UI-2 | `app/page.tsx` · `agent/agent-side-panel.tsx` · `agent-progress-panel.tsx` · `pending-approvals.tsx` · `plan-list-panel.tsx` |
+| S-UI-3 | `ui/alert.tsx` · `app/settings/page.tsx` |
+| 文档 | `docs/design/ui-renovation-plan.md`（v1.1-approved）· 本节 TODO |
+
+### S-UI-4 静态预检证据（2026-07-24 20:06:47 +08:00）
 
 **长页滚动（读代码，未启服务）**
 | 路由 | 根容器 | 可否滚 | 说明 |
 |------|--------|--------|------|
 | 全站 | `layout.tsx` `<main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">` | ✅ | 统一滚动祖先 |
-| `/settings` | `max-w-2xl mx-auto p-6 pb-16 space-y-6` | ✅ | 无 `overflow:hidden` 锁死，靠 main |
+| `/settings` | `ui-page-narrow`（原 max-w-2xl 壳） | ✅ | 无 `overflow:hidden` 锁死，靠 main |
 | `/portfolio` | `max-w-4xl mx-auto p-6 pb-16 space-y-6` | ✅ | 同上 |
 | `/dashboard` | 根 `h-full min-h-0 overflow-y-auto overscroll-contain` | ✅ | 嵌套滚动容器（下拉刷新），内容可滚 |
 | 首页指数栏 | `market-overview.tsx` ticker `sticky top-0 z-20` | ✅ | sticky 相对 main 滚动祖先 |
 
-**静态命令**
-```bash
-cd frontend && node node_modules/typescript/bin/tsc --noEmit   # exit 0
-npx eslint src/app/layout.tsx src/app/dashboard/page.tsx \
-  src/app/portfolio/page.tsx src/app/settings/page.tsx \
-  src/components/market/market-overview.tsx                 # exit 0
-```
-
 **遗留（阻塞终验）**
-- S-UI-0~3 实现 commit 未全部落盘
-- WebBridge 路由矩阵 / 假数采样 / Hydration 未跑（本批仅静态）
-- 工作区未提交：`globals.css`（S-UI-0 WIP）、`settings/page.tsx`、`ui/alert.tsx`、`data/stock_names.json`（勿误并入无关提交）
+- WebBridge 路由矩阵 / 假数采样 / Hydration 未跑
+- artifacts·charts 全量皮肤对齐未在本批改完（S-UI-3 先落空错态 + settings）
+- **仍禁 push**
 
 ### 明确不做（防范围漂移）
 
@@ -69,11 +64,10 @@ npx eslint src/app/layout.tsx src/app/dashboard/page.tsx \
 ### 下一步
 
 - [x] 审批 `docs/design/ui-renovation-plan.md` §1（**已通过 2026-07-24 Comdr 全量 A–D**）
-- [x] **S-UI-4 静态预检**落盘（本条）
-- [ ] 完成 **S-UI-0** Token 冻结写入 `globals.css` 并 commit
-- [ ] 推进 **S-UI-1** 高频表面 polish
+- [x] **S-UI-0~3 代码**逻辑提交落盘
+- [x] **S-UI-4 静态预检**落盘
+- [ ] **S-UI-4 终验**（WebBridge + 假数采样 + 亮暗/图表）
 - [ ] 跟踪单源：勾选只改本节；实现 commit 必须引用 plan 章节与 sprint 编号
-- [ ] S-UI-3 后跑 **S-UI-4 终验**（WebBridge + 假数采样）
 - [ ] **仍禁 push**
 
 ---
