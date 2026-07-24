@@ -478,7 +478,7 @@ export default function StockDetailPage({
 
   /* ---------- JSX ---------- */
   return (
-    <div className="min-h-screen w-full px-4 py-4 md:px-8 md:py-6 space-y-4 max-w-7xl mx-auto">
+    <div className="min-h-full w-full px-4 py-4 md:px-8 md:py-6 pb-16 space-y-4 max-w-7xl mx-auto">
       {/* ======= 头部 ======= */}
       <GlassCard padding="md" hover={false} glow="brand">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -7,7 +7,6 @@
 import { useRef, useEffect, useState, useCallback, type CSSProperties, type ReactElement } from "react";
 import { List } from "react-window";
 import { useChatStore } from "@/lib/stores/chat-store";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble } from "./message-bubble";
 import { StreamMarkdown } from "./stream-markdown";
 import { AgentProgressPanel } from "@/components/agent/agent-progress-panel";
@@ -40,7 +39,7 @@ interface MessageListProps {
 
 export function MessageList({ onRegenerate }: MessageListProps = {}) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  /** 唯一滚动容器：原生 overflow，避免 ScrollArea 根节点非滚动导致 isAtBottom 失效与双滚动条 */
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -49,11 +48,10 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
   const streamingContent = useChatStore(s => s.streamingContent);
 
   const handleScroll = useCallback(() => {
-    const el = scrollAreaRef.current;
-    if (el) {
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-      setIsAtBottom(atBottom);
-    }
+    const el = containerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    setIsAtBottom(atBottom);
   }, []);
 
   // 测量容器高度用于虚拟滚动
@@ -66,20 +64,40 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
       }
     });
     ro.observe(el);
+    setContainerHeight(el.clientHeight);
     return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
     if (isAtBottom) {
+      scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages, streamingContent, isStreaming, isAtBottom]);
+
+  const scrollToBottom = () => {
+    const el = containerRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
       scrollRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, streamingContent, isAtBottom]);
+    setIsAtBottom(true);
+  };
 
   const useVirtualScroll = messages.length > 50;
+  // 等待态：流已启动但正文未到（进度面板可并行）
+  const showWaitingStatus = isStreaming && !streamingContent;
 
   return (
-    <ScrollArea className="flex-1 p-4 relative" ref={containerRef}>
-      <div className="space-y-4" ref={scrollAreaRef} onScroll={handleScroll} role="log" aria-live="polite" aria-label="对话消息">
+    <div
+      ref={containerRef}
+      className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 relative"
+      onScroll={handleScroll}
+      role="log"
+      aria-live="polite"
+      aria-label="对话消息"
+    >
+      <div className="space-y-4">
         {messages.length > 30 && (
           <div className="text-center text-[10px] text-muted-foreground py-1">
             显示最近 {messages.length} 条消息
@@ -92,17 +110,20 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
             rowCount={messages.length}
             rowHeight={120}
             rowProps={{ messages }}
-            style={{ height: containerHeight, width: '100%' }}
+            style={{ height: containerHeight, width: "100%" }}
           />
         ) : (
           messages.map((msg, i) => (
-            <div key={msg.message_id} className="animate-[glass-enter_300ms_ease-out_both]" style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}>
+            <div
+              key={msg.message_id}
+              className="animate-[glass-enter_300ms_ease-out_both]"
+              style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
+            >
               <MessageBubble
                 message={msg}
                 onRegenerate={
                   msg.role === "assistant" && onRegenerate
                     ? () => {
-                        // 找到该AI消息之前最近的用户消息
                         const prevMsgs = messages.slice(0, i);
                         const lastUserMsg = [...prevMsgs].reverse().find((m) => m.role === "user");
                         if (lastUserMsg) {
@@ -129,11 +150,16 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
 
         {isStreaming && <AgentProgressPanel />}
 
-        {isStreaming && !streamingContent && (
-          <div className="flex items-center gap-2 text-sm animate-[glass-enter_300ms_ease-out_both]">
+        {showWaitingStatus && (
+          <div
+            className="flex items-center gap-2 text-sm animate-[glass-enter_300ms_ease-out_both]"
+            role="status"
+            aria-live="polite"
+            data-testid="chat-waiting-status"
+          >
             <div className="ai-thinking h-5 w-5 rounded-full" />
             <span className="bg-gradient-to-r from-[#3737CC] to-[#46BEA3] bg-clip-text text-transparent font-medium">
-              AI正在分析中
+              AI 正在分析中，请稍候
               <span className="inline-flex ml-0.5">
                 <span className="inline-block w-1 h-1 rounded-full bg-[#3737CC] animate-[ai-dot-bounce_1.2s_ease-in-out_infinite]" />
                 <span className="inline-block w-1 h-1 rounded-full bg-[#4F4FE6] ml-0.5 animate-[ai-dot-bounce_1.2s_ease-in-out_0.2s_infinite]" />
@@ -147,14 +173,15 @@ export function MessageList({ onRegenerate }: MessageListProps = {}) {
       </div>
       {!isAtBottom && messages.length > 0 && (
         <button
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-[#3737CC]/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in flex items-center gap-1"
-          onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+          type="button"
+          className="sticky bottom-4 left-1/2 -translate-x-1/2 mx-auto bg-[#3737CC]/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs shadow-lg z-10 animate-fade-in flex items-center gap-1"
+          onClick={scrollToBottom}
           aria-label="滚动到最新消息"
         >
           <ArrowDown className="h-3 w-3" />
           新消息
         </button>
       )}
-    </ScrollArea>
+    </div>
   );
 }

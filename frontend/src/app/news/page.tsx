@@ -231,8 +231,8 @@ export default function NewsPage() {
   };
 
   return (
-    <div className="flex-1 overflow-hidden p-4 min-h-0">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-full min-h-0" style={{ height: 'calc(100vh - 96px)' }}>
+    <div className="h-full min-h-0 overflow-hidden p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-full min-h-0">
 
         {/* ====== 左栏: AI Sentiment Terminal ====== */}
         {/* 双主题：浅色下白底+深色文字保持clarity，深色下保留terminal视觉 */}

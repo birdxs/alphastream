@@ -89,10 +89,12 @@ function ChatPanelInner() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto scroll-shadow-top">
+      {/* Content：单层滚动容器，避免与 MessageList 双滚动条 */}
+      <div className="flex-1 min-h-0 flex flex-col scroll-shadow-top">
         {messages.length === 0 && !isStreaming ? (
-          <WelcomeScreen onQuestionSelect={handleSend} />
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <WelcomeScreen onQuestionSelect={handleSend} />
+          </div>
         ) : (
           <MessageList onRegenerate={(content) => handleSend(content, {})} />
         )}

@@ -325,7 +325,7 @@ export function AgentSidePanel() {
   }
 
   return (
-    <div className="hidden md:flex w-72 xl:w-96 shrink-0 flex-col font-mono border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-foreground/[0.06] dark:shadow-black/30">
+    <div className="hidden md:flex w-72 xl:w-96 shrink-0 flex-col h-full min-h-0 self-stretch font-mono border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-foreground/[0.06] dark:shadow-black/30">
       {/* macOS 风格标题栏（毛玻璃） */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.03] dark:bg-white/[0.03]">
         <div className="flex items-center gap-2">
@@ -376,8 +376,11 @@ export function AgentSidePanel() {
       </div>
 
       {/* 终端内容（透明，让毛玻璃容器透过） */}
-      {/* P0-5 HITL 确认面：轮询 pending / 提交 approve|reject */}
-      <div className="px-3 pt-2 shrink-0 space-y-2" data-testid="pending-approvals-host">
+      {/* P0-5 HITL 确认面：轮询 pending / 提交 approve|reject；限高+内部滚动，避免挤爆侧栏 */}
+      <div
+        className="px-3 pt-2 shrink-0 space-y-2 max-h-[32%] min-h-0 overflow-y-auto overscroll-contain"
+        data-testid="pending-approvals-host"
+      >
         <PlanListPanel />
         <PendingApprovalsPanel />
       </div>
@@ -391,7 +394,7 @@ export function AgentSidePanel() {
         (memoryContext &&
           ((memoryContext as { history_count?: number }).history_count ||
             (memoryContext as { semantic_context?: string }).semantic_context))) && (
-        <div className="mb-3 space-y-2 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/5 p-2.5 dark:border-[#7F7FFF]/25 dark:bg-[#7F7FFF]/10">
+        <div className="mx-2 mb-3 space-y-2 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/5 p-2.5 dark:border-[#7F7FFF]/25 dark:bg-[#7F7FFF]/10 max-h-[28%] min-h-0 overflow-y-auto overscroll-contain shrink-0">
           <div className="text-[10px] font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#7F7FFF]">
             Run Scorecard / 备忘
           </div>

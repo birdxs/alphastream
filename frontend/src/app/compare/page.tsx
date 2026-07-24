@@ -72,7 +72,7 @@ export default function ComparePage() {
   const TAG_COLORS = ['bg-[#3737CC]', 'bg-[#46BEA3]', 'bg-[#FF8767]', 'bg-[#6B5EE4]'];
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-4xl mx-auto p-6 pb-16 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <BarChart3 className="h-6 w-6" />

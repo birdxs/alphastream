@@ -307,7 +307,7 @@ export default function DashboardPage() {
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full"
+      className="h-full min-h-0 overflow-y-auto overscroll-contain"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

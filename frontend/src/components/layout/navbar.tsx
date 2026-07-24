@@ -99,17 +99,17 @@ export function Navbar() {
         <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]" onClick={toggleTheme} aria-label="切换主题">
           {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </Button>
-        <Link href="/settings" aria-label="设置" title="设置">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] ${
-              settingsActive ? "text-[#3737CC]" : ""
-            }`}
-            aria-current={settingsActive ? "page" : undefined}
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </Button>
+        <Link
+          href="/settings"
+          aria-label="设置"
+          title="设置"
+          aria-current={settingsActive ? "page" : undefined}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] transition-colors ${
+            settingsActive ? "text-[#3737CC]" : "text-foreground"
+          }`}
+          data-testid="navbar-settings-link"
+        >
+          <Settings className="h-3.5 w-3.5" />
         </Link>
       </div>
     </nav>

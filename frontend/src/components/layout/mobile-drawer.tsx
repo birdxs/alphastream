@@ -110,7 +110,11 @@ export function MobileDrawer() {
             { href: "/compare", icon: BarChart3, label: "多股对比" },
             { href: "/settings", icon: Settings, label: "设置" },
           ].map(item => (
-            <Link key={item.href} href={item.href}>
+            <Link
+              key={item.href}
+              href={item.href}
+              data-testid={item.href === "/settings" ? "mobile-drawer-settings-link" : undefined}
+            >
               <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent transition-colors">
                 <item.icon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{item.label}</span>

@@ -281,7 +281,7 @@ export default function ScreenerPage() {
   }, []);
 
   return (
-    <div className="min-h-full p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
+    <div className="min-h-full p-4 md:p-6 pb-16 space-y-4 max-w-7xl mx-auto">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

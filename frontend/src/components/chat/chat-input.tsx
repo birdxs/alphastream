@@ -260,6 +260,17 @@ export function ChatInput({ onSend, onStop }: Props) {
 
   return (
     <div className="bg-background/80 dark:bg-[rgba(10,10,26,0.8)] backdrop-blur-xl border-t border-foreground/[0.08] dark:border-white/[0.08]">
+      {isStreaming && (
+        <div
+          className="flex items-center gap-2 px-3 pt-2 text-xs text-muted-foreground"
+          role="status"
+          aria-live="polite"
+          data-testid="chat-input-waiting-status"
+        >
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#3737CC] animate-pulse" />
+          <span>AI 正在回复，可点停止中断</span>
+        </div>
+      )}
       {/* 输入框 */}
       <div className="p-3 relative">
         <CommandPalette
