@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-24 — [S-UI-4] CDP 浏览器矩阵补齐（诚实范围）
+
+- **补齐前缺口**：上一轮仅 curl；CDP 无 tab / 内存紧导致浏览器列全 `[ ]`。
+- **本轮（CDP bridge · Chrome :9222）**：真启 8888/3000（`AUTH_REQUIRED=false`）；`/health` 200；`market_indices` 仍 **503 DEGRADED**。
+- **路由矩阵截图**：`/tmp/stockanal_ui/sui4_home_5s.png`、`sui4_home_15s.png`、`sui4_dashboard.png`、`sui4_stock_600519.png`、`sui4_portfolio.png`、`sui4_settings.png`。
+- **假数双窗**：首页 5s/15s 指数均为 `---`；DOM 无 `1174.06`/`4384.17`、无 Hydration 红字；与 503 对照通过（铁律 #1）。
+- **路由 DOM 摘要**：dashboard「暂无指数数据」；stock/600519 名「贵州茅台」+ K 线 loading（无假价）；portfolio 总市值/盈亏 `—`；settings 可达可滚。
+- **仍未勾**：亮/暗切换无闪白、sticky 强制滚动、Agent/HITL/provenance/scorecard 真路径、`/api-docs` 浏览器。
+- 文档：`TODO.md` / `ui-renovation-plan.md` → `v1.4-sui4-browser` / `docs/design/README.md`；**验收后 8888/3000 已停**；**未 push**。
+
 ## 2026-07-24 — [S-UI-charts] + [S-UI-4] 部分终验（诚实范围）
 
 - **S-UI-charts**（`8ba801a`）：charts/artifacts 涨跌与置信/情感色绑定 design tokens（`--stock-up/down`、`--ok/warn/danger`，经 `css-var`/`stockPalette`）；去掉硬编码 `#ef4444`/`#22c55e` 等；`tsc --noEmit` exit 0。
@@ -7,7 +17,7 @@
   - `GET :8888/health` → 200 `status=ok` version=3.1.0（首轮 `uptime_s≈17`）。
   - `GET :3000/health`/`/` 冷启首轮曾超时（Turbopack）；热身后 `/health`、`/`、`/dashboard`、`/stock/600519`、`/portfolio`、`/settings` 均为 **200**。
   - `GET :8888/api/market_indices` → **503 DEGRADED**（上游不可用/`stale_cache`，**无假指数**，守铁律 #1）。
-- **浏览器终验未完成**：CDP bridge 报 `No browser tabs connected`；free pages 一度 <5000；未产出 WebBridge 路由截图 / 假数多窗采样 / 主题无闪白证明。§8.1 与路由矩阵浏览器列保持 `[ ]`。
+- **当时浏览器终验未完成**（已由上方 v1.4 CDP 条目补做路由矩阵）：CDP bridge 报 `No browser tabs connected`；free pages 一度 <5000。
 - 文档：`TODO.md` / `ui-renovation-plan.md` → `v1.3-sui4-partial` / `docs/design/README.md` 同步；验收后停 8888/3000；**未 push**。
 
 ## 2026-07-24 — [S-UI-docs] 对齐 S-UI-0~3 已落地口径（docs only）

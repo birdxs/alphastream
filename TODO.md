@@ -2,7 +2,7 @@
 
 ## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · 浏览器终验部分完成）
 
-> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl/启服预检完成** · **浏览器视觉终验未完成（CDP/WebBridge 不可用）** · **仍禁 push**  
+> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl + CDP 五路由矩阵已做** · **§8.1 部分产品视觉项仍未勾** · **仍禁 push**  
 > **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.3-sui4-partial`）  
 > **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
 > **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright · #3 资源红线；只改原件
@@ -20,7 +20,7 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | S-UI-2 | **B+C** 首页三态 + Agent 工位 | page 三态；agent 侧栏/进度/HITL/Plan | **代码已落地** | S-UI-1 |
 | S-UI-3 | **D** 视觉皮肤 + 空/错态 | alert warn/degraded；settings 空错统一 | **代码已落地** | S-UI-2 |
 | S-UI-charts | charts/artifacts 涨跌色绑 token | `css-var` + stockPalette；去硬编码红绿 | **代码已落地** `8ba801a` | S-UI-3 |
-| S-UI-4 | 回归 | curl 启服 + WebBridge 矩阵 + 无假数 + 文档闭环 | **curl/启服已做 · 浏览器视觉未做** | S-UI-charts |
+| S-UI-4 | 回归 | curl 启服 + CDP 矩阵 + 无假数 + 文档闭环 | **curl+CDP 五路由已做 · §8.1 亮暗/Agent/HITL 等仍部分 `[ ]`** | S-UI-charts |
 
 ### 阶段验收勾选
 
@@ -30,7 +30,9 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 - [x] **S-UI-3 D（代码）**：`alert` warn/degraded + settings 空/错态 + ui-empty/ui-dash
 - [x] **S-UI-charts（2026-07-24）**：charts/artifacts 涨跌与语义色绑 `--stock-up/down` / `--ok/warn/danger`；`tsc --noEmit` 0；commit `8ba801a`
 - [x] **S-UI-4（curl + 启服 2026-07-24）**：后端 `/health` 200；前端冷启后 `/health`/`/`/`/dashboard`/`/stock/600519`/`/portfolio`/`/settings` 200；`market_indices` 503 DEGRADED（无假指数，铁律 #1）
-- [ ] **S-UI-4 浏览器终验**：WebBridge/CDP 路由矩阵截图 + 假数多窗采样 + Hydration + 主题无闪白 · **未完成**（extension 无 tab；free pages 一度 <5000）
+- [x] **S-UI-4 浏览器路由矩阵（CDP 2026-07-24 23:00~23:13 +08:00）**：Chrome `:9222` tab 可用；依次打开 `/`/`/dashboard`/`/stock/600519`/`/portfolio`/`/settings`；截图 `/tmp/stockanal_ui/sui4_*.png`；五页 DOM 均无 Hydration 红字、无已知假值 `1174.06`/`4384.17`
+- [x] **S-UI-4 假数多窗（首页）**：5s + 15s 两帧指数均为 `---`；同期 `curl :8888/api/market_indices` 持续 **503 DEGRADED**（无假价对照通过）
+- [ ] **S-UI-4 残余浏览器项**：亮/暗切换无闪白、sticky 滚动吸顶、Agent/HITL/provenance/scorecard 真路径、`/api-docs` 浏览器 · **未在本轮点验**
 - [ ] plan §8.1 产品/视觉全勾 · **未完成**
 - [ ] **仍禁 push**（除非 Comdr 另行授权）
 
@@ -44,6 +46,22 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | S-UI-charts | `lib/utils/css-var.ts` · `charts/base-*.tsx` · `artifacts/*`（涨跌/置信/情感） |
 | 文档 | `docs/design/ui-renovation-plan.md` · 本节 TODO |
 
+### S-UI-4 浏览器矩阵证据（2026-07-24 23:00~23:13 +08:00，CDP）
+
+| 项 | 结果 |
+|---|---|
+| 时间锚点 | 本机 2026-07-24 08:00:38 -0700；Cloudflare/GitHub Date `Fri, 24 Jul 2026 15:00:3x GMT`（=23:00 +08）；偏差 ≪100s |
+| 内存闸门 | 启服前 free pages ~74142；中段最低 ~4335（已有服务继续，未另开重负载）；收尾停服后 ~96746 |
+| 服务 | 后端 `AUTH_REQUIRED=false` PID 96069 `:8888`；前端 Next `:3000`；**验收后已 kill，端口空** |
+| `market_indices` | BE/FE 均为 **503 DEGRADED** / `stale_cache`，body 无 indices 数值 |
+| `/` 5s+15s | 上证/深证/创业板/沪深300 显示 `---`；`priceLike=[]`；无 Hydration |
+| `/dashboard` | 「暂无指数数据 / 上游降级或暂无快照」；`priceLike=[]`；无假价 |
+| `/stock/600519` | 名称「贵州茅台」+ code；K 线「加载K线数据中…」（无假 K 值） |
+| `/portfolio` | 总市值/盈亏/收益率 `—`；暂无持仓；main 可滚 |
+| `/settings` | 主题/深度/Wind 配额 UI 可达；main 可滚；无假行情 |
+| 截图 | `/tmp/stockanal_ui/sui4_home_5s.png` · `sui4_home_15s.png` · `sui4_dashboard.png` · `sui4_stock_600519.png` · `sui4_portfolio.png` · `sui4_settings.png` |
+| 未做 | 主题亮暗切换截图；sticky 强制滚动；Agent 真 SSE 路径；`/api-docs` 浏览器 |
+
 ### S-UI-4 curl/启服证据（2026-07-24，本地）
 
 | 检查 | 结果 |
@@ -54,7 +72,7 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | `GET :8888/api/market_indices` | **503** DEGRADED `stale_cache`（本机上游不可用，**未伪造指数**） |
 | `tsc --noEmit` | **exit 0** |
 | Playwright | **未使用** |
-| 浏览器截图/DOM 采样 | **未完成**（CDP bridge `No browser tabs connected`；内存偏紧） |
+| 浏览器截图/DOM 采样 | **已完成五路由 + 首页双窗**（见上节）；残余产品项见 `[ ]` |
 | 服务 | 验收后已 stop 8888/3000 |
 
 **遗留（阻塞 §8 产品全勾）**
@@ -73,7 +91,8 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 - [x] **S-UI-0~3 代码**逻辑提交落盘
 - [x] **S-UI-charts** 绑 token 提交 `8ba801a`
 - [x] **S-UI-4 curl/启服预检**落盘
-- [ ] **S-UI-4 浏览器终验**（WebBridge/CDP + 假数采样 + 亮暗/图表截图）
+- [x] **S-UI-4 CDP 五路由矩阵 + 假数双窗**落盘
+- [ ] **S-UI-4 残余**：亮暗切换 / sticky 滚动 / Agent·HITL 真路径 / api-docs 浏览器
 - [ ] 跟踪单源：勾选只改本节；实现 commit 必须引用 plan 章节与 sprint 编号
 - [ ] **仍禁 push**
 
