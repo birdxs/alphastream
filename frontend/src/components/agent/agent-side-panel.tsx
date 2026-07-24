@@ -296,17 +296,17 @@ export function AgentSidePanel() {
   // SSR/未挂载时仅输出占位骨架, 避免任何时间戳hydration不匹配
   if (!mounted) {
     return (
-      <div className="hidden md:flex w-72 xl:w-96 shrink-0 border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150" />
+      <div className="flex w-full h-full min-h-0 bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl" />
     );
   }
 
   if (collapsed) {
     return (
-      <div className="hidden md:flex w-10 shrink-0 flex-col items-center py-2 gap-2 border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.6)] backdrop-blur-xl backdrop-saturate-150">
+      <div className="flex w-full h-full min-h-0 flex-col items-center py-2 gap-2 bg-background/70 dark:bg-[rgba(10,10,26,0.6)] backdrop-blur-xl">
         <button
           onClick={toggle}
           className="h-8 w-8 flex items-center justify-center rounded-md text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
-          title="展开 Agent Stream"
+          title="展开 Agent 工位"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -315,38 +315,49 @@ export function AgentSidePanel() {
             className={`h-2.5 w-2.5 fill-current ${isAnalyzing ? "text-[#46BEA3]" : "text-foreground/30"}`}
           />
           <span className="text-[9px] font-mono rotate-90 origin-center whitespace-nowrap mt-8 text-foreground/50">
-            Agent Stream
+            工位
           </span>
         </div>
       </div>
     );
   }
 
+  const doneAgents = agentProgresses.filter((p) => p.status === "completed").length;
+  const totalAgents = agentProgresses.length || 0;
+
   return (
-    <div className="hidden md:flex w-72 xl:w-96 shrink-0 flex-col h-full min-h-0 self-stretch font-mono border-l border-foreground/[0.08] dark:border-white/[0.08] bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-foreground/[0.06] dark:shadow-black/30">
-      {/* macOS 风格标题栏（毛玻璃） */}
+    <div
+      className="flex w-full h-full min-h-0 flex-col font-mono bg-background/70 dark:bg-[rgba(10,10,26,0.65)] backdrop-blur-xl backdrop-saturate-150"
+      data-testid="agent-workspace"
+    >
+      {/* S-UI-2：产品化标题 — Agent 工位 */}
       <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.03] dark:bg-white/[0.03]">
-        <div className="flex items-center gap-2">
-          {/* Mac 三点 */}
-          <div className="flex items-center gap-1.5 mr-2">
-            <span className="w-3 h-3 rounded-full bg-[#FF5F57] shadow-sm" />
-            <span className="w-3 h-3 rounded-full bg-[#FEBC2E] shadow-sm" />
-            <span className="w-3 h-3 rounded-full bg-[#28C840] shadow-sm" />
-          </div>
-          <span className="text-[11px] tracking-wide text-foreground/70">
-            ⎔ AGENT STREAM · stock-analysis · zsh
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[12px] font-semibold tracking-wide text-foreground/85">
+            Agent 工位
           </span>
+          {isAnalyzing && (
+            <span className="text-[10px] font-medium text-[#46BEA3] tabular-nums shrink-0">运行中</span>
+          )}
         </div>
-        <span className="text-[10px] tabular-nums text-foreground/45" suppressHydrationWarning>
-          {now == null ? '--:--:--' : fmtTs(now)}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] tabular-nums text-foreground/45" suppressHydrationWarning>
+            {now == null ? "--:--:--" : fmtTs(now)}
+          </span>
+          <button
+            onClick={toggle}
+            className="h-5 w-5 flex items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
+            title="折叠工位"
+          >
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
       </div>
 
       {/* 工具条 */}
       <div className="flex items-center justify-between px-3 h-7 shrink-0 border-b border-foreground/[0.06] dark:border-white/[0.06] bg-foreground/[0.02] dark:bg-white/[0.02]">
         <span className="text-[10px] text-foreground/50">
-          {events.length} events · {agentProgresses.filter((p) => p.status === "completed").length}/
-          {agentProgresses.length || 10} agents
+          {events.length} events · {doneAgents}/{totalAgents || 10} agents
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -363,25 +374,61 @@ export function AgentSidePanel() {
           >
             <Download className="h-3 w-3" />
           </button>
-          <button
-            onClick={toggle}
-            className="h-5 w-5 flex items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
-            title="折叠"
-          >
-            <ChevronRight className="h-3 w-3" />
-          </button>
         </div>
       </div>
 
-      {/* 终端内容（透明，让毛玻璃容器透过） */}
-      {/* P0-5 HITL 确认面：轮询 pending / 提交 approve|reject；限高+内部滚动，避免挤爆侧栏 */}
+      {/* S-UI-2 分区：待审批 → 计划（限高内滚） */}
       <div
-        className="px-3 pt-2 shrink-0 space-y-2 max-h-[32%] min-h-0 overflow-y-auto overscroll-contain"
-        data-testid="pending-approvals-host"
+        className="px-3 pt-2 shrink-0 space-y-2 max-h-[36%] min-h-0 overflow-y-auto overscroll-contain"
+        data-testid="agent-workspace-priority"
       >
-        <PlanListPanel />
         <PendingApprovalsPanel />
+        <PlanListPanel />
       </div>
+
+      {/* S-UI-2：进度区 */}
+      {(isAnalyzing || overallProgress > 0) && (
+        <div
+          className="mx-2 mt-1 mb-2 shrink-0 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/[0.06] dark:bg-[#3737CC]/10 px-2.5 py-2 space-y-1.5"
+          data-testid="agent-workspace-progress"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#9aa0ff]">
+              进度
+            </span>
+            <span className="text-[10px] tabular-nums text-muted-foreground">
+              {Math.round(overallProgress || 0)}% · {doneAgents}/{totalAgents || 10}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-foreground/[0.06] dark:bg-white/[0.08] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[#3737CC]/80 transition-all duration-500"
+              style={{ width: `${Math.min(100, Math.max(2, overallProgress || (isAnalyzing ? 6 : 0)))}%` }}
+            />
+          </div>
+          {agentProgresses.length > 0 && (
+            <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
+              {agentProgresses.slice(0, 10).map((p) => (
+                <span
+                  key={p.agent}
+                  className={`text-[9px] px-1.5 py-0.5 rounded border ${
+                    p.status === "completed"
+                      ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                      : p.status === "running"
+                        ? "border-[#3737CC]/40 text-[#3737CC] dark:text-[#9aa0ff]"
+                        : p.status === "error"
+                          ? "border-rose-500/30 text-rose-600"
+                          : "border-border/50 text-muted-foreground"
+                  }`}
+                  title={`${p.agent}: ${p.status}`}
+                >
+                  {p.agent}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* P0-2 降级可视化条：有 degradation 时吸顶可见，不渲染假数 */}
       {/* G6/G5/G7/G8 评分卡与只读上下文 */}
@@ -394,7 +441,7 @@ export function AgentSidePanel() {
             (memoryContext as { semantic_context?: string }).semantic_context))) && (
         <div className="mx-2 mb-3 space-y-2 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/5 p-2.5 dark:border-[#7F7FFF]/25 dark:bg-[#7F7FFF]/10 max-h-[28%] min-h-0 overflow-y-auto overscroll-contain shrink-0">
           <div className="text-xs font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#7F7FFF]">
-            Run Scorecard / 备忘
+            洞察
           </div>
           {scorecard && (
             <div className="grid grid-cols-2 gap-1.5 text-[10px]">
@@ -503,7 +550,7 @@ export function AgentSidePanel() {
           className="px-3 pb-2 shrink-0 border-b border-foreground/[0.06] space-y-1.5"
           data-testid="debate-turns-strip"
         >
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Debate · 分歧扫读</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">辩论</div>
           <div className="grid grid-cols-2 gap-1.5">
             {(["bull", "bear"] as const).map((side) => {
               const turn = debateTurns.find((t) => t.side === side);
@@ -563,7 +610,7 @@ export function AgentSidePanel() {
           <ChevronDown
             className={`h-3 w-3 shrink-0 transition-transform ${logCollapsed ? "-rotate-90" : ""}`}
           />
-          <span className="truncate">Stream Log</span>
+          <span className="truncate">日志</span>
           <span className="text-[10px] font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80">
             {events.length}
           </span>

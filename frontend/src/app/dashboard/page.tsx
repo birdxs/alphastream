@@ -1,6 +1,6 @@
 // Input: 后端 /api/market_indices(proxy)、/api/latest_news、watchlist-store、portfolio-store、useStockNames、useStockPrices
-// Output: 投资看板页面 — Bento Grid布局、自选股+持仓表格实时补全中文名与最新价，Dark Glassmorphism风格
-// Pos: app/dashboard/page.tsx - Dashboard看板主页面 (R1 Q3契约收尾 2026-04-15 21:28: DEDUP fetchWatchQuotes→useStockPrices+useStockNames; news published_at/source 字段统一)
+// Output: 投资看板页面 — Bento Grid布局、自选股+持仓表格实时补全中文名与最新价，Dark Glassmorphism风格；S-UI-3 空态/错误统一
+// Pos: app/dashboard/page.tsx - Dashboard看板主页面 (R1 Q3契约收尾 2026-04-15 21:28: DEDUP fetchWatchQuotes→useStockPrices+useStockNames; news published_at/source 字段统一)；S-UI-3
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";

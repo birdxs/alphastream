@@ -44,6 +44,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="prefetch" href="/api/market_indices" as="fetch" crossOrigin="anonymous" />
         {/* P2: 预热 /health Route Handler，让浏览器在 NetworkStatus 探针发起前完成后端冷启动连接 */}
         <link rel="prefetch" href="/health" as="fetch" crossOrigin="anonymous" />
+              <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var r=localStorage.getItem('theme-storage');if(!r)return;var j=JSON.parse(r);var t=(j&&j.state&&j.state.theme)||'dark';var s=(j&&j.state&&j.state.stockColorScheme)||'cn';var el=document.documentElement;if(t==='dark')el.classList.add('dark');else el.classList.remove('dark');el.setAttribute('data-color-scheme',s);}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className={`${inter.className} antialiased`}>
         <a

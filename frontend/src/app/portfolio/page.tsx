@@ -1,5 +1,5 @@
 // Input: portfolio-store 持久化持仓 + /api/portfolio_risk 诊断 + 用户操作
-// Output: 投资组合页：添加/删除/观察标签 + 风险诊断摘要（Skeleton/— 无数据时）
+// Output: 投资组合页：添加/删除/观察标签 + 风险诊断摘要（Skeleton/— 无数据时；S-UI-3 壳层/空态）
 // Pos: /portfolio 路由页面
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
@@ -450,10 +450,10 @@ export default function PortfolioPage() {
         </div>
         <div className="space-y-2">
           {holdings.length === 0 ? (
-            <div className="text-center py-12 space-y-4">
-              <Briefcase className="h-12 w-12 text-muted-foreground dark:text-white/15 mx-auto" />
-              <p className="text-muted-foreground dark:text-white/40">暂无持仓</p>
-              <p className="ui-empty-title dark:text-white/25">
+            <div className="ui-empty py-12">
+              <Briefcase className="h-12 w-12 text-muted-foreground dark:text-white/15" />
+              <p className="ui-empty-title">暂无持仓</p>
+              <p className="ui-empty-hint">
                 点击上方&ldquo;添加持仓&rdquo;开始管理您的投资组合
               </p>
             </div>

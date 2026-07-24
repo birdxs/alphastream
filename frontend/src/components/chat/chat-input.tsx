@@ -351,7 +351,7 @@ export function ChatInput({ onSend, onStop }: Props) {
               aria-label="消息输入框"
               rows={1}
               tabIndex={10}
-              className="textarea-thin-scroll w-full resize-none rounded-2xl border border-foreground/[0.08] dark:border-white/[0.08] bg-foreground/[0.03] dark:bg-white/[0.03] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#3737CC]/30 focus:border-[#3737CC] focus:shadow-[0_0_12px_rgba(55,55,204,0.15)] transition-all duration-300 placeholder:text-muted-foreground/35"
+              className="textarea-thin-scroll ui-chat-input w-full resize-none px-4 py-2.5 focus:outline-none transition-all duration-200 placeholder:text-[var(--text-muted)]"
               disabled={isStreaming}
               style={{ minHeight: '40px', maxHeight: '120px', overflowY: 'hidden' }}
             />
