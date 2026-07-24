@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 2026-07-24 — [S-UI-4] fix FE `:3000` swagger.json 404
+
+- **根因**：Swagger UI `API_URL=/static/swagger.json`；开发期 Next 只代理 `/api/*` 与 `/api-docs`，未代理 Flask `/static/*`，浏览器同源请求定义文件 404。
+- **修复**：`frontend/next.config.ts` 开发 rewrites 增加 `/static/:path*` → `http://127.0.0.1:8888/static/:path*`（与 `/_next/static` 不冲突）。
+- **验证（curl）**：`:8888/static/swagger.json` 与 `:3000/static/swagger.json` 均为 **200** `application/json` 14483B；`:3000/api-docs` **200** HTML；`:3000/api/docs/swagger-ui.css` 与 `swagger-ui-bundle.js` 200。
+- **未做**：浏览器内 Swagger 交互点选、改后端 API_URL 指向 `/api/openapi.json`、生产 nginx（生产既有静态路径）。
+- **未 push**；验收后停 8888/3000。
+
 ## 2026-07-24 — [S-UI-4] residual acceptance notes（诚实范围）
 
 - **范围**：v1.4 未勾的残余项；**仅文档 + 证据**，无业务代码改动。

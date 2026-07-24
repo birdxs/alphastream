@@ -20,7 +20,7 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | S-UI-2 | **B+C** 首页三态 + Agent 工位 | page 三态；agent 侧栏/进度/HITL/Plan | **代码已落地** | S-UI-1 |
 | S-UI-3 | **D** 视觉皮肤 + 空/错态 | alert warn/degraded；settings 空错统一 | **代码已落地** | S-UI-2 |
 | S-UI-charts | charts/artifacts 涨跌色绑 token | `css-var` + stockPalette；去硬编码红绿 | **代码已落地** `8ba801a` | S-UI-3 |
-| S-UI-4 | 回归 | curl 启服 + CDP 矩阵 + 无假数 + 文档闭环 | **curl+CDP 五路由 + 主题/api-docs 已做 · sticky 未强测 · Agent 真 SSE 跳过** | S-UI-charts |
+| S-UI-4 | 回归 | curl 启服 + CDP 矩阵 + 无假数 + 文档闭环 | **curl+CDP 五路由 + 主题已做 · api-docs swagger.json 已代理 200 · sticky 未强测 · Agent 真 SSE 跳过** | S-UI-charts |
 
 ### 阶段验收勾选
 
@@ -33,7 +33,7 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 - [x] **S-UI-4 浏览器路由矩阵（CDP 2026-07-24 23:00~23:13 +08:00）**：Chrome `:9222` tab 可用；依次打开 `/`/`/dashboard`/`/stock/600519`/`/portfolio`/`/settings`；截图 `/tmp/stockanal_ui/sui4_*.png`；五页 DOM 均无 Hydration 红字、无已知假值 `1174.06`/`4384.17`
 - [x] **S-UI-4 假数多窗（首页）**：5s + 15s 两帧指数均为 `---`；同期 `curl :8888/api/market_indices` 持续 **503 DEGRADED**（无假价对照通过）
 - [x] **S-UI-4 残余 · 主题切换（2026-07-24 23:18~23:30 +08）**：navbar `aria-label=切换主题` 亮↔暗；bg `rgb(247,248,250)` ↔ `rgb(10,10,26)`；切换采样 `flashWhite=false`；截图 `/tmp/stockanal_ui/sui4_theme_before_light.png` · `sui4_theme_after_dark.png` · `sui4_theme_light.png`
-- [x] **S-UI-4 残余 · `/api-docs`**：BE `/api-docs` **302**→`/api/docs/` **200** Swagger（17 ops）；FE `/api-docs` **200** HTML shell；注意 FE `/static/swagger.json` **404**（定义未加载，入口本身非 404）；截图 `sui4_api_docs_be.png` · `sui4_api_docs_fe.png`
+- [x] **S-UI-4 残余 · `/api-docs`**：BE `/api-docs` **302**→`/api/docs/` **200**；FE 经 `:3000` 同源可加载定义——`next.config.ts` 开发 rewrite `/static/:path*`→`:8888` 后 `GET :3000/static/swagger.json` **200**（14483B，此前 404）；`/api-docs` shell 200；未强测浏览器 UI 交互
 - [ ] **S-UI-4 残余 · sticky 强滚**：首页 main `canScroll=false`（内容未溢出）→ **无法强测**；DOM 已有 `sticky top-0 z-20`
 - [ ] **S-UI-4 残余 · Agent/HITL 真 SSE**：本轮进程 `MOCK_LLM=1`（`/api/health/deep` llm skipped）→ **诚实跳过**；未重启 `MOCK_LLM=0`（避资源/积分硬撑）
 - [ ] plan §8.1 产品/视觉全勾 · **未完成**（仍欠 sticky 强测 + Agent/HITL/provenance/scorecard + 涨跌色有数对照）

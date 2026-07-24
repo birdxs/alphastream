@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
     if (process.env.NODE_ENV === 'development') {
       return [
         {
+          source: '/api-docs',
+          destination: 'http://127.0.0.1:8888/api/docs/',
+        },
+        {
           source: '/api-docs/:path*',
           destination: 'http://127.0.0.1:8888/api/docs/',
         },
@@ -22,6 +26,13 @@ const nextConfig: NextConfig = {
           source: '/api/:path*',
           // B23: 强制 IPv4，避免 localhost→::1 IPv6 TCP timeout（17s 延迟根因）
           destination: 'http://127.0.0.1:8888/api/:path*',
+        },
+        // S-UI-4: Swagger UI 配置 API_URL=/static/swagger.json（Flask 静态）。
+        // 经 :3000 打开 /api-docs 时浏览器会同源请求 /static/*；此前未代理 → 404，定义加载失败。
+        // Next 自身静态在 /_next/static，/static/* 仅后端 Flask 使用，开发期整前缀代理安全。
+        {
+          source: '/static/:path*',
+          destination: 'http://127.0.0.1:8888/static/:path*',
         },
         // P2: /health 探针改由 src/app/health/route.ts Route Handler 代理。
         // 原 rewrite 是 runtime lazy-eval，首次请求触发 Turbopack JIT 编译偶发超时；
