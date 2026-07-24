@@ -89,6 +89,8 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 # 期望：success=true, executed=false, local_mark_only=true
 ```
 
+## 3. 如何启动（本地）
+
 ### 3.1 环境要点
 
 - Python 3 + 项目依赖（`requirements.txt`）
