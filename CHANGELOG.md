@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 2026-07-24 — [S-UI-live] fullstack CDP smoke screenshots
+
+- **启服**：真重启 `AUTH_REQUIRED=false DISABLE_NETWORK=0 MOCK_LLM=0` 后端 `:8888` + Next `:3000`；**服务保持运行供 Comdr 手测**。
+- **curl**：`/health` 200；`:3000/static/swagger.json` 200；`:3000/api-docs` 200 Swagger UI；`market_indices` 启动初期 cache HIT 后上游退回 **503 DEGRADED**（`所有上游数据源均不可用` / `stale_cache`）。
+- **CDP 截图（磁盘）**：`/tmp/stockanal_ui/live_home.png` · `live_home_15s.png` · `live_dashboard.png` · `live_stock_600519.png` · `live_portfolio.png` · `live_settings.png` · `live_api_docs.png`。
+- **铁律 #1**：首页 15s 指数仍为 `---`；无假价数字。
+- **Agent**：`POST /api/ai/chat` SSE 200 已开始推流（~16KB/25s 客户端超时截断）；**未**完成全量决策流截图 `live_agent_stream.png`。
+- **未 push**。
+
 ## 2026-07-24 — [S-UI-4] final status snapshot（文档对齐）
 
 - **触发**：TODO 遗留段仍写 FE `/static/swagger.json` **404**，与 commit `8cdfe24`（已代理 200）矛盾；plan §8.3 / README 同滞。

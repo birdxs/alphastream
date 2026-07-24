@@ -1,11 +1,22 @@
 # TODO
 
-## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · S-UI-4 部分完成 · 终态文档对齐 v1.6）
+## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · S-UI-4 部分完成 · live 连调已截图）
 
-> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 主题已做 · swagger 代理已修（`8cdfe24`）** · **§8.1 sticky/Agent/HITL 等仍未全勾** · **仍禁 push**  
+> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 主题已做 · swagger 代理已修（`8cdfe24`）** · **[S-UI-live] 2026-07-24 全栈真重启 + CDP 截图落盘 `/tmp/stockanal_ui/live_*.png`** · **§8.1 sticky/Agent 全量流等仍未全勾** · **仍禁 push**  
 > **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.6-sui4-final-snapshot`）  
 > **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
 > **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright · #3 资源红线；只改原件
+
+### [S-UI-live] 全栈 CDP smoke（2026-07-24 23:50~24:05 +08 锚点段）
+
+| 项 | 结果 |
+|---|---|
+| 可交付 | HEAD 含 `8ba801a` charts · `8cdfe24` swagger 代理 · `51907ba` S-UI-4 final snapshot |
+| 服务 | BE PID **98795** `:8888` · FE **98826** next-server `:3000` · **测后保持运行** |
+| 截图 | `/tmp/stockanal_ui/live_{home,home_15s,dashboard,stock_600519,portfolio,settings,api_docs}.png` |
+| 指数 | 初 curl cache HIT 真数 → 后 **503 DEGRADED**；UI `---` /「暂无指数数据」（无假数） |
+| api-docs | 浏览器 title「股票智能分析系统 API文档」· base `/static/swagger.json` |
+| Agent | SSE 已开流，25s 客户端截断；未存 `live_agent_stream.png` |
 
 ### 门禁链（按序）
 
