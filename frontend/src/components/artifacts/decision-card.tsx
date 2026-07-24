@@ -124,20 +124,20 @@ export function DecisionCardArtifact({ data }: Props) {
       BUY: {
         text: "\u4E70\u5165",
         emoji: "\uD83D\uDFE2",
-        bg: "bg-[#46BEA3]/10 border-[#46BEA3]/30",
-        text_color: "text-[#46BEA3]",
+        bg: "bg-ok/10 border-ok/30",
+        text_color: "text-ok",
       },
       SELL: {
         text: "\u5356\u51FA",
         emoji: "\uD83D\uDD34",
-        bg: "bg-[#FF8767]/10 border-[#FF8767]/30",
-        text_color: "text-[#FF8767]",
+        bg: "bg-danger/10 border-danger/30",
+        text_color: "text-danger",
       },
       HOLD: {
         text: "\u6301\u6709",
         emoji: "\uD83D\uDFE1",
-        bg: "bg-[#F59E0B]/10 border-[#F59E0B]/30",
-        text_color: "text-[#F59E0B]",
+        bg: "bg-warn/10 border-warn/30",
+        text_color: "text-warn",
       },
     }[action] || {
       text: action,
@@ -159,14 +159,14 @@ export function DecisionCardArtifact({ data }: Props) {
         </div>
         <div className="text-right">
           <div className="text-sm">置信度</div>
-          <div className="text-2xl font-bold font-mono text-[#6B5EE4]">{(confidence * 100).toFixed(0)}%</div>
+          <div className="text-2xl font-bold font-mono text-accent">{(confidence * 100).toFixed(0)}%</div>
         </div>
       </div>
 
       {/* 置信度进度条 */}
       <div className="w-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-2">
         <div
-          className="h-2 rounded-full transition-all duration-1000 bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
+          className="h-2 rounded-full transition-all duration-1000 bg-gradient-to-r from-accent to-accent/80"
           style={{ width: `${Math.max(0, Math.min(1, confidence)) * 100}%` }}
         />
       </div>
@@ -222,19 +222,19 @@ export function DecisionCardArtifact({ data }: Props) {
           {data.price_targets.support && (
             <div className="bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg p-2 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
               <div className="text-xs text-muted-foreground">支撑位</div>
-              <div className="font-mono text-2xl font-medium text-[#FF8767]">{data.price_targets.support}</div>
+              <div className="font-mono text-2xl font-medium text-danger">{data.price_targets.support}</div>
             </div>
           )}
           {data.price_targets.target && (
             <div className="bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg p-2 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
               <div className="text-xs text-muted-foreground">目标价</div>
-              <div className="font-mono text-2xl font-medium text-[#6B5EE4]">{data.price_targets.target}</div>
+              <div className="font-mono text-2xl font-medium text-accent">{data.price_targets.target}</div>
             </div>
           )}
           {data.price_targets.resistance && (
             <div className="bg-foreground/[0.03] dark:bg-white/[0.03] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg p-2 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
               <div className="text-xs text-muted-foreground">阻力位</div>
-              <div className="font-mono text-2xl font-medium text-[#46BEA3]">{data.price_targets.resistance}</div>
+              <div className="font-mono text-2xl font-medium text-ok">{data.price_targets.resistance}</div>
             </div>
           )}
         </div>

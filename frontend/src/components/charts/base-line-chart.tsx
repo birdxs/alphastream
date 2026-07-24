@@ -1,34 +1,73 @@
-// Input: data数组(name/value), height, color, dataKey
-// Output: 响应式折线图（Recharts LineChart）
-// Pos: components/charts/base-line-chart.tsx - 基础折线图，用于趋势展示
-// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
-
+/**
+ * Input: chart data array, dataKey for Y values
+ * Output: line chart component using Recharts
+ * Pos: base chart components, used by various artifact panels
+ * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+ */
 "use client";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
-import { useThemeStore } from "@/lib/stores/theme-store";
 
-interface Props {
-  data: Array<{ name: string; value: number; [key: string]: unknown }>;
-  height?: number;
-  color?: string;
-  dataKey?: string;
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { stockPalette } from "@/lib/utils/css-var";
+
+interface DataPoint {
+  [key: string]: string | number;
 }
 
-export function BaseLineChart({ data, height = 200, color = "#3b82f6", dataKey = "value" }: Props) {
-  const { theme } = useThemeStore();
-  const gridColor = theme === 'dark' ? '#374151' : '#e5e7eb';
-  const textColor = theme === 'dark' ? '#9ca3af' : '#4b5563';
+interface BaseLineChartProps {
+  data: DataPoint[];
+  dataKey: string;
+  xKey?: string;
+  color?: string;
+  height?: number;
+  className?: string;
+}
+
+export function BaseLineChart({
+  data,
+  dataKey,
+  xKey = "date",
+  color,
+  height = 300,
+  className,
+}: BaseLineChartProps) {
+  const lineColor = color || stockPalette().chart1;
 
   return (
-    <SafeResponsiveContainer width="100%" height={height}>
-      <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-        <XAxis dataKey="name" tick={{ fontSize: 10, fill: textColor }} />
-        <YAxis tick={{ fontSize: 10, fill: textColor }} />
-        <Tooltip contentStyle={{ background: theme === 'dark' ? '#1f2937' : '#fff', border: 'none', borderRadius: 8, fontSize: 12 }} />
-        <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} />
-      </LineChart>
-    </SafeResponsiveContainer>
+    <div className={className} style={{ width: "100%", height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <XAxis
+            dataKey={xKey}
+            tick={{ fontSize: 12 }}
+            className="text-muted-foreground"
+          />
+          <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px",
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey={dataKey}
+            stroke={lineColor}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

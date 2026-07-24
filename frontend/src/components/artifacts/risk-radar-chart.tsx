@@ -85,8 +85,8 @@ export function RiskRadarArtifact({ data }: Props) {
   const riskScore = typeof rawScore === 'number' ? Math.round(rawScore * 10) / 10 : 50;
   const riskLevel = data.risk_level || '中等风险';
 
-  const riskColor = 'from-[#3737CC] to-[#6B5EE4]';
-  const riskBg = riskScore >= 70 ? 'bg-[#FF8767]/10 text-[#FF8767]' : riskScore >= 40 ? 'bg-[#F59E0B]/10 text-[#F59E0B]' : 'bg-[#46BEA3]/10 text-[#46BEA3]';
+  const riskColor = 'from-accent to-accent/80';
+  const riskBg = riskScore >= 70 ? 'bg-danger/10 text-danger' : riskScore >= 40 ? 'bg-warn/10 text-warn' : 'bg-ok/10 text-ok';
 
   const radarData = {
     volatility_risk: extractScore(data.volatility_risk, data.volatility_risk_level),
@@ -122,7 +122,7 @@ export function RiskRadarArtifact({ data }: Props) {
         {data.stop_loss_suggestion && (
           <div className="text-right">
             <div className="text-[10px] text-muted-foreground">止损建议</div>
-            <div className="text-sm font-mono font-bold text-[#FF8767]">{data.stop_loss_suggestion}</div>
+            <div className="text-sm font-mono font-bold text-danger">{data.stop_loss_suggestion}</div>
           </div>
         )}
       </div>
@@ -141,7 +141,7 @@ export function RiskRadarArtifact({ data }: Props) {
           <p className="text-xs font-medium text-muted-foreground">风险因素</p>
           {derivedFactors.map((f, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
-              <span className="text-[#FF8767] mt-0.5">&#9888;</span>
+              <span className="text-danger mt-0.5">&#9888;</span>
               <span>{f}</span>
             </div>
           ))}

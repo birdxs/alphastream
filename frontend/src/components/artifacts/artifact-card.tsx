@@ -18,8 +18,9 @@ interface Props {
 
 function ConfidenceBadge({ value }: { value: number }) {
   const label = value >= 0.8 ? "高置信" : value >= 0.5 ? "中置信" : "低置信";
-  const dotColor = value >= 0.8 ? "text-[#10B981]" : value >= 0.5 ? "text-amber-400" : "text-[#EF4444]";
-  const bgColor = value >= 0.8 ? "bg-[#10B981]/10" : value >= 0.5 ? "bg-amber-400/10" : "bg-[#EF4444]/10";
+  // S-UI tokens：高→ok 中→warn 低→danger（禁止 #10B981/#EF4444 硬编码）
+  const dotColor = value >= 0.8 ? "text-ok" : value >= 0.5 ? "text-warn" : "text-danger";
+  const bgColor = value >= 0.8 ? "bg-[color:var(--ok)]/10" : value >= 0.5 ? "bg-[color:var(--warn)]/10" : "bg-[color:var(--danger)]/10";
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${bgColor} ${dotColor}`}>
       <span className="text-[8px]">{"\u25CF"}</span>
@@ -108,12 +109,12 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
       >
         <div className="p-6">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-foreground/[0.08] dark:border-white/[0.08]">
-            <h2 className="text-lg font-semibold flex items-center gap-2 text-foreground dark:text-[#F0F0F5]">
-              {icon && <span className="text-[#3737CC]/80">{icon}</span>}
+            <h2 className="text-lg font-semibold flex items-center gap-2 text-foreground dark:text-foreground">
+              {icon && <span className="text-accent/80">{icon}</span>}
               {title}
             </h2>
             <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-foreground transition-all duration-200"
               onClick={() => setFullscreen(false)}
               aria-label="退出全屏"
             >
@@ -130,15 +131,15 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
       >
         {/* 标题栏 — 微弱分层 */}
         <div className="flex items-center justify-between px-4 py-3 bg-foreground/[0.02] dark:bg-white/[0.02] border-b border-foreground/[0.06] dark:border-white/[0.06] rounded-t-2xl">
-          <div className="text-sm font-medium flex items-center gap-2 text-foreground dark:text-[#F0F0F5]/90">
-            {icon && <span className="text-[#3737CC]/80">{icon}</span>}
+          <div className="text-sm font-medium flex items-center gap-2 text-foreground dark:text-foreground/90">
+            {icon && <span className="text-accent/80">{icon}</span>}
             <span className="truncate">{title}</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {confidence !== undefined && <ConfidenceBadge value={confidence} />}
             <div className="relative" ref={exportMenuRef}>
               <button
-                className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
+                className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-foreground transition-all duration-200"
                 onClick={() => setExportMenuOpen(!exportMenuOpen)}
                 title="导出"
                 aria-label="导出菜单"
@@ -154,21 +155,21 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] transition-colors"
                     onClick={handleCopyData}
                   >
-                    <Copy className="h-3.5 w-3.5 text-muted-foreground dark:text-[#8888A0]" />
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                     复制数据
                   </button>
                   <button
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#E0E0F0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] transition-colors"
                     onClick={handleSaveImage}
                   >
-                    <Camera className="h-3.5 w-3.5 text-muted-foreground dark:text-[#8888A0]" />
+                    <Camera className="h-3.5 w-3.5 text-muted-foreground" />
                     保存图片
                   </button>
                 </div>
               )}
             </div>
             <button
-              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
+              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-foreground transition-all duration-200"
               onClick={() => setFullscreen(true)}
               title="全屏"
               aria-label="全屏查看"
@@ -176,7 +177,7 @@ export function ArtifactCard({ title, icon, children, defaultExpanded = true, co
               <Maximize2 className="h-3.5 w-3.5" />
             </button>
             <button
-              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground dark:text-[#8888A0] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-[#F0F0F5] transition-all duration-200"
+              className="h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] hover:text-foreground dark:hover:text-foreground transition-all duration-200"
               onClick={() => setExpanded(!expanded)}
               title={expanded ? "折叠" : "展开"}
               aria-label={expanded ? "折叠内容" : "展开内容"}

@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { stockPalette, cssVar } from "@/lib/utils/css-var";
 
 interface Props {
   data: {
@@ -51,24 +52,28 @@ export function ScoreRadarArtifact({ data }: Props) {
   ];
 
   const avgScore = Math.round(radarData.reduce((sum, d) => sum + d.value, 0) / radarData.length);
+  const palette = stockPalette();
+  const textMuted = cssVar("--text-muted", "#94A3B8");
+  const scoreClass =
+    avgScore >= 60 ? "text-ok" : avgScore >= 40 ? "text-warn" : "text-danger";
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <span className="text-muted-foreground dark:text-[#8888A0] text-xs">综合评分</span>
-        <span className={`font-mono text-lg font-bold ${avgScore >= 60 ? 'text-[#46BEA3]' : avgScore >= 40 ? 'text-[#F59E0B]' : 'text-[#FF8767]'}`}>
+        <span className="text-muted-foreground text-xs">综合评分</span>
+        <span className={`font-mono text-lg font-bold font-num ${scoreClass}`}>
           {avgScore}
         </span>
       </div>
       <SafeResponsiveContainer width="100%" height={300} aria-label="多维度评分雷达图">
         <RadarChart data={radarData}>
           <PolarGrid
-            stroke={theme === "dark" ? "rgba(255,255,255,0.08)" : "#e5e7eb"}
+            stroke={cssVar("--border", theme === "dark" ? "rgba(255,255,255,0.08)" : "#e5e7eb")}
           />
           <PolarAngleAxis
             dataKey="subject"
             tick={{
-              fill: theme === "dark" ? "#8888A0" : "#4b5563",
+              fill: textMuted,
               fontSize: 12,
             }}
           />
@@ -76,7 +81,7 @@ export function ScoreRadarArtifact({ data }: Props) {
           <Tooltip
             contentStyle={{
               background: theme === 'dark' ? 'rgba(10,10,26,0.85)' : 'rgba(255,255,255,0.85)',
-              border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.08)',
+              border: `1px solid ${cssVar("--border", "rgba(0,0,0,0.08)")}`,
               borderRadius: 12,
               fontSize: 12,
               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
@@ -95,8 +100,8 @@ export function ScoreRadarArtifact({ data }: Props) {
           <Radar
             name="评分"
             dataKey="value"
-            stroke="#3737CC"
-            fill="#3737CC"
+            stroke={palette.accent}
+            fill={palette.accent}
             fillOpacity={0.25}
           />
         </RadarChart>
@@ -104,8 +109,8 @@ export function ScoreRadarArtifact({ data }: Props) {
       <div className="grid grid-cols-3 gap-1 px-1">
         {radarData.map((d) => (
           <div key={d.subject} className="flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08]">
-            <span className="text-muted-foreground dark:text-[#8888A0]">{d.subject}</span>
-            <span className={`font-mono ${d.value >= 60 ? 'text-[#46BEA3]' : d.value >= 40 ? 'text-[#F59E0B]' : 'text-[#FF8767]'}`}>
+            <span className="text-muted-foreground">{d.subject}</span>
+            <span className={`font-mono ${d.value >= 60 ? 'text-ok' : d.value >= 40 ? 'text-warn' : 'text-danger'}`}>
               {d.value}
             </span>
           </div>

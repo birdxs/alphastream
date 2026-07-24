@@ -54,7 +54,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
   const score = Number(data.score ?? 0);
   const indicators = data.financial_indicators || {};
 
-  const scoreColor = 'from-[#3737CC] to-[#6B5EE4]';
+  const scoreColor = 'from-accent to-accent/80';
 
   const metrics = [
     { label: "PE(TTM)", value: indicators.pe_ratio, suffix: "倍", good: (v: number) => v > 0 && v < 30 },
@@ -100,8 +100,8 @@ export function FundamentalScorecardArtifact({ data }: Props) {
             const isBad = ['较差', '弱', '低', '高估'].includes(q.value || '');
             return (
               <div key={q.label} className={`px-2.5 py-1 rounded-lg text-xs border ${
-                isGood ? 'bg-[#46BEA3]/10 border-[#46BEA3]/30 text-[#46BEA3]' :
-                isBad ? 'bg-[#FF8767]/10 border-[#FF8767]/30 text-[#FF8767]' :
+                isGood ? 'bg-ok/10 border-ok/30 text-ok' :
+                isBad ? 'bg-danger/10 border-danger/30 text-danger' :
                 'bg-foreground/[0.03] dark:bg-white/[0.03] border-foreground/[0.08] dark:border-white/[0.08]'
               }`}>
                 <span className="text-muted-foreground">{q.label}</span>
@@ -121,7 +121,7 @@ export function FundamentalScorecardArtifact({ data }: Props) {
             return (
               <div key={m.label} className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2.5 text-center border-b border-foreground/[0.06] dark:border-white/[0.06] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
                 <div className="text-[10px] text-muted-foreground mb-0.5">{m.label}</div>
-                <div className={`text-sm font-mono font-bold text-right ${isGood ? 'text-[#46BEA3]' : 'text-foreground'}`}>
+                <div className={`text-sm font-mono font-bold text-right ${isGood ? 'text-ok' : 'text-foreground'}`}>
                   {val.toFixed(1)}{m.suffix}
                 </div>
                 <div className="text-[8px] text-muted-foreground/50 mt-0.5">

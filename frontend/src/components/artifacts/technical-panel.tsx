@@ -35,24 +35,24 @@ export function TechnicalPanelArtifact({ data }: Props) {
   const score = Number(data.score ?? 0);
   const scoreGradient =
     score >= 80
-      ? "bg-gradient-to-r from-[#46BEA3] to-[#34D399] bg-clip-text text-transparent"
+      ? "text-ok"
       : score >= 60
-        ? "bg-gradient-to-r from-[#3737CC] to-[#6B5EE4] bg-clip-text text-transparent"
+        ? "bg-gradient-to-r from-accent to-accent/80 bg-clip-text text-transparent"
         : score >= 40
-          ? "bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] bg-clip-text text-transparent"
-          : "bg-gradient-to-r from-[#FF8767] to-[#EF4444] bg-clip-text text-transparent";
+          ? "text-warn"
+          : "text-danger";
   const barGradient =
     score >= 80
-      ? "bg-gradient-to-r from-[#46BEA3] to-[#34D399]"
+      ? "bg-ok"
       : score >= 60
-        ? "bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
+        ? "bg-gradient-to-r from-accent to-accent/80"
         : score >= 40
-          ? "bg-gradient-to-r from-[#F59E0B] to-[#FBBF24]"
-          : "bg-gradient-to-r from-[#FF8767] to-[#EF4444]";
+          ? "bg-warn"
+          : "bg-danger";
 
   const indicators = [
     { label: "RSI", value: data.rsi, format: (v: number) => {
-      const color = v > 70 ? 'text-[#FF8767]' : v < 30 ? 'text-[#46BEA3]' : '';
+      const color = v > 70 ? 'text-danger' : v < 30 ? 'text-ok' : '';
       const label = v > 70 ? ' 超买' : v < 30 ? ' 超卖' : '';
       return <span className={color}>{v?.toFixed(1)}{label}</span>;
     }},

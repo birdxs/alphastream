@@ -16,6 +16,7 @@ import {
 import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { formatLargeNumber } from "@/lib/utils/format";
+import { stockPalette, cssVar } from "@/lib/utils/css-var";
 import { TrendingDown } from "lucide-react";
 
 interface DailyFlowItem {
@@ -55,8 +56,11 @@ interface Props {
 
 export function CapitalFlowArtifact({ data }: Props) {
   const { theme } = useThemeStore();
-  const upColor = "#46BEA3";   // 流入 — design token --color-up
-  const downColor = "#FF8767"; // 流出 — design token --color-down
+  useThemeStore(s => s.stockColorScheme);
+  const palette = stockPalette();
+  const upColor = palette.up;
+  const downColor = palette.down;
+  const textMuted = cssVar("--text-muted", "#94A3B8");
 
   // 柱状图数据：兼容两种后端格式
   const chartData =
@@ -119,10 +123,10 @@ export function CapitalFlowArtifact({ data }: Props) {
               key={item.label}
               className="bg-foreground/[0.04] dark:bg-white/[0.04] border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg px-2 py-1.5 text-sm"
             >
-              <span className="text-muted-foreground dark:text-[#8888A0]">{item.label}</span>
+              <span className="text-muted-foreground">{item.label}</span>
               <span
                 className={`ml-2 font-mono ${
-                  Number(item.value) >= 0 ? "text-[#46BEA3]" : "text-[#FF8767]"
+                  Number(item.value) >= 0 ? "text-up" : "text-down"
                 }`}
               >
                 {Math.abs(item.value) >= 10000
@@ -141,19 +145,19 @@ export function CapitalFlowArtifact({ data }: Props) {
           <BarChart data={chartData}>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke={theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb"}
+              stroke={cssVar("--border", theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb")}
             />
             <XAxis
               dataKey="date"
               tick={{
                 fontSize: 10,
-                fill: theme === "dark" ? "#8888A0" : "#4b5563",
+                fill: textMuted,
               }}
             />
             <YAxis
               tick={{
                 fontSize: 10,
-                fill: theme === "dark" ? "#8888A0" : "#4b5563",
+                fill: textMuted,
               }}
             />
             <Tooltip
@@ -163,8 +167,8 @@ export function CapitalFlowArtifact({ data }: Props) {
                 const val = payload[0].value as number;
                 return (
                   <div className="bg-card/90 dark:bg-[#0A0A1A]/90 border border-foreground/[0.08] dark:border-white/[0.08] rounded-lg px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
-                    <p className="text-muted-foreground dark:text-[#8888A0]">{payload[0].payload?.date}</p>
-                    <p className={`font-mono font-bold ${val >= 0 ? 'text-[#46BEA3]' : 'text-[#FF8767]'}`}>
+                    <p className="text-muted-foreground">{payload[0].payload?.date}</p>
+                    <p className={`font-mono font-bold ${val >= 0 ? 'text-up' : 'text-down'}`}>
                       净流入: {formatLargeNumber(val * 10000)}
                     </p>
                   </div>
@@ -185,7 +189,7 @@ export function CapitalFlowArtifact({ data }: Props) {
 
       {/* 无数据提示 */}
       {chartData.length === 0 && summaryItems.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground dark:text-[#8888A0]">
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
           <TrendingDown className="h-8 w-8 mb-2 opacity-40" />
           <p className="text-sm">暂无资金流向数据</p>
         </div>

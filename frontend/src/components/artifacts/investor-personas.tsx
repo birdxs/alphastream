@@ -55,9 +55,9 @@ export function InvestorPersonasArtifact({ data }: Props) {
 
   const recColor = (rec: string) => {
     const r = rec?.toUpperCase();
-    if (r === "BUY") return "bg-[#46BEA3]/10 text-[#46BEA3] border-[#46BEA3]/30";
-    if (r === "SELL") return "bg-[#FF8767]/10 text-[#FF8767] border-[#FF8767]/30";
-    return "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30";
+    if (r === "BUY") return "bg-ok/10 text-ok border-ok/30";
+    if (r === "SELL") return "bg-danger/10 text-danger border-danger/30";
+    return "bg-warn/10 text-warn border-warn/30";
   };
 
   const recText = (rec: string) => {
@@ -101,7 +101,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
                 <span className="w-12 text-right text-muted-foreground truncate">{meta.name}</span>
                 <div className="flex-1 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-2.5 overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-[#3737CC] to-[#6B5EE4]"
+                    className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-accent to-accent/80"
                     style={{ width: `${conf * 100}%` }}
                   />
                 </div>
@@ -135,7 +135,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
                   <div className="flex items-center gap-2 mb-1">
                     <div className="flex-1 bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1.5">
                       <div
-                        className="bg-gradient-to-r from-[#3737CC] to-[#6B5EE4] h-1.5 rounded-full"
+                        className="bg-gradient-to-r from-accent to-accent/80 h-1.5 rounded-full"
                         style={{ width: `${opinion.confidence * 100}%` }}
                       />
                     </div>
@@ -155,7 +155,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
         <div className="bg-foreground/[0.04] dark:bg-white/[0.04] border-t border-foreground/[0.08] dark:border-white/[0.08] rounded-b-xl p-4 space-y-3">
           {consensus?.key_agreements && consensus.key_agreements.length > 0 && (
             <div className="text-sm space-y-1">
-              <p className="font-medium text-[#46BEA3]">{"\u2705"} 一致认同</p>
+              <p className="font-medium text-ok">{"\u2705"} 一致认同</p>
               {consensus.key_agreements.map((a, i) => (
                 <p key={i} className="text-xs text-muted-foreground pl-5">
                   {"\u2022"} {a}
@@ -165,7 +165,7 @@ export function InvestorPersonasArtifact({ data }: Props) {
           )}
           {consensus?.key_disagreements && consensus.key_disagreements.length > 0 && (
             <div className="text-sm space-y-1">
-              <p className="font-medium text-[#FF8767]">{"\u26A1"} 主要分歧</p>
+              <p className="font-medium text-danger">{"\u26A1"} 主要分歧</p>
               {consensus.key_disagreements.map((d, i) => (
                 <p key={i} className="text-xs text-muted-foreground pl-5">
                   {"\u2022"} {d}

@@ -16,6 +16,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { stockPalette, cssVar } from "@/lib/utils/css-var";
 
 interface OHLCVData {
   date: string;
@@ -70,9 +71,15 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
   useEffect(() => {
     if (!chartRef.current || !filteredData?.length) return;
 
-    // 涨跌颜色（创建时使用当前值）
-    const upColor = stockColorScheme === "cn" ? "#ef4444" : "#22c55e";
-    const downColor = stockColorScheme === "cn" ? "#22c55e" : "#ef4444";
+    // 涨跌色读 S-UI token（--stock-up/--stock-down 已随 data-color-scheme 切换）
+    void stockColorScheme; // 依赖变化时重建图表
+    const palette = stockPalette();
+    const upColor = palette.up;
+    const downColor = palette.down;
+    const surface = cssVar("--surface", theme === "dark" ? "#0A0A1A" : "#ffffff");
+    const textMuted = cssVar("--text-muted", theme === "dark" ? "#8888A0" : "#64748B");
+    const borderCol = cssVar("--border", theme === "dark" ? "rgba(255,255,255,0.08)" : "#E2E8F0");
+    const gridCol = theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
 
     const chart = createChart(chartRef.current, {
       width: chartRef.current.clientWidth,
@@ -80,19 +87,19 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
       layout: {
         background: {
           type: ColorType.Solid,
-          color: theme === "dark" ? "#0A0A1A" : "#ffffff",
+          color: surface,
         },
-        textColor: theme === "dark" ? "#8888A0" : "#374151",
+        textColor: textMuted,
       },
       grid: {
-        vertLines: { color: theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb" },
-        horzLines: { color: theme === "dark" ? "rgba(255,255,255,0.04)" : "#e5e7eb" },
+        vertLines: { color: gridCol },
+        horzLines: { color: gridCol },
       },
       crosshair: { mode: 0 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
       timeScale: {
-        borderColor: theme === "dark" ? "rgba(255,255,255,0.08)" : "#d1d5db",
+        borderColor: borderCol,
       },
     });
 
@@ -128,7 +135,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
         filteredData.map((d) => ({
           time: d.date as Time,
           value: d.volume || d.amount || 0,
-          color: d.close >= d.open ? "rgba(70,190,163,0.5)" : "rgba(255,135,103,0.5)",
+          color: d.close >= d.open ? upColor + "80" : downColor + "80",
         }))
       );
     }
@@ -137,7 +144,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     const offset = (data.ohlcv?.length || 0) - filteredData.length;
     if (data.indicators?.ma5) {
       const ma5Series = chart.addSeries(LineSeries, {
-        color: "#F59E0B",
+        color: palette.warn,
         lineWidth: 1,
       });
       ma5Series.setData(
@@ -152,7 +159,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     }
     if (data.indicators?.ma20) {
       const ma20Series = chart.addSeries(LineSeries, {
-        color: "#3737CC",
+        color: palette.accent,
         lineWidth: 1,
       });
       ma20Series.setData(
@@ -167,7 +174,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     }
     if (data.indicators?.ma60) {
       const ma60Series = chart.addSeries(LineSeries, {
-        color: "#6B5EE4",
+        color: palette.chart5,
         lineWidth: 1,
       });
       ma60Series.setData(
@@ -186,12 +193,12 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     if (lastBar) {
       candleSeries.createPriceLine({
         price: lastBar.close,
-        color: '#3737CC',
+        color: palette.accent,
         lineWidth: 1,
         lineStyle: 2, // Dashed
         axisLabelVisible: true,
         title: '最新',
-        axisLabelColor: '#3737CC',
+        axisLabelColor: palette.accent,
         axisLabelTextColor: '#ffffff',
       });
     }
@@ -248,7 +255,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
     chartInstance.current.applyOptions({
       layout: {
         background: { type: ColorType.Solid, color: theme === 'dark' ? '#0A0A1A' : '#ffffff' },
-        textColor: theme === 'dark' ? '#8888A0' : '#374151',
+        textColor: cssVar('--text-muted', theme === 'dark' ? '#8888A0' : '#64748B'),
       },
       grid: {
         vertLines: { color: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#e5e7eb' },
@@ -281,8 +288,8 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
               onClick={() => handleTimeRangeChange(r.days)}
               className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ${
                 timeRange === r.days
-                  ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30'
-                  : 'bg-transparent text-muted-foreground dark:text-[#8888A0] border-transparent hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]'
+                  ? 'bg-accent/20 text-accent border-accent/30'
+                  : 'bg-transparent text-muted-foreground border-transparent hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]'
               }`}
             >
               {r.label}
@@ -291,7 +298,7 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
           <button
             onClick={() => setDrawMode(drawMode === 'trendline' ? 'none' : 'trendline')}
             className={`px-2 py-0.5 text-[10px] rounded-lg border transition-colors ml-2 ${
-              drawMode === 'trendline' ? 'bg-[#3737CC]/20 text-[#3737CC] border-[#3737CC]/30' : 'bg-foreground/[0.04] dark:bg-white/[0.04] text-muted-foreground dark:text-[#8888A0] border-foreground/[0.08] dark:border-white/[0.08] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08]'
+              drawMode === 'trendline' ? 'bg-accent/20 text-accent border-accent/30' : 'bg-foreground/[0.04] dark:bg-white/[0.04] text-muted-foreground border-foreground/[0.08] dark:border-white/[0.08] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08]'
             }`}
           >
             趋势线
@@ -299,23 +306,23 @@ export function CandlestickChartArtifact({ data, onTimeRangeChange }: Props) {
         </div>
       </div>
       {drawMode === 'trendline' && (
-        <div className="text-[10px] text-[#3737CC] bg-[#3737CC]/10 rounded-lg px-2 py-1 mb-1 border border-[#3737CC]/20">
+        <div className="text-[10px] text-accent bg-accent/10 rounded-lg px-2 py-1 mb-1 border border-accent/20">
           趋势线模式：点击图表两个点绘制趋势线（开发中）
         </div>
       )}
       {crosshairData && (
-        <div className="bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg px-3 py-1 font-mono text-xs flex items-center gap-3 text-muted-foreground dark:text-[#8888A0] mb-1">
+        <div className="bg-foreground/[0.04] dark:bg-white/[0.04] rounded-lg px-3 py-1 font-mono text-xs flex items-center gap-3 text-muted-foreground mb-1">
           <span>{crosshairData.time}</span>
-          <span>O:<span className={crosshairData.close >= crosshairData.open ? 'text-[#46BEA3]' : 'text-[#FF8767]'}>{crosshairData.open.toFixed(2)}</span></span>
-          <span>H:<span className="text-[#46BEA3]">{crosshairData.high.toFixed(2)}</span></span>
-          <span>L:<span className="text-[#FF8767]">{crosshairData.low.toFixed(2)}</span></span>
-          <span>C:<span className={crosshairData.close >= crosshairData.open ? 'text-[#46BEA3]' : 'text-[#FF8767]'}>{crosshairData.close.toFixed(2)}</span></span>
+          <span>O:<span className={crosshairData.close >= crosshairData.open ? 'text-up' : 'text-down'}>{crosshairData.open.toFixed(2)}</span></span>
+          <span>H:<span className="text-up">{crosshairData.high.toFixed(2)}</span></span>
+          <span>L:<span className="text-down">{crosshairData.low.toFixed(2)}</span></span>
+          <span>C:<span className={crosshairData.close >= crosshairData.open ? 'text-up' : 'text-down'}>{crosshairData.close.toFixed(2)}</span></span>
           {crosshairData.volume != null && (
-            <span>V:<span className="text-foreground dark:text-[#F0F0F5]">{crosshairData.volume >= 1e8 ? (crosshairData.volume / 1e8).toFixed(2) + '亿' : crosshairData.volume >= 1e4 ? (crosshairData.volume / 1e4).toFixed(0) + '万' : crosshairData.volume.toLocaleString()}</span></span>
+            <span>V:<span className="text-foreground dark:text-foreground">{crosshairData.volume >= 1e8 ? (crosshairData.volume / 1e8).toFixed(2) + '亿' : crosshairData.volume >= 1e4 ? (crosshairData.volume / 1e4).toFixed(0) + '万' : crosshairData.volume.toLocaleString()}</span></span>
           )}
         </div>
       )}
-      <div className="relative w-full border-b border-[#3737CC]/10">
+      <div className="relative w-full border-b border-accent/10">
         {(data.stock_code || data.stock_name) && (
           <div className="absolute top-4 left-4 text-2xl font-bold pointer-events-none select-none z-10" style={{ color: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' }}>
             {data.stock_code || ''} {data.stock_name || ''}

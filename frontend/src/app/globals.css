@@ -28,6 +28,15 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  /* S-UI 语义色 → Tailwind utility（text-up / bg-ok/10 等） */
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-stock-up: var(--stock-up);
+  --color-stock-down: var(--stock-down);
+  --color-degraded: var(--degraded);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -156,10 +165,10 @@
   --input: var(--border-subtle);
   --ring: var(--accent);
   --chart-1: var(--accent);
-  --chart-2: var(--down);
+  --chart-2: var(--ok);
   --chart-3: var(--warn);
-  --chart-4: #FF8767;
-  --chart-5: #6B5EE4;
+  --chart-4: var(--danger);
+  --chart-5: #6B5EE4; /* AI 紫装饰，非涨跌语义 */
   --sidebar: #f8fafc;
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--accent);
@@ -336,8 +345,9 @@
   --stock-down: var(--down);
 }
 [data-color-scheme="us"] {
+  /* 国际：绿涨红跌 —— stock-up 取 down(绿)，stock-down 取 up(红) */
   --stock-up:   var(--down);
-  --stock-down: #FF8767;
+  --stock-down: var(--up);
 }
 
 /* S-UI 语义工具类（涨跌/状态/数字） */

@@ -1,30 +1,77 @@
-// Input: data数组(name/value/color?), height
-// Output: 响应式环形饼图（Recharts PieChart），带百分比标签
-// Pos: components/charts/base-pie-chart.tsx - 基础饼图，用于占比展示
-// 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
-
+/**
+ * Input: pie chart data array with name and value
+ * Output: pie/donut chart component
+ * Pos: base chart components, used by risk distribution and other proportion charts
+ * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
+ */
 "use client";
-import { PieChart, Pie, Cell, Tooltip } from "recharts";
-import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 
-interface Props {
-  data: Array<{ name: string; value: number; color?: string }>;
-  height?: number;
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import { stockPalette } from "@/lib/utils/css-var";
+
+interface DataPoint {
+  name: string;
+  value: number;
+  [key: string]: string | number;
 }
 
-const COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4'];
+interface BasePieChartProps {
+  data: DataPoint[];
+  height?: number;
+  className?: string;
+  colors?: string[];
+}
 
-export function BasePieChart({ data, height = 200 }: Props) {
+function defaultPalette(): string[] {
+  const p = stockPalette();
+  return [p.chart1, p.chart4, p.chart2, p.chart3, p.chart5, p.accent];
+}
+
+export function BasePieChart({
+  data,
+  height = 300,
+  className,
+  colors,
+}: BasePieChartProps) {
+  const palette = colors && colors.length > 0 ? colors : defaultPalette();
+
   return (
-    <SafeResponsiveContainer width="100%" height={height}>
-      <PieChart>
-        <Pie data={data} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
-          {data.map((entry, i) => (
-            <Cell key={i} fill={entry.color || COLORS[i % COLORS.length]} />
-          ))}
-        </Pie>
-        <Tooltip />
-      </PieChart>
-    </SafeResponsiveContainer>
+    <div className={className} style={{ width: "100%", height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={60}
+            outerRadius={100}
+            paddingAngle={2}
+            dataKey="value"
+          >
+            {data.map((_, index) => (
+              <Cell
+                key={`cell-${index}`}
+                fill={palette[index % palette.length]}
+              />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px",
+            }}
+          />
+          <Legend />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

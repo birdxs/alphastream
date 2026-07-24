@@ -10,6 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { stockPalette } from "@/lib/utils/css-var";
 import { SafeResponsiveContainer } from "@/components/charts/safe-responsive-container";
 import { Briefcase, TrendingUp, AlertCircle } from "lucide-react";
 
@@ -39,30 +40,8 @@ interface Props {
   };
 }
 
-const SKILL_COLORS = ["#6B5EE4", "#46BEA3", "#F59E0B", "#3737CC", "#FF8767", "#8888A0"];
+const SKILL_COLORS = (): string[] => { const p = stockPalette(); return [p.chart5, p.ok, p.warn, p.accent, p.danger, p.muted]; };
 
-const DEMO_DATA: Props["data"] = {
-  company: "Apple Inc.",
-  total_postings: 268,
-  yoy_change: 42,
-  expansion_level: "high",
-  monthly_trend: [
-    { month: "2025-10", count: 120 },
-    { month: "2025-11", count: 145 },
-    { month: "2025-12", count: 158 },
-    { month: "2026-01", count: 198 },
-    { month: "2026-02", count: 225 },
-    { month: "2026-03", count: 268 },
-  ],
-  skill_distribution: [
-    { name: "AI/ML", value: 82 },
-    { name: "iOS/Swift", value: 56 },
-    { name: "硬件工程", value: 44 },
-    { name: "Cloud/基础设施", value: 38 },
-    { name: "芯片设计", value: 28 },
-    { name: "其他", value: 20 },
-  ],
-};
 
 // 从 items 派生月度趋势 (回退用)
 function deriveMonthlyTrend(items: JobItem[]): MonthlyTrend[] {
@@ -91,7 +70,7 @@ function deriveSkillDist(items: JobItem[]): SkillDist[] {
 export function HiringSignalArtifact({ data }: Props) {
   const effective: Props["data"] = useMemo(() => {
     const hasData = data && ((data.items && data.items.length > 0) || (data.monthly_trend && data.monthly_trend.length > 0));
-    if (!hasData) return DEMO_DATA;
+    if (!hasData) return data;
     const items = Array.isArray(data.items) ? data.items : [];
     return {
       ...data,
@@ -102,14 +81,14 @@ export function HiringSignalArtifact({ data }: Props) {
   }, [data]);
 
   const total = effective.total_postings ?? 0;
-  const yoy = typeof effective.yoy_change === "number" ? effective.yoy_change : 0;
-  const level = effective.expansion_level || (yoy > 30 ? "high" : yoy > 10 ? "medium" : "low");
+  const yoy = typeof effective.yoy_change === "number" ? effective.yoy_change : null;
+  const level = effective.expansion_level || (yoy != null ? (yoy > 30 ? "high" : yoy > 10 ? "medium" : "low") : "low");
 
   const levelStyle = level === "high"
-    ? { bg: "bg-[#46BEA3]/10", text: "text-[#46BEA3]", label: "强扩张" }
+    ? { bg: "bg-ok/10", text: "text-ok", label: "强扩张" }
     : level === "medium"
-    ? { bg: "bg-[#F59E0B]/10", text: "text-[#F59E0B]", label: "温和扩张" }
-    : { bg: "bg-[#8888A0]/10", text: "text-[#8888A0]", label: "平稳" };
+    ? { bg: "bg-warn/10", text: "text-warn", label: "温和扩张" }
+    : { bg: "bg-muted", text: "text-muted-foreground", label: "平稳" };
 
   return (
     <div className="space-y-4">
@@ -119,15 +98,15 @@ export function HiringSignalArtifact({ data }: Props) {
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1">
             <Briefcase className="h-3 w-3" /> 在招岗位
           </div>
-          <div className="text-lg font-mono font-bold text-foreground dark:text-[#F0F0F5]">{total.toLocaleString()}</div>
+          <div className="text-lg font-mono font-bold text-foreground">{total > 0 ? total.toLocaleString() : "—"}</div>
           <div className="text-[10px] text-muted-foreground truncate">{effective.company || "—"}</div>
         </div>
         <div className="bg-foreground/[0.03] dark:bg-white/[0.03] rounded-lg p-2.5 border-b border-foreground/[0.06] dark:border-white/[0.06]">
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1">
             <TrendingUp className="h-3 w-3" /> 同比变化
           </div>
-          <div className={`text-lg font-mono font-bold ${yoy >= 0 ? "text-[#46BEA3]" : "text-[#FF8767]"}`}>
-            {yoy >= 0 ? "+" : ""}{yoy.toFixed(0)}%
+          <div className={`text-lg font-mono font-bold ${yoy == null ? "text-muted-foreground" : yoy >= 0 ? "text-up" : "text-down"}`}>
+            {yoy == null ? "—" : `${yoy >= 0 ? "+" : ""}${yoy.toFixed(0)}%`}
           </div>
           <div className="text-[10px] text-muted-foreground">较去年同期</div>
         </div>
@@ -147,14 +126,14 @@ export function HiringSignalArtifact({ data }: Props) {
           <SafeResponsiveContainer width="100%" height="100%">
             <LineChart data={effective.monthly_trend || []} margin={{ top: 6, right: 8, left: -8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#8888A0" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#8888A0" }} axisLine={false} tickLine={false} width={36} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} width={36} />
               <Tooltip
                 cursor={{ stroke: "rgba(107,94,228,0.3)", strokeWidth: 1 }}
                 contentStyle={{ background: "rgba(20,20,43,0.95)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 11 }}
                 labelStyle={{ color: "#F0F0F5" }}
               />
-              <Line type="monotone" dataKey="count" stroke="#6B5EE4" strokeWidth={2} dot={{ r: 3, fill: "#6B5EE4" }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="count" stroke="var(--chart-5)" strokeWidth={2} dot={{ r: 3, fill: "var(--chart-5)" }} activeDot={{ r: 5 }} />
             </LineChart>
           </SafeResponsiveContainer>
         </div>
@@ -178,7 +157,7 @@ export function HiringSignalArtifact({ data }: Props) {
                   paddingAngle={2}
                 >
                   {effective.skill_distribution.map((_, i) => (
-                    <Cell key={i} fill={SKILL_COLORS[i % SKILL_COLORS.length]} stroke="rgba(10,10,26,0.6)" strokeWidth={1.5} />
+                    <Cell key={i} fill={SKILL_COLORS()[i % SKILL_COLORS.length]} stroke="rgba(10,10,26,0.6)" strokeWidth={1.5} />
                   ))}
                 </Pie>
                 <Legend
@@ -186,7 +165,7 @@ export function HiringSignalArtifact({ data }: Props) {
                   align="right"
                   verticalAlign="middle"
                   iconSize={8}
-                  wrapperStyle={{ fontSize: 10, color: "#8888A0" }}
+                  wrapperStyle={{ fontSize: 10, color: "var(--text-muted)" }}
                 />
                 <Tooltip
                   contentStyle={{ background: "rgba(20,20,43,0.95)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 11 }}

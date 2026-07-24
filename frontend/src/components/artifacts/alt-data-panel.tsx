@@ -25,10 +25,10 @@ interface Props {
 }
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = [
-  { key: "shipping", label: "航运 & 大宗", icon: Ship, color: "#6B5EE4" },
-  { key: "esg", label: "ESG 评级", icon: Leaf, color: "#46BEA3" },
-  { key: "hiring", label: "招聘扩张", icon: Briefcase, color: "#F59E0B" },
-  { key: "corporate", label: "企业关联", icon: Network, color: "#3737CC" },
+  { key: "shipping", label: "航运 & 大宗", icon: Ship, color: "var(--chart-5)" },
+  { key: "esg", label: "ESG 评级", icon: Leaf, color: "var(--ok)" },
+  { key: "hiring", label: "招聘扩张", icon: Briefcase, color: "var(--warn)" },
+  { key: "corporate", label: "企业关联", icon: Network, color: "var(--accent)" },
 ];
 
 export function AltDataPanelArtifact({ data }: Props) {
@@ -69,7 +69,7 @@ export function AltDataPanelArtifact({ data }: Props) {
               onClick={() => setActiveKey(tab.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-gradient-to-br from-[#3737CC]/20 to-[#6B5EE4]/10 text-[#F0F0F5] shadow-lg shadow-[#3737CC]/10 border border-[#3737CC]/30"
+                  ? "bg-gradient-to-br from-accent/20 to-accent/10 text-foreground shadow-lg shadow-accent/10 border border-accent/30"
                   : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]"
               } ${!isAvail && !isActive ? "opacity-50" : ""}`}
               title={!isAvail ? `${tab.label} (示例数据)` : tab.label}
