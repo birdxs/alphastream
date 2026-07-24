@@ -239,6 +239,14 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 
 **一句话状态**：`PROVENANCE_CONSUMERS_NORMALIZE_OFFLINE_DONE | 启服依赖见 §3.0`
 
+### 3.0.1 本轮离线验证证据（2026-07-24 14:35:00 +08:00）
+
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_agent_async_routes.py -k status_normalizes` → **1 passed**
+- `... pytest -q tests/backend/unit/test_core_ai_client.py -k tool_call_payloads_normalize` → **1 passed**
+- `cd frontend && npm run test -- --run src/lib/types/__tests__/provenance.test.ts` → **5 passed**
+- `node frontend/node_modules/typescript/bin/tsc --noEmit -p frontend/tsconfig.json` → **exit 0**
+- 禁启服 / 禁 push；主批 commit `2fc1ca7` + 本收尾 vitest 补交
+
 ### 3.1 环境要点
 
 - Python 3 + 项目依赖（`requirements.txt`）
