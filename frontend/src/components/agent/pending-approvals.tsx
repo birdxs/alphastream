@@ -10,6 +10,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ApprovalCard,
+  matchStickyItem,
+  stickyIdsFromWriteProposalEvent,
   type ApprovalKind,
   type PendingApproval,
 } from "@/components/agent/approval-card";
@@ -165,26 +167,17 @@ export function PendingApprovalsPanel({
       if (!["approved", "rejected", "applied", "applied_local", "timeout_reject"].includes(st)) {
         continue;
       }
-      const pid = String(d.proposal_id || d.id || "").trim();
-      const aid = String(d.approval_id || "").trim();
-      const tid = String(d.task_id || "").trim();
-      const matchKey = (x: PendingApproval) => {
-        const keys = [x.proposal_id, x.approval_id, x.task_id].filter(Boolean).map(String);
-        return (
-          (pid && keys.includes(pid)) ||
-          (aid && keys.includes(aid)) ||
-          (tid && (x.task_id === tid || x.approval_id === tid))
-        );
-      };
+      // 优先级 proposal_id > approval_id > task_id（字段对字段，防跨字段误命中）
+      const eventIds = stickyIdsFromWriteProposalEvent(ev);
+      const matchKey = (pool: PendingApproval[]) => matchStickyItem(eventIds, pool);
+      const isSame = (x: PendingApproval, base: PendingApproval) =>
+        (x.approval_id || x.task_id) === (base.approval_id || base.task_id);
 
       if (st === "approved") {
         setStickyItems((prev) => {
-          const existing = prev.find(matchKey);
-          const fromList = items.find(matchKey);
-          const base = existing || fromList;
+          const base = matchKey(prev) || matchKey(items);
           if (!base) return prev;
-          const key = base.approval_id || base.task_id;
-          const filtered = prev.filter((x) => (x.approval_id || x.task_id) !== key);
+          const filtered = prev.filter((x) => !isSame(x, base));
           return [
             ...filtered,
             {
@@ -195,16 +188,26 @@ export function PendingApprovalsPanel({
           ];
         });
       } else if (st === "applied" || st === "applied_local") {
-        setStickyItems((prev) =>
-          prev.map((x) =>
-            matchKey(x)
+        setStickyItems((prev) => {
+          const hit = matchKey(prev);
+          if (!hit) return prev;
+          return prev.map((x) =>
+            isSame(x, hit)
               ? { ...x, status: st === "applied_local" ? "applied_local" : "applied" }
               : x,
-          ),
-        );
+          );
+        });
       } else if (st === "rejected" || st === "timeout_reject") {
-        setStickyItems((prev) => prev.filter((x) => !matchKey(x)));
-        setItems((prev) => prev.filter((x) => !matchKey(x)));
+        setStickyItems((prev) => {
+          const hit = matchKey(prev);
+          if (!hit) return prev;
+          return prev.filter((x) => !isSame(x, hit));
+        });
+        setItems((prev) => {
+          const hit = matchKey(prev);
+          if (!hit) return prev;
+          return prev.filter((x) => !isSame(x, hit));
+        });
       }
       // 只处理最新一条匹配终态
       break;

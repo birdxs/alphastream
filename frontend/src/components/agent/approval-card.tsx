@@ -94,21 +94,85 @@ function pickWriteProposalStatus(ev: AgentEvent): string {
   return String(d.status || d.resolution || "").toLowerCase().trim();
 }
 
-function matchesWriteProposalEvent(ev: AgentEvent, approval: PendingApproval): boolean {
+/** 事件侧 id 抽取（供 sticky 匹配） */
+export type StickyEventIds = {
+  proposal_id?: string | null;
+  approval_id?: string | null;
+  task_id?: string | null;
+};
+
+/**
+ * sticky 匹配优先级：proposal_id > approval_id > task_id
+ * 字段对字段等值，禁止跨字段误命中（如 event.proposal_id === item.approval_id）。
+ */
+export function matchStickyItem<T extends {
+  proposal_id?: string | null;
+  approval_id?: string | null;
+  task_id: string;
+}>(
+  eventIds: StickyEventIds,
+  items: T[],
+): T | null {
+  const pid = String(eventIds.proposal_id || "").trim();
+  const aid = String(eventIds.approval_id || "").trim();
+  const tid = String(eventIds.task_id || "").trim();
+
+  if (pid) {
+    const hit = items.find((x) => x.proposal_id && String(x.proposal_id) === pid);
+    if (hit) return hit;
+  }
+  if (aid) {
+    const hit = items.find(
+      (x) =>
+        (x.approval_id && String(x.approval_id) === aid) ||
+        (!x.approval_id && x.task_id === aid),
+    );
+    if (hit) return hit;
+  }
+  if (tid) {
+    const hit = items.find(
+      (x) => x.task_id === tid || (x.approval_id != null && String(x.approval_id) === tid),
+    );
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** 单卡：事件是否对应该 approval（同优先级字段对字段） */
+export function matchesWriteProposalEvent(
+  ev: AgentEvent,
+  approval: PendingApproval,
+): boolean {
   if (ev.type !== "write_proposal") return false;
   const d = (ev.meta || {}) as Record<string, unknown>;
   const pid = String(d.proposal_id || d.id || "").trim();
   const aid = String(d.approval_id || "").trim();
-  const targets = [approval.proposal_id, approval.approval_id, approval.task_id]
-    .filter(Boolean)
-    .map((x) => String(x));
-  if (pid && targets.includes(pid)) return true;
-  if (aid && targets.includes(aid)) return true;
-  if (approval.task_id && String(d.task_id || "") === approval.task_id) {
-    const st = pickWriteProposalStatus(ev);
+  const tid = String(d.task_id || "").trim();
+
+  // 1) proposal_id 优先
+  if (pid && approval.proposal_id && String(approval.proposal_id) === pid) {
+    return true;
+  }
+  // 2) approval_id
+  if (aid) {
+    if (approval.approval_id && String(approval.approval_id) === aid) return true;
+    if (!approval.approval_id && approval.task_id === aid) return true;
+  }
+  // 3) task_id（仅终态推进，避免无关 write_proposal 误绑）
+  if (tid && (approval.task_id === tid || String(approval.approval_id || "") === tid)) {
+    const st = String(d.status || d.resolution || "").toLowerCase().trim();
     return ["approved", "rejected", "applied", "applied_local", "timeout_reject"].includes(st);
   }
   return false;
+}
+
+export function stickyIdsFromWriteProposalEvent(ev: AgentEvent): StickyEventIds {
+  const d = (ev.meta || {}) as Record<string, unknown>;
+  return {
+    proposal_id: String(d.proposal_id || d.id || "").trim() || null,
+    approval_id: String(d.approval_id || "").trim() || null,
+    task_id: String(d.task_id || "").trim() || null,
+  };
 }
 
 function phaseRank(p: CardPhase): number {

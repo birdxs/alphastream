@@ -358,3 +358,153 @@ def test_publish_dual_role_aliases(monkeypatch):
     kinds = {k for k, _ in seen}
     assert 'started' in kinds
     assert 'role_started' in kinds
+
+
+# --- SSE 桥多订阅 + plan.step / write_proposal 终态（不启服 unit 模拟）---
+
+
+def test_eventbus_multi_handler_plan_step():
+    """多 handler 订阅 plan.step：每个 handler 均收到同一 payload。"""
+    from app.core import event_bus as eb
+
+    bus = eb.EventBus()
+    a, b, c = [], [], []
+    bus.subscribe(eb.EVENT_PLAN_STEP, lambda d: a.append(d))
+    bus.subscribe(eb.EVENT_PLAN_STEP, lambda d: b.append(d))
+    bus.subscribe(eb.EVENT_PLAN_STEP, lambda d: c.append(dict(d)))
+    payload = {
+        'plan_id': 'plan_1',
+        'step_id': 's1',
+        'status': 'running',
+        'task_id': 'task_plan',
+    }
+    bus.publish(eb.EVENT_PLAN_STEP, payload)
+    assert len(a) == 1 and len(b) == 1 and len(c) == 1
+    assert a[0]['plan_id'] == 'plan_1'
+    assert b[0]['step_id'] == 's1'
+    assert c[0]['status'] == 'running'
+    # 副本隔离：修改 c 不污染 a
+    c[0]['status'] = 'mutated'
+    assert a[0]['status'] == 'running'
+
+
+def test_eventbus_multi_handler_write_proposal_resolved():
+    """write_proposal 终态（approved/rejected/applied_local）多 handler 均收到；pending 与终态 dedupe 键不同。"""
+    from app.core import event_bus as eb
+    from app.core.event_bus import event_dedupe_key
+
+    bus = eb.EventBus()
+    h1, h2 = [], []
+    bus.subscribe(eb.EVENT_WRITE_PROPOSAL, lambda d: h1.append(d.get('status')))
+    bus.subscribe(eb.EVENT_WRITE_PROPOSAL, lambda d: h2.append(d.get('status')))
+
+    base = {
+        'kind': 'portfolio_write_proposal',
+        'proposal_id': 'prop_r1',
+        'approval_id': 'appr_r1',
+        'task_id': 'task_r1',
+        'executed': False,
+    }
+    for st in ('pending', 'approved', 'rejected', 'applied_local'):
+        bus.publish(eb.EVENT_WRITE_PROPOSAL, {**base, 'status': st})
+
+    assert h1 == ['pending', 'approved', 'rejected', 'applied_local']
+    assert h2 == h1
+
+    k_pending = event_dedupe_key(eb.EVENT_WRITE_PROPOSAL, {**base, 'status': 'pending'})
+    k_approved = event_dedupe_key(eb.EVENT_WRITE_PROPOSAL, {**base, 'status': 'approved'})
+    k_applied = event_dedupe_key(eb.EVENT_WRITE_PROPOSAL, {**base, 'status': 'applied_local'})
+    k_applied_alias = event_dedupe_key(eb.EVENT_WRITE_PROPOSAL, {**base, 'status': 'applied'})
+    assert k_pending != k_approved != k_applied
+    assert k_applied == k_applied_alias  # applied → applied_local 归一
+
+
+def test_sse_bridge_multi_tab_plan_and_write_proposal():
+    """模拟多 tab：多个 create_sse_bridge 均收到 plan.step 与 write_proposal 终态。"""
+    from app.core import event_bus as eb
+
+    bus = eb.EventBus()
+    tab_a = bus.create_sse_bridge()
+    tab_b = bus.create_sse_bridge()
+    tab_c = bus.create_sse_bridge(
+        filter_events=[eb.EVENT_PLAN_STEP, eb.EVENT_WRITE_PROPOSAL],
+    )
+
+    bus.publish(
+        eb.EVENT_PLAN_STEP,
+        {'plan_id': 'p_multi', 'step_id': 'step_2', 'status': 'completed', 'task_id': 't_m'},
+    )
+    bus.publish(
+        eb.EVENT_WRITE_PROPOSAL,
+        {
+            'kind': 'portfolio_write_proposal',
+            'proposal_id': 'prop_m',
+            'approval_id': 'appr_m',
+            'task_id': 't_m',
+            'status': 'approved',
+            'executed': False,
+        },
+    )
+    # write_proposal.resolved 语义：status 终态再推 applied_local
+    bus.publish(
+        eb.EVENT_WRITE_PROPOSAL,
+        {
+            'kind': 'portfolio_write_proposal',
+            'proposal_id': 'prop_m',
+            'approval_id': 'appr_m',
+            'task_id': 't_m',
+            'status': 'applied_local',
+            'executed': False,
+        },
+    )
+
+    def drain(q):
+        items = []
+        while not q.empty():
+            items.append(q.get_nowait())
+        return items
+
+    for name, q in (('a', tab_a), ('b', tab_b), ('c', tab_c)):
+        items = drain(q)
+        assert len(items) == 3, f'tab {name} expected 3 events, got {len(items)}: {items}'
+        types = [it['event'] for it in items]
+        assert types.count(eb.EVENT_PLAN_STEP) == 1
+        assert types.count(eb.EVENT_WRITE_PROPOSAL) == 2
+        wp_statuses = [
+            it['data'].get('status') for it in items if it['event'] == eb.EVENT_WRITE_PROPOSAL
+        ]
+        assert wp_statuses == ['approved', 'applied_local']
+        plan_payload = next(it['data'] for it in items if it['event'] == eb.EVENT_PLAN_STEP)
+        assert plan_payload['plan_id'] == 'p_multi'
+        assert plan_payload.get('executed') is not True  # 铁律#1：无假成交
+        # dedupe_key 非空且 plan / write_proposal 不同
+        keys = {it.get('dedupe_key') for it in items}
+        assert len(keys) == 3
+        assert all(k for k in keys)
+
+
+def test_sse_bridge_unsubscribe_stops_delivery():
+    """destroy_sse_bridge 后该 queue 不再收事件；其他 tab 不受影响。"""
+    from app.core import event_bus as eb
+
+    bus = eb.EventBus()
+    alive = bus.create_sse_bridge()
+    peer = bus.create_sse_bridge()
+    closed = bus.create_sse_bridge()
+
+    bus.publish(eb.EVENT_PLAN_STEP, {'plan_id': 'before', 'step_id': '0'})
+    assert not alive.empty() and not peer.empty() and not closed.empty()
+    for q in (alive, peer, closed):
+        while not q.empty():
+            q.get_nowait()
+
+    bus.destroy_sse_bridge(closed)
+
+    bus.publish(eb.EVENT_PLAN_STEP, {'plan_id': 'after_close', 'step_id': '1'})
+    assert not alive.empty()
+    got = alive.get_nowait()
+    assert got['event'] == eb.EVENT_PLAN_STEP
+    assert got['data']['plan_id'] == 'after_close'
+    assert not peer.empty()
+    assert peer.get_nowait()['data']['plan_id'] == 'after_close'
+    assert closed.empty()
