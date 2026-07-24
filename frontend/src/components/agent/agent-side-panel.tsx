@@ -354,16 +354,17 @@ export function AgentSidePanel() {
         </div>
       </div>
 
-      {/* 工具条 */}
+      {/* S-UI-2 工具条：中文产品文案；技术计数降权 */}
       <div className="flex items-center justify-between px-3 h-7 shrink-0 border-b border-foreground/[0.06] dark:border-white/[0.06] bg-foreground/[0.02] dark:bg-white/[0.02]">
-        <span className="text-[10px] text-foreground/50">
-          {events.length} events · {doneAgents}/{totalAgents || 10} agents
+        <span className="text-[10px] text-foreground/50 tabular-nums">
+          已完成 {doneAgents}/{totalAgents || 10}
+          {events.length > 0 ? ` · 事件 ${events.length}` : ""}
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCleared((c) => !c)}
             className="h-5 w-5 flex items-center justify-center rounded text-foreground/50 hover:text-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors"
-            title={cleared ? "恢复显示" : "清空视图 (不删除store)"}
+            title={cleared ? "恢复显示" : "清空视图"}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -616,7 +617,7 @@ export function AgentSidePanel() {
           </span>
         </button>
         {isAnalyzing && logCollapsed && (
-          <span className="text-[10px] font-mono text-[#46BEA3] tabular-nums shrink-0">streaming…</span>
+          <span className="text-[10px] font-mono text-[#46BEA3] tabular-nums shrink-0">输出中…</span>
         )}
       </div>
       {!logCollapsed && (
@@ -648,9 +649,9 @@ export function AgentSidePanel() {
             className={`w-2 h-2 rounded-full ${isAnalyzing ? "bg-[#46BEA3]" : "bg-foreground/30"}`}
             style={isAnalyzing ? { boxShadow: "0 0 6px #46BEA3" } : undefined}
           />
-          <span>{isAnalyzing ? "connected · streaming" : "idle"}</span>
+          <span>{isAnalyzing ? "已连接 · 分析中" : "空闲"}</span>
         </span>
-        <span>uptime {uptimeStr}</span>
+        <span>运行 {uptimeStr}</span>
       </div>
 
       {/* 光标闪烁 + 自定义滚动条（细、透明 track） */}

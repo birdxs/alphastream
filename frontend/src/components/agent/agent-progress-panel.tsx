@@ -465,7 +465,7 @@ export function AgentProgressPanel() {
           <span className="flex items-center gap-2 min-w-0">
             <Bot className={`h-3 w-3 text-[#3737CC] shrink-0 ${isAnalyzing ? "animate-pulse" : ""}`} />
             <span className="font-mono truncate">
-              {isAnalyzing ? `Agent ${Math.round(overallProgress)}%` : "Agent 进度"}
+              {isAnalyzing ? `分析进度 ${Math.round(overallProgress)}%` : "分析进度"}
             </span>
             <span className="hidden sm:inline-block w-16 max-w-[4.5rem] bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1 overflow-hidden shrink-0">
               <span
@@ -475,7 +475,7 @@ export function AgentProgressPanel() {
             </span>
           </span>
           <span className="text-muted-foreground font-mono text-[10px] tabular-nums shrink-0">
-            {completedCount}/{agentProgresses.length || 10} · {events.length}
+            {completedCount}/{agentProgresses.length || 10}
           </span>
         </button>
       )}
@@ -486,7 +486,7 @@ export function AgentProgressPanel() {
           <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpanded(false)}>
             <span className="text-xs font-medium uppercase tracking-wide flex items-center gap-1.5">
               <Bot className={`h-3.5 w-3.5 text-[#3737CC] ${isAnalyzing ? 'animate-pulse' : ''}`} />
-              Multi-Agent 实时数据流
+              多智能体进度
             </span>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground font-mono tabular-nums">{Math.round(overallProgress)}%</span>
