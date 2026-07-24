@@ -210,31 +210,43 @@ export default function PortfolioPage() {
         </Button>
       </div>
 
-      {/* 组合概况 */}
+      {/* 组合概况（S-UI-3：空持仓仅 —，禁止 0.00 假占位） */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <GlassCard padding="md">
           <p className="text-sm text-muted-foreground dark:text-white/50">总市值</p>
-          <p className="text-2xl font-bold font-mono">&yen;{formatPrice(totalValue)}</p>
+          {holdings.length === 0 ? (
+            <p className="text-2xl font-bold font-mono ui-dash">—</p>
+          ) : (
+            <p className="text-2xl font-bold font-mono">&yen;{formatPrice(totalValue)}</p>
+          )}
         </GlassCard>
         <GlassCard padding="md">
           <p className="text-sm text-muted-foreground dark:text-white/50">总盈亏</p>
-          <p className={`text-2xl font-bold font-mono ${getPriceColorClass(totalPnl)}`}>
-            {totalPnl >= 0 ? "+" : ""}
-            {formatPrice(totalPnl)}
-          </p>
+          {holdings.length === 0 ? (
+            <p className="text-2xl font-bold font-mono ui-dash">—</p>
+          ) : (
+            <p className={`text-2xl font-bold font-mono ${getPriceColorClass(totalPnl)}`}>
+              {totalPnl >= 0 ? "+" : ""}
+              {formatPrice(totalPnl)}
+            </p>
+          )}
         </GlassCard>
         <GlassCard padding="md">
           <p className="text-sm text-muted-foreground dark:text-white/50">收益率</p>
-          <p
-            className={`text-2xl font-bold font-mono flex items-center gap-1 ${getPriceColorClass(totalReturn)}`}
-          >
-            {totalReturn >= 0 ? (
-              <TrendingUp className="h-5 w-5" />
-            ) : (
-              <TrendingDown className="h-5 w-5" />
-            )}
-            {formatPercent(totalReturn)}
-          </p>
+          {holdings.length === 0 ? (
+            <p className="text-2xl font-bold font-mono ui-dash">—</p>
+          ) : (
+            <p
+              className={`text-2xl font-bold font-mono flex items-center gap-1 ${getPriceColorClass(totalReturn)}`}
+            >
+              {totalReturn >= 0 ? (
+                <TrendingUp className="h-5 w-5" />
+              ) : (
+                <TrendingDown className="h-5 w-5" />
+              )}
+              {formatPercent(totalReturn)}
+            </p>
+          )}
         </GlassCard>
       </div>
 
