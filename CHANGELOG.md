@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-24 — [DP-P0] market indices last_good + stock_profile multisource
+
+- **DP-P0-1**：`_fetch_market_indices_data` 成功非空 indices 原子写 `data/market_indices_last_good.json`；失败链 内存 stale → disk last_good（200/`disk_last_good`/asof）→ 仅全无 503。新浪后异构 easyquotation / 腾讯 gtimg。
+- **DP-P0-2**：`api_stock_profile` 在 baostock+ak 后 `_multisource_profile_fill`（analyzer/DataProvider + AdapterRegistry `get_stock_info`）；缺字段 null，不造假；`_akshare_fill` 提升模块级便于 mock。
+- **测试**：`tests/backend/api/test_stock_data_routes.py` 增 disk last_good / multisource / normalize_info 用例；离线 12 passed。
+- **生效**：需重启后端进程加载新代码；成功拉指数后才会生成 last_good 文件。
+- **未 push**。
 
 ## 2026-07-24 — [S-UI-live] fullstack CDP smoke screenshots
 

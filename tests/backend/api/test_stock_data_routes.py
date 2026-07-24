@@ -580,24 +580,18 @@ class TestStockProfileRoute:
                 return _FailFuture()
 
         monkeypatch.setattr(ws, "_GLOBAL_THREAD_POOL", _FailPool())
+        # akshare 补洞空操作（模拟东财/雪球均不可达；模块级，可 mock）
+        monkeypatch.setattr(ws, "_akshare_fill", lambda *a, **kw: None)
 
-        # akshare 补洞故意空操作（模拟东财/雪球均不可达）
-        monkeypatch.setattr(ws, "_akshare_fill", lambda *a, **kw: None, raising=False)
-
-        # 内嵌 _akshare_fill 定义在 api 函数内部，需让整体超时后的 try 路径失败：
-        # 通过 patch 模块级 _multisource_profile_fill 即可覆盖 DP-P0-2 新层
         def _fake_ms(prof, stock_code):
             prof["industry"] = "白酒"
             prof["pe_ttm"] = 20.01
             prof["pb"] = 6.11
-            # roe / market_cap 故意保持 None（部分字段）
+            # roe / market_cap 故意保持 None（部分字段，铁律#1）
             return "analyzer/data_provider"
 
         monkeypatch.setattr(ws, "_multisource_profile_fill", _fake_ms)
 
-        # 使内部 _akshare_fill 调用失败：timeout 分支 try 里调用内嵌函数；
-        # 内嵌函数会真的 import akshare，在 DISABLE_NETWORK 下应空结果。
-        # 再保险：令 budget 路径里的 _akshare_fill 名称冲突无效时，直接不产生 metrics。
         resp = flask_client.get("/api/stock_profile?stock_code=600519")
         assert resp.status_code == 200, resp.data[:400]
         data = _json(resp)
@@ -628,6 +622,7 @@ class TestStockProfileRoute:
                 return _FailFuture()
 
         monkeypatch.setattr(ws, "_GLOBAL_THREAD_POOL", _FailPool())
+        monkeypatch.setattr(ws, "_akshare_fill", lambda *a, **kw: None)
         monkeypatch.setattr(ws, "_multisource_profile_fill", lambda *a, **kw: None)
 
         resp = flask_client.get("/api/stock_profile?stock_code=600519")

@@ -283,15 +283,15 @@ gantt
 - 唯一跟踪节：本文档顶部「UI改造A-D（进行中）」
 - 方案：`docs/design/ui-renovation-plan.md`（v1.1-approved + v1.1-sui4-static）
 
-## 数据路径冗余（审计 2026-07-24 · 待修）
+## 数据路径冗余（审计 2026-07-24 · DP-P0 已落地）
 
 > 完整机制与矩阵：`CLAUDE.md`「数据路径审计：AkShare 多接口冗余健壮性」  
-> 本轮 **未写大代码**；禁 push
+> **DP-P0-1 / DP-P0-2 代码已落地**（见 CLAUDE.md 交付段）；禁 push
 
 | ID | 优先级 | 状态 | 摘要 |
 |----|--------|------|------|
-| DP-P0-1 | P0 | 已完成 | 异构 easyquotation/gtimg + disk last_good（`data/market_indices_last_good.json`），失败链内存 stale→disk→503 |
-| DP-P0-2 | P0 | 待办 | stock_profile 与 K 线同源降级（baostock 8s 不足时） |
+| DP-P0-1 | P0 | [x] 完成 | 异构 easyquotation/gtimg + disk last_good（`data/market_indices_last_good.json`）；失败链 内存 stale→disk→仅全无 503 |
+| DP-P0-2 | P0 | [x] 完成 | stock_profile：baostock/ak 后 `_multisource_profile_fill`（analyzer/DataProvider + AdapterRegistry get_stock_info）；缺字段 null |
 | DP-P1-1 | P1 | 待办 | DataProvider vs AdapterRegistry 双栈收敛 |
 | DP-P1-2 | P1 | 待办 | stock_data meta.source 写真实 adapter |
 | DP-P1-3 | P1 | 待办 | quote_batch 接 a_stock_realtime |
@@ -299,4 +299,5 @@ gantt
 | DP-P2-1 | P2 | 待办 | adapters/status 超时与缓存 |
 | DP-P2-2 | P2 | 待办 | Agent 基本面统一 xbrl_financials call_with_fallback |
 
-实测快照（8888 live）：market_indices **200 cache HIT**；stock_data 600519 **200** 242 行；stock_profile 600519 **503** all_sources_failed。
+验证（离线）：`pytest -k "market_indices or MarketIndices or profile or Profile"` → 12 passed。  
+实测注意：需**重启后端**后 last_good 路径与 profile multisource 才生效；成功拉指数后自动写 `data/market_indices_last_good.json`。

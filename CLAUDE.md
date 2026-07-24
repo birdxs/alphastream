@@ -3194,3 +3194,128 @@ git checkout HEAD -- CLAUDE.md docs/design/TODO.md CHANGELOG.md 2>/dev/null
 # 或 git revert <本 commit>
 ```
 
+---
+
+## 数据路径审计：AkShare 多接口冗余健壮性（2026-07-24 24:43~24:48 +08:00）
+
+任务约束：本仓只读为主 + 文档落盘；禁 push；禁 Playwright；默认不大改代码。8888 当时在跑（curl 实测）。
+
+时间锚点：
+- 本机：2026-07-24 09:42:38 -0700 ≡ 2026-07-24 24:42:38 +08:00（记录时段）
+- Cloudflare/GitHub HTTPS Date：`Fri, 24 Jul 2026 16:42:40~41 GMT` ≡ 2026-07-24 24:42:40~41 +08:00
+- 最大偏差：约 2 秒；判定通过（≤100s）
+
+### 因果机制（前台空 ← 失败步）
+
+**首页/仪表盘指数「---」或「暂无指数」**
+
+1. UI 读 `/api/market_indices` 或 SSE `market_stream`（后者调同一 `_fetch_market_indices_data`）。
+2. `get_market_indices`（`app/web/web_server.py` ~2566–2848）：
+   - 热路径：进程内 `_market_indices_cache` TTL=`INDEX_CACHE_TTL_S`（默认 30s）HIT → 200 + `X-Data-Source: cache`。
+   - 冷路径锁内：东财 `ak.stock_zh_index_spot_em`（`INDEX_PRIMARY_TIMEOUT_S` 默认 5s）→ 失败则新浪 `ak.stock_zh_index_spot_sina`（`INDEX_FALLBACK_TIMEOUT_S` 默认 15s）→ 再失败则 4 路 `ak.stock_zh_index_daily` 并发（12s）→ 仍空则返回**上一份**缓存且 `source=stale_cache`。
+3. **前台空的硬条件**：主/备/日线全失败 **且** `_market_indices_cache['data']` 为空 → HTTP **503** + `indices: []` + `status: DEGRADED`。铁律 #1 下前端合法显示 `---`，**不是假数**。
+4. 冗余是否“顶上”：有多 **AkShare 函数**，**不是** `AdapterRegistry`/`FallbackManager` 跨包冗余；本质 = **同一库多 URL + 进程内存缓存**。冷启动 + 上游全挂 + 无预热成功 = 503 空列表。预热线程 `_preload_market_indices` 每 ~25s 调同一函数，失败则仍无缓存。
+
+**个股 K 线有数但基本面 profile 503（本机实测 2026-07-24）**
+
+1. `/api/stock_data`：`analyzer.get_stock_data` → `market_data_adapter.get_kline` → **A 股只走** `DataProvider.get_stock_history`（`resilient_call` 45s）→ **`FallbackManager` 链：Akshare → Baostock → Efinance → Ashare**。Akshare 内部 **新浪 daily → 腾讯 hist_tx → 东财 hist**（`akshare_adapter.py` ~284–340）。实测 600519：**200**，`data` 242 行，`meta.source` 写死 `'akshare'`（A 股标签，**不反映**真实命中 adapter）。
+2. `/api/stock_profile`：**不走** DataProvider 降级链。主路径 baostock 全局锁 + I/O，`PROFILE_BAOSTOCK_TIMEOUT_S` 默认 **8s**；超时 → `_akshare_fill`（雪球 spot_xq + financial_abstract，预算 6s）→ stale profile cache → 仍无字段则 **503** `all_sources_failed` / `baostock_timeout + akshare_fallback_failed`。实测 600519：**503**（缓存无命中、baostock 超时、akshare 填字段失败）。
+3. `/api/stock_quote_batch`：**不读实时 domain**；对每只再调 `analyzer.get_stock_data` 近 14 日 K 线，用末两根 close 拼“涨跌”。实时表 `a_stock_realtime`（Efinance→Easyquotation→Akshare→OpenCLI）**未接到**该 REST。
+
+**Agent 工具 vs REST**
+
+- `app/core/tools.py` `get_stock_data`：直接 `get_data_provider().get_stock_history`（与 REST K 线同源 **DataProvider+FallbackManager**）。
+- `get_fundamental_data`：可选 **Wind 优先**（key 且非空才用）→ 否则 `FundamentalAnalyzer`（**非** `xbrl_financials` 全 registry 自动链）。
+- 资金流工具：`CapitalFlowAnalyzer` **直连 akshare**（`stock_individual_fund_flow` / hsgt 等），**不经** FallbackManager。
+- Agent 侧（`base_agent` 等）：另有 `AdapterRegistry.call_with_fallback` 路径；与 REST `/api/stock_data` **并行两套域注册**，库存 domain 顺序见 `adapter_registry.DEFAULT_DOMAIN_MAP`，但 **热 REST 的 K 线并未调 Registry**。
+- 无 `graph_tools.py` 文件（Glob 0）；图工具在 agents/* + tools.py。
+
+**Wind**
+
+- Domain：`xbrl_financials` 链首 `WindAdapter → EDGAR → YFinance → OpenBB`；**故意排除** `a_stock_kline` / `a_stock_realtime` / 指数高频（注释于 registry）。
+- 配额/缓存/熔断：`wind_budget` + adapter 冷却；`tools.get_fundamental_data` 走独立 Wind 优先，非 registry 全自动切换的全部面。
+
+### 数据源矩阵
+
+| 能力 | 主源 | 备源 | 代码位置 | 本机 8888 实测（2026-07-24） |
+|------|------|------|----------|------------------------------|
+| 市场指数 | 东财 spot_em | 新浪 spot_sina → 4× daily → stale 内存 | `web_server.py` `_fetch_market_indices_data` ~2618–2848；超时 env INDEX_* | **200** cache HIT，4 指数（上证 3814.1978…）；冷 503 在 S-UI live 已见 |
+| 指数 SSE | 同上 | 同上 | `market_stream` → `_fetch_market_indices_data` | 未 curl SSE；与 REST 同源 |
+| A 股 K 线 | Akshare 内：新浪→腾讯→东财 | FallbackManager：Baostock→Efinance→Ashare | `data_provider.py` 链；`akshare_adapter.get_stock_history`；入口 `market_data_adapter.get_kline` / `stock_analyzer` | **stock_data 600519 200** 242 行 |
+| 批量报价 | K 线末两日衍生 | 无实时备源 | `stock_quote_batch` ~5945 | 路径设计已审计；本机未强制全批量超时测 |
+| 股票档案 | baostock 串行 | akshare xq/fa 填洞 → stale | `api_stock_profile` ~2051–2291 | **600519 503** all_sources_failed |
+| Agent K 线工具 | DataProvider 同 REST | 同上 | `tools.py` `get_stock_data` | 与 REST 同源（代码层） |
+| Agent 基本面 | Wind(S) 可选 | FundamentalAnalyzer / 非强制 registry | `tools.get_fundamental_data` | 依赖 WIND_API_KEY；registry stats 显示 xbrl 可配 |
+| 资金流/北向 | AkShare 单库多函数 | 日志降级 WARNING；无跨 vendor | `capital_flow_analyzer` + `akshare_adapter` hsgt/fund_flow | 历史代理失败已治理为 WARNING |
+| 实时 A 股 domain | Efinance | Easyquotation(sina)→Akshare→OpenCLI | `AdapterRegistry` `a_stock_realtime` | registry/stats：**first_available=efinance**；**REST 热路径未用** |
+| 财务 XBRL | Wind | EDGAR→YF→OpenBB | `xbrl_financials` | 设计禁止进高频行情 |
+
+Registry 实测摘要（`/api/registry/stats`）：`a_stock_kline` available_count=5 first=akshare；`a_stock_realtime` first=efinance。`/api/adapters/status` 本机 curl **10s 超时无体**（健康检查本身重）。
+
+### 明确缺口
+
+| ID | 级别 | 现象 | 机制 | 建议改法（文件级，本轮未编码） |
+|----|------|------|------|--------------------------------|
+| DP-P0-1 | P0 | 指数冷启动/全上游挂 → 503 空 indices；UI 长期 `---` | 仅 AkShare 三层 + **无跨 vendor 指数源**；stale 仅内存，进程重启丢 | `web_server._fetch_market_indices_data`：接入 Easyquotation/腾讯指数或本地昨收快照文件；预热失败写 `data/` 持久 last_good |
+| DP-P0-2 | P0 | profile 有 K 线仍 503 基本面 | profile **独立** baostock 8s + 弱 akshare 填字段，**未**复用 K 线成功源 | `api_stock_profile`：超时后改调 `AdapterRegistry`/`get_stock_info` 多源；或与 Wind B 档 basicinfo 对齐 |
+| DP-P1-1 | P1 | 双栈：DataProvider vs AdapterRegistry 并存 | REST K 线走 DataProvider；registry 给 agent/P3；顺序漂移难测 | 统一 `call_with_fallback('a_stock_kline', ...)` 或单写 DataProvider 为唯一实现 |
+| DP-P1-2 | P1 | `meta.source='akshare'` 写死 | 掩盖真实命中新浪/腾讯/baostock | `get_stock_data` 响应透传实际 adapter 名 |
+| DP-P1-3 | P1 | quote_batch 伪实时 | 近 14 日 K 线末两日，非 `a_stock_realtime` | `stock_quote_batch` 改 registry `a_stock_realtime` 或 Easyquotation 批量 |
+| DP-P1-4 | P1 | 资金流单 vendor | 仅 eastmoney 系 ak 接口；代理挂即空 | analyzer 内第二源或 Efinance 镜像 |
+| DP-P2-1 | P2 | adapters/status 易超时 | 多 adapter health 串/并成本高 | 已有 timeout env；默认跳过重探针 / 缓存 status |
+| DP-P2-2 | P2 | Agent 基本面 Wind 与 registry 双入口 | tools 手写 Wind 优先 ≠ registry 自动 | 合并到 `call_with_fallback('xbrl_financials')` |
+
+### 与「多接口冗余」作战指令的差距（诚实）
+
+| 维度 | 已做 | 文档/注释宣称 | 运行时单点风险 |
+|------|------|---------------|----------------|
+| 指数 | AkShare **3 接口** + 30s 内存 + 预热 | 「三级兜底」成立 | **无第二库**；重启/全挂 → 503 空（S-UI live 已复现） |
+| A 股 K 线 | AkShare **内 3 URL** + **4 adapter** FallbackManager | 「多数据源故障转移」成立 | REST 不经 Registry；meta 假源标签 |
+| 实时 | Registry 4 源 | domain 文档完整 | **热 REST 几乎不用** |
+| profile | baostock + ak 补洞 | 「分层混合」 | **弱于 K 线**；本机 503 |
+| Wind | 财务链首 + 禁高频 | 设计意图清晰 | 非指数/K 线冗余 |
+| Agent | tools≈DataProvider K 线 | 与 REST 对齐一半 | 资金流/基本面仍分叉 |
+
+**结论**：不是「只有单接口」——**K 线链路冗余最完整**；**指数 = 同库多接口 + 缓存**；**最大产品缺口是指数跨源与 profile 与 K 线不对齐**，以及 **Registry 实时域闲置**。对照 dojo 竞品思路（多独立 vendor 并行）本仓 Registry 能力已具备但 **未接到前台最痛的指数/批量报价路径**。
+
+### 回滚
+
+本节纯文档；删除本节与 TODO 对应条目即可。未改业务代码。
+
+## DP-P0 数据路径落地记录（2026-07-24 17:10 +08:00）
+
+任务约束：本地开发；禁止 push；铁律 #1 无假数；禁止 Playwright。
+
+时间真实性校验（本节锚点）：
+- 本机：2026-07-24 10:07:50 -0700 ≈ 2026-07-24 17:07:50 +08:00
+- Cloudflare / GitHub HTTPS Date：`Fri, 24 Jul 2026 17:07:54 GMT` = 2026-07-24 17:07:54 +08:00
+- 最大偏差：约 4 秒；判定：通过
+
+### DP-P0-1 指数 disk last_good + 异构源
+
+- 路径常量：`_MARKET_INDICES_LAST_GOOD_PATH` = `data/market_indices_last_good.json`
+- `_persist_market_indices_last_good(indices, source)`：成功非空 indices 时 `atomic_write_json` 写 indices/source/fetched_at/timestamp
+- `_load_market_indices_last_good()`：读盘校验非空 indices
+- `_try_heterogeneous_index_quote()`：在新浪之后尝试 easyquotation / 腾讯 gtimg `qt.gtimg.cn`（超时 `INDEX_HETERO_TIMEOUT_S`，默认 8s）
+- 失败链：东财 → 新浪 → **异构** → 历史日线 → 内存 stale → **disk last_good** → 仅全无 `source=degraded` 空 indices（路由 503）
+- 路由 `get_market_indices`：fetch 返回 `disk_last_good` 时 200 + `X-Data-Source: disk_last_good` + `X-Cache: DISK` + meta.asof
+
+### DP-P0-2 profile 多源降级
+
+- `_profile_has_metrics` / `_profile_pick_*` / `_normalize_info_to_profile`：异构 info 映射；缺字段保持 null
+- `_multisource_profile_fill`：`analyzer.get_stock_info` / `DataProvider.get_stock_info` → AdapterRegistry domain + 已知 adapter 类
+- 挂点：baostock 超时 ak-only 后；baostock 成功但关键字段全空时补洞
+- X-Data-Source：`multisource:<src>`；全失败仍 503 `all_sources_failed`（reason 含 multisource_failed）
+
+### 验证
+
+- `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q tests/backend/api/test_stock_data_routes.py -k "market_indices or MarketIndices or profile or Profile"` → **12 passed**
+
+### 特例
+
+- 未新建源文件；`data/market_indices_last_good.json` 为运行期产物（.gitignore data/），成功抓取后自动生成
+
+### 回滚
+
+- 还原 `app/web/web_server.py`、`tests/backend/api/test_stock_data_routes.py`、TODO/CLAUDE 本节；删除 `data/market_indices_last_good.json`（若有）
+
