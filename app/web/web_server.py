@@ -7,7 +7,7 @@
 # web_server.py
 
 import numpy as np
-from typing import Any
+from typing import Any, Optional
 import pandas as pd
 import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, g
@@ -2021,6 +2021,185 @@ def _profile_cache_evict_and_set(stock_code, value, ttl):
             _PROFILE_CACHE.pop(k, None)
         _PROFILE_CACHE[stock_code] = value
 
+
+def _profile_has_metrics(prof: dict) -> bool:
+    """DP-P0-2：关键档案字段是否至少命中一个（industry/pe_ttm/pb/roe）。缺字段保持 null，不算假值。"""
+    if not isinstance(prof, dict):
+        return False
+    return any(prof.get(k) is not None for k in ('industry', 'pe_ttm', 'pb', 'roe'))
+
+
+def _profile_pick_float(info: dict, keys) -> Optional[float]:
+    """从异构 info dict 取首个可解析 float；失败返回 None（铁律#1，不造数）。"""
+    if not isinstance(info, dict):
+        return None
+    for key in keys:
+        raw = info.get(key)
+        if raw is None or raw == '':
+            continue
+        if isinstance(raw, str):
+            s = raw.strip().replace(',', '')
+            if not s or s in ('--', 'None', 'nan', 'NaN', '未知'):
+                continue
+            raw = s
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if val != val:  # NaN
+            continue
+        return val
+    return None
+
+
+def _profile_pick_text(info: dict, keys) -> Optional[str]:
+    """从异构 info dict 取首个非空文本；'未知' 视为无效。"""
+    if not isinstance(info, dict):
+        return None
+    for key in keys:
+        raw = info.get(key)
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if not text or text in ('--', 'None', 'nan', 'NaN', '未知'):
+            continue
+        return text
+    return None
+
+
+def _normalize_info_to_profile(info: dict, prof: dict) -> bool:
+    """将 adapter/analyzer.get_stock_info 异构字段映射进 profile（原地）；返回是否新写入任何 metric。
+
+    支持键：东财 item/value、efinance 中文键、yfinance trailingPE/priceToBook、baostock 行业 等。
+    不写假 PE/ROE；market_cap 仅在缺失时填，单位：元 → 亿元（>1e6 时）。
+    """
+    if not isinstance(info, dict) or not isinstance(prof, dict):
+        return False
+    filled = False
+
+    if prof.get('industry') is None:
+        industry = _profile_pick_text(info, (
+            '行业', 'industry', 'sector', '所属行业', 'industry_category',
+        ))
+        if industry is not None:
+            prof['industry'] = industry
+            filled = True
+
+    if prof.get('pe_ttm') is None:
+        pe = _profile_pick_float(info, (
+            'pe_ttm', 'peTTM', '市盈率(TTM)', '市盈率-动态', '市盈率',
+            'trailingPE', 'pe', 'forwardPE',
+        ))
+        if pe is not None:
+            prof['pe_ttm'] = pe
+            filled = True
+
+    if prof.get('pb') is None:
+        pb = _profile_pick_float(info, (
+            'pb', 'pbMRQ', '市净率', 'priceToBook', 'PB',
+        ))
+        if pb is not None:
+            prof['pb'] = pb
+            filled = True
+
+    if prof.get('roe') is None:
+        roe = _profile_pick_float(info, (
+            'roe', 'ROE', '净资产收益率', '净资产收益率(%)', 'returnOnEquity',
+            'roeAvg',
+        ))
+        if roe is not None:
+            # yfinance returnOnEquity 常为 0.xx 小数；>1 视为已是百分数
+            if -1.0 <= roe <= 1.0 and roe != 0:
+                roe = roe * 100.0
+            prof['roe'] = roe
+            filled = True
+
+    if prof.get('market_cap') is None:
+        mcap = _profile_pick_float(info, (
+            'market_cap', '总市值', '市值', 'marketCap', '流通值', '资产净值/总市值',
+        ))
+        if mcap is not None:
+            # 元量级 → 亿元；已是亿元（通常 < 1e6）原样
+            if abs(mcap) >= 1e6:
+                mcap = mcap / 1e8
+            prof['market_cap'] = mcap
+            # market_cap  alone 不算 metric 成功，不强制 filled=True for 200 门槛
+            # 但记录 source 时仍有用；有 industry/pe 等才会 filled
+
+    # 名称：仅当 profile 缺真名且 info 有真名（≠ code）时回填
+    code = str(prof.get('stock_code') or '')
+    if not prof.get('stock_name'):
+        nm = _profile_pick_text(info, (
+            '股票名称', '股票简称', 'code_name', 'shortName', 'longName',
+            'org_short_name_cn', 'org_name_cn', 'name',
+        ))
+        if nm and nm != code:
+            prof['stock_name'] = nm
+
+    return filled
+
+
+def _multisource_profile_fill(prof: dict, stock_code: str) -> Optional[str]:
+    """DP-P0-2：baostock+ak 补洞仍缺关键字段时，对齐 K 线同源多源 info 链再补一层。
+
+    顺序：
+      1) analyzer.get_stock_info（DataProvider → FallbackManager → Ashare/Akshare/Efinance/Baostock/YFinance）
+      2) 直接 AdapterRegistry 实例（Akshare/Efinance/YFinance），兜住 analyzer 短路径异常
+
+    Returns:
+        命中源标签（如 analyzer/data_provider 或 adapter 名），无收获则 None。
+        铁律#1：绝不编造 pe/pb/roe。
+    """
+    if not isinstance(prof, dict):
+        return None
+    source_hit = None
+
+    # 1) Analyzer / DataProvider 同源链（与 stock_data/K 线旁路对齐）
+    try:
+        _an = analyzer if analyzer is not None else None
+        if _an is None:
+            from app.analysis.stock_analyzer import StockAnalyzer as _SA
+            _an = _SA()
+        info = _an.get_stock_info(stock_code) or {}
+        if _normalize_info_to_profile(info, prof):
+            source_hit = 'analyzer/data_provider'
+    except Exception as e:
+        app.logger.warning(
+            f"[DP-P0-2] analyzer.get_stock_info 失败 ({stock_code}): {type(e).__name__}: {e}"
+        )
+
+    if _profile_has_metrics(prof):
+        return source_hit or 'analyzer/data_provider'
+
+    # 2) 直接多 adapter get_stock_info（跳过 Wind 烧积分；不走 registry domain 因暂无 stock_info 域）
+    try:
+        from app.adapters.akshare_adapter import AkshareAdapter
+        from app.adapters.efinance_adapter import EfinanceAdapter
+        from app.adapters.yfinance_adapter import YFinanceAdapter
+        for cls, tag in (
+            (AkshareAdapter, 'AkshareAdapter'),
+            (EfinanceAdapter, 'EfinanceAdapter'),
+            (YFinanceAdapter, 'YFinanceAdapter'),
+        ):
+            try:
+                ad = cls()
+                info = ad.get_stock_info(stock_code) or {}
+                if _normalize_info_to_profile(info, prof):
+                    source_hit = tag
+                    if _profile_has_metrics(prof):
+                        return source_hit
+            except Exception as e:
+                app.logger.warning(
+                    f"[DP-P0-2] {tag}.get_stock_info 失败 ({stock_code}): {type(e).__name__}: {e}"
+                )
+    except Exception as e:
+        app.logger.warning(
+            f"[DP-P0-2] multi-adapter import/call 失败 ({stock_code}): {type(e).__name__}: {e}"
+        )
+
+    return source_hit if _profile_has_metrics(prof) else None
+
+
 def _ensure_bs_login():
     # [Batch8-FIX 2026-05-19] DISABLE_NETWORK=1 时跳过真实 baostock 网络连接（测试环境）
     if os.getenv("DISABLE_NETWORK") == "1":
@@ -2269,12 +2448,25 @@ def api_stock_profile():
         except Exception as _e:
             app.logger.warning(f"akshare-only 兜底失败 ({stock_code}): {_e}")
 
-        if any(_fb.get(k) is not None for k in ('industry', 'pe_ttm', 'pb', 'roe')):
+        if _profile_has_metrics(_fb):
+            _profile_cache_evict_and_set(stock_code, (_time.time(), dict(_fb)), _PROFILE_CACHE_TTL_S)
             resp = custom_jsonify(_fb)
             resp.headers['X-Data-Source'] = 'akshare-fallback'
             return resp
 
-        # akshare 也失败 → 尝试 stale cache
+        # DP-P0-2：ak 仍空 → 多源 get_stock_info（analyzer/DataProvider + adapters）
+        _ms_src = None
+        try:
+            _ms_src = _multisource_profile_fill(_fb, stock_code)
+        except Exception as _e:
+            app.logger.warning(f"[DP-P0-2] multisource 兜底失败 ({stock_code}): {_e}")
+        if _profile_has_metrics(_fb):
+            _profile_cache_evict_and_set(stock_code, (_time.time(), dict(_fb)), _PROFILE_CACHE_TTL_S)
+            resp = custom_jsonify(_fb)
+            resp.headers['X-Data-Source'] = f'multisource:{_ms_src or "info"}'
+            return resp
+
+        # 全源失败 → 尝试 stale cache
         _stale = _profile_cache_get(stock_code)
         if _stale:
             _stale_ts, _stale_data = _stale if isinstance(_stale, tuple) else (0, _stale)
@@ -2286,12 +2478,23 @@ def api_stock_profile():
 
         return custom_jsonify({
             'error': 'all_sources_failed',
-            'reason': 'baostock_timeout + akshare_fallback_failed',
+            'reason': 'baostock_timeout + akshare_fallback_failed + multisource_failed',
             'stock_code': stock_code
         }), 503
     except Exception as e:
         app.logger.error(f"api_stock_profile 子线程异常 ({stock_code}): {e}")
         return custom_jsonify({'error': 'internal_error', 'detail': str(e)}), 500
+
+    # baostock 路径返回但关键字段仍全空 → 多源补洞（对齐 K 线健壮性；减少「K 线有、档案全空」）
+    if not _profile_has_metrics(profile):
+        try:
+            _ms_src = _multisource_profile_fill(profile, stock_code)
+            if _ms_src and _profile_has_metrics(profile):
+                app.logger.info(
+                    f"[DP-P0-2] baostock 空结果经 multisource 补洞 ({stock_code}) src={_ms_src}"
+                )
+        except Exception as _e:
+            app.logger.warning(f"[DP-P0-2] post-baostock multisource 失败 ({stock_code}): {_e}")
 
     # 淘汰过期条目并写入（S1-C3 原子操作，整体在锁内）
     now2 = _time.time()
@@ -2559,18 +2762,194 @@ _market_indices_cache: dict = {}  # {'data': {...}, 'ts': float, 'source': str}
 # 避免多个并发请求（prefetch + React fetchIndices）同时触发 akshare 导致 16s 延迟
 _market_indices_lock: threading.Lock = threading.Lock()
 
+# DP-P0-1: 冷启动/全上游失败时的磁盘 last_good（真实成功拉取过的指数，禁止 mock）
+_MARKET_INDICES_LAST_GOOD_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'data', 'market_indices_last_good.json')
+_INDEX_TARGET_CODES = ['000001', '399001', '399006', '000300']
+_INDEX_CODE_NAMES = {
+    '000001': '上证指数',
+    '399001': '深证成指',
+    '399006': '创业板指',
+    '000300': '沪深300',
+}
+
+
+def _persist_market_indices_last_good(indices, origin_source: str) -> None:
+    """成功拉到非空指数时原子写入 data/market_indices_last_good.json。
+
+    Input : indices 列表（真数）、origin_source 实际上游名
+    Output: 无；落盘失败仅 WARNING
+    Pos   : _fetch_market_indices_data 完整/可用结果出口
+    """
+    if not indices:
+        return
+    try:
+        payload = {
+            'indices': indices,
+            'source': origin_source,
+            'fetched_at': now_cn().isoformat(),
+            'timestamp': now_cn().isoformat(),
+        }
+        os.makedirs(os.path.dirname(_MARKET_INDICES_LAST_GOOD_PATH), exist_ok=True)
+        atomic_write_json(_MARKET_INDICES_LAST_GOOD_PATH, payload)
+        app.logger.debug(
+            f"市场指数 last_good 已落盘: {_MARKET_INDICES_LAST_GOOD_PATH} "
+            f"({len(indices)} 条, source={origin_source})")
+    except Exception as e:
+        app.logger.warning(f"市场指数 last_good 落盘失败: {e}")
+
+
+def _load_market_indices_last_good():
+    """从磁盘读取 last_good；无文件/残缺返回 None。
+
+    Input : 无
+    Output: {'indices', 'source':'disk_last_good', 'asof', ...} 或 None
+    Pos   : 内存 stale 之后、503 空态之前
+    """
+    try:
+        if not os.path.exists(_MARKET_INDICES_LAST_GOOD_PATH):
+            return None
+        with open(_MARKET_INDICES_LAST_GOOD_PATH, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+        indices = raw.get('indices') if isinstance(raw, dict) else None
+        if not indices or not isinstance(indices, list):
+            return None
+        # 防御：至少一条含 code+price 的真实结构，拒绝空壳
+        valid = [
+            x for x in indices
+            if isinstance(x, dict) and x.get('code') is not None and x.get('price') is not None
+        ]
+        if not valid:
+            return None
+        asof = raw.get('fetched_at') or raw.get('timestamp')
+        return {
+            'indices': valid,
+            'source': 'disk_last_good',
+            'asof': asof,
+            'timestamp': asof or now_cn().isoformat(),
+            'original_source': raw.get('source'),
+        }
+    except Exception as e:
+        app.logger.warning(f"市场指数 last_good 读取失败: {e}")
+        return None
+
+
+def _try_heterogeneous_index_quote():
+    """非纯 ak 异构实时：优先 easyquotation，再腾讯 gtimg 轻量 HTTP。
+
+    Input : 无
+    Output: indices list 或 []（失败空列表，不抛）
+    Pos   : 新浪 ak 之后、日线之前（DP-P0-1）
+    铁律 #1：仅返回上游真实数值，不造假价。
+    """
+    result = []
+
+    # 1) easyquotation（项目已有适配器依赖，tencent/sina 均为非 em 通道）
+    try:
+        import easyquotation
+        for src_name in ('tencent', 'sina'):
+            try:
+                q = easyquotation.use(src_name)
+                codes = ['sh000001', 'sz399001', 'sz399006', 'sh000300']
+                batch = q.stocks(codes) or {}
+                got = []
+                for prefixed, bare in (
+                    ('sh000001', '000001'),
+                    ('sz399001', '399001'),
+                    ('sz399006', '399006'),
+                    ('sh000300', '000300'),
+                ):
+                    row = batch.get(bare) or batch.get(prefixed) or {}
+                    if not isinstance(row, dict):
+                        continue
+                    now_px = row.get('now')
+                    if now_px is None:
+                        continue
+                    close_px = row.get('close')
+                    name = row.get('name') or _INDEX_CODE_NAMES.get(bare, bare)
+                    change_pct = safe_change_pct(now_px, close_px) if close_px not in (None, 0, 0.0) else None
+                    got.append({
+                        'name': str(name),
+                        'code': bare,
+                        'price': quantize_finance(now_px, 4),
+                        'change_pct': quantize_finance(change_pct, 2) if change_pct is not None else None,
+                    })
+                if len(got) >= len(_INDEX_TARGET_CODES):
+                    return got
+                if got and len(got) > len(result):
+                    result = got
+            except Exception as e:
+                app.logger.debug(f"异构 easyquotation({src_name}) 指数失败: {e}")
+    except Exception as e:
+        app.logger.debug(f"异构 easyquotation 不可用: {e}")
+
+    # 2) 腾讯 gtimg 轻量 HTTP（仓库无独立 SDK，直接复用 requests；失败静默）
+    try:
+        import requests as _req
+        url = 'http://qt.gtimg.cn/q=s_sh000001,s_sz399001,s_sz399006,s_sh000300'
+        resp = _req.get(url, timeout=float(os.getenv('INDEX_HETERO_TIMEOUT_S', '5')),
+                        headers={'User-Agent': 'Mozilla/5.0 StockAnal/DP-P0-1'})
+        if resp.status_code == 200 and resp.text:
+            got = []
+            # v_s_sh000001="1~上证指数~000001~3814.20~-62.58~-1.61~..."
+            for line in resp.text.strip().split(';'):
+                line = line.strip()
+                if not line or '="' not in line:
+                    continue
+                try:
+                    body = line.split('="', 1)[1].rstrip('"')
+                    parts = body.split('~')
+                    if len(parts) < 6:
+                        continue
+                    name = parts[1]
+                    code = parts[2]
+                    if code not in _INDEX_TARGET_CODES:
+                        continue
+                    price = float(parts[3])
+                    change_pct = float(parts[5])
+                    got.append({
+                        'name': name or _INDEX_CODE_NAMES.get(code, code),
+                        'code': code,
+                        'price': quantize_finance(price, 4),
+                        'change_pct': quantize_finance(change_pct, 2),
+                    })
+                except (ValueError, IndexError, TypeError):
+                    continue
+            if len(got) >= len(_INDEX_TARGET_CODES):
+                return got
+            if got and len(got) > len(result):
+                result = got
+    except Exception as e:
+        app.logger.debug(f"异构 gtimg 指数失败: {e}")
+
+    return result
+
+
+def _commit_market_indices_hit(indices, source: str):
+    """写入内存缓存 + disk last_good，并返回带 source 的 payload。"""
+    data = {'indices': indices, 'timestamp': now_cn().isoformat()}
+    _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': source})
+    data = dict(data)
+    data['source'] = source
+    _persist_market_indices_last_good(indices, source)
+    return data
+
+
 def _fetch_market_indices_data():
     """内部函数：获取主要市场指数数据（上证/深证/创业板/沪深300），供API和SSE共用。
     Input: 无
     Output: {'indices': [...], 'source': str}
-    Pos: 实时指数三级兜底链（东财→新浪→日线），30s 内存缓存
+    Pos: 实时指数多级兜底（东财→新浪→异构 easyquotation/gtimg→日线→内存 stale→disk last_good）
     B23: 加 _market_indices_lock 防止并发竞争 akshare（双重检查锁定模式）
+    DP-P0-1: 异构备用 + 磁盘 last_good，冷启动无内存时避免 503 空 indices
     """
     import akshare as ak
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+    from concurrent.futures import TimeoutError as FuturesTimeout
 
     _PRIMARY_TIMEOUT = int(os.getenv('INDEX_PRIMARY_TIMEOUT_S', '5'))
     _FALLBACK_TIMEOUT = int(os.getenv('INDEX_FALLBACK_TIMEOUT_S', '15'))  # 新浪约 9s
+    _HETERO_TIMEOUT = int(os.getenv('INDEX_HETERO_TIMEOUT_S', '5'))
     # 与 get_market_indices / 预热默认一致：120s 新鲜窗（过期仍可由路由层 stale 回退）
     _CACHE_TTL = int(os.getenv('INDEX_CACHE_TTL_S', '120'))
 
@@ -2591,8 +2970,7 @@ def _fetch_market_indices_data():
             return cached
 
         # --- 主路径: 东财 stock_zh_index_spot_em(symbol="沪深重要指数") ---
-        # H1: 必须传 symbol；四目标码未齐时不当完整 HIT，继续 sina/daily 兜底或合并补齐
-        _INDEX_TARGET_CODES = ['000001', '399001', '399006', '000300']
+        # H1: 必须传 symbol；四目标码未齐时不当完整 HIT，继续 sina/异构/daily 兜底或合并补齐
 
         def _try_eastmoney():
             df = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
@@ -2615,10 +2993,7 @@ def _fetch_market_indices_data():
         try:
             result = fut.result(timeout=_PRIMARY_TIMEOUT)
             if result and len(result) >= len(_INDEX_TARGET_CODES):
-                data = {'indices': result, 'timestamp': now_cn().isoformat()}
-                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': 'eastmoney'})
-                data['source'] = 'eastmoney'
-                return data
+                return _commit_market_indices_hit(result, 'eastmoney')
             if result:
                 em_partial = result
                 app.logger.warning(
@@ -2676,18 +3051,31 @@ def _fetch_market_indices_data():
             if em_partial:
                 result = _merge_indices(em_partial, result or [])
             if result and len(result) >= len(_INDEX_TARGET_CODES):
-                data = {'indices': result, 'timestamp': now_cn().isoformat()}
                 src = 'eastmoney+sina' if em_partial else 'sina'
-                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': src})
-                data['source'] = src
-                return data
+                return _commit_market_indices_hit(result, src)
             if result:
-                # 仍不齐则继续 daily，携带部分结果合并
+                # 仍不齐则继续异构/daily，携带部分结果合并
                 em_partial = result
         except FuturesTimeout:
-            app.logger.warning(f"实时指数兜底1(新浪)超时({_FALLBACK_TIMEOUT}s), 切日线")
+            app.logger.warning(f"实时指数兜底1(新浪)超时({_FALLBACK_TIMEOUT}s), 切异构源")
         except Exception as e:
-            app.logger.warning(f"实时指数兜底1(新浪)失败: {e}, 切日线")
+            app.logger.warning(f"实时指数兜底1(新浪)失败: {e}, 切异构源")
+
+        # --- 兜底1.5 DP-P0-1: 异构 easyquotation / 腾讯 gtimg（非纯 ak 同函数）---
+        fut = _GLOBAL_THREAD_POOL.submit(_try_heterogeneous_index_quote)
+        try:
+            result = fut.result(timeout=_HETERO_TIMEOUT + 2)
+            if em_partial:
+                result = _merge_indices(em_partial, result or [])
+            if result and len(result) >= len(_INDEX_TARGET_CODES):
+                src = 'eastmoney+hetero' if em_partial else 'heterogeneous'
+                return _commit_market_indices_hit(result, src)
+            if result:
+                em_partial = result
+        except FuturesTimeout:
+            app.logger.warning(f"实时指数异构源超时({_HETERO_TIMEOUT}s), 切日线")
+        except Exception as e:
+            app.logger.warning(f"实时指数异构源失败: {e}, 切日线")
 
         # --- 兜底2: 历史日线最后一条（4 路并发，减少串行等待）---
         try:
@@ -2725,20 +3113,25 @@ def _fetch_market_indices_data():
                 result = _merge_indices(em_partial, result or [])
 
             if result:
-                data = {'indices': result, 'timestamp': now_cn().isoformat()}
                 src = 'merged_daily' if em_partial else 'daily'
-                _market_indices_cache.update({'data': data, 'ts': time.time(), 'source': src})
-                data['source'] = src
-                return data
+                return _commit_market_indices_hit(result, src)
         except Exception as e:
             app.logger.error(f"历史指数数据也失败: {e}")
 
-        # --- 兜底3: 返回已有缓存（无论是否过期）；部分结果不当完整 HIT 缓存 ---
+        # --- 兜底3: 返回已有内存缓存（无论是否过期）；部分结果不当完整 HIT 缓存 ---
         if _market_indices_cache.get('data'):
-            app.logger.warning("所有指数来源均失败，返回过期缓存")
+            app.logger.warning("所有指数来源均失败，返回过期内存缓存 source=stale_cache")
             stale = dict(_market_indices_cache['data'])
             stale['source'] = 'stale_cache'
             return stale
+
+        # --- 兜底4 DP-P0-1: 磁盘 last_good（冷启动无内存时保真数）---
+        disk = _load_market_indices_last_good()
+        if disk is not None:
+            app.logger.warning(
+                f"所有指数来源均失败，返回 disk last_good asof={disk.get('asof')}"
+            )
+            return disk
 
         # 仅有残缺部分结果：返回但不写 cache（避免假 HIT）
         if em_partial:
@@ -2777,6 +3170,16 @@ def get_market_indices():
         stale['source'] = 'stale_cache'
         return stale
 
+    def _fallback_memory_or_disk():
+        """失败链路由层：内存 stale → disk last_good → None。"""
+        stale = _stale_from_cache(_market_indices_cache)
+        if stale is not None:
+            return stale
+        disk = _load_market_indices_last_good()
+        if disk is not None:
+            return disk
+        return None
+
     # 快路径：TTL 内缓存命中时跳过线程池
     _cache = _market_indices_cache
     if _cache.get('data') and (time.time() - _cache.get('ts', 0)) < _ttl:
@@ -2784,26 +3187,28 @@ def get_market_indices():
         cached['source'] = 'cache'
         data = cached
     else:
-        # 慢路径：在全局线程池限时拉取；失败/超时优先 stale，杜绝空 503 闪屏
+        # 慢路径：在全局线程池限时拉取；失败/超时优先 stale/disk，杜绝空 503 闪屏
         fut = _GLOBAL_THREAD_POOL.submit(_fetch_market_indices_data)
         try:
             data = fut.result(timeout=_fast_ms / 1000.0)
-            if (not data.get('indices')) and (stale := _stale_from_cache(_cache)):
-                app.logger.warning(
-                    "get_market_indices 上游空结果，返回过期缓存 source=stale_cache"
-                )
-                data = stale
+            if not data.get('indices'):
+                fb = _fallback_memory_or_disk()
+                if fb is not None:
+                    app.logger.warning(
+                        f"get_market_indices 上游空结果，回退 source={fb.get('source')}"
+                    )
+                    data = fb
         except FuturesTimeout:
             fut.cancel()
-            stale = _stale_from_cache(_cache)
-            if stale is not None:
+            fb = _fallback_memory_or_disk()
+            if fb is not None:
                 app.logger.warning(
-                    f"get_market_indices 快速超时 {_fast_ms}ms，返回过期缓存 source=stale_cache"
+                    f"get_market_indices 快速超时 {_fast_ms}ms，回退 source={fb.get('source')}"
                 )
-                data = stale
+                data = fb
             else:
                 app.logger.warning(
-                    f"get_market_indices 快速超时 {_fast_ms}ms 且无缓存，返回 degraded"
+                    f"get_market_indices 快速超时 {_fast_ms}ms 且无缓存/disk，返回 degraded"
                 )
                 data = {'indices': [], 'source': 'degraded'}
 
@@ -2811,15 +3216,25 @@ def get_market_indices():
 
     # B2-4: 标注行情时效性
     _dq_map = {
-        'cache':       'cached_fresh',
-        'eastmoney':   'realtime',
-        'sina':        'realtime',
-        'daily':       'delayed_15min',
-        'stale_cache': 'stale_cache',
-        'degraded':    'stale_cache',
+        'cache':           'cached_fresh',
+        'eastmoney':       'realtime',
+        'sina':            'realtime',
+        'eastmoney+sina':  'realtime',
+        'heterogeneous':   'realtime',
+        'eastmoney+hetero':'realtime',
+        'daily':           'delayed_15min',
+        'merged_daily':    'delayed_15min',
+        'stale_cache':     'stale_cache',
+        'disk_last_good':  'stale_cache',
+        'partial':         'partial',
+        'degraded':        'stale_cache',
     }
     data_quality = _dq_map.get(source, 'unknown')
     data.setdefault('meta', {})['data_quality'] = data_quality
+    if source == 'disk_last_good' and data.get('asof'):
+        data['meta']['asof'] = data.get('asof')
+    elif source == 'stale_cache' and data.get('timestamp'):
+        data['meta'].setdefault('asof', data.get('timestamp'))
 
     # B2-5: 完全 degraded 时返回 503（无任何有效数据，仍禁止假数）
     if source == 'degraded' and not data.get('indices'):
@@ -2834,8 +3249,10 @@ def get_market_indices():
     resp.headers['X-Data-Source'] = source
     if source == 'cache':
         resp.headers['X-Cache'] = 'HIT'
-    elif source in ('degraded', 'stale_cache'):
-        resp.headers['X-Cache'] = 'STALE' if source == 'stale_cache' else 'DEGRADED'
+    elif source in ('stale_cache', 'disk_last_good'):
+        resp.headers['X-Cache'] = 'STALE' if source == 'stale_cache' else 'DISK'
+    elif source == 'degraded':
+        resp.headers['X-Cache'] = 'DEGRADED'
     else:
         resp.headers['X-Cache'] = 'MISS'
     return resp

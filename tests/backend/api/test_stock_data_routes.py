@@ -521,6 +521,121 @@ class TestStockProfileRoute:
         # roeAvg=0.12 * 100 = 12.0
         assert data["roe"] == pytest.approx(12.0)
 
+    def test_normalize_info_to_profile_maps_heterogeneous_keys(self):
+        """DP-P0-2：异构 info 键映射；缺字段保持 null，不造假值。"""
+        from app.web import web_server as ws
+
+        prof = {
+            "stock_code": "600519",
+            "stock_name": None,
+            "industry": None,
+            "market_cap": None,
+            "pe_ttm": None,
+            "pb": None,
+            "roe": None,
+        }
+        filled = ws._normalize_info_to_profile(
+            {
+                "行业": "白酒",
+                "市盈率": "20.5",
+                "市净率": "6.1",
+                "总市值": 1_655_389_000_000,  # 元 → 亿元
+                "股票简称": "贵州茅台",
+            },
+            prof,
+        )
+        assert filled is True
+        assert prof["industry"] == "白酒"
+        assert prof["pe_ttm"] == pytest.approx(20.5)
+        assert prof["pb"] == pytest.approx(6.1)
+        assert prof["market_cap"] == pytest.approx(16553.89)
+        assert prof["stock_name"] == "贵州茅台"
+        assert prof["roe"] is None  # 未提供 → 保持 null（铁律#1）
+
+        # 空 info 不改写、不造数
+        empty_prof = dict(pe_ttm=None, pb=None, industry=None, roe=None, stock_code="x")
+        assert ws._normalize_info_to_profile({}, empty_prof) is False
+        assert empty_prof["pe_ttm"] is None
+
+    def test_baostock_fail_multisource_success_returns_200_partial(
+        self, flask_client, monkeypatch
+    ):
+        """DP-P0-2：baostock 超时 + ak 补洞无果 + multisource 成功 → 200 部分字段。"""
+        import concurrent.futures
+
+        from app.web import web_server as ws
+
+        ws._PROFILE_CACHE.clear()
+        monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {"600519": "贵州茅台"})
+        monkeypatch.setattr(ws, "_load_stock_name_cache", lambda: None)
+        monkeypatch.setattr(ws, "_ensure_bs_login", lambda: None)
+
+        # 外层 baostock 总超时（沿用现有 8s 路径）
+        class _FailFuture:
+            def result(self, timeout=None):
+                raise concurrent.futures.TimeoutError("baostock mock timeout")
+
+        class _FailPool:
+            def submit(self, fn, *a, **kw):
+                return _FailFuture()
+
+        monkeypatch.setattr(ws, "_GLOBAL_THREAD_POOL", _FailPool())
+
+        # akshare 补洞故意空操作（模拟东财/雪球均不可达）
+        monkeypatch.setattr(ws, "_akshare_fill", lambda *a, **kw: None, raising=False)
+
+        # 内嵌 _akshare_fill 定义在 api 函数内部，需让整体超时后的 try 路径失败：
+        # 通过 patch 模块级 _multisource_profile_fill 即可覆盖 DP-P0-2 新层
+        def _fake_ms(prof, stock_code):
+            prof["industry"] = "白酒"
+            prof["pe_ttm"] = 20.01
+            prof["pb"] = 6.11
+            # roe / market_cap 故意保持 None（部分字段）
+            return "analyzer/data_provider"
+
+        monkeypatch.setattr(ws, "_multisource_profile_fill", _fake_ms)
+
+        # 使内部 _akshare_fill 调用失败：timeout 分支 try 里调用内嵌函数；
+        # 内嵌函数会真的 import akshare，在 DISABLE_NETWORK 下应空结果。
+        # 再保险：令 budget 路径里的 _akshare_fill 名称冲突无效时，直接不产生 metrics。
+        resp = flask_client.get("/api/stock_profile?stock_code=600519")
+        assert resp.status_code == 200, resp.data[:400]
+        data = _json(resp)
+        assert data["stock_code"] == "600519"
+        assert data["industry"] == "白酒"
+        assert data["pe_ttm"] == pytest.approx(20.01)
+        assert data["pb"] == pytest.approx(6.11)
+        assert data.get("roe") is None  # 缺字段保持 null
+        assert resp.headers.get("X-Data-Source", "").startswith("multisource:")
+
+    def test_baostock_and_all_fallback_fail_still_503(self, flask_client, monkeypatch):
+        """DP-P0-2：全部源失败仍保持 503 契约。"""
+        import concurrent.futures
+
+        from app.web import web_server as ws
+
+        ws._PROFILE_CACHE.clear()
+        monkeypatch.setattr(ws, "_STOCK_NAME_CACHE", {})
+        monkeypatch.setattr(ws, "_load_stock_name_cache", lambda: None)
+        monkeypatch.setattr(ws, "_ensure_bs_login", lambda: None)
+
+        class _FailFuture:
+            def result(self, timeout=None):
+                raise concurrent.futures.TimeoutError("baostock mock timeout")
+
+        class _FailPool:
+            def submit(self, fn, *a, **kw):
+                return _FailFuture()
+
+        monkeypatch.setattr(ws, "_GLOBAL_THREAD_POOL", _FailPool())
+        monkeypatch.setattr(ws, "_multisource_profile_fill", lambda *a, **kw: None)
+
+        resp = flask_client.get("/api/stock_profile?stock_code=600519")
+        assert resp.status_code == 503, resp.data[:400]
+        data = _json(resp)
+        assert data.get("error") == "all_sources_failed"
+        assert "multisource_failed" in (data.get("reason") or "")
+
 
 # --------------------------------------------------------------------------- #
 # 4. GET /api/stock_name_search
@@ -573,6 +688,9 @@ class TestMarketIndicesRoute:
 
     def test_market_indices_empty_when_fetch_fails(self, flask_client, monkeypatch):
         from app.web import web_server
+        web_server._market_indices_cache.clear()
+        # 隔离 disk last_good，确保无内存/无磁盘时仍空
+        monkeypatch.setattr(web_server, "_load_market_indices_last_good", lambda: None)
         monkeypatch.setattr(web_server, "_fetch_market_indices_data",
                             lambda: {"indices": []})
         resp = flask_client.get("/api/market_indices")
@@ -586,8 +704,9 @@ class TestMarketIndicesRoute:
         from app.web import web_server
 
         monkeypatch.setenv("INDEX_FAST_TIMEOUT_MS", "50")
-        # 无缓存：超时后只能 degraded 503
+        # 无缓存 / 无 disk：超时后只能 degraded 503
         web_server._market_indices_cache.clear()
+        monkeypatch.setattr(web_server, "_load_market_indices_last_good", lambda: None)
 
         def slow_fetch():
             time.sleep(1.0)
@@ -640,6 +759,100 @@ class TestMarketIndicesRoute:
         assert len(data.get("indices") or []) == 1
         assert data["indices"][0]["code"] == "000001"
         assert resp.headers.get("X-Cache") == "STALE"
+
+    def test_market_indices_disk_last_good_when_upstream_all_fail(
+        self, flask_client, monkeypatch, tmp_path
+    ):
+        """上游全失败 + 无内存 stale + 预置 last_good → 200 + source=disk_last_good 真 indices。"""
+        from app.web import web_server
+
+        web_server._market_indices_cache.clear()
+        last_good = tmp_path / "market_indices_last_good.json"
+        sample = {
+            "indices": [
+                {"name": "上证指数", "code": "000001", "price": 3814.1978, "change_pct": -1.61},
+                {"name": "深证成指", "code": "399001", "price": 13774.676, "change_pct": -2.47},
+                {"name": "创业板指", "code": "399006", "price": 3480.87, "change_pct": -2.65},
+                {"name": "沪深300", "code": "000300", "price": 4649.1917, "change_pct": -1.67},
+            ],
+            "source": "heterogeneous",
+            "fetched_at": "2026-07-24T17:00:00+08:00",
+            "timestamp": "2026-07-24T17:00:00+08:00",
+        }
+        last_good.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(web_server, "_MARKET_INDICES_LAST_GOOD_PATH", str(last_good))
+        monkeypatch.setattr(
+            web_server,
+            "_fetch_market_indices_data",
+            lambda: {"indices": [], "source": "degraded"},
+        )
+        monkeypatch.setenv("INDEX_FAST_TIMEOUT_MS", "5000")
+
+        resp = flask_client.get("/api/market_indices")
+        assert resp.status_code == 200
+        data = _json(resp)
+        assert data.get("source") == "disk_last_good"
+        assert len(data.get("indices") or []) == 4
+        assert data["indices"][0]["code"] == "000001"
+        assert data["indices"][0]["price"] == 3814.1978
+        assert data.get("asof") == "2026-07-24T17:00:00+08:00"
+        assert data.get("meta", {}).get("data_quality") == "stale_cache"
+        assert resp.headers.get("X-Data-Source") == "disk_last_good"
+        assert resp.headers.get("X-Cache") == "DISK"
+
+    def test_fetch_market_indices_reads_disk_last_good_inline(self, monkeypatch, tmp_path):
+        """_fetch 内部链：上游全挂、无内存 → 直接返回 disk_last_good。"""
+        from app.web import web_server
+
+        web_server._market_indices_cache.clear()
+        last_good = tmp_path / "market_indices_last_good.json"
+        sample = {
+            "indices": [
+                {"name": "上证指数", "code": "000001", "price": 3000.5, "change_pct": 0.1},
+            ],
+            "source": "sina",
+            "fetched_at": "2026-07-24T10:00:00+08:00",
+        }
+        last_good.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(web_server, "_MARKET_INDICES_LAST_GOOD_PATH", str(last_good))
+        monkeypatch.setattr(web_server, "_try_heterogeneous_index_quote", lambda: [])
+
+        class _Boom:
+            def stock_zh_index_spot_em(self, *a, **k):
+                raise RuntimeError("em down")
+
+            def stock_zh_index_spot_sina(self, *a, **k):
+                raise RuntimeError("sina down")
+
+            def stock_zh_index_daily(self, *a, **k):
+                raise RuntimeError("daily down")
+
+        monkeypatch.setitem(sys.modules, "akshare", _Boom())
+        monkeypatch.setenv("INDEX_PRIMARY_TIMEOUT_S", "1")
+        monkeypatch.setenv("INDEX_FALLBACK_TIMEOUT_S", "1")
+        monkeypatch.setenv("INDEX_HETERO_TIMEOUT_S", "1")
+        monkeypatch.setenv("INDEX_CACHE_TTL_S", "120")
+
+        out = web_server._fetch_market_indices_data()
+        assert out.get("source") == "disk_last_good"
+        assert out.get("indices")
+        assert out["indices"][0]["price"] == 3000.5
+
+    def test_persist_market_indices_last_good_writes_file(self, monkeypatch, tmp_path):
+        """成功路径落盘 last_good（原子写）。"""
+        from app.web import web_server
+
+        path = tmp_path / "lg.json"
+        monkeypatch.setattr(web_server, "_MARKET_INDICES_LAST_GOOD_PATH", str(path))
+        indices = [
+            {"name": "上证指数", "code": "000001", "price": 3100.0, "change_pct": 1.2},
+        ]
+        web_server._persist_market_indices_last_good(indices, "heterogeneous")
+        assert path.exists()
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        assert loaded["indices"][0]["price"] == 3100.0
+        assert loaded["source"] == "heterogeneous"
+        assert "fetched_at" in loaded
 
 
 # --------------------------------------------------------------------------- #
