@@ -501,18 +501,55 @@ import-smoke：`len(OPENAPI_SPEC['paths']) == 71`；`get_market_overview_brief` 
 
 | 项 | 原因 | 建议门槛 |
 |----|------|----------|
-| **写仓 harness / 真 mutate 端点** | P0-2 仅硬拦；无审批写路径 | Sprint4 + Comdr 书面审批 + 审计日志 |
-| **Plan DAG / 多步编排** | 架构面大，超出 facade 薄封装 | 独立设计 + 超时/配额统一 |
+| **真券商 / 真 mutate 用户持仓** | 仅 local_mark_only 骨架；无 broker | Comdr 书面审批 + 审计 + 独立适配器 |
+| **provenance[] 证据链深化** | 非本切片 | 对齐 scorecard/decision_memo 字段后补 |
+| **Plan DAG / 多步编排** | 架构面大 | 独立设计 + 超时/配额统一 |
 | **Skills / dojosdk 数据面替换** | 破坏 adapters/Wind 铁证链 | 仅 facade 挂现源；禁替换 |
 | **git push** | 工作区纪律 + 本地 ahead origin | Comdr 显式授权 |
 | **全量 vitest / npm build / 启服务** | 铁律 #3 资源 | 仅 tsc + 聚焦 eslint + 聚焦 pytest |
+
+---
+
+## Sprint4 写仓提案闸门 + decision 挂载（2026-07-24 18:23 PDT）
+
+**任务约束**：禁 push；禁启服；离线可测；铁律 #1–3。
+
+### 落地项
+
+| 项 | 路径 | 说明 |
+|----|------|------|
+| 写仓提案 store | `app/core/write_proposal.py` | [NEW-FILE:#20260724-S4] propose/decide/apply；RLock；进程内 |
+| 工具闸门 | `app/core/tools.py` | 三工具 + schema；裸写工具仍硬拦并 hint 提案路径 |
+| 会话挂载 | `app/core/conversation.py` | `decision_artifacts` + `attach_decision_artifact` |
+| chat/agent 接线 | `app/web/web_server.py` | assistant 落盘后挂 decision_card/scorecard |
+| 测试 | `test_sprint2_intent_portfolio.py` + `test_core_conversation.py` | 闸门全链路 + 挂载断言 |
+
+### 语义铁证（禁止假下单）
+
+- `propose` → `success=true, executed=false, broker=null, approval_id`
+- `apply` 未批 → `APPROVAL_REQUIRED, executed=false`
+- `apply` 已批 → `applied=true, local_marked=true, executed=false, broker=null`
+- 响应文案含「非成交 / 禁止解读为…已下单」
+
+### 聚焦测试命令
+
+```bash
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q \
+  tests/backend/unit/test_sprint2_intent_portfolio.py \
+  tests/backend/unit/test_agent_scorecard.py \
+  tests/backend/unit/test_tool_guardrails.py \
+  tests/backend/unit/test_hitl_gate.py \
+  tests/backend/integration/test_hitl.py \
+  tests/backend/unit/test_analysis_risk_monitor.py \
+  tests/backend/unit/test_core_event_bus.py \
+  tests/backend/unit/test_core_conversation.py
+```
 
 ### 回滚
 
 ```bash
 git revert <本批 commit>
-# 或按文件还原 tools.py / openapi_spec.py / scorecard.py / chat-panel.tsx /
-# decision-card.tsx / types/index.ts 与三份测试追加段
+# 或：rm app/core/write_proposal.py；还原 tools.py / conversation.py / web_server.py / 测试与文档
 ```
 
 

@@ -317,3 +317,165 @@ class TestMarketSectorFacadeG9:
         data = json.loads(raw) if isinstance(raw, str) else raw
         assert data.get("indices") == []
         assert data.get("source") in ("error", "offline_disabled")
+
+
+class TestSprint4WriteProposalGate:
+    """Sprint4：propose → decide → apply 闸门；禁止假「已下单」。"""
+
+    @pytest.fixture(autouse=True)
+    def _reset_store(self):
+        from app.core.write_proposal import reset_write_proposal_store_for_tests
+
+        reset_write_proposal_store_for_tests()
+        yield
+        reset_write_proposal_store_for_tests()
+
+    def test_propose_returns_approval_id_not_executed(self):
+        raw = execute_tool(
+            "propose_portfolio_write",
+            {
+                "action": "add_holding",
+                "code": "600519",
+                "name": "贵州茅台",
+                "shares": 100,
+                "reason": "unit test",
+            },
+        )
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        assert data.get("success") is True
+        assert data.get("executed") is False
+        assert data.get("broker") is None
+        assert data.get("approval_id")
+        assert data.get("proposal_id")
+        prop = data.get("proposal") or {}
+        assert prop.get("status") == "proposed"
+        assert prop.get("executed") is False
+        assert "已下单" not in str(data.get("message") or "")
+        assert "提案" in str(data.get("message") or "")
+
+    def test_apply_without_approval_blocked(self):
+        raw_p = execute_tool(
+            "propose_portfolio_write",
+            {"action": "add_holding", "code": "000001"},
+        )
+        p = json.loads(raw_p)
+        raw = execute_tool(
+            "apply_portfolio_proposal",
+            {
+                "proposal_id": p["proposal_id"],
+                "approval_id": p["approval_id"],  # still pending
+            },
+        )
+        data = json.loads(raw)
+        assert data.get("success") is False
+        assert data.get("executed") is False
+        assert data.get("error_code") == "APPROVAL_REQUIRED"
+        assert data.get("broker") is None
+
+    def test_apply_missing_approval_id(self):
+        raw_p = execute_tool(
+            "propose_portfolio_write",
+            {"action": "remove_holding", "code": "000002"},
+        )
+        p = json.loads(raw_p)
+        raw = execute_tool(
+            "apply_portfolio_proposal",
+            {"proposal_id": p["proposal_id"], "approval_id": ""},
+        )
+        data = json.loads(raw)
+        assert data.get("success") is False
+        assert data.get("executed") is False
+        assert data.get("error_code") == "APPROVAL_REQUIRED"
+
+    def test_full_flow_local_mark_never_broker_fill(self):
+        raw_p = execute_tool(
+            "propose_portfolio_write",
+            {
+                "action": "update_holding",
+                "code": "600036",
+                "shares": 200,
+            },
+        )
+        p = json.loads(raw_p)
+        aid = p["approval_id"]
+        pid = p["proposal_id"]
+
+        raw_d = execute_tool(
+            "decide_portfolio_proposal_approval",
+            {"approval_id": aid, "approved": True, "feedback": "ok"},
+        )
+        d = json.loads(raw_d)
+        assert d.get("success") is True
+        assert d.get("executed") is False
+        assert (d.get("approval") or {}).get("status") == "approved"
+
+        raw_a = execute_tool(
+            "apply_portfolio_proposal",
+            {"proposal_id": pid, "approval_id": aid},
+        )
+        a = json.loads(raw_a)
+        assert a.get("success") is True
+        assert a.get("executed") is False  # 禁止假「已下单」
+        assert a.get("applied") is True
+        assert a.get("broker") is None
+        assert a.get("apply_mode") == "local_mark_only"
+        assert "成交" not in (a.get("message") or "") or "非成交" in (
+            a.get("message") or ""
+        )
+        prop = a.get("proposal") or {}
+        assert prop.get("status") == "applied"
+        assert prop.get("executed") is False
+
+    def test_reject_blocks_apply(self):
+        raw_p = execute_tool(
+            "propose_portfolio_write",
+            {"action": "add_holding", "code": "601318"},
+        )
+        p = json.loads(raw_p)
+        execute_tool(
+            "decide_portfolio_proposal_approval",
+            {"approval_id": p["approval_id"], "approved": False},
+        )
+        raw_a = execute_tool(
+            "apply_portfolio_proposal",
+            {
+                "proposal_id": p["proposal_id"],
+                "approval_id": p["approval_id"],
+            },
+        )
+        a = json.loads(raw_a)
+        assert a.get("success") is False
+        assert a.get("executed") is False
+        assert a.get("error_code") == "APPROVAL_REQUIRED"
+
+    def test_invalid_action(self):
+        raw = execute_tool(
+            "propose_portfolio_write",
+            {"action": "market_buy_now", "code": "600519"},
+        )
+        data = json.loads(raw)
+        assert data.get("success") is False
+        assert data.get("executed") is False
+        assert data.get("error_code") == "INVALID_ACTION"
+
+    def test_legacy_write_tools_still_hard_blocked(self):
+        """P0-2：裸 portfolio_write_* 仍硬拦；应提示走提案闸门。"""
+        raw = execute_tool("portfolio_write_create", {"name": "x"})
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        assert data.get("error_code") == "WRITE_TOOL_BLOCKED"
+        assert data.get("executed") is False
+        assert data.get("broker") is None
+        msg = str(data.get("message") or "")
+        assert "propose_portfolio_write" in msg or "提案" in msg
+
+    def test_proposal_tools_are_not_write_blocked(self):
+        """闸门三工具在 READ_ONLY 白名单，不走 WRITE_TOOL_BLOCKED。"""
+        from app.core.tools import READ_ONLY_TOOL_NAMES
+
+        for name in (
+            "propose_portfolio_write",
+            "apply_portfolio_proposal",
+            "decide_portfolio_proposal_approval",
+        ):
+            assert name in READ_ONLY_TOOL_NAMES
+            assert is_write_tool_name(name) is False

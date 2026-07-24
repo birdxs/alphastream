@@ -1,7 +1,7 @@
 """
-Input: 用户对话消息、AI回复、工具调用记录、Artifact数据
-Output: 对话历史存取接口、多轮上下文管理
-Pos: app/core/conversation.py - 对话上下文持久化，支持多轮AI分析对话
+Input: 用户对话消息、AI回复、工具调用记录、Artifact数据；可选 decision_memo/scorecard 挂载
+Output: 对话历史存取接口、多轮上下文管理；Sprint4 decision_artifacts 会话级挂载
+Pos: app/core/conversation.py - 对话上下文持久化，支持多轮AI分析对话与决策产物回放索引
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -19,6 +19,9 @@ now_cn = lambda: datetime.now(_ASIA_SHANGHAI)
 logger = logging.getLogger(__name__)
 
 CONVERSATION_DIR = os.path.join(os.path.dirname(__file__), '../../data/conversations')
+
+# 会话级 decision 产物上限（防膨胀）
+_MAX_DECISION_ARTIFACTS = 50
 
 
 class ConversationManager:
@@ -44,7 +47,9 @@ class ConversationManager:
             'updated_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
             'messages': [],
             'stock_codes': [],
-            'analysis_refs': []
+            'analysis_refs': [],
+            # Sprint4：会话级决策/评分卡产物（可回放；不写虚构行情数值）
+            'decision_artifacts': [],
         }
         self._save_conversation(conv_id, conv)
         return conv_id
@@ -191,6 +196,81 @@ class ConversationManager:
         if conv and stock_code not in conv.get('stock_codes', []):
             conv.setdefault('stock_codes', []).append(stock_code)
             self._save_conversation(conversation_id, conv)
+
+    def attach_decision_artifact(
+        self,
+        conversation_id: str,
+        artifact: Dict[str, Any],
+        *,
+        source: str = 'agent',
+        task_id: str = '',
+        stock_code: str = '',
+    ) -> Optional[Dict[str, Any]]:
+        """将会话相关的 decision/scorecard 产物挂到 decision_artifacts。
+
+        - artifact 必须为非空 dict；不补造假金融字段
+        - 超限 FIFO 裁剪；可选写入 analysis_refs 轻量索引
+        """
+        if not conversation_id or not isinstance(artifact, dict) or not artifact:
+            return None
+        with self._lock:
+            conv = self._load_conversation(conversation_id)
+            if conv is None:
+                logger.warning(
+                    'attach_decision_artifact: conversation %s not found',
+                    conversation_id,
+                )
+                return None
+
+            items = conv.get('decision_artifacts')
+            if not isinstance(items, list):
+                items = []
+
+            entry: Dict[str, Any] = {
+                'id': f"da_{uuid.uuid4().hex[:12]}",
+                'attached_at': now_cn().strftime('%Y-%m-%d %H:%M:%S'),
+                'source': (source or 'agent')[:64],
+                'task_id': (task_id or '')[:128],
+                'stock_code': (stock_code or '')[:32],
+                'artifact': artifact,
+            }
+            items.append(entry)
+            if len(items) > _MAX_DECISION_ARTIFACTS:
+                items = items[-_MAX_DECISION_ARTIFACTS:]
+            conv['decision_artifacts'] = items
+
+            refs = conv.get('analysis_refs')
+            if not isinstance(refs, list):
+                refs = []
+            if task_id:
+                refs.append({
+                    'type': 'decision_artifact',
+                    'task_id': task_id,
+                    'stock_code': stock_code or '',
+                    'artifact_id': entry['id'],
+                    'attached_at': entry['attached_at'],
+                })
+                conv['analysis_refs'] = refs[-100:]
+
+            conv['updated_at'] = now_cn().strftime('%Y-%m-%d %H:%M:%S')
+            self._save_conversation(conversation_id, conv)
+            return entry
+
+    def get_decision_artifacts(
+        self, conversation_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """读取会话挂载的 decision artifacts（最近 N 条）。"""
+        conv = self._load_conversation(conversation_id)
+        if not conv:
+            return []
+        items = conv.get('decision_artifacts') or []
+        if not isinstance(items, list):
+            return []
+        try:
+            lim = max(1, min(int(limit or 20), _MAX_DECISION_ARTIFACTS))
+        except (TypeError, ValueError):
+            lim = 20
+        return items[-lim:]
 
     def _load_conversation(self, conversation_id: str) -> Optional[Dict]:
         filepath = os.path.join(CONVERSATION_DIR, f"{conversation_id}.json")

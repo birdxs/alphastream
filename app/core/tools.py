@@ -1,7 +1,7 @@
 """
 Input: 各分析模块的方法调用、OpenAI Function Calling工具调用请求；可选请求级 portfolio_snapshot（ContextVar）
 Output: LangChain @tool 包装的标准工具函数 + OpenAI Function Calling格式schema + 工具执行分发
-Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 护栏 + P0-2 写工具硬拦；Sprint2 持仓只读
+Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 护栏 + P0-2 写工具硬拦；Sprint2 持仓只读；Sprint4 写仓提案闸门
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -433,6 +433,76 @@ def get_portfolio_risk_summary(include_market_risk: bool = False) -> str:
     return json.dumps(base, ensure_ascii=False, default=str)
 
 
+@tool
+def propose_portfolio_write(
+    action: str,
+    code: str = "",
+    name: str = "",
+    shares: float = None,
+    weight: float = None,
+    reason: str = "",
+    conversation_id: str = "",
+) -> str:
+    """生成写仓**提案**（Sprint4），不执行真实下单。
+
+    输出 proposal_id + approval_id；必须先审批再 apply_portfolio_proposal。
+    禁止解读为「已下单」；broker 恒为 null。
+    action: add_holding | remove_holding | update_holding | rebalance | other
+    """
+    from app.core.write_proposal import get_write_proposal_store
+
+    store = get_write_proposal_store()
+    result = store.create_proposal(
+        action=action or "",
+        code=code or "",
+        name=name or "",
+        shares=shares,
+        weight=weight,
+        reason=reason or "",
+        conversation_id=conversation_id or "",
+        source="agent_tool",
+    )
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@tool
+def apply_portfolio_proposal(
+    proposal_id: str,
+    approval_id: str = "",
+) -> str:
+    """在 approval_id 已批准后，本地标记提案 applied（模拟）。
+
+    **无真实券商**；缺 approval / 未 approved → APPROVAL_REQUIRED，executed=false。
+    禁止将成功响应理解为交易所成交。
+    """
+    from app.core.write_proposal import get_write_proposal_store
+
+    store = get_write_proposal_store()
+    result = store.apply_proposal(
+        proposal_id=(proposal_id or "").strip(),
+        approval_id=(approval_id or "").strip(),
+    )
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@tool
+def decide_portfolio_proposal_approval(
+    approval_id: str,
+    approved: bool = False,
+    feedback: str = "",
+) -> str:
+    """记录写仓提案审批结果（approve/reject），不执行写仓。"""
+    from app.core.write_proposal import get_write_proposal_store
+
+    store = get_write_proposal_store()
+    result = store.decide_approval(
+        (approval_id or "").strip(),
+        approved=bool(approved),
+        feedback=feedback or "",
+    )
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
 def _offline_or_disabled() -> bool:
     """DISABLE_NETWORK=1 / 离线：facade 不得联网、不得造假数。"""
     return os.environ.get("DISABLE_NETWORK", "").strip() in ("1", "true", "True", "YES", "yes")
@@ -777,6 +847,111 @@ OPENAI_TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "propose_portfolio_write",
+            "description": (
+                "生成写仓提案（非真实下单）。返回 proposal_id + approval_id；"
+                "必须先审批再 apply_portfolio_proposal。禁止解读为已下单。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": (
+                            "提案动作：add_holding | remove_holding | "
+                            "update_holding | rebalance | other"
+                        ),
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "股票代码（add/remove/update 必填）",
+                        "default": "",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "股票名称（可选，不得以 code 冒充）",
+                        "default": "",
+                    },
+                    "shares": {
+                        "type": "number",
+                        "description": "拟调整股数（可选）",
+                    },
+                    "weight": {
+                        "type": "number",
+                        "description": "拟目标权重 0-1（可选）",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "提案理由（可选，最长约500字）",
+                        "default": "",
+                    },
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "关联会话 id（可选）",
+                        "default": "",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "decide_portfolio_proposal_approval",
+            "description": (
+                "记录写仓提案审批（approve/reject），不执行写仓、不调用券商。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "approval_id": {
+                        "type": "string",
+                        "description": "提案返回的 approval_id",
+                    },
+                    "approved": {
+                        "type": "boolean",
+                        "description": "true=批准，false=拒绝",
+                        "default": False,
+                    },
+                    "feedback": {
+                        "type": "string",
+                        "description": "审批意见（可选）",
+                        "default": "",
+                    },
+                },
+                "required": ["approval_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "apply_portfolio_proposal",
+            "description": (
+                "在 approval_id 已批准后，将提案本地标记为 applied（模拟）。"
+                "无真实券商；缺/未批 approval → APPROVAL_REQUIRED。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "string",
+                        "description": "提案 id",
+                    },
+                    "approval_id": {
+                        "type": "string",
+                        "description": "已批准的 approval_id",
+                        "default": "",
+                    },
+                },
+                "required": ["proposal_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_market_overview_brief",
             "description": (
                 "大盘/指数只读简报 facade。"
@@ -885,6 +1060,9 @@ TOOL_EXECUTORS = {
     "get_risk_assessment": get_risk_assessment,
     "get_portfolio_snapshot": get_portfolio_snapshot,
     "get_portfolio_risk_summary": get_portfolio_risk_summary,
+    "propose_portfolio_write": propose_portfolio_write,
+    "apply_portfolio_proposal": apply_portfolio_proposal,
+    "decide_portfolio_proposal_approval": decide_portfolio_proposal_approval,
     "get_market_overview_brief": get_market_overview_brief,
     "get_sector_snapshot": get_sector_snapshot,
 }
@@ -962,11 +1140,15 @@ def _refuse_write_tool(tool_name: str) -> str:
         "error_code": "WRITE_TOOL_BLOCKED",
         "tool": tool_name,
         "message": (
-            "写仓/下单类工具已服务端硬拦：当前 Agent 链路仅允许只读分析。"
-            "未执行任何写操作；请用户在组合页手动维护持仓。"
+            "写仓/下单类工具已服务端硬拦：当前 Agent 链路不允许直接改仓/下单。"
+            "未执行任何写操作。若需写仓流程，请使用 propose_portfolio_write "
+            "→ decide_portfolio_proposal_approval → apply_portfolio_proposal "
+            "（提案+审批闸门，仍无真实券商）。"
             "禁止将本响应解读为下单或改仓成功。"
         ),
         "data": None,
+        "broker": None,
+        "hint": "propose_portfolio_write",
     }
     try:
         logger.warning("WRITE_TOOL_BLOCKED tool=%s", tool_name)

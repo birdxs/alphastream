@@ -68,6 +68,52 @@ def test_T004_add_message_basic(manager):
     assert conv['messages'][0]['content'] == '你好'
 
 
+# ============ Sprint4 decision_artifacts 挂载 ============
+def test_sprint4_create_has_decision_artifacts_list(manager, temp_conv_dir):
+    cid = manager.create_conversation(title="s4")
+    conv = manager.get_conversation(cid)
+    assert isinstance(conv.get("decision_artifacts"), list)
+    assert conv["decision_artifacts"] == []
+
+
+def test_sprint4_attach_decision_artifact(manager, temp_conv_dir):
+    cid = manager.create_conversation()
+    entry = manager.attach_decision_artifact(
+        cid,
+        {
+            "artifact_type": "decision_card",
+            "data": {"action": "HOLD", "confidence": 0.6},
+            "decision_memo": {"summary": "持有"},
+        },
+        source="unit",
+        task_id="task_ut_001",
+        stock_code="600519",
+    )
+    assert entry is not None
+    assert entry["id"].startswith("da_")
+    assert entry["task_id"] == "task_ut_001"
+    assert entry["stock_code"] == "600519"
+    assert entry["artifact"]["artifact_type"] == "decision_card"
+
+    items = manager.get_decision_artifacts(cid)
+    assert len(items) == 1
+    assert items[0]["id"] == entry["id"]
+
+    conv = manager.get_conversation(cid)
+    refs = conv.get("analysis_refs") or []
+    assert any(
+        r.get("type") == "decision_artifact" and r.get("task_id") == "task_ut_001"
+        for r in refs
+    )
+
+
+def test_sprint4_attach_rejects_empty(manager):
+    cid = manager.create_conversation()
+    assert manager.attach_decision_artifact(cid, {}) is None
+    assert manager.attach_decision_artifact(cid, None) is None  # type: ignore[arg-type]
+    assert manager.get_decision_artifacts(cid) == []
+
+
 # ============ T005 add_message 自动更新标题（首条 user 消息前 20 字符）============
 def test_T005_auto_update_title_from_first_user_msg(manager):
     cid = manager.create_conversation()

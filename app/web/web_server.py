@@ -4672,6 +4672,32 @@ def ai_chat_stream():
                     artifacts=artifacts_collected,
                     tool_calls=tools_log
                 )
+                # Sprint4：将会话相关 decision/scorecard 产物挂到 conversation.decision_artifacts
+                try:
+                    for art in (artifacts_collected or []):
+                        if not isinstance(art, dict):
+                            continue
+                        at = (
+                            art.get('artifact_type')
+                            or art.get('type')
+                            or ''
+                        )
+                        if at in (
+                            'decision_card',
+                            'decision_memo',
+                            'scorecard',
+                            'run_scorecard',
+                        ) or art.get('decision_memo') or art.get('action'):
+                            conv_mgr.attach_decision_artifact(
+                                conversation_id,
+                                art,
+                                source='chat',
+                                stock_code=stock_code or '',
+                            )
+                except Exception as _att_err:
+                    app.logger.warning(
+                        'chat attach_decision_artifact failed: %s', _att_err
+                    )
 
                 # 生成follow-up问题
                 follow_ups = _generate_follow_ups(stock_code, final_content)
@@ -5078,10 +5104,31 @@ def ai_agent_analyze_stream():
                     if fd.get('bear_case'):
                         summary_parts.append(f"看空观点: {str(fd['bear_case'])[:400]}")
                     summary_text = "\n".join(summary_parts)
+                    da_payload = {
+                        'artifact_type': 'decision_card',
+                        'data': fd,
+                    }
+                    if result.get('decision_memo') is not None:
+                        da_payload['decision_memo'] = result.get('decision_memo')
+                    if result.get('scorecard') is not None:
+                        da_payload['scorecard'] = result.get('scorecard')
                     conv_mgr.add_message(
                         conversation_id, 'assistant', summary_text,
-                        artifacts=[{'artifact_type': 'decision_card', 'data': fd}]
+                        artifacts=[da_payload],
                     )
+                    # Sprint4：会话级挂载 decision artifact（可回放索引）
+                    try:
+                        conv_mgr.attach_decision_artifact(
+                            conversation_id,
+                            da_payload,
+                            source='agent-analyze',
+                            task_id=str(result.get('task_id') or '')[:128],
+                            stock_code=stock_code or '',
+                        )
+                    except Exception as _att_e:
+                        app.logger.warning(
+                            'agent-analyze attach_decision_artifact: %s', _att_e
+                        )
                 except Exception as _e:
                     app.logger.warning(f"agent-analyze 保存assistant消息失败: {_e}")
 

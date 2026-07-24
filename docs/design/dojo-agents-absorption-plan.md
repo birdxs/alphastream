@@ -564,6 +564,11 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 ### Sprint 4 — 写仓 harness + 市场 facade + P2 选修
 
 - 仅当 P0/P1 稳定且 Comdr 明示；offline arena / Sink / 截图等可砍。
+- **2026-07-24 18:23 PDT（+08:00 等效 2026-07-24 09:23）离线切片（骨架 DONE）**：
+  - `app/core/write_proposal.py` [NEW-FILE:#20260724-S4]：提案 + `approval_id` 闸门；`propose → decide → apply`；apply 仅 `local_mark_only`，**executed=false / broker=null**，禁止假「已下单」。
+  - `tools.py` 注册 `propose_portfolio_write` / `decide_portfolio_proposal_approval` / `apply_portfolio_proposal`（白名单可执行；裸 `portfolio_write_*` 仍 WRITE_TOOL_BLOCKED）。
+  - `conversation.attach_decision_artifact` + chat/agent-analyze 落盘挂载 decision_card（会话级可回放索引）。
+  - **未做**：真券商 / 改用户 portfolio-store / provenance[] / Plan DAG / Skills loader / 启服联调。
 
 ### 每 Sprint DoD
 
