@@ -30,6 +30,14 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+# 导入前/收集阶段再写一次后台门控（web_server 模块级 _startup_background_enabled）
+# 与根 conftest.py 双保险，减少 atexit closed-stream 噪声
+os.environ.setdefault("DISABLE_NETWORK", "1")
+os.environ.setdefault("MOCK_LLM", "1")
+os.environ.setdefault("AUTH_REQUIRED", "false")
+os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+
+
 # ==============================================================================
 # 全局外网阻断 fixture（autouse）
 # 阻断所有单元测试的外网调用，避免超时或真实 I/O 污染测试结果。
@@ -43,7 +51,7 @@ def _block_external_network(request, monkeypatch):
     1. AdapterRegistry.call_with_fallback → None（阻断 news/sentiment_social/esg_rating 等域）
     2. app.core.search.search_stock_news_unified → []（阻断联网新闻搜索）
     3. app.core.search.search_web / multi_search → []（阻断通用搜索）
-    4. 设置 DISABLE_NETWORK=1, MOCK_LLM=1 环境变量
+    4. 设置 DISABLE_NETWORK=1, MOCK_LLM=1, STOCKANAL_DISABLE_BACKGROUND=1 环境变量
 
     环境变量门控：SKIP_NETWORK_BLOCK=1 可跳过本 fixture（用于明确需要外网的测试）。
     集成测试目录 tests/backend/integration/ 默认也应用，但可在测试内用 monkeypatch 覆盖。
@@ -56,6 +64,7 @@ def _block_external_network(request, monkeypatch):
     # 1. 设置网络屏蔽环境变量
     monkeypatch.setenv("DISABLE_NETWORK", "1")
     monkeypatch.setenv("MOCK_LLM", "1")
+    monkeypatch.setenv("STOCKANAL_DISABLE_BACKGROUND", "1")
 
     # 1b. 确保 app.core.tools stub（如果已注入）含有 execute_tool 属性，避免 T020 等测试崩溃
     try:

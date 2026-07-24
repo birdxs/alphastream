@@ -203,6 +203,56 @@ def test_decision_memo_includes_provenance_from_state_and_fd():
         assert "price" not in p
 
 
+def test_decision_memo_provenance_items_are_structured_dicts():
+    """provenance 数组元素必须是 dict 结构（source/tool/digest），非裸字符串。"""
+    state = {
+        "stock_code": "000001",
+        "final_decision": {
+            "action": "HOLD",
+            "confidence": 0.5,
+            "provenance": [
+                {"source": "wind", "tool": "fundamentals", "digest": "w1nddead"},
+                "legacy-string-should-skip",
+                {"source": "akshare", "tool": "quote", "digest": "ak000001"},
+                {"source": "", "tool": "skip"},
+            ],
+        },
+        "provenance": [
+            {"source": "sina", "tool": "news", "digest": "sn123456"},
+            None,
+            42,
+        ],
+        "technical_report": {"summary": "neutral"},
+        "fundamental_report": None,
+        "hitl": {"required": False},
+        "risk_assessment": {},
+        "degradations": [],
+        "scorecard": {
+            "data_coverage": 0.4,
+            "tool_success_rate": 0.9,
+            "role_agreement": 0.5,
+            "confidence_cap": 0.5,
+        },
+    }
+    memo = build_decision_memo(state)
+    prov = memo.get("provenance")
+    assert isinstance(prov, list)
+    assert len(prov) >= 2
+    for item in prov:
+        assert isinstance(item, dict), f"expected dict, got {type(item)}: {item!r}"
+        assert item.get("source"), f"missing source: {item!r}"
+        # 空 source 的 tool-only 项应被 collector 丢弃；禁止假行情字段
+        assert "last_price" not in item
+        assert "price" not in item
+        assert "pe" not in item
+    sources = {p.get("source") for p in prov}
+    assert "wind" in sources
+    assert "akshare" in sources
+    assert "sina" in sources
+    # tool-only / 非 dict 不入库
+    assert all(isinstance(p, dict) and p.get("source") for p in prov)
+
+
 def test_reflection_summary_empty_is_none():
     assert summarize_reflection_readonly([]) is None
     assert summarize_reflection_readonly(None) is None  # type: ignore[arg-type]

@@ -121,6 +121,33 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 5. provenance[] 结构化数组（P0-4 已知缺口）
 
 
+## 2b. v1.6.1 本轮落地（plan SSE 前端桥 + PlanList filters + pytest gate）
+
+| 维度 | 说明 |
+|------|------|
+| 时间锚点 | 2026-07-24（系统 + 网络 Date 校验通过，偏差 ≤100s） |
+| SSE 映射 | `client.ts`：`plan.created`/`plan_created`、`plan.step`/`plan_step`、`write_proposal`/`write-proposal` → handlers |
+| Handlers | `SSEHandlers` 增 `onPlanCreated` / `onPlanStep` / `onWriteProposal` |
+| 流消费 | `use-chat-stream` 三 handler → `agentStore.appendEvent`（timeline） |
+| Store 归一 | `canonicalAgentEventName` + dedupeKey 认 plan/write 字段 |
+| PlanList UI | status 过滤芯片 +「仅当前会话」checkbox（读 `activeConversationId` → query `conversation_id`）；空态友好 |
+| pytest 门控 | 根 `conftest.py` / `tests/backend/conftest.py` / `tests/backend/api/conftest.py` import 前 `STOCKANAL_DISABLE_BACKGROUND=1` |
+| provenance | `test_decision_memo_provenance_items_are_structured_dicts`：数组元素必须 dict + source，跳过裸串/假数字段 |
+| 约束 | 禁 push；禁启服；铁律#1；优先改现有文件 |
+
+### 本轮验证（离线）
+
+- 见本节 commit 消息与下方测试末行
+- 8888/3000 本轮未监听
+
+### 下一批建议
+
+1. Skills 目录热加载 / 更多 builtin 样例（勿放密钥）
+2. Agent 真路径下 plan 事件到 chat SSE 的端到端（真启服 + Kimi，非本批）
+3. 若 atexit 仍噪声：确认 pytest 未用已加载旧 sys.modules 缓存的 web_server
+4. write_proposal 审批卡与 timeline 双通道对齐 UX
+
+
 ## 3. 如何启动（本地）
 
 ### 3.1 环境要点

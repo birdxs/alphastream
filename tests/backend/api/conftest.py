@@ -1,3 +1,17 @@
+# Input: pytest 收集/导入 API 测试模块
+# Output: 导入前写入 STOCKANAL_DISABLE_BACKGROUND=1，并清理模块级 cache（防顺序污染）
+# Pos: tests/backend/api/conftest — 与根 conftest 双保险减少 atexit 噪声
+
+from __future__ import annotations
+
+import os
+
+# 必须在 import app.web.web_server 之前
+os.environ.setdefault("DISABLE_NETWORK", "1")
+os.environ.setdefault("MOCK_LLM", "1")
+os.environ.setdefault("AUTH_REQUIRED", "false")
+os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+
 """
 Sprint 3-I：autouse fixture 清模块级缓存，防止跨测顺序污染
 Input: 每个 api/ 测试用例

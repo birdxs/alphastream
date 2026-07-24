@@ -69,18 +69,42 @@ export function canonicalAgentEventName(eventType?: string | null): string {
     agent_completed: "agent.completed",
     "agent.started": "agent.started",
     "agent.completed": "agent.completed",
+    // Plan / write_proposal 别名归一（时间线去重）
+    plan_created: "plan.created",
+    "plan.created": "plan.created",
+    plan_step: "plan.step",
+    "plan.step": "plan.step",
+    "write-proposal": "write_proposal",
+    write_proposal: "write_proposal",
   };
   return map[et] || et;
 }
 
 export function agentEventDedupeKey(
   eventType: string | undefined | null,
-  data: { agent_name?: string; agent?: string; role?: string; task_id?: string; conversation_id?: string; progress?: number | string } = {},
+  data: {
+    agent_name?: string;
+    agent?: string;
+    role?: string;
+    task_id?: string;
+    conversation_id?: string;
+    progress?: number | string;
+    plan_id?: string;
+    step_id?: string;
+    proposal_id?: string;
+    id?: string;
+  } = {},
 ): string {
   const canon = canonicalAgentEventName(eventType);
   const agent = data.agent_name || data.agent || data.role || "";
-  const task = data.task_id || data.conversation_id || "";
-  const seq = data.progress ?? "";
+  const task =
+    data.task_id ||
+    data.plan_id ||
+    data.proposal_id ||
+    data.id ||
+    data.conversation_id ||
+    "";
+  const seq = data.step_id ?? data.progress ?? "";
   return `${canon}|${agent}|${task}|${seq}`;
 }
 

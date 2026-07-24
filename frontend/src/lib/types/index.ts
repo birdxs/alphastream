@@ -25,6 +25,12 @@ export interface SSEHandlers {
   onRunScorecard?: (data: RunScorecardEvent) => void;
   /** Sprint2: chat 意图路由 meta（无假行情数） */
   onMeta?: (data: ChatIntentMeta) => void;
+  /** Plan DAG：plan.created（EventBus → SSE bridge） */
+  onPlanCreated?: (data: Record<string, unknown>) => void;
+  /** Plan DAG：plan.step 状态推进 */
+  onPlanStep?: (data: Record<string, unknown>) => void;
+  /** 写仓提案 write_proposal（HITL 桥接） */
+  onWriteProposal?: (data: Record<string, unknown>) => void;
   onError?: (data: { code: string; message: string; recoverable?: boolean }) => void;
   onDone?: (data: StreamDone) => void;
   // 流通道关闭时的兜底（无论是否收到 done 事件都会触发，用于强制清理 loading 状态）

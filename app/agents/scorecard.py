@@ -210,13 +210,12 @@ def _collect_memo_provenance(state: Dict[str, Any], fd: Dict[str, Any]) -> List[
             key = (src, tool, digest)
             if key in seen:
                 continue
-            # 至少有 source 或 tool 才收录，避免空行假摘要
-            if not src and not tool:
+            # 必须有非空 source 才收录（可追溯数据源；无 source 的弱项丢弃）
+            # 允许额外 tool/digest/ts；绝不写入行情数值字段
+            if not src:
                 continue
             seen.add(key)
-            entry: Dict[str, Any] = {}
-            if src:
-                entry["source"] = src
+            entry: Dict[str, Any] = {"source": src}
             if tool:
                 entry["tool"] = tool
             if digest:

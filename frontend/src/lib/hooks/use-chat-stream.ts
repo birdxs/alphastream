@@ -386,6 +386,76 @@ export function useChatStream() {
             meta: d,
           });
         },
+        onPlanCreated: (data) => {
+          const d = (data || {}) as Record<string, unknown>;
+          const nested =
+            d.data && typeof d.data === 'object'
+              ? (d.data as Record<string, unknown>)
+              : d;
+          const planId = String(nested.plan_id || nested.id || d.plan_id || '');
+          const goal = String(nested.goal || nested.title || '').slice(0, 120);
+          agentStore.appendEvent({
+            id: `plan_created_${planId || Date.now()}`,
+            type: 'plan.created',
+            agent: 'Plan',
+            title: goal ? `计划已创建: ${goal}` : `计划已创建${planId ? ` #${planId.slice(0, 8)}` : ''}`,
+            detail: planId || undefined,
+            ts: Date.now(),
+            meta: nested,
+          });
+        },
+        onPlanStep: (data) => {
+          const d = (data || {}) as Record<string, unknown>;
+          const nested =
+            d.data && typeof d.data === 'object'
+              ? (d.data as Record<string, unknown>)
+              : d;
+          const stepId = String(nested.step_id || nested.id || '');
+          const status = String(nested.status || nested.state || 'updated');
+          const name = String(nested.name || nested.title || stepId || 'step');
+          agentStore.appendEvent({
+            id: `plan_step_${stepId || Date.now()}_${status}`,
+            type: 'plan.step',
+            agent: 'Plan',
+            title: `步骤 ${name}: ${status}`,
+            detail:
+              typeof nested.message === 'string'
+                ? nested.message
+                : typeof nested.detail === 'string'
+                  ? nested.detail
+                  : undefined,
+            ts: Date.now(),
+            meta: nested,
+          });
+        },
+        onWriteProposal: (data) => {
+          const d = (data || {}) as Record<string, unknown>;
+          const nested =
+            d.data && typeof d.data === 'object'
+              ? (d.data as Record<string, unknown>)
+              : d;
+          const proposalId = String(
+            nested.proposal_id || nested.id || nested.task_id || '',
+          );
+          const action = String(nested.action || nested.side || nested.kind || 'write');
+          const code = String(nested.stock_code || nested.code || '');
+          agentStore.appendEvent({
+            id: `write_proposal_${proposalId || Date.now()}`,
+            type: 'write_proposal',
+            agent: '写仓',
+            title: code
+              ? `写仓提案 ${action} ${code}`
+              : `写仓提案 ${action}${proposalId ? ` #${proposalId.slice(0, 8)}` : ''}`,
+            detail:
+              typeof nested.reason === 'string'
+                ? nested.reason
+                : typeof nested.summary === 'string'
+                  ? nested.summary
+                  : undefined,
+            ts: Date.now(),
+            meta: nested,
+          });
+        },
         onError: (data) => {
           const errText = typeof data === 'string' ? data : (data?.message || (data as { error?: string })?.error || JSON.stringify(data));
           console.error('Stream error:', errText, data);

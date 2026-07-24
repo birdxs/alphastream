@@ -304,6 +304,19 @@ class ApiClient {
               case 'meta':
                 handlers.onMeta?.(payload as Parameters<NonNullable<typeof handlers.onMeta>>[0]);
                 break;
+              // Plan DAG / write_proposal（EventBus EVENT_PLAN_* / EVENT_WRITE_PROPOSAL → SSE bridge）
+              case 'plan.created':
+              case 'plan_created':
+                handlers.onPlanCreated?.(payload as Record<string, unknown>);
+                break;
+              case 'plan.step':
+              case 'plan_step':
+                handlers.onPlanStep?.(payload as Record<string, unknown>);
+                break;
+              case 'write_proposal':
+              case 'write-proposal':
+                handlers.onWriteProposal?.(payload as Record<string, unknown>);
+                break;
               case 'error': handlers.onError?.(payload as Parameters<NonNullable<typeof handlers.onError>>[0]); break;
               case 'done':
                 doneEventSeen = true;

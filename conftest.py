@@ -40,6 +40,13 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("OPENAI_API_URL", "https://test.invalid/v1")
 os.environ.setdefault("OPENAI_API_MODEL", "test-model")
 os.environ.setdefault("DISABLE_NETWORK", "1")  # 允许业务代码读取此标志自行短路
+os.environ.setdefault("MOCK_LLM", "1")
+os.environ.setdefault("AUTH_REQUIRED", "false")
+# 导入前强关后台线程（名称预热 / 指数预热 / news scheduler），减少 atexit closed-stream 噪声
+# web_server._startup_background_enabled() 识别 STOCKANAL_DISABLE_BACKGROUND=1
+os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+if os.environ.get("DISABLE_NETWORK") == "1":
+    os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
 
 # 将仓库根加入 sys.path，保证 `import app.*` 在子目录测试中也能命中
 _REPO_ROOT = Path(__file__).resolve().parent
