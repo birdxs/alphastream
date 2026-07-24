@@ -506,6 +506,67 @@ def test_openapi_json_fifth_batch_parameters(flask_client):
     pending = paths["/api/agent_pending_approvals"]["get"]
     assert "responses" in pending
     assert "200" in pending["responses"]
+    pending_ref = (
+        pending["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    )
+    assert pending_ref.endswith("AgentPendingApprovalsResponse")
+
+    submit = paths["/api/agent_submit_approval"]["post"]
+    submit_schema = submit["requestBody"]["content"]["application/json"]["schema"]
+    assert submit["requestBody"]["required"] is True
+    assert submit_schema["required"] == ["task_id"]
+    assert "approved" in submit_schema["properties"]
+    assert "feedback" in submit_schema["properties"]
+    assert submit_schema["properties"]["feedback"]["maxLength"] == 2000
+    submit_ref = (
+        submit["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    )
+    assert submit_ref.endswith("AgentSubmitApprovalResponse")
+
+
+def test_openapi_pending_write_proposal_field_schemas(flask_client):
+    """写仓 pending/submit OpenAPI 契约：kind / approval_id / proposal_id / decision。"""
+    resp = flask_client.get("/api/openapi.json")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    schemas = body["components"]["schemas"]
+
+    for name in (
+        "PendingApprovalDecision",
+        "PendingApprovalItem",
+        "AgentPendingApprovalsResponse",
+        "AgentSubmitApprovalResponse",
+    ):
+        assert name in schemas, f"missing schema {name}"
+
+    item = schemas["PendingApprovalItem"]
+    props = item["properties"]
+    for key in ("task_id", "kind", "approval_id", "proposal_id", "decision", "status"):
+        assert key in props, f"PendingApprovalItem missing {key}"
+    assert "kind" in (item.get("required") or [])
+    assert "task_id" in (item.get("required") or [])
+    kind_enum = props["kind"].get("enum") or []
+    assert "portfolio_write_proposal" in kind_enum
+    assert "agent_decision" in kind_enum
+
+    decision = schemas["PendingApprovalDecision"]["properties"]
+    for key in ("kind", "action", "code", "shares", "weight", "proposal_id"):
+        assert key in decision, f"PendingApprovalDecision missing {key}"
+
+    submit_resp = schemas["AgentSubmitApprovalResponse"]["properties"]["data"]["properties"]
+    for key in ("success", "task_id", "approved", "kind", "approval_id", "proposal_id", "decision", "status"):
+        assert key in submit_resp, f"AgentSubmitApprovalResponse.data missing {key}"
+
+    # path responses wire to the new schemas
+    paths = body["paths"]
+    pending_ref = paths["/api/agent_pending_approvals"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]["$ref"]
+    assert pending_ref.endswith("AgentPendingApprovalsResponse")
+    submit_ref = paths["/api/agent_submit_approval"]["post"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]["$ref"]
+    assert submit_ref.endswith("AgentSubmitApprovalResponse")
 
 
 def test_openapi_json_includes_market_stream_sse(flask_client):

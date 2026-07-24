@@ -276,3 +276,36 @@ class TestSkillStub:
             execute_tool("load_agent_skill", {"skill_id": "analysis_plan"})
         )
         assert via["success"] is True
+
+def test_list_analysis_plans_tool_readonly_summary():
+    """list_analysis_plans：只读列出 plan 状态，不抓数。"""
+    import json
+    from app.core.plan_dag import get_plan_dag_store
+    from app.core.tools import list_analysis_plans, create_analysis_plan
+
+    store = get_plan_dag_store()
+    store.reset()
+    created = json.loads(
+        create_analysis_plan.invoke(
+            {
+                "title": "list-tool-demo",
+                "steps": '["技术面","基本面"]',
+            }
+        )
+    )
+    assert created.get("success") is True
+    plan_id = created["plan_id"]
+
+    raw = list_analysis_plans.invoke({"limit": 10})
+    body = json.loads(raw)
+    assert body.get("success") is True
+    assert body.get("count", 0) >= 1
+    plans = body.get("plans") or []
+    hit = next((p for p in plans if p.get("plan_id") == plan_id), None)
+    assert hit is not None
+    assert hit.get("status")
+    assert "steps_summary" in hit
+    assert "pending" in hit["steps_summary"]
+    assert "note" in body
+    assert "不抓" in body["note"] or "只读" in body["note"]
+

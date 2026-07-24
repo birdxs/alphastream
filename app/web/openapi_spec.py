@@ -127,6 +127,145 @@ _COMPONENTS: Dict[str, Any] = {
                 'elapsed_ms': {'type': 'number'},
             },
         },
+        # HITL / 写仓提案 pending 列表与提交（与 hitl.get_pending_approvals + web_server 对齐）
+        'PendingApprovalDecision': {
+            'type': 'object',
+            'description': (
+                '决策/提案摘要。常规 agent_decision 含 recommendation/confidence；'
+                'portfolio_write_proposal 含 action/code/shares/weight/proposal_id。'
+            ),
+            'properties': {
+                'kind': {
+                    'type': 'string',
+                    'description': '可选；写仓时为 portfolio_write_proposal',
+                },
+                'action': {'type': 'string', 'description': '买入/卖出/调仓等动作'},
+                'code': {'type': 'string', 'description': '标的代码'},
+                'name': {'type': 'string', 'description': '标的名称（可空）'},
+                'shares': {'type': 'number', 'nullable': True},
+                'weight': {'type': 'number', 'nullable': True},
+                'proposal_id': {
+                    'type': 'string',
+                    'description': '写仓提案 ID（prop_*）',
+                },
+                'recommendation': {
+                    'type': 'string',
+                    'description': '常规 HITL 建议动作',
+                },
+                'confidence': {'type': 'number', 'nullable': True},
+            },
+            'additionalProperties': True,
+        },
+        'PendingApprovalItem': {
+            'type': 'object',
+            'description': '单条待审批项（前端 ApprovalCard 消费）',
+            'properties': {
+                'task_id': {
+                    'type': 'string',
+                    'description': '审批主键；写仓场景常等于 approval_id（appr_*）',
+                },
+                'kind': {
+                    'type': 'string',
+                    'description': 'agent_decision | portfolio_write_proposal',
+                    'enum': ['agent_decision', 'portfolio_write_proposal'],
+                },
+                'approval_id': {
+                    'type': 'string',
+                    'nullable': True,
+                    'description': '写仓审批 ID（appr_*）；常规 HITL 可为 null',
+                },
+                'proposal_id': {
+                    'type': 'string',
+                    'nullable': True,
+                    'description': '写仓提案 ID（prop_*）；常规 HITL 可为 null',
+                },
+                'decision': {'$ref': '#/components/schemas/PendingApprovalDecision'},
+                'risk_level': {'type': 'string'},
+                'created_at': {'type': 'string'},
+                'reason': {'type': 'string'},
+                'action_type': {'type': 'string'},
+                'confidence': {'type': 'number', 'nullable': True},
+                'timeout_seconds': {'type': 'number', 'nullable': True},
+                'timeout': {'type': 'number', 'nullable': True},
+                'status': {
+                    'type': 'string',
+                    'description': '列表接口仅返回 pending',
+                    'enum': ['pending'],
+                },
+            },
+            'required': ['task_id', 'kind', 'status'],
+            'additionalProperties': True,
+        },
+        'AgentPendingApprovalsResponse': {
+            'type': 'object',
+            'description': 'GET /api/agent_pending_approvals 成功外壳',
+            'properties': {
+                'success': {'type': 'boolean'},
+                'data': {
+                    'type': 'object',
+                    'properties': {
+                        'approvals': {
+                            'type': 'array',
+                            'items': {'$ref': '#/components/schemas/PendingApprovalItem'},
+                        },
+                    },
+                    'required': ['approvals'],
+                    'additionalProperties': True,
+                },
+            },
+            'required': ['success', 'data'],
+            'additionalProperties': True,
+        },
+        'AgentSubmitApprovalResponse': {
+            'type': 'object',
+            'description': (
+                'POST /api/agent_submit_approval 成功外壳。'
+                'data.success 为业务是否接受；kind/approval_id/proposal_id/decision 标识写仓桥接结果。'
+            ),
+            'properties': {
+                'success': {'type': 'boolean'},
+                'data': {
+                    'type': 'object',
+                    'properties': {
+                        'success': {
+                            'type': 'boolean',
+                            'description': '审批是否被接受（未知 task_id 等为 false）',
+                        },
+                        'task_id': {'type': 'string'},
+                        'approved': {'type': 'boolean'},
+                        'kind': {
+                            'type': 'string',
+                            'description': 'agent_decision | portfolio_write_proposal',
+                        },
+                        'approval_id': {
+                            'type': 'string',
+                            'nullable': True,
+                            'description': '写仓为 appr_*；常规 HITL 可 null',
+                        },
+                        'proposal_id': {
+                            'type': 'string',
+                            'nullable': True,
+                            'description': '写仓为 prop_*；常规可 null',
+                        },
+                        'decision': {
+                            'oneOf': [
+                                {'$ref': '#/components/schemas/PendingApprovalDecision'},
+                                {'type': 'object', 'additionalProperties': True},
+                                {'type': 'null'},
+                            ],
+                        },
+                        'status': {
+                            'type': 'string',
+                            'description': 'accepted 业务成功后的状态摘要：approved|rejected',
+                        },
+                    },
+                    'required': ['success'],
+                    'additionalProperties': True,
+                },
+            },
+            'required': ['success', 'data'],
+            'additionalProperties': True,
+        },
     },
     'securitySchemes': {
         'ApiKeyAuth': {
@@ -1313,18 +1452,37 @@ _PATHS: Dict[str, Any] = {
     '/api/agent_pending_approvals': {
         'get': {
             'tags': ['Agent'],
-            'summary': '列出待审批的智能体任务',
+            'summary': '列出待审批项（含写仓提案 portfolio_write_proposal）',
+            'description': (
+                '合并 HITL pending 与 write_proposal 店内 pending。'
+                '每项含 kind / approval_id / proposal_id / decision；'
+                '写仓项 task_id 通常等于 approval_id（appr_*），decision 内嵌 action/code/shares。'
+                '前端可从 data.approvals 或兼容壳解析列表。'
+            ),
             'operationId': 'getAgentPendingApprovals',
             'responses': {
-                '200': {'description': '待审批任务列表',
-                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '200': {
+                    'description': '待审批列表（status 均为 pending）',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                '$ref': '#/components/schemas/AgentPendingApprovalsResponse',
+                            },
+                        },
+                    },
+                },
             },
         },
     },
     '/api/agent_submit_approval': {
         'post': {
             'tags': ['Agent'],
-            'summary': '提交智能体任务审批结果',
+            'summary': '提交智能体/写仓提案审批结果',
+            'description': (
+                'task_id 为常规 HITL 任务 ID 或写仓 approval_id（appr_*）。'
+                '写仓路径桥接 write_proposal.decide_approval，**不自动 apply/下单**。'
+                '响应 data 含 success、kind、approval_id、proposal_id、decision、status。'
+            ),
             'operationId': 'submitAgentApproval',
             'requestBody': {
                 'required': True,
@@ -1332,15 +1490,28 @@ _PATHS: Dict[str, Any] = {
                     'type': 'object',
                     'required': ['task_id'],
                     'properties': {
-                        'task_id': {'type': 'string', 'minLength': 1, 'maxLength': 100},
+                        'task_id': {
+                            'type': 'string',
+                            'minLength': 1,
+                            'maxLength': 100,
+                            'description': 'HITL task_id 或写仓 approval_id',
+                        },
                         'approved': {'type': 'boolean', 'default': False},
                         'feedback': {'type': 'string', 'default': '', 'maxLength': 2000},
                     },
                 }}},
             },
             'responses': {
-                '200': {'description': '审批提交结果',
-                        'content': {'application/json': {'schema': {'$ref': '#/components/schemas/GenericObject'}}}},
+                '200': {
+                    'description': '审批已处理（data.success 表示业务是否接受）',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                '$ref': '#/components/schemas/AgentSubmitApprovalResponse',
+                            },
+                        },
+                    },
+                },
                 '400': {'description': '参数校验失败'},
             },
         },

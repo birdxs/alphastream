@@ -678,3 +678,40 @@ git revert <本批 commit>
 3. Skills `data/skills` 最小 builtin 包（无假行情文案）
 4. 启服后：propose → pending 卡片 → approve → apply 本地 mark 联调（需 Comdr 授权启服）
 
+## OpenAPI pending write-proposal fields + plan list thin（2026-07-24 10:58:00 +08:00）
+
+**基线**：`c5d500a`（pending 写仓 UI + memo provenance）
+
+### 本批交付
+
+| # | 项 | 状态 | 说明 |
+|---|---|---|---|
+| 1 | OpenAPI pending/submit 字段 | ✅ | `PendingApprovalItem` / `AgentPendingApprovalsResponse` / `AgentSubmitApprovalResponse`；path `$ref` 对齐 |
+| 2 | 后端序列化对齐 | ✅ | `GET /api/agent_pending_approvals` 双写 `approvals/count` + `success/data`；`POST submit` 补 `kind/approval_id/proposal_id/decision/status`（顶层+data） |
+| 3 | plan list 只读工具 | ✅ | `list_analysis_plans`（tools + OPENAI schema + executor）；不抓数 |
+| 4 | 测试 | ✅ | cache_control OpenAPI 字段契约 + plan_dag list 工具单测 |
+| 5 | 禁 push / 禁启服 | ✅ | 本地 commit only |
+
+### 字段契约（与前端 ApprovalCard 对齐）
+
+- pending item：`task_id`、`kind`（agent_decision|portfolio_write_proposal）、`approval_id`、`proposal_id`、`decision`、`status=pending`
+- submit data：`success`、`task_id`、`approved`、`kind`、`approval_id`、`proposal_id`、`decision`、`status`（approved|rejected）
+- 写仓仍 **不自动 apply**
+
+### 验证
+
+- py_compile web_server / AST tools+openapi
+- 聚焦 pytest：`test_cache_control_headers` + `test_plan_dag_hitl_bridge` + agent submit 相关
+
+### 下一批建议
+
+1. plan UI 薄展示（list_analysis_plans 结果进 side panel，只读）
+2. submit 404 路径 error 外壳统一 `api_error`（当前保持 jsonify 兼容测试）
+3. OpenAPI SSE/剩余 A2A 除外业务路由巡检
+
+### 运行时铁证（test_client，未启服）
+
+- write_proposal.create_proposal → pending 项含 kind/approval_id/proposal_id/decision
+- submit 顶层 + data 含 kind=portfolio_write_proposal、approval_id、proposal_id、status=approved
+- 聚焦 pytest：**37 passed**（cache_control + plan_dag + agent pending/submit）
+

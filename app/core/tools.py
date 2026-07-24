@@ -571,6 +571,63 @@ def get_plan_status(plan_id: str) -> str:
     result = store.get_status((plan_id or "").strip())
     return json.dumps(result, ensure_ascii=False, default=str)
 
+@tool
+def list_analysis_plans(limit: int = 20) -> str:
+    """列出近期 analysis plan 状态摘要（只读，不抓数）。
+
+    返回 JSON：success / count / plans[{plan_id,title,status,steps_summary,created_at}]。
+    进程内 store；不触上游行情。
+    """
+    import json
+    from app.core.plan_dag import get_plan_dag_store
+
+    try:
+        lim = int(limit) if limit is not None else 20
+    except (TypeError, ValueError):
+        lim = 20
+    lim = max(1, min(lim, 50))
+    store = get_plan_dag_store()
+    plans = store.list_plans(limit=lim)
+    items = []
+    for p in plans:
+        steps = p.get("steps") or []
+        items.append(
+            {
+                "plan_id": p.get("plan_id"),
+                "title": p.get("title"),
+                "status": p.get("status"),
+                "current_step_id": p.get("current_step_id"),
+                "created_at": p.get("created_at"),
+                "updated_at": p.get("updated_at"),
+                "steps_summary": {
+                    "pending": [s.get("id") for s in steps if s.get("status") == "pending"],
+                    "running": [s.get("id") for s in steps if s.get("status") == "running"],
+                    "completed": [s.get("id") for s in steps if s.get("status") == "completed"],
+                    "failed": [s.get("id") for s in steps if s.get("status") == "failed"],
+                },
+                "step_count": len(steps),
+            }
+        )
+    return json.dumps(
+        {
+            "success": True,
+            "error_code": None,
+            "message": "ok",
+            "count": len(items),
+            "plans": items,
+            "note": "只读 plan 状态；不抓取行情/不改持仓。",
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+
+
+
+def _offline_or_disabled() -> bool:
+    """DISABLE_NETWORK=1 / 离线：facade 不得联网、不得造假数。"""
+    return os.environ.get("DISABLE_NETWORK", "").strip() in ("1", "true", "True", "YES", "yes")
+
+
 
 @tool
 def load_agent_skill(
@@ -609,9 +666,6 @@ def list_agent_skills() -> str:
     )
 
 
-def _offline_or_disabled() -> bool:
-    """DISABLE_NETWORK=1 / 离线：facade 不得联网、不得造假数。"""
-    return os.environ.get("DISABLE_NETWORK", "").strip() in ("1", "true", "True", "YES", "yes")
 
 
 @tool
@@ -1116,6 +1170,28 @@ OPENAI_TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "list_analysis_plans",
+            "description": (
+                "列出近期 analysis plan 及其步骤状态摘要（只读，不抓数）。"
+                "用于回顾/续跑前查看 plan_id 与 pending/running/completed。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "最多返回条数，默认 20，上限 50",
+                        "minimum": 1,
+                        "maximum": 50,
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "load_agent_skill",
             "description": (
                 "加载 Skill stub 的 system_hint（不替代 adapters，不拉行情）。"
@@ -1266,6 +1342,7 @@ TOOL_EXECUTORS = {
     "decide_portfolio_proposal_approval": decide_portfolio_proposal_approval,
     "create_analysis_plan": create_analysis_plan,
     "get_plan_status": get_plan_status,
+    "list_analysis_plans": list_analysis_plans,
     "load_agent_skill": load_agent_skill,
     "list_agent_skills": list_agent_skills,
     "get_market_overview_brief": get_market_overview_brief,

@@ -4192,14 +4192,25 @@ def delete_agent_analysis():
 @app.route('/api/agent_pending_approvals', methods=['GET'])
 @validate_schema(AgentPendingApprovalsSchema)  # S3-G1: schema 校验扩展
 def get_pending_approvals():
-    """获取待人工审批的Agent决策（P0-5 确认面）"""
+    """获取待人工审批的Agent决策 / 写仓提案（P0-5 + Sprint4）
+
+    每项含 kind / approval_id / proposal_id / decision（由 hitl 合并序列化）。
+    双写：顶层 approvals/count 兼容旧测试；success+data 对齐 OpenAPI。
+    """
     try:
         from app.agents.hitl import approval_manager
         # 惰性绑定任务状态钩子，使 awaiting_approval 可写入任务查询
         if getattr(approval_manager, '_task_status_hook', None) is None:
             approval_manager.set_task_status_hook(update_task_status)
         pending = approval_manager.get_pending_approvals()
-        return jsonify({'approvals': pending, 'count': len(pending)})
+        payload = {'approvals': pending, 'count': len(pending)}
+        # 顶层兼容 + OpenAPI success/data 外壳
+        return jsonify({
+            'success': True,
+            'data': payload,
+            'approvals': pending,
+            'count': len(pending),
+        })
     except Exception as e:
         return api_error('INTERNAL', '获取待审批任务失败，请稍后重试', details=str(e))
 
@@ -4207,25 +4218,132 @@ def get_pending_approvals():
 @app.route('/api/agent_submit_approval', methods=['POST'])
 @validate_schema(AgentSubmitApprovalSchema, source='json')  # S3-E1: schema 校验扩展
 def submit_agent_approval():
-    """提交人工审批结果（P0-5 确认面）"""
+    """提交人工审批结果（P0-5 / 写仓 approval_id）
+
+    写仓路径不自动 apply。响应双写顶层字段与 data 外壳，
+    补齐 kind / approval_id / proposal_id / decision / status。
+    """
     try:
         from app.agents.hitl import approval_manager
         if getattr(approval_manager, '_task_status_hook', None) is None:
             approval_manager.set_task_status_hook(update_task_status)
-        data = request.json or {}
+        # 优先走 schema 校验结果，兜底 request.json
+        data = getattr(request, 'validated_data', None) or (request.json or {})
         task_id = data.get('task_id')
         approved = data.get('approved', False)
         feedback = data.get('feedback', '')
         if not task_id:
             return jsonify({'error': '请提供task_id'}), 400
+
+        tid = str(task_id)
+        # 提交前快照 decision provenance（submit 可能 pop pending）
+        pre_kind = 'agent_decision'
+        pre_approval_id = None
+        pre_proposal_id = None
+        pre_decision = None
+        try:
+            with approval_manager._lock:
+                entry = dict((approval_manager._pending_approvals or {}).get(tid) or {})
+            if entry:
+                pre_decision = entry.get('decision') if isinstance(entry.get('decision'), dict) else None
+                pre_kind = str(
+                    entry.get('kind')
+                    or (pre_decision or {}).get('kind')
+                    or 'agent_decision'
+                )
+                pre_approval_id = entry.get('approval_id') or (pre_decision or {}).get('approval_id')
+                pre_proposal_id = entry.get('proposal_id') or (pre_decision or {}).get('proposal_id')
+                if pre_decision is None and pre_kind == 'portfolio_write_proposal':
+                    pre_decision = {'kind': 'portfolio_write_proposal'}
+        except Exception:
+            pass
+
         success = approval_manager.submit_approval(task_id, approved, feedback)
-        if success:
+
+        kind = pre_kind
+        approval_id = pre_approval_id
+        proposal_id = pre_proposal_id
+        decision = pre_decision
+
+        # 写仓：从 write_proposal store 补全（submit 后仍可查 approval 记录）
+        if (
+            tid.startswith('appr_')
+            or kind == 'portfolio_write_proposal'
+            or approval_id is None
+            or proposal_id is None
+        ):
+            try:
+                from app.core.write_proposal import get_write_proposal_store
+                store = get_write_proposal_store()
+                ap = store.get_approval(tid) if hasattr(store, 'get_approval') else None
+                if ap:
+                    kind = 'portfolio_write_proposal'
+                    approval_id = ap.get('approval_id') or approval_id or tid
+                    proposal_id = ap.get('proposal_id') or proposal_id
+                    prop = None
+                    if proposal_id and hasattr(store, 'get_proposal'):
+                        prop = store.get_proposal(proposal_id)
+                    if prop:
+                        decision = {
+                            'kind': 'portfolio_write_proposal',
+                            'action': prop.get('action'),
+                            'code': prop.get('code'),
+                            'name': prop.get('name') or '',
+                            'shares': prop.get('shares'),
+                            'weight': prop.get('weight'),
+                            'proposal_id': prop.get('proposal_id'),
+                        }
+                    elif decision is None:
+                        decision = {
+                            'kind': 'portfolio_write_proposal',
+                            'proposal_id': proposal_id,
+                        }
+                elif tid.startswith('appr_'):
+                    kind = 'portfolio_write_proposal'
+                    approval_id = approval_id or tid
+            except Exception as _wp_exc:
+                logger.debug('submit_agent_approval write_proposal enrich skipped: %s', _wp_exc)
+
+        if tid.startswith('appr_'):
+            kind = 'portfolio_write_proposal'
+            approval_id = approval_id or tid
+
+        if not success:
             return jsonify({
-                'message': '审批已提交',
-                'approved': bool(approved),
+                'error': '未找到待审批任务',
+                'success': False,
                 'task_id': task_id,
-            })
-        return jsonify({'error': '未找到待审批任务'}), 404
+                'approved': bool(approved),
+                'kind': kind,
+                'approval_id': approval_id,
+                'proposal_id': proposal_id,
+                'decision': decision,
+            }), 404
+
+        status_label = 'approved' if approved else 'rejected'
+        data_body = {
+            'success': True,
+            'task_id': task_id,
+            'approved': bool(approved),
+            'kind': kind,
+            'approval_id': approval_id,
+            'proposal_id': proposal_id,
+            'decision': decision,
+            'status': status_label,
+        }
+        # 顶层保留 message/approved/task_id（既有 API 测试）；并双写 data 外壳
+        return jsonify({
+            'message': '审批已提交',
+            'approved': bool(approved),
+            'task_id': task_id,
+            'success': True,
+            'kind': kind,
+            'approval_id': approval_id,
+            'proposal_id': proposal_id,
+            'decision': decision,
+            'status': status_label,
+            'data': data_body,
+        })
     except Exception as e:
         return api_error('INTERNAL', '提交审批失败，请稍后重试', details=str(e))
 
