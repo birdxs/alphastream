@@ -3149,3 +3149,48 @@ Commit：`0c244f9`（本地，未 push）。
 
 回滚：`git revert 0c244f9`。
 
+
+---
+
+## 方案复审·文档对齐（2026-07-23）
+
+任务约束：本地开发；禁止 push；**只改文档**；禁止改业务代码。
+
+时间锚点：2026-07-23（Asia/Singapore +08:00）；双源 HTTPS Date 与本机一致（偏差 ≪ 100s）。
+
+### 改动文件
+
+| 文件 | 变更 |
+|------|------|
+| `docs/design/dojo-agents-absorption-plan.md` | 审批栏/§9.2 落地列/§11 状态表 + **§11.0b 能力真相表**/P0-4 缺口/Sprint3–4 说明/§19 结论 |
+| `docs/design/DELIVERY-STATUS.md` | v1.12；§5 限制；**§11 能力真相表**；Sprint4 行；仍暂缓项表 |
+| `docs/design/README.md` | 领地标记同步 v1.12 + 对齐摘要 |
+| `TODO.md` / `CHANGELOG.md` | 本轮文档对齐条目 |
+| `CLAUDE.md` | 本节 |
+
+### 对齐结论（与代码一致）
+
+| 能力 | 状态标签 | 仍故意未做 |
+|------|----------|------------|
+| **Plan** | 已落地（**仅状态机** + SSE `plan.step`） | 真执行 step（不真跑 tool） |
+| **Skills** | 已落地（**仅 system_hint**） | Skill 运行时（不替代 adapters） |
+| **Memory prefetch** | 已落地（agent **启动路径预取**；空历史不注入；**路径常开，无默认关 env**） | 完整 MemoryManager 会话维 |
+| **context_compress** | **未做** | 指针化压缩 |
+| **Checkpoint 回放** | 持久化（SqliteSaver）**已有** | **HTTP GET …/checkpoints**；**前端只读回放 UI** |
+| **provenance[]** | **已落地**（normalize 强制） | OpenAPI 字段级血统 schema 仍可再细 |
+| **写仓 harness** | 骨架 DONE（local_mark_only） | 真券商 / mutate portfolio-store |
+
+### 纠正的过时表述（示例）
+
+- ~~「P1 Skills / Plan DAG 未开」~~ → 状态机 / system_hint **已落地**
+- ~~「provenance[] 仍待」~~ → **v1.8–v1.11 已强制**
+- ~~「Sprint3 未含 … 即全未开」~~ → 切片边界 vs Sprint4+ 落地分离表述
+- ~~「Memory / 压缩 / 回放 一律未开」~~ → Memory 预取已开；压缩未做；回放 API/UI 未做
+
+### 回滚
+
+```bash
+git checkout HEAD -- CLAUDE.md docs/design/TODO.md CHANGELOG.md 2>/dev/null
+# 或 git revert <本 commit>
+```
+

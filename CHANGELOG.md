@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-23 — 方案复审·文档对齐（docs only）
+
+- 对齐 `docs/design/dojo-agents-absorption-plan.md` §11 / §9.2 / 审批栏 / 结论：Plan=状态机、Skills=system_hint、Memory 启动预取、provenance 已强制；删除「Skills/Plan 未开」「provenance 仍待」等过时句。
+- `docs/design/DELIVERY-STATUS.md` → **v1.12-doc-align-capability-truth**：新增 §11 能力真相表；更新 §5 限制与「仍暂缓项」。
+- `docs/design/README.md` / `CLAUDE.md` / `TODO.md` 同步记录。
+- **未改业务代码**；未启服务；未 push。
+
 ## 2026-06-15 13:48:26 +08:00 — OpenAPI 文档覆盖收口（第三~六批）+ 依赖维护
 
 - OpenAPI 文档第三批扩充（`73bfc36`）：`/api/openapi.json` 新增 8 个端点 operation，覆盖更多 `/api/*` 业务路由。

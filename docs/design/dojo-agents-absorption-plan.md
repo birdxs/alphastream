@@ -33,8 +33,8 @@ Pos: docs/design/dojo-agents-absorption-plan.md — 设计层唯一入口；审�
 | **生效后准入** | Sprint 0 **已执行**；仍禁止 push；**业务编码**须另批「可进 Sprint1」 |
 | **本轮绝对禁止** | `pip install dojoagents/strands-agents/dojosdk` 进主依赖；新建第二 HTTP 主入口；Vite 第二前端；替换 `coordinator.py` 主图；复制 Dojo monorepo；用假数 Demo Agent |
 | **Sprint0 进度** | **完成**（2026-07-23 15:33:50 +08:00）：事件 payload / terminal 态 / HITL 断点 / 风险分级 → `docs/design/sprint0-inventory.md` |
-| **Sprint1–3 进度** | **本地已落地**（详见 §11 状态表 + `DELIVERY-STATUS.md`）；P0-7 降级帽已 DONE（合约层）；provenance[] 与写仓 harness 属已知缺口/Sprint4 |
-| **下一步闸门** | S4C 已关：pending 写仓 UI + memo.provenance 对齐；下一批 OpenAPI pending 字段 / Plan 真 step / Skills 内容包 / 启服联调；默认仍 **禁 push** |
+| **Sprint1–4 进度** | **本地已落地**（详见 §11 状态表 + `DELIVERY-STATUS.md`）；P0 全 DONE；provenance[] **已强制 normalize**；写仓 harness **骨架 DONE**（local_mark_only）；Plan/Skills **仅状态机/system_hint**（见能力真相表） |
+| **下一步闸门** | Plan **真执行 step** / Skills **运行时与内容包深化** / context_compress / Checkpoint **HTTP+前端回放** / OpenAPI pending 字段 / 启服联调；默认仍 **禁 push** |
 
 > **铁律**：设计全文已批；实现按 Comdr 全权托管 + 分 Sprint 授权推进。伪修复（无铁证三件套）= 任务失败。
 
@@ -406,11 +406,11 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | 段 | 内容 |
 |----|------|
 | 锚点 | Dojo AnalysisResult/DataSourceRef；本仓 timeline |
-| 缺口 | ~~工具事件字段不统一~~（时间线已规范）；provenance[] 仍待补 |
+| 缺口 | ~~工具事件字段不统一~~（时间线已规范）；~~provenance[] 仍待补~~ → **v1.8–v1.11 已强制 normalize** |
 | 融化 | 规范化 `agent.tool_call` / `agent.tool_result`（映射 `tool.call.*` + wire `tool_call_*`） |
 | 契约 | name / args_digest / ok / error / duration_ms / source；兼容 tool_name/arguments/result |
 | 验收 | timeline 卡片只消费契约字段；digest 稳定；失败 ok=false |
-| 超越 | Artifact「数据血统」折叠（provenance 后续） |
+| 超越 | Artifact「数据血统」折叠（provenance **已挂 memo/decision_card**；OpenAPI 字段级血统 schema 仍可再细） |
 | 风险 | 字段膨胀 → 默认摘要 |
 | 交付 | `ai_client` payload helpers + 双主题 publish；前端 tool-call-card/timeline/types |
 
@@ -458,18 +458,18 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 ### 9.2 P1 — 可编排、可复用、可回放
 
-| ID | 能力融化 | 锚点 | 回路落点 | 验收要点 |
-|----|----------|------|----------|----------|
-| P1-1 | Skills 注入 | SkillManager | `data/skills` + loader；进 system/tool | 3 内置 skill 可跑通步骤 |
-| P1-2 | Plan DAG | PlanExecutionEngine | SQLite plans；步进调 tools/agent | 死锁保护单测；两步依赖完成 |
-| P1-3 | 写仓提案+Harness | portfolio_write+harness | 提案工具 + apply 需 approval_id | **DONE 骨架**（`write_proposal.py`；无审批不 apply；local_mark_only，无真仓/broker） |
-| P1-4 | 跨市场/板块 facade | market/sector 工具 | 统一工具名，源=adapters | 契约测 + 可选联网抽样 |
-| P1-5 | Memory prefetch/摘要 | MemoryManager | 扩 `agent_memory` session 维 | 二轮引用前序结论 |
-| P1-6 | 上下文压缩 | ContextCompressor | 工具结果指针化 + 保留数字表 | 超长轨迹可答 |
-| P1-7 | 决策备忘 Artifact | 可解释终局 | action/否决/引用 evidence_index | 模板快照 |
-| P1-8 | Run scorecard | 质量分解 | data_coverage/role_agreement/tool_success/confidence_cap | 低分默认升风险 |
-| P1-9 | Checkpoint 只读回放 | replay | 默认不重跑付费工具 | UI 入口+标识 |
-| P1-10 | 反思可读 | reflection | Artifact；不写生产权重 | 人可审 |
+| ID | 能力融化 | 锚点 | 回路落点 | **代码落地状态（2026-07-23 对齐）** | 验收要点 |
+|----|----------|------|----------|--------------------------------------|----------|
+| P1-1 | Skills 注入 | SkillManager | `data/skills` + loader；进 system/tool | **已落地（仅 system_hint）**：`skill_loader` + `load_agent_skill`；**无 Skill 运行时**，不替代 adapters | 3 内置 skill 可跑通步骤（运行时未做） |
+| P1-2 | Plan DAG | PlanExecutionEngine | SQLite plans；步进调 tools/agent | **已落地（仅状态机）**：`plan_dag` + SSE `plan.step` + list UI；`advance_plan_step` **不真跑 tool** | 死锁保护单测；两步依赖完成（真 step 未做） |
+| P1-3 | 写仓提案+Harness | portfolio_write+harness | 提案工具 + apply 需 approval_id | **DONE 骨架**（`write_proposal.py`；无审批不 apply；local_mark_only，无真仓/broker） | 无审批不 apply |
+| P1-4 | 跨市场/板块 facade | market/sector 工具 | 统一工具名，源=adapters | **部分**（既有 adapters/工具名；统一 facade 未单独立项） | 契约测 + 可选联网抽样 |
+| P1-5 | Memory prefetch/摘要 | MemoryManager | 扩 `agent_memory` session 维 | **已落地（agent 启动路径预取）**：`build_memory_prefetch_summary`；空历史不注入；**无 env 默认关开关（路径常开）** | 二轮引用前序结论 |
+| P1-6 | 上下文压缩 | ContextCompressor | 工具结果指针化 + 保留数字表 | **未做**（无 ContextCompressor；仅 `ai_client` 大工具结果约 10KB 截断） | 超长轨迹可答 |
+| P1-7 | 决策备忘 Artifact | 可解释终局 | action/否决/引用 evidence_index | **DONE**（`decision_memo` + provenance 强制） | 模板快照 |
+| P1-8 | Run scorecard | 质量分解 | data_coverage/role_agreement/tool_success/confidence_cap | **DONE**（`scorecard.py` + UI） | 低分默认升风险 |
+| P1-9 | Checkpoint 只读回放 | replay | 默认不重跑付费工具 | **持久化已落地**（SqliteSaver）；**HTTP GET …/checkpoints 业务端点未做**；**前端只读回放 UI 未做** | UI 入口+标识 |
+| P1-10 | 反思可读 | reflection | Artifact；不写生产权重 | **部分**（reflection 模块存在；生产权重不写） | 人可审 |
 
 ### 9.3 P2 — 伴生与选修（可砍）
 
@@ -504,15 +504,26 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 
 > 全文设计已批（全权托管）；绝对时间锚点文档日 2026-07-23；交付冲刺锚点 2026-07-24 01:18 +08:00。默认禁 push。
 
-### 11.0 Sprint 状态总表（2026-07-24 01:18 +08:00）
+### 11.0 Sprint 状态总表（2026-07-24 01:18 +08:00；**2026-07-23 文档对齐修订**）
 
 | Sprint | 主题 | 状态 | 关键 commit（短哈希） | 备注 |
 |--------|------|------|----------------------|------|
 | **Sprint 0** | 只读盘点与契约 | **DONE** | `7886bd5` | `sprint0-inventory.md` |
-| **Sprint 1** | P0 回路闭合（护栏/HITL/辩论/时间线） | **DONE（主切片）** | `dd0fbc4` `fe1c08e` `0c244f9` `627a969` `7d78236` `fd077ae` | provenance 数组仍可深化 |
+| **Sprint 1** | P0 回路闭合（护栏/HITL/辩论/时间线） | **DONE（主切片）** | `dd0fbc4` `fe1c08e` `0c244f9` `627a969` `7d78236` `fd077ae` | provenance[] 后续已强制 normalize（v1.8–v1.11） |
 | **Sprint 2** | 意图路由 + 真仓只读 | **DONE** | `f0d1289` + handoff | P0-2 规则路由 + 写工具硬拦 |
-| **Sprint 3** | 组合诊断 + 观察 mode | **DONE** | `b612718` | Skills/Plan 仍属 P1 选修 |
-| **Sprint 4** | 写仓 harness（骨架） | **DONE（骨架）** | `78d6f34` + 本批 | propose→decide→apply 闸门；facade/P2 未开 |
+| **Sprint 3** | 组合诊断 + 观察 mode | **DONE** | `b612718` | 本切片不含 Skills/Plan；二者在 Sprint4+ 落地为状态机/hint |
+| **Sprint 4** | 写仓 harness + Plan/Skills 骨架 | **DONE（骨架）** | `78d6f34` + S4B/S4C 等 | propose→decide→apply；Plan 仅状态机；Skills 仅 system_hint；facade/P2 未开 |
+
+### 11.0b P1 能力真相表（与代码一致，2026-07-23）
+
+| 能力 | 状态标签 | 代码事实 | 仍故意未做 |
+|------|----------|----------|------------|
+| **Plan** | **已落地（仅状态机）** | `plan_dag.py` + `create/advance/get/list` 工具 + SSE `plan.step` + Plan 只读 UI | **真执行 step**（advance 不调用 tool/analyzer） |
+| **Skills** | **已落地（仅 system_hint）** | `skill_loader.py` + `load_agent_skill`/`list_agent_skills` + `data/skills` 样例 | **Skill 运行时**（不替代 adapters；无步骤引擎） |
+| **Memory prefetch** | **已落地（启动路径）** | `coordinator` → `build_memory_prefetch_summary`；空历史 → 不注入 | 完整 MemoryManager 会话维 / 独立 env 门控（**当前路径常开，无默认关开关**） |
+| **context_compress** | **未做** | 无 `ContextCompressor`；仅 `ai_client` 大工具结果截断 | 指针化压缩、超长轨迹可答 |
+| **Checkpoint 回放** | **持久化已有 / 回放未做** | SqliteSaver + `thread_id` 索引；LangGraph 库级 `get_state_history` | **HTTP GET …/checkpoints 业务端点**；**前端只读回放 UI** |
+| **provenance[]** | **已落地** | `normalize_provenance` 强制；memo/decision_card/scorecard/OpenAPI 消费方对齐 | OpenAPI 字段级血统专项 schema 仍可再细 |
 
 ### 11.1 P0 项 DONE 汇总
 
@@ -521,7 +532,7 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | **P0-1** | 工具调用护栏 | **DONE** | `dd0fbc4` | `tool_guardrails.py` + execute_tool / FC stream |
 | **P0-2** | 意图-工具协议 | **DONE** | `f0d1289` + handoff | 规则路由 + `WRITE_TOOL_BLOCKED` + 拟写意图硬拒绝 |
 | **P0-3** | 持仓读入回路 | **DONE** | `f0d1289` | `get_portfolio_snapshot` / risk_summary；chat 注入 snapshot |
-| **P0-4** | 工具时间线契约 | **DONE（timeline）** | `0c244f9` | tool_call/result 契约字段；provenance[] 仍待 |
+| **P0-4** | 工具时间线契约 | **DONE** | `0c244f9` + v1.8–v1.11 | tool_call/result 契约；**provenance[] 已强制 normalize**（非「仍待」） |
 | **P0-5** | HITL 确认面 | **DONE** | `fe1c08e` `627a969` | ApprovalCard / pending API / timeout_reject |
 | **P0-6** | 辩论证据面 | **DONE（证据面）** | `0c244f9` | debate_card + 分歧条；terminal 完成态仍可统一 |
 | **P0-7** | 降级帽 / confidence | **DONE（合约层）** | state/event_bus/decision-card | `degradations`+`confidence_cap`+`agent.degraded`+UI 横幅；真机压测可选 |
@@ -546,7 +557,8 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 - **P0-1 工具护栏：DONE**（`dd0fbc4`）  
 - **P0-5 HITL 确认面：DONE**（`fe1c08e`/`627a969`）  
 - **P0-4 工具时间线 + P0-6 辩论证据面：DONE**（`0c244f9` 等）  
-- **已知缺口（非阻塞）**：provenance[] 结构化数组；terminal 态统一；写仓 harness（Sprint4）。  
+- **已知缺口（非阻塞，历史表述）**：terminal 态统一。  
+- **已补齐（勿再写「仍待」）**：provenance[] 强制 normalize（v1.8–v1.11）；写仓 harness 骨架（Sprint4）。  
 - 分批 pytest；CDP 真测；禁 Playwright/全量 vitest。
 
 ### Sprint 2 — 意图 + 真仓只读 ✅ DONE
@@ -554,27 +566,27 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 - **P0-2 规则意图路由 + P0-3 持仓 snapshot 工具与 chat 注入**（`f0d1289`）。  
 - 辩论 Artifact / decision memo / scorecard 深化仍可后续增强（部分在 Sprint1 已做证据面）。
 
-### Sprint 3 — 组合诊断 + 观察 mode ✅ 本切片 DONE；P1 Skills 未开
+### Sprint 3 — 组合诊断 + 观察 mode ✅ 本切片 DONE
 
 - **组合风险诊断 + 观察标记（`b612718`）**：  
   - `risk_monitor.build_portfolio_diagnosis` + `analyze_portfolio_risk` 扩展字段（缺行业=`unknown`，禁止假行业）  
   - OpenAPI `/api/portfolio_risk`；`portfolio-store` `mode: live|watch`；`/portfolio` 诊断摘要  
-- **未开**：P1-1 Skills / P1-2 Plan DAG / Memory / 压缩 / 回放。
+- **说明（2026-07-23 对齐）**：Sprint3 **切片本身**不含 Skills/Plan；二者在 **Sprint4+** 已以「状态机 / system_hint」形态落地——**禁止再写「P1 Skills/Plan 未开」**。完整边界见 §11.0b。
 
-### Sprint 4 — 写仓 harness（骨架 DONE）+ 市场 facade / P2 选修（未开）
+### Sprint 4 — 写仓 harness（骨架 DONE）+ Plan/Skills 骨架 + 市场 facade / P2 选修（未开）
 
 - 仅当 P0/P1 稳定且 Comdr 明示；offline arena / Sink / 截图等可砍。
 - **2026-07-24 09:30 +08:00 写仓 harness 骨架 DONE**（commit `78d6f34` + 意图提示升级）：
   - `app/core/write_proposal.py` [NEW-FILE:#20260724-S4]：提案 + `approval_id` 闸门；`propose → decide → apply`；apply 仅 `local_mark_only`，**executed=false / broker=null**，禁止假「已下单」。
   - `tools.py` 注册 `propose_portfolio_write` / `decide_portfolio_proposal_approval` / `apply_portfolio_proposal`（白名单可执行；裸 `portfolio_write_*` 仍 WRITE_TOOL_BLOCKED）。
   - `intent_router`：`portfolio_write_blocked` system_hint 引导合规提案路径，禁止假成功文案。
-  - `conversation.attach_decision_artifact` + chat/agent-analyze 落盘挂载 decision_card（会话级可回放索引）。
+  - `conversation.attach_decision_artifact` + chat/agent-analyze 落盘挂载 decision_card（会话级索引）。
 - **2026-07-24 09:35 +08:00 Sprint4+ 薄切片 DONE**（HITL 桥 + Plan DAG + Skill stub）：
   - HITL：`approval_id` = pending `task_id`；`agent_submit_approval` ↔ `decide_portfolio_proposal_approval`。
-  - `app/core/plan_dag.py` [NEW-FILE:#20260724-S4B]：串行/depends_on/环检测/状态机；工具 `create_analysis_plan` / `get_plan_status`。
-  - `app/core/skill_loader.py` [NEW-FILE:#20260724-S4B]：system_hint stub（builtin + 可选 data/skills + reflection 片段）；**不替代 adapters**。
+  - `app/core/plan_dag.py` [NEW-FILE:#20260724-S4B]：串行/depends_on/环检测/状态机；工具 `create_analysis_plan` / `get_plan_status` / `advance_plan_step`（**状态推进 only，不真跑 tool**）。
+  - `app/core/skill_loader.py` [NEW-FILE:#20260724-S4B]：system_hint stub（builtin + 可选 data/skills + reflection 片段）；**不替代 adapters；无 Skill 运行时**。
   - **S4C DONE（2026-07-24）**：前端 `pending-approvals`/`approval-card` 展示 `kind=portfolio_write_proposal` + `approval_id`/`proposal_id`；`build_decision_memo` 挂 `provenance[]`（与 state/fd 去重对齐）；decision-card 回退读 memo.provenance。
-- **仍未做**：真券商 / mutate portfolio-store / Plan 真执行 step / OpenAPI pending 字段补齐 / 市场 facade 余项 / P2 / 启服 / push。
+- **仍故意未做**：真券商 / mutate portfolio-store / **Plan 真执行 step** / **Skills 运行时** / **context_compress** / **Checkpoint HTTP+前端回放** / OpenAPI pending 字段补齐 / 市场 facade 余项 / P2 / 启服 / push。
 
 ### 每 Sprint DoD
 
@@ -743,6 +755,7 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 |------|------|------|
 | v1.0-draft-for-approval | 2026-07-23 | 完整稿：AI 原生贯穿 + DojoAgents 具体能力融化 + P0–P2 + Sprint0–4；**待 Comdr 审批**；禁止编码 |
 | v1.1 | 2026-07-23 | **已通过 2026-07-23 Comdr 全权托管**；Sprint0 只读盘点完成（`sprint0-inventory.md`）；实现编码仍须「可进 Sprint1」闸 |
+| v1.2-doc-align | 2026-07-23 | **方案复审·文档对齐**：§11.0b 能力真相表；Plan/Skills/Memory/compress/Checkpoint/provenance 与代码一致；删除「未开/仍待」过时句 |
 
 ### E. Sprint0 证据入口
 
@@ -759,11 +772,11 @@ SkillMeta { name, description, required_tools[], markets[], body_path }
 3. **宿主** = Flask + LangGraph + Next + adapters/Wind。  
 4. **P0** = 护栏 + 协议硬拦 + 真仓只读 + 证据信封 + 确认面 + 辩论/完成态 + 降级帽。  
 5. **超越** = 辩论×持仓、Wind 感知调度、TruthGuard、合规夹注、Artifacts 标准化、演进→skill。  
-6. **现状** = **全权托管 + Sprint0–3 主切片本地可使用；P0-7 与多数 P1 未开；见 DELIVERY-STATUS。**
+6. **现状** = **全权托管 + Sprint0–4 主切片本地可使用；P0 全 DONE；P1 中 Plan/Skills 为状态机/hint、Memory 启动预取、provenance 已强制；context_compress 与 Checkpoint 回放 UI/HTTP 仍未做；见 §11.0b + DELIVERY-STATUS。**
 
 ---
 
-**— 全文完 · 全权托管 · Sprint0–3 主切片 DONE · v1.2 · 交付清单 DELIVERY-STATUS.md —**  
+**— 全文完 · 全权托管 · Sprint0–4 主切片 DONE · v1.2（2026-07-23 文档对齐）· 交付清单 DELIVERY-STATUS.md —**  
 **绝对路径**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/dojo-agents-absorption-plan.md`
 
 ### P0-5 HITL 确认面（2026-07-23）

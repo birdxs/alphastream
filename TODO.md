@@ -1,5 +1,14 @@
 # TODO
 
+## 2026-07-23 — 方案复审·文档对齐（Top1）
+
+- [x] 检索 CLAUDE.md / docs/design 中 Skills/Plan/Memory/压缩/Checkpoint/provenance 过时句
+- [x] 与代码对齐：Plan=状态机 / Skills=system_hint / Memory 启动预取常开 / compress 未做 / Checkpoint 回放未做 / provenance 已强制
+- [x] DELIVERY-STATUS v1.12 + 设计文档 §11.0b 能力真相表
+- [x] CLAUDE.md 追加「方案复审·文档对齐」
+- [ ] **仍禁 push**
+- [ ] **仍故意未做（代码）**：Plan 真 step / Skills 运行时 / context_compress / Checkpoint HTTP+前端回放 / 真券商
+
 ## 2026-07-20 14:58:40 +08:00 — 彻底停服后 CDP Bridge 真测
 
 - [x] 彻底停 8888/3000 → 干净重启 → cdp-bridge streamable-http :8765/:18765

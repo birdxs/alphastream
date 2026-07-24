@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.11-provenance-consumers-normalize` |
-| **交付锚点** | **2026-07-24 14:20:00 +08:00**（provenance 消费方强制 normalize；停服可做已基本穷尽） |
+| **文档版本** | `v1.12-doc-align-capability-truth` |
+| **交付锚点** | **2026-07-23 文档对齐**（Skills/Plan/Memory/压缩/Checkpoint/provenance 与代码一致；能力真相表 §11） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -25,7 +25,7 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 | Sprint 1 | **DONE（主切片）** | 护栏 / HITL / 辩论证据 / 工具时间线 |
 | Sprint 2 | **DONE** | 意图规则路由 + 持仓 snapshot 只读 |
 | Sprint 3 | **DONE** | 组合风险诊断 + 观察 mode |
-| Sprint 4 | **DONE（写仓 harness 骨架）** | 提案+approval 闸门 + decision 挂载；facade/P2 选修未开 |
+| Sprint 4 | **DONE（写仓 harness 骨架 + Plan 状态机 + Skills hint）** | 提案+approval 闸门 + decision 挂载；Plan **不真跑 step**；Skills **无运行时**；facade/P2/压缩/回放 UI 选修未开 |
 
 ### P0 汇总
 
@@ -348,9 +348,9 @@ CDP 备注：settings 硬刷后可见 Wind 配额真数（S/A/B 剩余，与 `/a
 ## 5. 已知限制
 
 1. **P0-7（合约 DONE）**：`degradations` + `confidence_cap` + `agent.degraded` + DecisionCard/SidePanel 已接；真机断网压测证据包仍可选。  
-2. **P0-2（handoff DONE）**：只读白名单 + 写工具名 `WRITE_TOOL_BLOCKED` no-op；拟写意图 `portfolio_write_blocked` + system_hint 硬拒绝；**真写 harness 未做**（Sprint4）。  
-3. **provenance[]**：`decision_memo.provenance` 已强制 `List[{source,tool?,ts?,digest?}]`（v1.8）；Artifact wrapper 全量对齐仍可做。  
-4. **Sprint3 未含 P1 Skills/Plan/Memory/回放**；仅组合诊断 + 观察 mode。  
+2. **P0-2（handoff DONE）**：只读白名单 + 写工具名 `WRITE_TOOL_BLOCKED` no-op；拟写意图 `portfolio_write_blocked` + system_hint 硬拒绝；**写仓 harness 骨架已 DONE**（`write_proposal` local_mark_only；**真券商/mutate store 仍未做**）。  
+3. **provenance[]**：**已落地**（v1.8–v1.11 `normalize_provenance` 强制；memo/decision_card/scorecard/OpenAPI 消费方对齐）；OpenAPI 字段级血统 schema 仍可再细（非阻塞）。  
+4. **Sprint3 切片本身**仅组合诊断 + 观察 mode；**Sprint4+ 已补** Plan（状态机）/ Skills（system_hint）/ Memory 启动预取——**禁止再写「P1 Skills/Plan 未开」**。完整边界见 §11。  
 5. **Wind**：无 `WIND_API_KEY` 时付费工具全降级；配额页不应显示造假剩余积分（空 key 时 remaining=满额未消费，属闸门初值非假交易结果）。  
 6. **auth**：`AUTH_REQUIRED=false` 仅本地；生产须开启鉴权 + CSRF。  
 7. **旧 TradingAgents 路径**：P0 只强化 LangGraph；旧路径只读兼容。  
@@ -537,15 +537,31 @@ bc19fa3 fix(review): 名称缓存 BD-3 回归 + Wind 扩展 WIP 冻结基线
 
 ---
 
-## 11. 已知缺口（不阻塞 handoff）
+## 11. 能力真相表 + 已知缺口（2026-07-23 文档对齐）
+
+### 11.0 P1 能力真相表（与代码一致；禁止写「未开」覆盖已落地骨架）
+
+| 能力 | 状态标签 | 代码事实 | 仍故意未做 |
+|------|----------|----------|------------|
+| **Plan** | **已落地（仅状态机）** | `plan_dag.py` + create/advance/get/list + SSE `plan.step` + Plan 只读 UI | **真执行 step**（advance 不调用 tool/analyzer） |
+| **Skills** | **已落地（仅 system_hint）** | `skill_loader.py` + load/list tools + `data/skills` 样例 | **Skill 运行时**（不替代 adapters） |
+| **Memory prefetch** | **已落地（agent 启动路径）** | `coordinator` → `build_memory_prefetch_summary`；空历史不注入 | 完整 MemoryManager 会话维 / 独立 env 门控（**路径常开，无默认关开关**） |
+| **context_compress** | **未做** | 无 ContextCompressor；仅 `ai_client` 大工具结果约 10KB 截断 | 指针化压缩、超长轨迹可答 |
+| **Checkpoint 回放** | **持久化已有 / 回放未做** | SqliteSaver + `thread_id`；LangGraph 库级 history | **HTTP GET …/checkpoints 业务端点**；**前端只读回放 UI** |
+| **provenance[]** | **已落地** | `normalize_provenance` 强制；memo/decision_card/scorecard 对齐 | OpenAPI 字段级血统 schema 仍可再细 |
+| **写仓 harness** | **骨架 DONE** | `write_proposal.py` + HITL 桥 + pending UI + local apply | 真券商 / mutate portfolio-store |
+
+### 11.1 仍故意未做 / 有意延后（不阻塞 handoff）
 
 | 项 | 级别 | 说明 | 建议时窗 |
 |----|------|------|----------|
-| **Artifact `provenance[]` 结构化数组** | P1 缺口 | P0-4 已有工具时间线事件；设计要求的 `provenance[]` 字段级血统数组未单独 schema 化 | Sprint4 / Skills 并行 |
+| **Plan 真执行 step** | P1 | 状态机已有；advance **不真跑 tool** | 另批 |
+| **Skills 运行时 / 内容包深化** | P1 | system_hint 已有；无 Skill 运行时 | 另批；禁止替代 adapters |
+| **context_compress** | P1 | **未做** | 选修 |
+| **Checkpoint HTTP + 前端回放 UI** | P1 | 持久化有；业务 GET/UI **未做** | 选修 |
 | **terminal 辩论完成态统一** | Low | 部分路径 terminal 与 progress 完成标记可再对齐 | 联调空窗 |
-| **P0-7 真机压测证据包** | Low | 单元/契约已通；可选再补「断网压测截图」 | Comdr 手测 §9.4 |
-| **写仓 harness（真写）** | P1/Sprint4 | 刻意未做：当前仅硬拦 + 拒绝提示；真写须 HITL + 前端 store API | 审批后再开 |
-| **P1 Skills / Plan DAG** | P1 | 未开 | 设计文档 Sprint4 |
+| **P0-7 真机压测证据包** | Low | 单元/契约已通；可选再补「断网压测截图」 | Comdr 手测 |
+| **写仓 harness（真写）** | P1 | 骨架 DONE（local_mark_only）；真券商 / mutate store 另批 | 审批后再开 |
 | **data/stock_names.json 本地脏改** | 噪音 | 常驻 runtime 刷新产物，**勿误提交密钥**；handoff 默认不入库 unless 有意刷新 | 提交时注意 exclude |
 
 ---
@@ -678,14 +694,16 @@ import-smoke：`len(OPENAPI_SPEC['paths']) == 71`；`get_market_overview_brief` 
 3. **OpenAPI 消费方**：若 Swagger UI 缓存，刷新 `/api/openapi.json` 确认 71 paths。  
 4. **仍默认禁 push**；合并前再跑一次上述 pytest 三文件。
 
-### 仍暂缓项（明确不在本批）
+### 仍暂缓项（明确不在本批；2026-07-23 对齐）
 
 | 项 | 原因 | 建议门槛 |
 |----|------|----------|
 | **真券商 / 真 mutate 用户持仓** | 仅 local_mark_only 骨架；无 broker | Comdr 书面审批 + 审计 + 独立适配器 |
-| **provenance[] 证据链深化** | 非本切片 | 对齐 scorecard/decision_memo 字段后补 |
-| **Plan DAG 执行引擎（真跑 step）** | 本批仅状态机 | 挂 analyzer 编排 + 超时/配额统一 |
-| **Skills 深替换 / dojosdk 数据面** | 破坏 adapters/Wind 铁证链 | 仅 system_hint facade；禁替换 adapters |
+| **provenance OpenAPI 字段级血统 schema** | normalize **已强制**（v1.8–v1.11）；专项 schema 仍可再细 | 选修 |
+| **Plan DAG 执行引擎（真跑 step）** | **状态机已落地**；advance 不真跑 tool | 挂 analyzer 编排 + 超时/配额统一 |
+| **Skills 运行时 / 深替换 / dojosdk 数据面** | **system_hint 已落地**；深替换会破坏 adapters/Wind 铁证链 | 禁替换 adapters |
+| **context_compress** | **未做**（仅大工具结果截断） | 选修 |
+| **Checkpoint HTTP + 前端回放 UI** | SqliteSaver 持久化已有；业务 GET/UI **未做** | 选修 |
 | **git push** | 工作区纪律 + 本地 ahead origin | Comdr 显式授权 |
 | **全量 vitest / npm build / 启服务** | 铁律 #3 资源 | 仅 tsc + 聚焦 eslint + 聚焦 pytest |
 
