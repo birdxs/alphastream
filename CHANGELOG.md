@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-24 — S-UI-4 静态预检 + 改造进度跟踪
+
+- Comdr 已全批 A–D；S-UI-0 进行中（`globals.css` 等 WIP 未并入本 commit）。
+- S-UI-4 静态预检：`tsc --noEmit` / 关键路由 eslint exit 0；dashboard/settings/portfolio 长页滚动代码审通过；终验阻塞于 S-UI-0~3 交付与 WebBridge。
+- 文档：`TODO.md` UI 节、`docs/design/ui-renovation-plan.md` §12（v1.1-sui4-static）。**仍禁 push**。
+
 ## 2026-07-23 — 方案复审·文档对齐（docs only）
 
 - 对齐 `docs/design/dojo-agents-absorption-plan.md` §11 / §9.2 / 审批栏 / 结论：Plan=状态机、Skills=system_hint、Memory 启动预取、provenance 已强制；删除「Skills/Plan 未开」「provenance 仍待」等过时句。
