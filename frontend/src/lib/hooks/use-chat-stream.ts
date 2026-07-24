@@ -434,26 +434,58 @@ export function useChatStream() {
             d.data && typeof d.data === 'object'
               ? (d.data as Record<string, unknown>)
               : d;
+          // 与 EVENT_WRITE_PROPOSAL / ApprovalCard 对齐：kind / approval_id / proposal_id
           const proposalId = String(
-            nested.proposal_id || nested.id || nested.task_id || '',
+            nested.proposal_id || nested.id || '',
           );
-          const action = String(nested.action || nested.side || nested.kind || 'write');
+          const approvalId = String(
+            nested.approval_id || nested.task_id || '',
+          );
+          const kind = String(
+            nested.kind || 'portfolio_write_proposal',
+          );
+          const action = String(
+            nested.action || nested.side || 'write',
+          );
           const code = String(nested.stock_code || nested.code || '');
+          // 只读摘要（零假数）：优先服务端 summary，否则 action+code，不拼价格
+          const summaryFromServer =
+            typeof nested.summary === 'string' && nested.summary.trim()
+              ? nested.summary.trim()
+              : '';
+          const summaryLocal = [action, code].filter(Boolean).join(' ');
+          const summary = summaryFromServer || summaryLocal;
+          const reason =
+            typeof nested.reason === 'string' ? nested.reason : '';
           agentStore.appendEvent({
-            id: `write_proposal_${proposalId || Date.now()}`,
+            id: `write_proposal_${proposalId || approvalId || Date.now()}`,
             type: 'write_proposal',
             agent: '写仓',
-            title: code
-              ? `写仓提案 ${action} ${code}`
-              : `写仓提案 ${action}${proposalId ? ` #${proposalId.slice(0, 8)}` : ''}`,
-            detail:
-              typeof nested.reason === 'string'
-                ? nested.reason
-                : typeof nested.summary === 'string'
-                  ? nested.summary
-                  : undefined,
+            title: summary
+              ? `写仓提案 ${summary}`
+              : `写仓提案${proposalId ? ` #${proposalId.slice(0, 8)}` : ''}`,
+            detail: [
+              reason || undefined,
+              summary && summary !== reason ? summary : undefined,
+              approvalId && `审批 ${approvalId.slice(0, 14)}`,
+              proposalId && `提案 ${proposalId.slice(0, 14)}`,
+              '待审批 · 未成交',
+            ]
+              .filter(Boolean)
+              .join(' · '),
             ts: Date.now(),
-            meta: nested,
+            meta: {
+              ...nested,
+              kind,
+              proposal_id: proposalId || undefined,
+              approval_id: approvalId || undefined,
+              action: action || undefined,
+              code: code || undefined,
+              summary: summary || undefined,
+              status:
+                nested.status != null ? String(nested.status) : 'pending',
+              executed: false,
+            },
           });
         },
         onError: (data) => {

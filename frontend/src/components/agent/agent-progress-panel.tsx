@@ -133,12 +133,35 @@ function truncate(s: string | undefined, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
+/** write_proposal 事件只读摘要：与 ApprovalCard / EVENT_WRITE_PROPOSAL 同字段 */
+function writeProposalSummaryBits(meta?: Record<string, unknown> | null): string[] {
+  if (!meta || typeof meta !== 'object') return [];
+  const bits: string[] = [];
+  const kind = meta.kind != null ? String(meta.kind) : '';
+  if (kind) bits.push(kind);
+  const summary = meta.summary != null ? String(meta.summary).trim() : '';
+  if (summary) bits.push(summary);
+  const approvalId = meta.approval_id != null ? String(meta.approval_id) : '';
+  if (approvalId) bits.push(`appr ${approvalId.slice(0, 12)}`);
+  const proposalId = meta.proposal_id != null ? String(meta.proposal_id) : '';
+  if (proposalId) bits.push(`prop ${proposalId.slice(0, 12)}`);
+  const status = meta.status != null ? String(meta.status) : '';
+  if (status) bits.push(status);
+  if (meta.executed === true) bits.push('已标记');
+  else if (meta.executed === false) bits.push('未成交');
+  return bits;
+}
+
 function EventRow({ ev, prevTs }: { ev: AgentEvent; prevTs?: number }) {
   const cfg = EVENT_VISUAL[ev.type] ?? EVENT_VISUAL.degraded;
   const Icon = cfg.Icon;
   const [open, setOpen] = useState(false);
   const hasDetail = !!(ev.detail && ev.detail.length > 0);
   const delta = prevTs ? ev.ts - prevTs : 0;
+  const isWriteProposal = ev.type === 'write_proposal';
+  const wpBits = isWriteProposal ? writeProposalSummaryBits(ev.meta) : [];
+  const hasMetaPanel = isWriteProposal && wpBits.length > 0;
+  const expandable = hasDetail || hasMetaPanel;
 
   return (
     <div className="relative pl-7 pr-1 group">
@@ -159,26 +182,57 @@ function EventRow({ ev, prevTs }: { ev: AgentEvent; prevTs?: number }) {
           )}
         </div>
 
+        {/* write_proposal：与审批卡同步的 kind/approval_id/proposal_id 只读徽章 */}
+        {isWriteProposal && wpBits.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {wpBits.slice(0, 6).map((b) => (
+              <span
+                key={b}
+                className="font-mono text-[9px] px-1 py-0 rounded border border-[#F59E0B]/25 bg-[#F59E0B]/5 text-[#F59E0B]/90 max-w-[140px] truncate"
+                title={b}
+              >
+                {truncate(b, 28)}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-start gap-1">
           <button
             type="button"
-            onClick={() => hasDetail && setOpen(o => !o)}
-            disabled={!hasDetail}
-            className={`flex-1 text-left text-[11px] leading-tight text-foreground/90 ${hasDetail ? 'cursor-pointer hover:text-foreground' : 'cursor-default'} break-words`}
+            onClick={() => expandable && setOpen(o => !o)}
+            disabled={!expandable}
+            className={`flex-1 text-left text-[11px] leading-tight text-foreground/90 ${expandable ? 'cursor-pointer hover:text-foreground' : 'cursor-default'} break-words`}
           >
             {ev.title}
             {hasDetail && !open && (
               <span className="text-muted-foreground/60 ml-1">— {truncate(ev.detail, 60)}</span>
             )}
           </button>
-          {hasDetail && (
+          {expandable && (
             <ChevronDown className={`h-3 w-3 text-muted-foreground/50 shrink-0 mt-0.5 transition-transform ${open ? 'rotate-180' : ''}`} />
           )}
         </div>
 
-        {open && hasDetail && (
-          <div className={`mt-1 p-2 rounded ${cfg.bg} border ${cfg.border} text-[10px] font-mono text-foreground/85 whitespace-pre-wrap break-all max-h-48 overflow-y-auto`}>
-            {ev.detail}
+        {open && (hasDetail || hasMetaPanel) && (
+          <div className={`mt-1 p-2 rounded ${cfg.bg} border ${cfg.border} text-[10px] font-mono text-foreground/85 whitespace-pre-wrap break-all max-h-48 overflow-y-auto space-y-1`}>
+            {isWriteProposal && (
+              <div className="text-muted-foreground/80 space-y-0.5">
+                {ev.meta?.kind != null && <div>kind: {String(ev.meta.kind)}</div>}
+                {ev.meta?.approval_id != null && (
+                  <div>approval_id: {String(ev.meta.approval_id)}</div>
+                )}
+                {ev.meta?.proposal_id != null && (
+                  <div>proposal_id: {String(ev.meta.proposal_id)}</div>
+                )}
+                {ev.meta?.summary != null && String(ev.meta.summary).trim() && (
+                  <div>summary: {String(ev.meta.summary)}</div>
+                )}
+                {ev.meta?.status != null && <div>status: {String(ev.meta.status)}</div>}
+                <div>executed: {ev.meta?.executed === true ? 'true' : 'false'}（未宣称券商成交）</div>
+              </div>
+            )}
+            {hasDetail && <div>{ev.detail}</div>}
           </div>
         )}
       </div>

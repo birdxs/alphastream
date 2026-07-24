@@ -222,24 +222,41 @@ class HumanApprovalManager:
             return False
         with self._lock:
             existing = self._pending_approvals.get(tid)
+            # 与 EVENT_WRITE_PROPOSAL / 前端 ApprovalCard 对齐
+            dec = decision or {}
+            pid = None
+            if isinstance(dec, dict):
+                pid = dec.get('proposal_id') or dec.get('id')
+            if metadata and isinstance(metadata, dict) and not pid:
+                pid = metadata.get('proposal_id')
+            kind_n = kind or 'external'
+
             if existing is not None and existing.get('status') == 'pending':
                 # 幂等刷新展示字段
-                existing['decision'] = decision or existing.get('decision') or {}
+                existing['decision'] = dec or existing.get('decision') or {}
                 existing['reason'] = reason or existing.get('reason') or ''
-                existing['kind'] = kind or existing.get('kind') or 'external'
+                existing['kind'] = kind_n or existing.get('kind') or 'external'
                 existing['metadata'] = metadata if metadata is not None else existing.get('metadata') or {}
+                existing['approval_id'] = tid
+                if pid:
+                    existing['proposal_id'] = pid
+                elif kind_n == 'portfolio_write_proposal' and not existing.get('proposal_id'):
+                    existing['proposal_id'] = (existing.get('metadata') or {}).get('proposal_id')
                 return True
             self._pending_approvals[tid] = {
-                'decision': decision or {},
+                'decision': dec,
                 'risk_level': risk_level or 'high',
                 'status': 'pending',
                 'created_at': now_cn().isoformat(),
                 'reason': reason or build_approval_reason(decision),
                 'timeout_seconds': float(timeout_seconds) if timeout_seconds is not None else None,
                 'risk_assessment': {},
-                'kind': kind or 'external',
+                'kind': kind_n,
                 'metadata': metadata or {},
                 'non_blocking': True,
+                # timeline / ApprovalCard 同步字段
+                'approval_id': tid,
+                'proposal_id': pid,
             }
         try:
             _publish_approval_event(
@@ -249,7 +266,17 @@ class HumanApprovalManager:
                 risk_level or 'high',
                 reason=reason or '',
                 timeout_seconds=timeout_seconds,
-                extra={'kind': kind or 'external', 'non_blocking': True},
+                extra={
+                    'kind': kind or 'external',
+                    'non_blocking': True,
+                    'approval_id': tid,
+                    'proposal_id': (
+                        (decision or {}).get('proposal_id')
+                        if isinstance(decision, dict)
+                        else None
+                    )
+                    or ((metadata or {}).get('proposal_id') if isinstance(metadata, dict) else None),
+                },
             )
         except Exception as e:
             logger.debug(f"register_non_blocking_pending 事件发布失败: {e}")
@@ -556,9 +583,23 @@ class HumanApprovalManager:
                     ),
                     'status': 'pending',
                     'kind': v.get('kind') or 'agent_decision',
-                    'approval_id': k if (v.get('kind') == 'portfolio_write_proposal' or str(k).startswith('appr_')) else None,
-                    'proposal_id': (v.get('metadata') or {}).get('proposal_id')
-                    or (v.get('decision') or {}).get('proposal_id'),
+                    # approval_id：写仓/appr_* 必填；其它 kind 也回填 task_id 便于 timeline 对齐
+                    'approval_id': (
+                        v.get('approval_id')
+                        or (
+                            k
+                            if (
+                                v.get('kind') == 'portfolio_write_proposal'
+                                or str(k).startswith('appr_')
+                            )
+                            else k
+                        )
+                    ),
+                    'proposal_id': (
+                        v.get('proposal_id')
+                        or (v.get('metadata') or {}).get('proposal_id')
+                        or (v.get('decision') or {}).get('proposal_id')
+                    ),
                 }
                 for k, v in self._pending_approvals.items()
                 if v.get('status') == 'pending'

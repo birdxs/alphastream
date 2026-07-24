@@ -230,12 +230,30 @@ class TestSkillStub:
         assert "risk_checklist" in ids
         assert "portfolio_readonly" in ids
         assert "reflection_hint" in ids
+        # 文件 skill 热读（data/skills）
+        assert "research_depth" in ids
+        assert "hitl_checklist" in ids
+        assert "tool_discipline" in ids  # 文件优先 / builtin 同名
+
+        # 元数据契约：source / has_hint / path(仅文件)
+        file_skills = [s for s in skills if s.get("source") == "data/skills"]
+        assert len(file_skills) >= 3
+        for s in file_skills:
+            assert s.get("has_hint") is True or s.get("has_hint") is False
+            assert s.get("path") and "/" not in str(s.get("path"))  # 仅文件名
+            assert "1174.06" not in json.dumps(s, ensure_ascii=False)
 
         res = loader.load_skill("risk_checklist")
         assert res["success"] is True
         assert "system_hint" in res and "Skill: risk_checklist" in res["system_hint"]
         # 不得出现假价格数字作为行情
         assert "1174.06" not in res["system_hint"]
+
+        # tool_discipline 可 load（文件优先）
+        td = loader.load_skill("tool_discipline")
+        assert td["success"] is True
+        assert "system_hint" in td
+        assert "1174.06" not in td["system_hint"]
 
     def test_reflection_hint_uses_local_or_empty_message(self):
         from app.core.skill_loader import get_skill_loader
@@ -265,6 +283,16 @@ class TestSkillStub:
         listed = json.loads(list_agent_skills.invoke({}))
         assert listed["success"] is True
         assert listed["count"] >= 3
+        # 文件 skill 元数据在 tools 出口
+        skill_ids = {s["id"] for s in listed["skills"]}
+        assert "tool_discipline" in skill_ids
+        assert "research_depth" in skill_ids
+        assert "by_source" in listed
+        assert listed["by_source"].get("data/skills", 0) >= 1
+        # 元数据无密钥/假数
+        blob = json.dumps(listed, ensure_ascii=False)
+        assert "api_key" not in blob.lower()
+        assert "1174.06" not in blob
 
         loaded = json.loads(
             load_agent_skill.invoke({"skill_id": "portfolio_readonly"})
@@ -435,6 +463,87 @@ def test_list_analysis_plans_filter_kwargs():
     assert data["success"] is True
     assert data["count"] >= 1
     assert all(p.get("conversation_id") == "conv_tool_filt" for p in data["plans"])
+
+
+def test_write_proposal_event_fields_align_with_approval_card():
+    """write_proposal EVENT 与 HITL pending 字段对齐：kind / approval_id / proposal_id / summary。"""
+    from app.agents.hitl import approval_manager
+    from app.core.event_bus import EVENT_WRITE_PROPOSAL, get_event_bus
+    from app.core.write_proposal import (
+        get_write_proposal_store,
+        reset_write_proposal_store_for_tests,
+    )
+
+    bus = get_event_bus()
+    seen = []
+
+    def _on_wp(data):
+        seen.append(data if isinstance(data, dict) else {})
+
+    bus.subscribe(EVENT_WRITE_PROPOSAL, _on_wp)
+    reset_write_proposal_store_for_tests()
+    store = get_write_proposal_store()
+    # 清理 HITL 残留
+    try:
+        with approval_manager._lock:  # type: ignore[attr-defined]
+            approval_manager._pending_approvals.clear()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    result = store.create_proposal(
+        action="add_holding",
+        code="600519",
+        name="贵州茅台",
+        shares=100,
+        reason="单元测试写仓提案字段对齐",
+        conversation_id="conv_wp_align",
+    )
+    assert result.get("success") is True
+    assert result.get("executed") is False
+    data = result.get("data") if isinstance(result.get("data"), dict) else result
+    proposal_id = (
+        result.get("proposal_id")
+        or (data or {}).get("proposal_id")
+    )
+    approval_id = (
+        result.get("approval_id")
+        or (data or {}).get("approval_id")
+    )
+    assert proposal_id and str(proposal_id).startswith("prop_")
+    assert approval_id and str(approval_id).startswith("appr_")
+
+    # EventBus 载荷字段
+    assert seen, "应发布 EVENT_WRITE_PROPOSAL"
+    ev = seen[-1]
+    # 允许总线再包一层 data
+    if "data" in ev and isinstance(ev.get("data"), dict) and "proposal_id" not in ev:
+        ev = ev["data"]
+    assert ev.get("kind") == "portfolio_write_proposal"
+    assert ev.get("proposal_id") == proposal_id
+    assert ev.get("approval_id") == approval_id
+    assert ev.get("status") == "pending"
+    assert ev.get("executed") is False
+    assert ev.get("summary")
+    assert "add_holding" in str(ev.get("summary"))
+    assert "600519" in str(ev.get("summary")) or ev.get("code") == "600519"
+    assert "1174.06" not in json.dumps(ev, ensure_ascii=False)
+
+    # HITL pending 列表字段与 event 对齐
+    pending = approval_manager.get_pending_approvals()
+    hit = next(
+        (
+            p
+            for p in pending
+            if p.get("approval_id") == approval_id
+            or p.get("task_id") == approval_id
+            or p.get("proposal_id") == proposal_id
+        ),
+        None,
+    )
+    assert hit is not None, f"pending 应含 approval_id={approval_id}, got={pending!r}"
+    assert hit.get("kind") == "portfolio_write_proposal"
+    assert hit.get("approval_id") == approval_id or hit.get("task_id") == approval_id
+    assert hit.get("proposal_id") == proposal_id
 
 
 def test_file_skills_from_data_dir():

@@ -26,12 +26,13 @@ _SKILLS_DIR = _REPO_ROOT / "data" / "skills"
 _REFLECTIONS_DIR = _REPO_ROOT / "data" / "agent_reflections"
 _STRATEGIES_DIR = _REPO_ROOT / "data" / "agent_strategies"
 
-# 内置只读 skill stub（不触网、不拉行情）
+# 内置只读 skill stub（不触网、不拉行情、无密钥）
 _BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
     "risk_checklist": {
         "id": "risk_checklist",
         "title": "高风险决策自检清单",
         "source": "builtin",
+        "kind": "checklist",
         "system_hint": (
             "【Skill: risk_checklist】回答高风险投资建议前自检："
             "1) 是否区分提案与已成交；2) 置信度与风险等级是否一致；"
@@ -43,6 +44,7 @@ _BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
         "id": "portfolio_readonly",
         "title": "持仓只读约束",
         "source": "builtin",
+        "kind": "policy",
         "system_hint": (
             "【Skill: portfolio_readonly】持仓相关工具为只读快照。"
             "不得假装 mutate 用户组合；拟写须 propose_portfolio_write，"
@@ -53,9 +55,26 @@ _BUILTIN_SKILLS: Dict[str, Dict[str, Any]] = {
         "id": "analysis_plan",
         "title": "多步分析计划",
         "source": "builtin",
+        "kind": "workflow",
         "system_hint": (
             "【Skill: analysis_plan】复杂分析可先 create_analysis_plan 建串行/DAG 步骤，"
             "用 get_plan_status 查询；计划本身不执行抓数，步骤完成由宿主推进。"
+        ),
+    },
+    # [NEW 2026-07-24] 无密钥 builtin 样例：工具调用纪律
+    "tool_discipline": {
+        "id": "tool_discipline",
+        "title": "工具调用纪律",
+        "source": "builtin",
+        "kind": "policy",
+        "system_hint": (
+            "【Skill: tool_discipline】调用工具纪律："
+            "1) 先 list_agent_skills / 选用 skill 再答复杂约束；"
+            "2) 行情/财务只经 adapters 与已注册工具，禁止手写点位；"
+            "3) 写仓必须 propose→HITL approve→apply（local_mark_only），"
+            "proposal_id/approval_id/kind 不得编造；"
+            "4) 失败降级如实说明 source/degraded，禁止用历史缓存冒充实时；"
+            "5) 本 skill 不含密钥与任何真实金融数值。"
         ),
     },
 }
@@ -70,55 +89,107 @@ class SkillLoader:
         self._file_cache: Dict[str, Dict[str, Any]] = {}
 
     def list_skills(self) -> List[Dict[str, Any]]:
+        """热读 data/skills（优先）+ builtin 元数据；目录枚举不缓存，增删文件即可见。
+
+        返回字段（稳定契约）：
+          id, title, source, kind?, path?, has_hint, format?
+        禁止携带密钥或任何看起来像行情的数值。
+        """
         items: List[Dict[str, Any]] = []
-        for sid, meta in _BUILTIN_SKILLS.items():
-            items.append(
-                {
-                    "id": sid,
-                    "title": meta.get("title"),
-                    "source": "builtin",
-                }
-            )
+        seen: set = set()
+
+        # 1) 热读 data/skills（文件优先于同 id builtin）
         if self._skills_dir.is_dir():
             for p in sorted(self._skills_dir.iterdir()):
+                if not p.is_file():
+                    continue
                 if p.suffix.lower() not in (".md", ".txt", ".json"):
                     continue
-                sid = p.stem
-                if any(x["id"] == sid for x in items):
+                # 跳过目录说明与隐藏文件
+                if p.name.upper().startswith("README") or p.name.startswith("."):
                     continue
+                sid = p.stem
                 title = sid
-                # 尝试从文件取标题（无敏感内容、失败则回退 stem）
+                has_hint = False
+                kind = "file"
+                fmt = p.suffix.lower().lstrip(".") or "txt"
                 try:
+                    text = p.read_text(encoding="utf-8")
                     if p.suffix.lower() == ".json":
-                        raw = json.loads(p.read_text(encoding="utf-8"))
-                        if isinstance(raw, dict) and raw.get("title"):
-                            title = str(raw["title"])[:80]
+                        raw = json.loads(text)
+                        if isinstance(raw, dict):
+                            if raw.get("title"):
+                                title = str(raw["title"])[:80]
+                            if raw.get("id"):
+                                inner_id = str(raw.get("id")).strip()
+                                if inner_id:
+                                    sid = inner_id
+                            has_hint = bool(
+                                raw.get("system_hint")
+                                or raw.get("hint")
+                                or raw.get("content")
+                            )
+                            if raw.get("kind"):
+                                kind = str(raw["kind"])[:32]
                     else:
-                        # markdown: 首行 # 标题
-                        first = p.read_text(encoding="utf-8").splitlines()[:3]
+                        first = text.splitlines()[:5]
                         for line in first:
                             s = line.strip()
                             if s.startswith("#"):
                                 title = s.lstrip("#").strip()[:80] or sid
                                 break
+                        low = text.lower()
+                        has_hint = bool(text.strip()) and (
+                            "system_hint" in low
+                            or "【skill" in low
+                            or len(text.strip()) > 20
+                        )
                 except Exception:
                     title = sid
+                    has_hint = False
+                if sid in seen:
+                    continue
+                seen.add(sid)
                 items.append(
                     {
                         "id": sid,
                         "title": title,
                         "source": "data/skills",
-                        "path": str(p),
+                        "path": str(p.name),  # 仅文件名，不泄露绝对路径
+                        "kind": kind,
+                        "format": fmt,
+                        "has_hint": has_hint,
                     }
                 )
-        # 动态 reflection 技能入口（按 code 加载）
-        items.append(
-            {
-                "id": "reflection_hint",
-                "title": "标的反思/策略片段",
-                "source": "agent_reflections|agent_strategies",
-            }
-        )
+
+        # 2) builtin（同 id 已被文件覆盖则跳过）
+        for sid, meta in _BUILTIN_SKILLS.items():
+            if sid in seen:
+                continue
+            seen.add(sid)
+            items.append(
+                {
+                    "id": sid,
+                    "title": meta.get("title"),
+                    "source": "builtin",
+                    "kind": meta.get("kind") or "builtin",
+                    "has_hint": bool(meta.get("system_hint")),
+                    "format": "builtin",
+                }
+            )
+
+        # 3) 动态 reflection 技能入口（按 code 加载）
+        if "reflection_hint" not in seen:
+            items.append(
+                {
+                    "id": "reflection_hint",
+                    "title": "标的反思/策略片段",
+                    "source": "agent_reflections|agent_strategies",
+                    "kind": "dynamic",
+                    "has_hint": True,
+                    "format": "reflection",
+                }
+            )
         return items
 
     def _load_file_skill(self, skill_id: str) -> Optional[Dict[str, Any]]:

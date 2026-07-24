@@ -30,12 +30,21 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
-# 导入前/收集阶段再写一次后台门控（web_server 模块级 _startup_background_enabled）
-# 与根 conftest.py 双保险，减少 atexit closed-stream 噪声
+# 导入前/收集阶段再强制写后台门控（web_server 模块级 _startup_background_enabled）
+# 与根 conftest.py 双保险，减少 atexit closed-stream 噪声；须在任何 app import 前
 os.environ.setdefault("DISABLE_NETWORK", "1")
 os.environ.setdefault("MOCK_LLM", "1")
 os.environ.setdefault("AUTH_REQUIRED", "false")
 os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+os.environ["STOCKANAL_TEST_MODE"] = "1"
+
+
+def pytest_configure(config):  # noqa: ARG001
+    """backend 收集阶段再次强制门控（防子 conftest/plugin 顺序问题）。"""
+    os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+    os.environ["STOCKANAL_TEST_MODE"] = "1"
+    os.environ.setdefault("DISABLE_NETWORK", "1")
+    os.environ.setdefault("MOCK_LLM", "1")
 
 
 # ==============================================================================

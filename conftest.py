@@ -44,14 +44,26 @@ os.environ.setdefault("MOCK_LLM", "1")
 os.environ.setdefault("AUTH_REQUIRED", "false")
 # 导入前强关后台线程（名称预热 / 指数预热 / news scheduler），减少 atexit closed-stream 噪声
 # web_server._startup_background_enabled() 识别 STOCKANAL_DISABLE_BACKGROUND=1
+# 强制赋值（非 setdefault）：确保任意父进程/CI 传参不能把后台门控关掉
 os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+os.environ["STOCKANAL_TEST_MODE"] = "1"
 if os.environ.get("DISABLE_NETWORK") == "1":
     os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
 
 # 将仓库根加入 sys.path，保证 `import app.*` 在子目录测试中也能命中
+# 注意：本段在任何 app 导入之前执行；后台门控已在上方强制写入
 _REPO_ROOT = Path(__file__).resolve().parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+
+def pytest_configure(config):  # noqa: ARG001
+    """收集阶段再次强制 env（防 plugin/包 import 前序覆盖）。"""
+    os.environ["STOCKANAL_DISABLE_BACKGROUND"] = "1"
+    os.environ["STOCKANAL_TEST_MODE"] = "1"
+    os.environ.setdefault("DISABLE_NETWORK", "1")
+    os.environ.setdefault("MOCK_LLM", "1")
+    os.environ.setdefault("AUTH_REQUIRED", "false")
 
 
 # --------------------------------------------------------------------------- #

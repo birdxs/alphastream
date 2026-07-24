@@ -300,22 +300,34 @@ export function ApprovalCard({
           className="flex flex-wrap gap-x-3 gap-y-0.5 rounded-md border border-violet-500/20 bg-violet-500/5 px-2 py-1.5 font-mono text-[10px] text-muted-foreground"
           data-testid="approval-proposal-summary"
         >
+          {/* 与 timeline write_proposal meta.summary 同形只读摘要（零假数，无价格） */}
+          <span data-testid="approval-readonly-summary">
+            {[action, code, shares != null ? `×${shares}` : null, weight != null ? `w=${weight}` : null]
+              .filter(Boolean)
+              .join(" ")}
+          </span>
           {code ? <span>code: {code}</span> : null}
           {name && name !== code ? <span>name: {name}</span> : null}
           {shares != null ? <span>shares: {shares}</span> : null}
           {weight != null ? <span>weight: {weight}</span> : null}
+          <span className="text-violet-700/80 dark:text-violet-300/80">未成交</span>
         </div>
       ) : null}
 
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+        {kind ? (
+          <span data-testid="approval-kind-text" title={kind}>
+            kind: {kind}
+          </span>
+        ) : null}
         {approvalId ? (
           <span title={approvalId} data-testid="approval-id-text">
-            approval: {shortId(approvalId, 16)}
+            approval_id: {shortId(approvalId, 16)}
           </span>
         ) : null}
         {proposalId ? (
           <span title={proposalId} data-testid="proposal-id-text">
-            proposal: {shortId(proposalId, 16)}
+            proposal_id: {shortId(proposalId, 16)}
           </span>
         ) : null}
         {typeof approval.timeout_seconds === "number" ? (

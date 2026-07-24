@@ -179,21 +179,41 @@ class WriteProposalStore:
         except Exception:
             pass
 
-        # timeline / SSE：写仓提案事件（不宣称已成交）
+        # timeline / SSE / ApprovalCard：字段与 pending 审批对齐（kind/approval_id/proposal_id）
         try:
             from app.core.event_bus import get_event_bus, EVENT_WRITE_PROPOSAL
+
+            # 只读摘要（零假数）：动作 + 代码 + 可选 shares/weight，无价格
+            _sum_parts = [act or "write"]
+            if code_s:
+                _sum_parts.append(str(code_s))
+            if shares is not None:
+                _sum_parts.append(f"×{shares}")
+            if weight is not None:
+                _sum_parts.append(f"w={weight}")
+            summary = " ".join(_sum_parts)
 
             get_event_bus().publish(
                 EVENT_WRITE_PROPOSAL,
                 {
                     "event_type": EVENT_WRITE_PROPOSAL,
+                    "kind": "portfolio_write_proposal",
                     "proposal_id": proposal_id,
                     "approval_id": approval_id,
+                    "task_id": approval_id,  # HITL task_id == approval_id
+                    "status": "pending",
                     "action": act,
-                    "code": code_s,
+                    "code": code_s or None,
+                    "name": name or None,
+                    "shares": shares,
+                    "weight": weight,
+                    "reason": reason or "",
+                    "risk_level": "high",
                     "conversation_id": conversation_id or "",
                     "executed": False,
-                    "message": f"写仓提案 {act} {code_s or ''}（待审批，未执行）".strip(),
+                    "apply_mode": None,
+                    "summary": summary,
+                    "message": f"写仓提案 {summary}（待审批，未执行）".strip(),
                 },
             )
         except Exception as e:

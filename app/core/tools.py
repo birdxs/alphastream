@@ -698,16 +698,26 @@ def load_agent_skill(
 
 @tool
 def list_agent_skills() -> str:
-    """列出可用 Skill stub（builtin + data/skills + reflection_hint 入口）。"""
+    """列出可用 Skill 元数据（builtin + data/skills 热读 + reflection_hint）。
+
+    每项含 id/title/source/kind/has_hint/format[/path]；文件 skill 的 path 为相对文件名。
+    仅元数据，禁止当作行情数据源，无密钥字段。
+    """
     from app.core.skill_loader import get_skill_loader
 
     items = get_skill_loader().list_skills()
+    # 统计来源，便于 Agent 决策是否 load
+    by_source: dict = {}
+    for it in items:
+        src = str((it or {}).get("source") or "unknown")
+        by_source[src] = by_source.get(src, 0) + 1
     return json.dumps(
         {
             "success": True,
             "count": len(items),
+            "by_source": by_source,
             "skills": items,
-            "note": "Skills 仅为 system_hint 片段，禁止当作行情数据源",
+            "note": "Skills 仅为 system_hint 片段/元数据，禁止当作行情数据源；load_agent_skill 取正文",
         },
         ensure_ascii=False,
     )

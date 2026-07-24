@@ -3,7 +3,7 @@
 - tools.py(共享工具注册表；Sprint2 持仓只读；Sprint4 propose/decide/apply；Sprint4+ plan/skill；advance_plan_step 状态机；禁假下单)
 - write_proposal.py(Sprint4 写仓提案 + approval_id 闸门；HITL 桥；local_mark_only；publish write_proposal 事件) [NEW-FILE:#20260724-S4]
 - plan_dag.py(Sprint4+ 轻量 Plan DAG：depends_on/环检测/状态机；list 过滤 conversation_id/status；advance_step；plan.created/plan.step 事件；不抓数不下单) [NEW-FILE:#20260724-S4B]
-- skill_loader.py(Sprint4+ Skills：builtin + data/skills(.md/.json 样例 research_depth/hitl_checklist) + reflection 片段 → system_hint；禁替代 adapters) [NEW-FILE:#20260724-S4B]
+- skill_loader.py(Sprint4+ Skills：data/skills 热读优先元数据(id/title/source/kind/has_hint/path) + builtin(含 tool_discipline) + reflection → system_hint；list_agent_skills 出口完整；禁替代 adapters) [NEW-FILE:#20260724-S4B]
 - intent_router.py(Sprint2 chat 意图规则路由：portfolio/cross_market/market_overview/single_stock_deep/general) [NEW-FILE:#20260723-S2]
 - artifact_wrapper.py(Generative UI后端数据协议层，将工具结果包装为前端可渲染的Artifact结构化JSON)
 - data_provider.py(数据层), cache.py(缓存), search.py(搜索), agent_memory.py(Agent长期记忆)

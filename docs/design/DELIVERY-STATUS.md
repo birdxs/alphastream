@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.6-plan-advance-skills-timeline` |
-| **交付锚点** | **2026-07-24 12:45:00 +08:00**（plan 过滤/advance + skills 样例 + timeline 事件；校时双源 Date ≤100s） |
+| **文档版本** | `v1.7-skills-meta-proposal-timeline` |
+| **交付锚点** | **2026-07-24 13:00:00 +08:00**（skills 元数据热读 + write_proposal timeline UX 对齐；校时双源 Date ≤100s） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -121,18 +121,23 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 5. provenance[] 结构化数组（P0-4 已知缺口）
 
 
-## 2b. v1.6.1 本轮落地（plan SSE 前端桥 + PlanList filters + pytest gate）
+## 2b. v1.6.1 plan SSE 前端桥 + PlanList filters + pytest gate（已入库）
+
+见基线 `bcd2060` 及 v1.6 文档。
+
+## 2c. v1.7 本轮落地（skills 元数据热读 + write_proposal timeline UX 对齐）
 
 | 维度 | 说明 |
 |------|------|
 | 时间锚点 | 2026-07-24（系统 + 网络 Date 校验通过，偏差 ≤100s） |
-| SSE 映射 | `client.ts`：`plan.created`/`plan_created`、`plan.step`/`plan_step`、`write_proposal`/`write-proposal` → handlers |
-| Handlers | `SSEHandlers` 增 `onPlanCreated` / `onPlanStep` / `onWriteProposal` |
-| 流消费 | `use-chat-stream` 三 handler → `agentStore.appendEvent`（timeline） |
-| Store 归一 | `canonicalAgentEventName` + dedupeKey 认 plan/write 字段 |
-| PlanList UI | status 过滤芯片 +「仅当前会话」checkbox（读 `activeConversationId` → query `conversation_id`）；空态友好 |
-| pytest 门控 | 根 `conftest.py` / `tests/backend/conftest.py` / `tests/backend/api/conftest.py` import 前 `STOCKANAL_DISABLE_BACKGROUND=1` |
-| provenance | `test_decision_memo_provenance_items_are_structured_dicts`：数组元素必须 dict + source，跳过裸串/假数字段 |
+| Skills | `skill_loader.list_skills` **热读** `data/skills`（优先于同 id builtin）；元数据 `id/title/source/kind/has_hint/format/path(文件名)` |
+| list 工具 | `list_agent_skills` 返回完整元数据 + `by_source` 统计 |
+| builtin 样例 | 新增 `tool_discipline`（无密钥）；文件 `data/skills/tool_discipline.md`（热读优先） |
+| Event | `EVENT_WRITE_PROPOSAL` 载荷：`kind`/`approval_id`/`proposal_id`/`task_id`/`summary`/`status`/`executed=false` |
+| HITL | `register_non_blocking_pending` + `get_pending_approvals` 回填 `approval_id`/`proposal_id`/`kind` |
+| Timeline | `use-chat-stream` onWriteProposal meta 对齐；`agent-progress-panel` 展示 kind/appr/prop/summary 徽章 |
+| ApprovalCard | 展示 `kind:` / `approval_id:` / `proposal_id:` + 只读 summary（零假数） |
+| pytest 门控 | 根 + `tests/backend` conftest：`STOCKANAL_DISABLE_BACKGROUND=1` 强制写 + `pytest_configure` 再强制 |
 | 约束 | 禁 push；禁启服；铁律#1；优先改现有文件 |
 
 ### 本轮验证（离线）
@@ -142,10 +147,10 @@ curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
 
 ### 下一批建议
 
-1. Skills 目录热加载 / 更多 builtin 样例（勿放密钥）
-2. Agent 真路径下 plan 事件到 chat SSE 的端到端（真启服 + Kimi，非本批）
-3. 若 atexit 仍噪声：确认 pytest 未用已加载旧 sys.modules 缓存的 web_server
-4. write_proposal 审批卡与 timeline 双通道对齐 UX
+1. Agent 真路径下 plan/write_proposal 事件到 chat SSE 端到端（真启服 + Kimi）
+2. 若 atexit 仍噪声：确认 pytest 未复用已加载旧 `web_server` sys.modules
+3. provenance[] 结构化数组（P0-4 已知缺口）
+4. apply 成功/拒绝后 timeline 事件更新 status 同步
 
 
 ## 3. 如何启动（本地）
