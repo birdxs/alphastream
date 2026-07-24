@@ -333,6 +333,7 @@ class AgentPlansSchema(Schema):
 class ApplyPortfolioProposalSchema(Schema):
     """POST /api/agent_apply_portfolio_proposal — 本地标记 apply，不撮合、不广播已成交"""
     proposal_id = fields.Str(required=True, validate=mv.Length(min=1, max=100))
+    # 可选：省略时服务端从提案 binding 回填；未批准仍 APPROVAL_REQUIRED
     approval_id = fields.Str(load_default='', validate=mv.Length(max=100))
 
 

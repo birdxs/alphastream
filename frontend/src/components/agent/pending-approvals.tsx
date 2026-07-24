@@ -126,6 +126,8 @@ export function PendingApprovalsPanel({
   className?: string;
 }) {
   const [items, setItems] = useState<PendingApproval[]>([]);
+  /** 写仓批准后 sticky：轮询不再覆盖掉待二次 apply 卡片 */
+  const [stickyItems, setStickyItems] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
 
@@ -160,18 +162,30 @@ export function PendingApprovalsPanel({
           item?.kind === "portfolio_write_proposal" ||
           Boolean(item?.proposal_id);
         await submitApproval(taskId, approved);
-        // 写仓批准后保留卡片，供 ApprovalCard 二次「本地标记应用」；拒绝/普通决策立即刷新
-        if (!(approved && isWrite)) {
-          await refresh();
+        // 写仓批准后 sticky 保留，供 ApprovalCard 二次「本地标记应用」
+        if (approved && isWrite && item) {
+          setStickyItems((prev) => {
+            const key = item.approval_id || item.task_id;
+            const filtered = prev.filter(
+              (x) => (x.approval_id || x.task_id) !== key,
+            );
+            // status=approved 供 ApprovalCard 切到二次「本地标记应用」
+            return [
+              ...filtered,
+              {
+                ...item,
+                status: "approved",
+                kind: item.kind || "portfolio_write_proposal",
+              },
+            ];
+          });
         } else {
-          // 仅从 pending 语义上标掉，但本地仍展示该卡直到 apply / 下次轮询自然消失
-          setItems((prev) =>
-            prev.map((x) =>
-              x.task_id === taskId || x.approval_id === taskId
-                ? { ...x, status: "approved" }
-                : x,
+          setStickyItems((prev) =>
+            prev.filter(
+              (x) => x.task_id !== taskId && x.approval_id !== taskId,
             ),
           );
+          await refresh();
         }
       } finally {
         setSubmittingId(null);
@@ -180,15 +194,27 @@ export function PendingApprovalsPanel({
     [items, refresh],
   );
 
-  if (!loading && items.length === 0) return null;
+  const displayItems = (() => {
+    const map = new Map<string, PendingApproval>();
+    // 服务器 pending 先入；sticky 写仓批准卡覆盖，防轮询摘掉二次 apply 入口
+    for (const it of items) {
+      map.set(it.approval_id || it.task_id, it);
+    }
+    for (const it of stickyItems) {
+      map.set(it.approval_id || it.task_id, it);
+    }
+    return Array.from(map.values());
+  })();
+
+  if (!loading && displayItems.length === 0) return null;
 
   return (
     <div className={className} data-testid="pending-approvals-panel">
       <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        待确认 ({items.length})
+        待确认 ({displayItems.length})
       </div>
       <div className="space-y-2">
-        {items.map((it) => (
+        {displayItems.map((it) => (
           <ApprovalCard
             key={it.approval_id || it.task_id}
             approval={it}

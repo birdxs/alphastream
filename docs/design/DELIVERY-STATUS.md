@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.4-sprint4c-pending-provenance` |
-| **交付锚点** | **2026-07-24 10:15:00 +08:00**（S4C：前端写仓 pending UI + decision_memo.provenance；校时：本机 ≡ Cloudflare/GitHub Date，偏差 ≤100s，通过） |
+| **文档版本** | `v1.5-plan-list-apply-confirm` |
+| **交付锚点** | **2026-07-24 11:45:00 +08:00**（plan list 只读 + 写仓二次 local_mark apply；校时锚点沿用双源 Date ≤100s） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -59,12 +59,35 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 | Settings 导航入口 | `7d19e75` | — | 顶栏/移动齿轮 → `/settings` |
 | Wind use_wind + 配额 | `7cae626` | — | 请求级开关；`/api/wind/quota` 鉴权策略 |
 | profile `_outer_pool` + portfolio 输入守卫 | 本冲刺 | （见最终 commit） | P0：移除全局池 shutdown 残留；portfolio 非 dict 400 |
+| **plan list 只读 + 写仓二次 local_mark apply** | `b7d5718` + 后续 sticky 加固 | — | `GET /api/agent_plans` + side-panel 只读 PlanList；`POST /api/agent_apply_portfolio_proposal`（executed 恒 false）；approve 后 sticky 二次「本地标记应用」 |
 
 设计/计划文档同步：`docs/design/dojo-agents-absorption-plan.md`、本文件。
 
 ---
 
-## 3. 如何启动（本地）
+## 2b. Plan list / 写仓二次 apply（v1.5，2026-07-24）
+
+| 项 | 说明 |
+|----|------|
+| 只读计划 | `GET /api/agent_plans?limit=` 包装 `plan_dag.list_plans`；不抓行情、不执行 step |
+| 前端列表 | `frontend/src/components/agent/plan-list-panel.tsx` 挂 side-panel |
+| 二次应用 | approve 写仓后 **不自动 apply**；卡片进「本地标记应用」→ `POST /api/agent_apply_portfolio_proposal` |
+| 铁律 #1 | 响应强制 `executed=false`、`local_mark_only=true`、`apply_mode=local_mark_only`；禁「已成交」宣称 |
+| sticky | approve 后 sticky 保留卡片（含写仓 `approved` 本地态），防 pending 轮询摘掉二次入口 |
+| OpenAPI | `AgentPlansResponse` / `ApplyPortfolioProposalResponse` + 两 path |
+| apply 契约 | 缺 `approval_id` 且无法回查 → `APPROVAL_REQUIRED`；响应 `executed=false` + `local_mark_only` + `data` 镜像 |
+| 聚焦测 | `tests/backend/api/test_cache_control_headers.py` 含 plans list / apply local_mark 用例 |
+
+### 4.1 附：plan / apply 烟测（无需启服可 pytest；有服时）
+
+```bash
+curl -sS "http://127.0.0.1:8888/api/agent_plans?limit=10"
+# 写仓：create → submit_approval approved → apply（仅 local_mark）
+curl -sS -X POST http://127.0.0.1:8888/api/agent_apply_portfolio_proposal \
+  -H 'Content-Type: application/json' \
+  -d '{"proposal_id":"prop_xxx","approval_id":"appr_xxx"}'
+# 期望：success=true, executed=false, local_mark_only=true
+```
 
 ### 3.1 环境要点
 
@@ -765,4 +788,5 @@ git revert <本批 commit>
 # 或还原：web_server/schema/openapi_spec/test_cache_control_headers + 前端 agent 三文件 + plan-list-panel
 ```
 
-**代表 commit message**：`feat(ui): plan list readonly + write-proposal apply confirm`
+**代表 commit message**：`feat(ui): plan list readonly + write-proposal apply confirm`  
+**主批 commit**：`b7d5718`；**残余加固**：sticky 保留写仓二次入口 + apply API 走 `get_proposal` 公有接口 + 失败体 `error_code/APPROVAL_REQUIRED`（见本提交）。

@@ -4401,9 +4401,8 @@ def apply_portfolio_proposal_api():
         store = get_write_proposal_store()
         # apply_proposal 需要 approval_id；允许仅传 proposal_id，从 store 回查
         if not approval_id:
-            with store._lock:
-                prop = store._proposals.get(proposal_id) or {}
-                approval_id = str(prop.get('approval_id') or '').strip()
+            prop0 = store.get_proposal(proposal_id) or {}
+            approval_id = str(prop0.get('approval_id') or '').strip()
         if not approval_id:
             return jsonify({
                 'success': False,
@@ -4412,17 +4411,22 @@ def apply_portfolio_proposal_api():
                 'executed': False,
                 'local_mark_only': True,
                 'proposal_id': proposal_id,
+                'data': {
+                    'success': False,
+                    'error': 'APPROVAL_REQUIRED',
+                    'executed': False,
+                    'local_mark_only': True,
+                    'proposal_id': proposal_id,
+                },
             }), 400
 
         result = store.apply_proposal(proposal_id, approval_id)
         # 防御：即便底层未来改动，API 层也不得对外声称已成交
-        executed = bool(result.get('executed')) if isinstance(result, dict) else False
-        if executed:
+        if isinstance(result, dict) and result.get('executed'):
             app.logger.error(
                 'apply_proposal unexpected executed=True proposal_id=%s — forcing False',
                 proposal_id,
             )
-            executed = False
 
         ok = bool(result.get('success')) if isinstance(result, dict) else False
         prop = result.get('proposal') if isinstance(result, dict) else None
@@ -4431,18 +4435,26 @@ def apply_portfolio_proposal_api():
         if isinstance(result, dict):
             msg = str(result.get('message') or result.get('error') or '')
         if ok and not msg:
-            msg = '本地标记已应用（未下单、未成交）'
+            msg = '本地标记已应用（模拟，非成交；executed=false）'
         if not ok and not msg:
             msg = '应用失败'
+        error_code = None
+        if isinstance(result, dict):
+            error_code = result.get('error_code') or result.get('error')
 
         payload = {
             'success': ok,
             'executed': False,
             'local_mark_only': True,
+            'applied': bool(result.get('applied')) if isinstance(result, dict) else False,
+            'apply_mode': 'local_mark_only',
             'proposal_id': proposal_id,
+            'approval_id': approval_id,
             'status': status,
             'message': msg,
-            'error': None if ok else (result.get('error') if isinstance(result, dict) else 'apply_failed'),
+            'error': None if ok else (error_code or 'apply_failed'),
+            'error_code': None if ok else error_code,
+            'broker': None,
         }
         if not ok:
             return jsonify({
