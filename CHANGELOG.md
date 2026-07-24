@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-25 — [S-UI-live2] post DP-P0 fullstack CDP smoke
+
+- **启服**：真重启 BE PID **11292** `:8888` + FE PID **11324** `:3000`（`AUTH_REQUIRED=false DISABLE_NETWORK=0 MOCK_LLM=0`）；**服务保持运行**。
+- **curl**：`/health` 200；`market_indices` **200** `source=cache` `cached_fresh`（上证 3814.1978）；`stock_data` 600519 **200** 242 行 akshare；`:3000/static/swagger.json` **200**。
+- **CDP 截图**：`/tmp/stockanal_ui/live2_{home,home_15s,dashboard,stock_600519,portfolio,settings,api_docs}.png`。
+- **Agent**：`/api/ai/chat` SSE 200 完成 `done`（~12s）；无 `live2_agent.png`。
+- **未 push**。
+
 ## 2026-07-24 — [DP-P0] market indices last_good + stock_profile multisource
 
 - **DP-P0-1**：`_fetch_market_indices_data` 成功非空 indices 原子写 `data/market_indices_last_good.json`；失败链 内存 stale → disk last_good（200/`disk_last_good`/asof）→ 仅全无 503。新浪后异构 easyquotation / 腾讯 gtimg。

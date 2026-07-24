@@ -1,11 +1,23 @@
 # TODO
 
-## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · S-UI-4 部分完成 · live 连调已截图）
+## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · S-UI-4 部分完成 · live/live2 连调已截图）
 
-> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 主题已做 · swagger 代理已修（`8cdfe24`）** · **[S-UI-live] 2026-07-24 全栈真重启 + CDP 截图落盘 `/tmp/stockanal_ui/live_*.png`** · **§8.1 sticky/Agent 全量流等仍未全勾** · **仍禁 push**  
+> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 主题已做 · swagger 代理已修（`8cdfe24`）** · **[S-UI-live2] DP-P0 后全栈真重启 + CDP 截图 `/tmp/stockanal_ui/live2_*.png`** · **仍禁 push**  
 > **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.6-sui4-final-snapshot`）  
 > **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
 > **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright · #3 资源红线；只改原件
+
+### [S-UI-live2] post DP-P0 全栈 CDP smoke（2026-07-25 06:23~06:28 +08）
+
+| 项 | 结果 |
+|---|---|
+| 可交付 | HEAD 含 `bbac8ee` DP-P0-1 · `7f70b9f` DP-P0-2 |
+| 服务 | BE PID **11292** `:8888` · FE **11324** node `:3000` · **测后保持运行** |
+| 截图 | `/tmp/stockanal_ui/live2_{home,home_15s,dashboard,stock_600519,portfolio,settings,api_docs}.png` |
+| 指数 | `source=cache` / `meta.data_quality=cached_fresh` / `X-Data-Source: cache` · 上证 **3814.20 -1.61%** 等真数（非 disk_last_good、非 503） |
+| 个股 | 600519 名 **贵州茅台** · 价 **1297.41** · K 线 242 行 `meta.source=akshare` |
+| api-docs | Swagger UI 加载 · `/static/swagger.json` **200** |
+| Agent | `POST /api/ai/chat` SSE **200** ~7.6KB/12s 至 `done`；未另存 `live2_agent.png` |
 
 ### [S-UI-live] 全栈 CDP smoke（2026-07-24 23:50~24:05 +08 锚点段）
 
