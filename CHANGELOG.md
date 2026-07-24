@@ -1,5 +1,15 @@
 # Changelog
 
+
+## 2026-07-24 — [S-UI-4] residual acceptance notes（诚实范围）
+
+- **范围**：v1.4 未勾的残余项；**仅文档 + 证据**，无业务代码改动。
+- **主题切换**：CDP 在 `/settings` 经 navbar `aria-label=切换主题` 亮↔暗；bg light `rgb(247,248,250)` / dark `rgb(10,10,26)`；密集采样 **无 flashWhite**；截图 `/tmp/stockanal_ui/sui4_theme_before_light.png` · `sui4_theme_after_dark.png`。
+- **sticky**：DOM `sticky top-0 z-20` 存在；首页 main **内容未溢出**（`canScroll=false`）→ **无法强测**，如实记入 plan §8.1。
+- **`/api-docs`**：BE `/api-docs` **302→** `/api/docs/` **200** Swagger 17 ops；FE `/api-docs` **200** shell；FE `/static/swagger.json` **404**（定义加载失败，入口非 404）。截图 `sui4_api_docs_be.png` · `sui4_api_docs_fe.png`。
+- **Agent 真 SSE/HITL**：**诚实跳过**——本轮启服 `MOCK_LLM=1`；`/api/health/deep` 显示 `llm.skipped`；未为真路径重启烧 LLM。
+- 文档：`TODO.md` / `ui-renovation-plan.md` → `v1.5-sui4-residual` / `docs/design/README.md`；**验收后 8888/3000 停服**；**未 push**。
+
 ## 2026-07-24 — [S-UI-4] CDP 浏览器矩阵补齐（诚实范围）
 
 - **补齐前缺口**：上一轮仅 curl；CDP 无 tab / 内存紧导致浏览器列全 `[ ]`。

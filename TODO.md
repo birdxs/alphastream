@@ -2,8 +2,8 @@
 
 ## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · 浏览器终验部分完成）
 
-> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl + CDP 五路由矩阵已做** · **§8.1 部分产品视觉项仍未勾** · **仍禁 push**  
-> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.3-sui4-partial`）  
+> **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 残余（主题/api-docs）已做** · **§8.1 sticky/Agent/HITL 等仍未全勾** · **仍禁 push**  
+> **计划文档**：`/Users/panda/Downloads/StockAnal_Sys/docs/design/ui-renovation-plan.md`（`v1.5-sui4-residual`）  
 > **产品主语**：Agent 决策工位 + 可信数据（非皮肤堆砌）  
 > **硬约束**：铁律 #1 零假值 · #2 禁用 Playwright · #3 资源红线；只改原件
 
@@ -20,7 +20,7 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | S-UI-2 | **B+C** 首页三态 + Agent 工位 | page 三态；agent 侧栏/进度/HITL/Plan | **代码已落地** | S-UI-1 |
 | S-UI-3 | **D** 视觉皮肤 + 空/错态 | alert warn/degraded；settings 空错统一 | **代码已落地** | S-UI-2 |
 | S-UI-charts | charts/artifacts 涨跌色绑 token | `css-var` + stockPalette；去硬编码红绿 | **代码已落地** `8ba801a` | S-UI-3 |
-| S-UI-4 | 回归 | curl 启服 + CDP 矩阵 + 无假数 + 文档闭环 | **curl+CDP 五路由已做 · §8.1 亮暗/Agent/HITL 等仍部分 `[ ]`** | S-UI-charts |
+| S-UI-4 | 回归 | curl 启服 + CDP 矩阵 + 无假数 + 文档闭环 | **curl+CDP 五路由 + 主题/api-docs 已做 · sticky 未强测 · Agent 真 SSE 跳过** | S-UI-charts |
 
 ### 阶段验收勾选
 
@@ -32,8 +32,11 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 - [x] **S-UI-4（curl + 启服 2026-07-24）**：后端 `/health` 200；前端冷启后 `/health`/`/`/`/dashboard`/`/stock/600519`/`/portfolio`/`/settings` 200；`market_indices` 503 DEGRADED（无假指数，铁律 #1）
 - [x] **S-UI-4 浏览器路由矩阵（CDP 2026-07-24 23:00~23:13 +08:00）**：Chrome `:9222` tab 可用；依次打开 `/`/`/dashboard`/`/stock/600519`/`/portfolio`/`/settings`；截图 `/tmp/stockanal_ui/sui4_*.png`；五页 DOM 均无 Hydration 红字、无已知假值 `1174.06`/`4384.17`
 - [x] **S-UI-4 假数多窗（首页）**：5s + 15s 两帧指数均为 `---`；同期 `curl :8888/api/market_indices` 持续 **503 DEGRADED**（无假价对照通过）
-- [ ] **S-UI-4 残余浏览器项**：亮/暗切换无闪白、sticky 滚动吸顶、Agent/HITL/provenance/scorecard 真路径、`/api-docs` 浏览器 · **未在本轮点验**
-- [ ] plan §8.1 产品/视觉全勾 · **未完成**
+- [x] **S-UI-4 残余 · 主题切换（2026-07-24 23:18~23:30 +08）**：navbar `aria-label=切换主题` 亮↔暗；bg `rgb(247,248,250)` ↔ `rgb(10,10,26)`；切换采样 `flashWhite=false`；截图 `/tmp/stockanal_ui/sui4_theme_before_light.png` · `sui4_theme_after_dark.png` · `sui4_theme_light.png`
+- [x] **S-UI-4 残余 · `/api-docs`**：BE `/api-docs` **302**→`/api/docs/` **200** Swagger（17 ops）；FE `/api-docs` **200** HTML shell；注意 FE `/static/swagger.json` **404**（定义未加载，入口本身非 404）；截图 `sui4_api_docs_be.png` · `sui4_api_docs_fe.png`
+- [ ] **S-UI-4 残余 · sticky 强滚**：首页 main `canScroll=false`（内容未溢出）→ **无法强测**；DOM 已有 `sticky top-0 z-20`
+- [ ] **S-UI-4 残余 · Agent/HITL 真 SSE**：本轮进程 `MOCK_LLM=1`（`/api/health/deep` llm skipped）→ **诚实跳过**；未重启 `MOCK_LLM=0`（避资源/积分硬撑）
+- [ ] plan §8.1 产品/视觉全勾 · **未完成**（仍欠 sticky 强测 + Agent/HITL/provenance/scorecard + 涨跌色有数对照）
 - [ ] **仍禁 push**（除非 Comdr 另行授权）
 
 ### S-UI-0~3 + charts 落地文件
@@ -60,7 +63,22 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | `/portfolio` | 总市值/盈亏/收益率 `—`；暂无持仓；main 可滚 |
 | `/settings` | 主题/深度/Wind 配额 UI 可达；main 可滚；无假行情 |
 | 截图 | `/tmp/stockanal_ui/sui4_home_5s.png` · `sui4_home_15s.png` · `sui4_dashboard.png` · `sui4_stock_600519.png` · `sui4_portfolio.png` · `sui4_settings.png` |
-| 未做 | 主题亮暗切换截图；sticky 强制滚动；Agent 真 SSE 路径；`/api-docs` 浏览器 |
+| 未做（v1.4 时） | 主题亮暗切换截图；sticky 强制滚动；Agent 真 SSE 路径；`/api-docs` 浏览器 |
+
+### S-UI-4 残余验收证据（2026-07-24 23:18~23:32 +08:00，CDP + curl）
+
+| 项 | 结果 |
+|---|---|
+| 时间锚点 | 本机 2026-07-24 08:19:26 -0700；Cloudflare `Fri, 24 Jul 2026 15:19:30 GMT`；GitHub `15:19:25 GMT`（=23:19 +08）；偏差 ≪100s |
+| 内存 | 启服中 free pages 一度 ~4100（红线附近）；主体 ≥8k 后继续轻负载 CDP；未另开重负载 |
+| 服务 | `AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1` 后端 PID 96858 `:8888`；前端 Next 96896 `:3000`；**验收后须 kill** |
+| 主题切换 | light→dark→light→dark 可逆；`theme-storage` 同步；`flashWhite=false`；FOUC 内联守卫存在（reload 后 class=storage） |
+| sticky | 指数栏 DOM sticky 存在；首页 `main.canScroll=false` → **内容未溢出无法强测 sticky** |
+| `/api-docs` curl | BE `302 Location:/api/docs/`；BE `/api/docs/` 200 title=股票智能分析系统 API文档；FE `/api-docs` 200 同 title |
+| `/api-docs` 浏览器 | BE Swagger UI `opCount=17`；FE shell 加载后报 `Fetch error Not Found /static/swagger.json`（rewrite 缺口，入口非 404） |
+| `market_indices`（本轮） | cache HIT；上证 3814.1978 / 深证 13774.676 / 创业板 3480.87 / 沪深300 4649.1917（真 API，非 UI 假数） |
+| Agent 真路径 | **跳过**：`MOCK_LLM=1` 启动；deep health `llm.skipped=true reason=MOCK_LLM=1`；mock `/api/ai/chat` 仍返回 SSE meta（非真 LLM 路径） |
+| 截图新增 | `sui4_theme_before_light.png` · `sui4_theme_after_dark.png` · `sui4_theme_light.png` · `sui4_api_docs_fe.png` · `sui4_api_docs_be.png` |
 
 ### S-UI-4 curl/启服证据（2026-07-24，本地）
 
@@ -76,7 +94,10 @@ S-UI-0 Token冻结+截图基线 ──► S-UI-1 A系统 ──► S-UI-2 B+C �
 | 服务 | 验收后已 stop 8888/3000 |
 
 **遗留（阻塞 §8 产品全勾）**
-- WebBridge 路由矩阵 / 假数多时间窗采样 / Hydration / 主题无闪白视觉终验
+- sticky 在可滚内容下的吸顶强测
+- Agent/HITL/provenance/scorecard 真 SSE（需 `MOCK_LLM=0` + 可用 LLM）
+- FE `/api-docs` 经 3000 时 `/static/swagger.json` 404（入口 200，定义代理缺口）
+- 涨跌色全站有数帧对照
 - **仍禁 push**
 
 ### 明确不做（防范围漂移）
