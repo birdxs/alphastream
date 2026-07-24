@@ -8,6 +8,8 @@ Pos: app/agents/hitl.py - Human-in-the-Loop 审批闸门（P0-5 确认面一等�
 - 事件主名 approval.needed；payload.event_type = approval_needed（兼容 alias）
 - 超时对 high 默认拒绝（timeout_reject），timeout_auto 徽标 ≠ 已批准
 - pending API 列出可提交项；submit 改变 status 并 publish approval.resolved
+- Sprint4+：写仓 proposal 用 register_non_blocking_pending(task_id=approval_id)；
+  submit_approval 与 decide_portfolio_proposal_approval / write_proposal.decide_approval 语义对齐
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -168,7 +170,13 @@ def _publish_approval_event(
 
 
 class HumanApprovalManager:
-    """人工审批管理器（进程内；H1 重启丢失风险已在 inventory 登记）"""
+    """人工审批管理器（进程内；H1 重启丢失风险已在 inventory 登记）
+
+    扩展（Sprint4+ HITL bridge）：
+    - register_non_blocking_pending：写仓提案等非阻塞登记，可见于 get_pending
+    - submit_approval 与 write_proposal.decide_approval 语义对齐（task_id=approval_id）
+    - get_pending_approvals 合并 write_proposal store 中仍 pending 的项
+    """
 
     def __init__(self):
         self._pending_approvals: Dict[str, Dict[str, Any]] = {}
@@ -192,6 +200,88 @@ class HumanApprovalManager:
                 logger.debug(f"task_status_hook 调用失败: {e}")
         except Exception as e:
             logger.debug(f"task_status_hook 调用失败: {e}")
+
+    def register_non_blocking_pending(
+        self,
+        task_id: str,
+        decision: Optional[dict] = None,
+        *,
+        risk_level: str = 'high',
+        reason: str = '',
+        kind: str = 'external',
+        metadata: Optional[dict] = None,
+        timeout_seconds: Optional[float] = None,
+    ) -> bool:
+        """非阻塞登记待审批项（写仓提案等），不进入 request_approval 等待循环。
+
+        task_id 通常等于 write_proposal 的 approval_id，使
+        GET /api/agent_pending_approvals 与 POST /api/agent_submit_approval 可统一消费。
+        """
+        tid = (task_id or '').strip()
+        if not tid:
+            return False
+        with self._lock:
+            existing = self._pending_approvals.get(tid)
+            if existing is not None and existing.get('status') == 'pending':
+                # 幂等刷新展示字段
+                existing['decision'] = decision or existing.get('decision') or {}
+                existing['reason'] = reason or existing.get('reason') or ''
+                existing['kind'] = kind or existing.get('kind') or 'external'
+                existing['metadata'] = metadata if metadata is not None else existing.get('metadata') or {}
+                return True
+            self._pending_approvals[tid] = {
+                'decision': decision or {},
+                'risk_level': risk_level or 'high',
+                'status': 'pending',
+                'created_at': now_cn().isoformat(),
+                'reason': reason or build_approval_reason(decision),
+                'timeout_seconds': float(timeout_seconds) if timeout_seconds is not None else None,
+                'risk_assessment': {},
+                'kind': kind or 'external',
+                'metadata': metadata or {},
+                'non_blocking': True,
+            }
+        try:
+            _publish_approval_event(
+                'needed',
+                tid,
+                decision or {},
+                risk_level or 'high',
+                reason=reason or '',
+                timeout_seconds=timeout_seconds,
+                extra={'kind': kind or 'external', 'non_blocking': True},
+            )
+        except Exception as e:
+            logger.debug(f"register_non_blocking_pending 事件发布失败: {e}")
+        return True
+
+    def _sync_write_proposal_decision(
+        self,
+        approval_id: str,
+        approved: bool,
+        feedback: str = '',
+    ) -> None:
+        """与 write_proposal.decide_approval 语义对齐（不抛到 API 层）。"""
+        try:
+            from app.core.write_proposal import get_write_proposal_store
+
+            store = get_write_proposal_store()
+            ap = store.get_approval(approval_id)
+            if ap is None:
+                return
+            if ap.get('status') != 'pending':
+                return
+            store.decide_approval(
+                approval_id,
+                approved=bool(approved),
+                feedback=feedback or '',
+            )
+        except Exception as e:
+            logger.warning(
+                "HITL→write_proposal 同步失败 approval_id=%s: %s",
+                approval_id,
+                e,
+            )
 
     def request_approval(
         self,
@@ -328,35 +418,120 @@ class HumanApprovalManager:
         return result
 
     def submit_approval(self, task_id: str, approved: bool, feedback: str = '') -> bool:
-        """提交人工审批结果"""
+        """提交人工审批结果。
+
+        语义对齐：
+        - 常规 HITL（阻塞 request_approval）：仅改 pending 状态，由等待循环收敛；
+        - 写仓提案（kind=portfolio_write_proposal 或 task_id 为 appr_*）：
+          同步调用 write_proposal.decide_approval，与
+          decide_portfolio_proposal_approval 工具同语义（不自动 apply）。
+        """
+        tid = (task_id or '').strip()
+        if not tid:
+            return False
+
+        kind = 'agent_decision'
+        decision: Dict[str, Any] = {}
+        risk_level = 'high'
+        reason = ''
+        non_blocking = False
+        found_local = False
+
         with self._lock:
-            if task_id not in self._pending_approvals:
+            if tid in self._pending_approvals:
+                entry = self._pending_approvals[tid]
+                if entry.get('status') != 'pending':
+                    return False
+                entry['status'] = 'approved' if approved else 'rejected'
+                entry['human_feedback'] = feedback
+                decision = entry.get('decision', {}) or {}
+                risk_level = entry.get('risk_level', 'high')
+                reason = entry.get('reason', '')
+                kind = entry.get('kind') or 'agent_decision'
+                non_blocking = bool(entry.get('non_blocking')) or kind == 'portfolio_write_proposal'
+                found_local = True
+                _publish_approval_event(
+                    'approved' if approved else 'rejected',
+                    tid,
+                    decision,
+                    risk_level,
+                    extra={
+                        'human_feedback': (feedback or '')[:200],
+                        'approval_type': 'human',
+                        'kind': kind,
+                    },
+                    reason=reason,
+                )
+                # 非阻塞项无 waiter 回收，立即弹出以免污染 pending 列表
+                if non_blocking:
+                    self._pending_approvals.pop(tid, None)
+            else:
+                # 可能仅有 write_proposal 侧 pending（未登记 / 进程内不同路径）
+                found_local = False
+
+        # 桥接：写仓审批 → write_proposal store（幂等：已决则 decide 返回 ALREADY_DECIDED）
+        is_portfolio = (
+            kind == 'portfolio_write_proposal'
+            or tid.startswith('appr_')
+            or (decision.get('kind') == 'portfolio_write_proposal')
+        )
+        if not found_local:
+            # 无 HITL 本地项时，尝试仅桥接 write_proposal
+            try:
+                from app.core.write_proposal import get_write_proposal_store
+
+                store = get_write_proposal_store()
+                ap = store.get_approval(tid)
+                if ap is None or ap.get('status') != 'pending':
+                    return False
+                res = store.decide_approval(
+                    tid, approved=bool(approved), feedback=feedback or ''
+                )
+                if not res.get('success'):
+                    return False
+                prop: Optional[Dict[str, Any]] = None
+                try:
+                    prop = store.get_proposal(ap.get('proposal_id') or '')
+                    decision = {
+                        'action': (prop or {}).get('action'),
+                        'code': (prop or {}).get('code'),
+                        'proposal_id': ap.get('proposal_id'),
+                        'kind': 'portfolio_write_proposal',
+                    }
+                except Exception:
+                    decision = {'kind': 'portfolio_write_proposal'}
+                _publish_approval_event(
+                    'approved' if approved else 'rejected',
+                    tid,
+                    decision,
+                    'high',
+                    extra={
+                        'human_feedback': (feedback or '')[:200],
+                        'approval_type': 'human',
+                        'kind': 'portfolio_write_proposal',
+                        'bridge': 'write_proposal_only',
+                    },
+                    reason=(prop or {}).get('reason', '') if prop else '',
+                )
+                return True
+            except Exception as e:
+                logger.warning("submit_approval write_proposal-only 桥接失败: %s", e)
                 return False
-            entry = self._pending_approvals[task_id]
-            if entry.get('status') != 'pending':
-                return False
-            entry['status'] = 'approved' if approved else 'rejected'
-            entry['human_feedback'] = feedback
-            decision = entry.get('decision', {})
-            risk_level = entry.get('risk_level', 'high')
-            reason = entry.get('reason', '')
-            _publish_approval_event(
-                'approved' if approved else 'rejected',
-                task_id,
-                decision,
-                risk_level,
-                extra={
-                    'human_feedback': (feedback or '')[:200],
-                    'approval_type': 'human',
-                },
-                reason=reason,
-            )
-            return True
+
+        if is_portfolio:
+            self._sync_write_proposal_decision(tid, approved, feedback)
+
+        return True
 
     def get_pending_approvals(self) -> list:
-        """获取所有待审批项（确认卡字段）"""
+        """获取所有待审批项（确认卡字段）。
+
+        合并来源：
+        1. 本管理器 _pending_approvals（含非阻塞写仓登记）
+        2. write_proposal store 仍为 pending 的 approval（防御：未 register 时仍可见）
+        """
         with self._lock:
-            return [
+            items = [
                 {
                     'task_id': k,
                     'decision': v.get('decision', {}),
@@ -369,13 +544,64 @@ class HumanApprovalManager:
                         or ''
                     ),
                     'confidence': (v.get('decision') or {}).get('confidence'),
-                    'timeout_seconds': v.get('timeout_seconds', _HITL_DEFAULT_TIMEOUT),
-                    'timeout': v.get('timeout_seconds', _HITL_DEFAULT_TIMEOUT),  # alias for API consumers
+                    'timeout_seconds': (
+                        v.get('timeout_seconds')
+                        if v.get('timeout_seconds') is not None
+                        else _HITL_DEFAULT_TIMEOUT
+                    ),
+                    'timeout': (
+                        v.get('timeout_seconds')
+                        if v.get('timeout_seconds') is not None
+                        else _HITL_DEFAULT_TIMEOUT
+                    ),
                     'status': 'pending',
+                    'kind': v.get('kind') or 'agent_decision',
+                    'approval_id': k if (v.get('kind') == 'portfolio_write_proposal' or str(k).startswith('appr_')) else None,
+                    'proposal_id': (v.get('metadata') or {}).get('proposal_id')
+                    or (v.get('decision') or {}).get('proposal_id'),
                 }
                 for k, v in self._pending_approvals.items()
                 if v.get('status') == 'pending'
             ]
+
+        seen = {x['task_id'] for x in items}
+        try:
+            from app.core.write_proposal import get_write_proposal_store
+
+            store = get_write_proposal_store()
+            for ap in store.list_pending_approvals():
+                aid = (ap.get('approval_id') or '').strip()
+                if not aid or aid in seen:
+                    continue
+                prop = store.get_proposal(ap.get('proposal_id') or '') or {}
+                items.append({
+                    'task_id': aid,
+                    'decision': {
+                        'action': prop.get('action'),
+                        'code': prop.get('code'),
+                        'name': prop.get('name'),
+                        'shares': prop.get('shares'),
+                        'weight': prop.get('weight'),
+                        'proposal_id': prop.get('proposal_id') or ap.get('proposal_id'),
+                        'kind': 'portfolio_write_proposal',
+                    },
+                    'risk_level': 'high',
+                    'created_at': ap.get('created_at') or prop.get('created_at'),
+                    'reason': prop.get('reason') or f"写仓提案 {prop.get('action') or ''} {prop.get('code') or ''}".strip(),
+                    'action_type': prop.get('action') or 'portfolio_write_proposal',
+                    'confidence': None,
+                    'timeout_seconds': None,
+                    'timeout': None,
+                    'status': 'pending',
+                    'kind': 'portfolio_write_proposal',
+                    'approval_id': aid,
+                    'proposal_id': prop.get('proposal_id') or ap.get('proposal_id'),
+                })
+                seen.add(aid)
+        except Exception as e:
+            logger.debug(f"get_pending 合并 write_proposal 失败: {e}")
+
+        return items
 
 
 # 全局单例

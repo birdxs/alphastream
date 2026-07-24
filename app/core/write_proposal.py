@@ -1,7 +1,7 @@
 """
 Input: 拟写仓提案字段 + approval_id 审批状态
 Output: 提案对象 / 硬闸门响应（禁止假「已下单」）；无真实券商
-Pos: app/core/write_proposal.py — Sprint4 写仓 harness 骨架（提案 + approval 闸门）
+Pos: app/core/write_proposal.py — Sprint4 写仓 harness（提案 + approval 闸门 + HITL pending 桥）
 
 [NEW-FILE:#20260724-S4] 离线可测；不依赖联调/真券商。
 
@@ -133,6 +133,41 @@ class WriteProposalStore:
             self._proposals[proposal_id] = proposal
             self._approvals[approval_id] = approval
 
+        # HITL 桥接：登记到 approval_manager，使 pending 列表 / agent_submit_approval 可见
+        # task_id 使用 approval_id，与 decide_portfolio_proposal_approval 同键
+        try:
+            from app.agents.hitl import approval_manager
+
+            approval_manager.register_non_blocking_pending(
+                approval_id,
+                decision={
+                    "action": act,
+                    "code": code_s,
+                    "name": proposal.get("name") or "",
+                    "shares": shares,
+                    "weight": weight,
+                    "proposal_id": proposal_id,
+                    "kind": "portfolio_write_proposal",
+                },
+                risk_level="high",
+                reason=(reason or f"写仓提案 {act} {code_s}".strip())[:500],
+                kind="portfolio_write_proposal",
+                metadata={
+                    "proposal_id": proposal_id,
+                    "approval_id": approval_id,
+                    "source": source,
+                },
+            )
+        except Exception as e:
+            try:
+                logger.debug(
+                    "WRITE_PROPOSAL HITL register skipped proposal_id=%s: %s",
+                    proposal_id,
+                    e,
+                )
+            except Exception:
+                pass
+
         try:
             logger.info(
                 "WRITE_PROPOSAL_CREATED proposal_id=%s approval_id=%s action=%s code=%s",
@@ -151,6 +186,8 @@ class WriteProposalStore:
             "message": (
                 "已生成写仓提案（未执行）。需经 approval_id 审批后才可 "
                 "apply_portfolio_proposal；当前无真实券商下单。"
+                "该 approval 已桥接到 HITL pending（task_id=approval_id），"
+                "可用 /api/agent_submit_approval 或 decide_portfolio_proposal_approval。"
             ),
             "proposal": deepcopy(proposal),
             "approval_id": approval_id,
@@ -204,7 +241,7 @@ class WriteProposalStore:
             ap["status"] = "approved" if approved else "rejected"
             ap["decided_at"] = now_cn().isoformat()
             ap["feedback"] = (feedback or "")[:500]
-            return {
+            result = {
                 "success": True,
                 "executed": False,
                 "approval": deepcopy(ap),
@@ -217,6 +254,29 @@ class WriteProposalStore:
                 "broker": None,
                 "disclaimer": DISCLAIMER,
             }
+
+        # 工具路径 decide 时，同步摘除 HITL pending（task_id=approval_id）
+        try:
+            from app.agents.hitl import approval_manager
+
+            with approval_manager._lock:
+                entry = approval_manager._pending_approvals.get(approval_id)
+                if entry is not None and entry.get("status") == "pending":
+                    entry["status"] = "approved" if approved else "rejected"
+                    entry["human_feedback"] = (feedback or "")[:500]
+                    if entry.get("non_blocking") or entry.get("kind") == "portfolio_write_proposal":
+                        approval_manager._pending_approvals.pop(approval_id, None)
+        except Exception as e:
+            try:
+                logger.debug(
+                    "decide_approval HITL cleanup skipped approval_id=%s: %s",
+                    approval_id,
+                    e,
+                )
+            except Exception:
+                pass
+
+        return result
 
     def apply_proposal(
         self,
@@ -352,6 +412,17 @@ class WriteProposalStore:
                 reverse=True,
             )
             return [deepcopy(p) for p in items[: max(1, min(limit, 200))]]
+
+    def list_pending_approvals(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """列出仍 pending 的审批（供 HITL get_pending 合并）。"""
+        with self._lock:
+            items = [
+                deepcopy(a)
+                for a in self._approvals.values()
+                if a.get("status") == "pending"
+            ]
+            items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+            return items[: max(1, min(limit, 200))]
 
 
 _store: Optional[WriteProposalStore] = None

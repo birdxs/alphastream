@@ -83,11 +83,17 @@ class TestIntentRouterRules:
         assert meta["router"] == "rules_v1"
 
     def test_portfolio_write_intent_hard_refuse_hint(self):
-        """P0-2：拟写仓关键词优先于持仓分析，system_hint 硬拒绝假成功。"""
+        """P0-2/S4：拟写仓关键词 → 硬拦假成功 + 引导 propose 提案闸门。"""
         r = classify_intent("帮我加仓600519")
         assert r.intent == INTENT_PORTFOLIO_WRITE
         assert "写仓" in r.system_hint or "硬拦" in r.system_hint
         assert "禁止" in r.system_hint
+        # Sprint4：合规路径指向提案工具，禁止假下单
+        assert "propose_portfolio_write" in r.system_hint
+        assert "approval_id" in r.system_hint or "local_mark" in r.system_hint
+        # 明确禁止声称假成功（hint 可含该字面作为「禁止对象」）
+        assert "禁止声称" in r.system_hint or "禁止" in r.system_hint
+        assert "executed" in r.system_hint and "false" in r.system_hint.lower()
         assert r.inject_portfolio is True
         assert r.confidence >= 0.9
 
@@ -247,15 +253,23 @@ class TestWriteGuardMatrixG4:
             assert is_write_tool_name(name) is False, name
 
     def test_portfolio_write_intent_system_refuses_success(self):
-        """intent portfolio_write → system_hint 硬拒绝文案，非成功暗示。"""
+        """intent portfolio_write → system_hint 硬拒绝假成功 + 提案路径。"""
         from app.core.intent_router import classify_intent, INTENT_PORTFOLIO_WRITE
         r = classify_intent("帮我把茅台加进持仓并下单买入")
         assert r.intent == INTENT_PORTFOLIO_WRITE
         hint = (r.system_hint or "").lower()
-        assert "拒绝" in r.system_hint or "不得" in r.system_hint or "block" in hint or "不可" in r.system_hint
+        assert (
+            "拒绝" in r.system_hint
+            or "不得" in r.system_hint
+            or "block" in hint
+            or "不可" in r.system_hint
+            or "硬拦" in r.system_hint
+            or "禁止" in r.system_hint
+        )
         # 不得出现鼓励写仓的假成功措辞
-        for bad in ("已成功下单", "已写入持仓", "order placed", "portfolio updated"):
+        for bad in ("已成功下单", "已写入持仓", "order placed", "portfolio updated", "已下单", "已加仓成功"):
             assert bad not in (r.system_hint or "")
+        assert "propose_portfolio_write" in (r.system_hint or "")
 
 
 

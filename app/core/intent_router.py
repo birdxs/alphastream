@@ -129,10 +129,14 @@ def _extract_codes(message: str) -> List[str]:
 def _hint_for(intent: str) -> str:
     if intent == INTENT_PORTFOLIO_WRITE:
         return (
-            "【写仓硬拦】用户请求改仓/下单/加仓减仓等写操作。"
-            "你必须明确拒绝执行任何写仓或下单；说明系统仅支持只读分析与建议；"
-            "引导用户在组合页手动维护持仓。禁止声称「已帮你加仓/下单成功」。"
-            "可继续提供只读分析（get_portfolio_snapshot / get_portfolio_risk_summary）。"
+            "【写仓硬拦·提案闸门】用户请求改仓/下单/加仓减仓等写操作。"
+            "禁止声称「已帮你加仓/下单成功」或任何 broker 成交；禁止调用 add_holding/buy/place_order 等裸写工具。"
+            "合规路径（提案模式，executed 恒为 false）："
+            "1) propose_portfolio_write 生成 proposal+approval_id（HITL）；"
+            "2) 用户确认后 decide_portfolio_proposal_approval(approved=true)；"
+            "3) apply_portfolio_proposal 仅 local_mark_only 本地标记，非成交、broker=null。"
+            "无 approval_id 不得 apply。可继续只读分析（get_portfolio_snapshot / get_portfolio_risk_summary）；"
+            "也可引导用户在组合页手动维护持仓。"
         )
     if intent == INTENT_PORTFOLIO:
         return (

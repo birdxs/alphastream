@@ -1,7 +1,9 @@
 # app/core/ - 核心基础设施
 - ai_client.py(AI统一客户端，支持chat_completion被动问答 + chat_with_tools主动Function Calling工具调用循环 + chat_completion_stream/chat_with_tools_stream流式输出)
-- tools.py(共享工具注册表；Sprint2 持仓只读；Sprint4 propose/decide/apply 写仓提案闸门，禁假下单)
-- write_proposal.py(Sprint4 写仓提案 + approval_id 闸门；local_mark_only，broker=null，executed=false) [NEW-FILE:#20260724-S4]
+- tools.py(共享工具注册表；Sprint2 持仓只读；Sprint4 propose/decide/apply；Sprint4+ plan/skill 只读工具，禁假下单)
+- write_proposal.py(Sprint4 写仓提案 + approval_id 闸门；HITL register_non_blocking_pending 桥；local_mark_only) [NEW-FILE:#20260724-S4]
+- plan_dag.py(Sprint4+ 轻量 Plan DAG：depends_on/环检测/状态机；不抓数不下单) [NEW-FILE:#20260724-S4B]
+- skill_loader.py(Sprint4+ Skills stub：builtin + data/skills + reflection 片段 → system_hint；禁替代 adapters) [NEW-FILE:#20260724-S4B]
 - intent_router.py(Sprint2 chat 意图规则路由：portfolio/cross_market/market_overview/single_stock_deep/general) [NEW-FILE:#20260723-S2]
 - artifact_wrapper.py(Generative UI后端数据协议层，将工具结果包装为前端可渲染的Artifact结构化JSON)
 - data_provider.py(数据层), cache.py(缓存), search.py(搜索), agent_memory.py(Agent长期记忆)

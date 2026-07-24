@@ -1,7 +1,7 @@
 """
 Input: 各分析模块的方法调用、OpenAI Function Calling工具调用请求；可选请求级 portfolio_snapshot（ContextVar）
 Output: LangChain @tool 包装的标准工具函数 + OpenAI Function Calling格式schema + 工具执行分发
-Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 护栏 + P0-2 写工具硬拦；Sprint2 持仓只读；Sprint4 写仓提案闸门
+Pos: app/core/tools.py - 所有Agent共享的工具函数注册表；execute_tool 挂 P0-1 护栏 + P0-2 写工具硬拦；Sprint2 持仓只读；Sprint4 写仓提案闸门；Sprint4+ plan_dag/skill stub
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -491,7 +491,11 @@ def decide_portfolio_proposal_approval(
     approved: bool = False,
     feedback: str = "",
 ) -> str:
-    """记录写仓提案审批结果（approve/reject），不执行写仓。"""
+    """记录写仓提案审批结果（approve/reject），不执行写仓。
+
+    与 POST /api/agent_submit_approval 同键（task_id=approval_id）：
+    decide 会清理 HITL pending；submit 会同步 write_proposal.decide_approval。
+    """
     from app.core.write_proposal import get_write_proposal_store
 
     store = get_write_proposal_store()
@@ -501,6 +505,108 @@ def decide_portfolio_proposal_approval(
         feedback=feedback or "",
     )
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@tool
+def create_analysis_plan(
+    steps: str,
+    title: str = "",
+    conversation_id: str = "",
+    stock_code: str = "",
+) -> str:
+    """创建轻量分析计划 DAG（串行 steps / depends_on 校验 + 状态机）。
+
+    steps 可为 JSON 数组字符串，如 '["技术面","基本面","风险"]' 或
+    '[{"id":"a","name":"技术"},{"id":"b","name":"基本面","depends_on":["a"]}]'。
+    仅结构存储，不抓数、不下单。
+    """
+    from app.core.plan_dag import get_plan_dag_store
+
+    raw = steps
+    parsed: Any = steps
+    if isinstance(steps, str):
+        s = steps.strip()
+        if not s:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error_code": "EMPTY_STEPS",
+                    "message": "steps 不能为空",
+                    "plan": None,
+                },
+                ensure_ascii=False,
+            )
+        try:
+            parsed = json.loads(s)
+        except json.JSONDecodeError:
+            # 逗号分隔简写
+            parsed = [p.strip() for p in s.split(",") if p.strip()]
+    if not isinstance(parsed, list):
+        return json.dumps(
+            {
+                "success": False,
+                "error_code": "INVALID_STEPS",
+                "message": "steps 须为 JSON 数组",
+                "plan": None,
+            },
+            ensure_ascii=False,
+        )
+    store = get_plan_dag_store()
+    result = store.create_plan(
+        parsed,
+        title=title or "",
+        conversation_id=conversation_id or "",
+        stock_code=stock_code or "",
+        auto_ready=True,
+    )
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@tool
+def get_plan_status(plan_id: str) -> str:
+    """查询分析计划状态（steps / topo_order / current_step）。"""
+    from app.core.plan_dag import get_plan_dag_store
+
+    store = get_plan_dag_store()
+    result = store.get_status((plan_id or "").strip())
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@tool
+def load_agent_skill(
+    skill_id: str,
+    stock_code: str = "",
+) -> str:
+    """加载 Skill stub 的 system_hint（不替代数据 adapters，不拉实时行情）。
+
+    skill_id 示例：risk_checklist / portfolio_readonly / analysis_plan / reflection_hint。
+    reflection_hint 可配合 stock_code 读本地 agent_reflections/strategies 片段。
+    """
+    from app.core.skill_loader import get_skill_loader
+
+    loader = get_skill_loader()
+    result = loader.load_skill(
+        (skill_id or "").strip(),
+        stock_code=(stock_code or "").strip(),
+    )
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@tool
+def list_agent_skills() -> str:
+    """列出可用 Skill stub（builtin + data/skills + reflection_hint 入口）。"""
+    from app.core.skill_loader import get_skill_loader
+
+    items = get_skill_loader().list_skills()
+    return json.dumps(
+        {
+            "success": True,
+            "count": len(items),
+            "skills": items,
+            "note": "Skills 仅为 system_hint 片段，禁止当作行情数据源",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _offline_or_disabled() -> bool:
@@ -850,7 +956,9 @@ OPENAI_TOOLS_SCHEMA = [
             "name": "propose_portfolio_write",
             "description": (
                 "生成写仓提案（非真实下单）。返回 proposal_id + approval_id；"
-                "必须先审批再 apply_portfolio_proposal。禁止解读为已下单。"
+                "approval_id 会进入 HITL pending（task_id=approval_id），"
+                "可 /api/agent_submit_approval 或 decide_portfolio_proposal_approval；"
+                "再 apply_portfolio_proposal。禁止解读为已下单。"
             ),
             "parameters": {
                 "type": "object",
@@ -901,6 +1009,7 @@ OPENAI_TOOLS_SCHEMA = [
             "name": "decide_portfolio_proposal_approval",
             "description": (
                 "记录写仓提案审批（approve/reject），不执行写仓、不调用券商。"
+                "与 /api/agent_submit_approval 同键 task_id=approval_id。"
             ),
             "parameters": {
                 "type": "object",
@@ -946,6 +1055,98 @@ OPENAI_TOOLS_SCHEMA = [
                     },
                 },
                 "required": ["proposal_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_analysis_plan",
+            "description": (
+                "创建轻量分析计划 DAG（串行 steps / depends_on 校验）。"
+                "仅结构与状态机，不抓数、不下单。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "string",
+                        "description": (
+                            "JSON 数组字符串，如 '[\"技术\",\"基本面\"]' 或 "
+                            "带 id/depends_on 的对象数组"
+                        ),
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "计划标题（可选）",
+                        "default": "",
+                    },
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "会话 id（可选）",
+                        "default": "",
+                    },
+                    "stock_code": {
+                        "type": "string",
+                        "description": "关联标的（可选）",
+                        "default": "",
+                    },
+                },
+                "required": ["steps"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_plan_status",
+            "description": "查询分析计划状态（steps / topo_order / current_step）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "plan_id": {
+                        "type": "string",
+                        "description": "create_analysis_plan 返回的 plan_id",
+                    },
+                },
+                "required": ["plan_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "load_agent_skill",
+            "description": (
+                "加载 Skill stub 的 system_hint（不替代 adapters，不拉行情）。"
+                "如 risk_checklist / portfolio_readonly / reflection_hint。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_id": {
+                        "type": "string",
+                        "description": "技能 id",
+                    },
+                    "stock_code": {
+                        "type": "string",
+                        "description": "reflection_hint 可选标的",
+                        "default": "",
+                    },
+                },
+                "required": ["skill_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_agent_skills",
+            "description": "列出可用 Skill stub（builtin + data/skills）",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         },
     },
@@ -1063,6 +1264,10 @@ TOOL_EXECUTORS = {
     "propose_portfolio_write": propose_portfolio_write,
     "apply_portfolio_proposal": apply_portfolio_proposal,
     "decide_portfolio_proposal_approval": decide_portfolio_proposal_approval,
+    "create_analysis_plan": create_analysis_plan,
+    "get_plan_status": get_plan_status,
+    "load_agent_skill": load_agent_skill,
+    "list_agent_skills": list_agent_skills,
     "get_market_overview_brief": get_market_overview_brief,
     "get_sector_snapshot": get_sector_snapshot,
 }

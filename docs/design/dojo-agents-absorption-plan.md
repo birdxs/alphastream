@@ -462,7 +462,7 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 |----|----------|------|----------|----------|
 | P1-1 | Skills 注入 | SkillManager | `data/skills` + loader；进 system/tool | 3 内置 skill 可跑通步骤 |
 | P1-2 | Plan DAG | PlanExecutionEngine | SQLite plans；步进调 tools/agent | 死锁保护单测；两步依赖完成 |
-| P1-3 | 写仓提案+Harness | portfolio_write+harness | 提案工具 + apply 需 approval_id | 无审批不落库 |
+| P1-3 | 写仓提案+Harness | portfolio_write+harness | 提案工具 + apply 需 approval_id | **DONE 骨架**（`write_proposal.py`；无审批不 apply；local_mark_only，无真仓/broker） |
 | P1-4 | 跨市场/板块 facade | market/sector 工具 | 统一工具名，源=adapters | 契约测 + 可选联网抽样 |
 | P1-5 | Memory prefetch/摘要 | MemoryManager | 扩 `agent_memory` session 维 | 二轮引用前序结论 |
 | P1-6 | 上下文压缩 | ContextCompressor | 工具结果指针化 + 保留数字表 | 超长轨迹可答 |
@@ -509,10 +509,10 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
 | Sprint | 主题 | 状态 | 关键 commit（短哈希） | 备注 |
 |--------|------|------|----------------------|------|
 | **Sprint 0** | 只读盘点与契约 | **DONE** | `7886bd5` | `sprint0-inventory.md` |
-| **Sprint 1** | P0 回路闭合（护栏/HITL/辩论/时间线） | **DONE（主切片）** | `dd0fbc4` `fe1c08e` `0c244f9` `627a969` `7d78236` `fd077ae` | P0-7 未做；provenance 数组未完 |
+| **Sprint 1** | P0 回路闭合（护栏/HITL/辩论/时间线） | **DONE（主切片）** | `dd0fbc4` `fe1c08e` `0c244f9` `627a969` `7d78236` `fd077ae` | provenance 数组仍可深化 |
 | **Sprint 2** | 意图路由 + 真仓只读 | **DONE** | `f0d1289` + handoff | P0-2 规则路由 + 写工具硬拦 |
-| **Sprint 3** | 组合诊断 + 观察 mode | **DONE（本切片）** | `b612718` | Skills/Plan/Memory 仍属 P1 未启动 |
-| **Sprint 4** | 写仓 harness + facade + P2 | **未开** | — | 待 Comdr |
+| **Sprint 3** | 组合诊断 + 观察 mode | **DONE** | `b612718` | Skills/Plan 仍属 P1 选修 |
+| **Sprint 4** | 写仓 harness（骨架） | **DONE（骨架）** | `78d6f34` + 本批 | propose→decide→apply 闸门；facade/P2 未开 |
 
 ### 11.1 P0 项 DONE 汇总
 
@@ -561,14 +561,19 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
   - OpenAPI `/api/portfolio_risk`；`portfolio-store` `mode: live|watch`；`/portfolio` 诊断摘要  
 - **未开**：P1-1 Skills / P1-2 Plan DAG / Memory / 压缩 / 回放。
 
-### Sprint 4 — 写仓 harness + 市场 facade + P2 选修
+### Sprint 4 — 写仓 harness（骨架 DONE）+ 市场 facade / P2 选修（未开）
 
 - 仅当 P0/P1 稳定且 Comdr 明示；offline arena / Sink / 截图等可砍。
-- **2026-07-24 18:23 PDT（+08:00 等效 2026-07-24 09:23）离线切片（骨架 DONE）**：
+- **2026-07-24 09:30 +08:00 写仓 harness 骨架 DONE**（commit `78d6f34` + 意图提示升级）：
   - `app/core/write_proposal.py` [NEW-FILE:#20260724-S4]：提案 + `approval_id` 闸门；`propose → decide → apply`；apply 仅 `local_mark_only`，**executed=false / broker=null**，禁止假「已下单」。
   - `tools.py` 注册 `propose_portfolio_write` / `decide_portfolio_proposal_approval` / `apply_portfolio_proposal`（白名单可执行；裸 `portfolio_write_*` 仍 WRITE_TOOL_BLOCKED）。
+  - `intent_router`：`portfolio_write_blocked` system_hint 引导合规提案路径，禁止假成功文案。
   - `conversation.attach_decision_artifact` + chat/agent-analyze 落盘挂载 decision_card（会话级可回放索引）。
-  - **未做**：真券商 / 改用户 portfolio-store / provenance[] / Plan DAG / Skills loader / 启服联调。
+- **2026-07-24 09:35 +08:00 Sprint4+ 薄切片 DONE**（HITL 桥 + Plan DAG + Skill stub）：
+  - HITL：`approval_id` = pending `task_id`；`agent_submit_approval` ↔ `decide_portfolio_proposal_approval`。
+  - `app/core/plan_dag.py` [NEW-FILE:#20260724-S4B]：串行/depends_on/环检测/状态机；工具 `create_analysis_plan` / `get_plan_status`。
+  - `app/core/skill_loader.py` [NEW-FILE:#20260724-S4B]：system_hint stub（builtin + 可选 data/skills + reflection 片段）；**不替代 adapters**。
+  - **仍未做**：真券商 / mutate portfolio-store / Plan 真执行 step / provenance[] / 市场 facade 余项 / P2 / 启服 / push。
 
 ### 每 Sprint DoD
 

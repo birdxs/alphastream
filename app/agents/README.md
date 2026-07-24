@@ -1,7 +1,7 @@
 # app/agents/ - 多Agent分析子系统
 - 9个分析Agent + 投资者人格Agent + 反思学习Agent + 策略演进器 + LangGraph动态编排协调器
 - coordinator.py: 核心编排器，支持并行fan-out/fan-in（fundamental+capital_flow并行、bull+bear并行）和条件路由（技术分析error快速失败）；P0-5 高风险 final_decision 经 HITL 闸门
-- hitl.py: Human-in-the-loop 审批（request_approval 阻塞、timeout_reject、event_bus approval.*、任务态钩子）
+- hitl.py: Human-in-the-loop 审批（request_approval 阻塞、timeout_reject、event_bus approval.*、任务态钩子；Sprint4+ 非阻塞 register + write_proposal pending 桥，task_id=approval_id）
 - state.py: 共享状态定义，含router_decision路由决策字段，investor_consensus改为Dict类型
 - reflection.py: Agent自我反思和策略优化，从历史决策中学习
 - strategy_evolver.py: Agent自主策略演进系统，从反思记录中提炼并迭代分析策略

@@ -1,18 +1,18 @@
-# 交付状态清单 · Sprint0–3（AI 原生融化）
+# 交付状态清单 · Sprint0–4（AI 原生融化）
 
 ```
-Input: Sprint0–3 已落地 commit + 本地可使用验收证据
+Input: Sprint0–4 已落地 commit + 本地可使用验收证据
 Output: 中文交付清单（能力 / 启动 / 验证 / 限制 / 回滚）
 Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 ```
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.2-g9-g12-handoff` |
-| **交付锚点** | **2026-07-23 18:45:00 +08:00**（最终 handoff；校时：本机 `2026-07-23 03:44:xx -0700` ≡ UTC 10:44；Cloudflare/GitHub HTTPS Date 同源，偏差 ≤10s，通过） |
+| **文档版本** | `v1.3-sprint4-write-proposal` |
+| **交付锚点** | **2026-07-24 09:30:00 +08:00**（Sprint4 写仓提案闸门收尾；校时：本机 `2026-07-23 18:23:44 -0700` ≡ UTC 01:23；Cloudflare/GitHub Date `Fri, 24 Jul 2026 01:23:47 GMT`，偏差 ≤5s，通过） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
-| **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2 |
+| **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
 | **约束** | 铁律 #1–#4；禁 Playwright；默认禁 push |
 
 ---
@@ -24,8 +24,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 | Sprint 0 | **DONE** | 只读盘点 + 契约 → `sprint0-inventory.md` |
 | Sprint 1 | **DONE（主切片）** | 护栏 / HITL / 辩论证据 / 工具时间线 |
 | Sprint 2 | **DONE** | 意图规则路由 + 持仓 snapshot 只读 |
-| Sprint 3 | **DONE（本切片）** | 组合风险诊断 + 观察 mode |
-| Sprint 4 | 未开 | 写仓 harness / facade / P2 选修 |
+| Sprint 3 | **DONE** | 组合风险诊断 + 观察 mode |
+| Sprint 4 | **DONE（写仓 harness 骨架）** | 提案+approval 闸门 + decision 挂载；facade/P2 选修未开 |
 
 ### P0 汇总
 
@@ -503,53 +503,118 @@ import-smoke：`len(OPENAPI_SPEC['paths']) == 71`；`get_market_overview_brief` 
 |----|------|----------|
 | **真券商 / 真 mutate 用户持仓** | 仅 local_mark_only 骨架；无 broker | Comdr 书面审批 + 审计 + 独立适配器 |
 | **provenance[] 证据链深化** | 非本切片 | 对齐 scorecard/decision_memo 字段后补 |
-| **Plan DAG / 多步编排** | 架构面大 | 独立设计 + 超时/配额统一 |
-| **Skills / dojosdk 数据面替换** | 破坏 adapters/Wind 铁证链 | 仅 facade 挂现源；禁替换 |
+| **Plan DAG 执行引擎（真跑 step）** | 本批仅状态机 | 挂 analyzer 编排 + 超时/配额统一 |
+| **Skills 深替换 / dojosdk 数据面** | 破坏 adapters/Wind 铁证链 | 仅 system_hint facade；禁替换 adapters |
 | **git push** | 工作区纪律 + 本地 ahead origin | Comdr 显式授权 |
 | **全量 vitest / npm build / 启服务** | 铁律 #3 资源 | 仅 tsc + 聚焦 eslint + 聚焦 pytest |
 
 ---
 
-## Sprint4 写仓提案闸门 + decision 挂载（2026-07-24 18:23 PDT）
+## Sprint4 写仓提案闸门 + decision 挂载（2026-07-24 09:30 +08:00 收尾）
 
-**任务约束**：禁 push；禁启服；离线可测；铁律 #1–3。
+**任务约束**：禁 push；禁启服；离线可测；铁律 #1–3。  
+**代表 commit**：`78d6f34`（骨架）+ 本批（意图提示升级 + 状态表对齐）。
 
 ### 落地项
 
 | 项 | 路径 | 说明 |
 |----|------|------|
 | 写仓提案 store | `app/core/write_proposal.py` | [NEW-FILE:#20260724-S4] propose/decide/apply；RLock；进程内 |
-| 工具闸门 | `app/core/tools.py` | 三工具 + schema；裸写工具仍硬拦并 hint 提案路径 |
+| 工具闸门 | `app/core/tools.py` | 三工具 + schema；裸 `portfolio_write_*` 仍 `WRITE_TOOL_BLOCKED` 并 hint 提案路径 |
+| 意图 system_hint | `app/core/intent_router.py` | `portfolio_write_blocked` 硬拦假成功 + 引导 propose→decide→apply |
 | 会话挂载 | `app/core/conversation.py` | `decision_artifacts` + `attach_decision_artifact` |
 | chat/agent 接线 | `app/web/web_server.py` | assistant 落盘后挂 decision_card/scorecard |
-| 测试 | `test_sprint2_intent_portfolio.py` + `test_core_conversation.py` | 闸门全链路 + 挂载断言 |
+| 测试 | `test_sprint2_intent_portfolio.py` + `test_core_conversation.py` | 闸门全链路 + 意图提示 + 挂载断言 |
 
 ### 语义铁证（禁止假下单）
 
 - `propose` → `success=true, executed=false, broker=null, approval_id`
 - `apply` 未批 → `APPROVAL_REQUIRED, executed=false`
-- `apply` 已批 → `applied=true, local_marked=true, executed=false, broker=null`
+- `apply` 已批 → `applied=true, local_marked=true, executed=false, broker=null, apply_mode=local_mark_only`
 - 响应文案含「非成交 / 禁止解读为…已下单」
+- 意图层不得输出「已下单/已加仓成功」
+
+### P1-3 验收对照
+
+| 计划要点 | 实测 |
+|----------|------|
+| 提案工具 | `propose_portfolio_write` / `decide_*` / `apply_*` |
+| apply 需 approval_id | 无/拒批 → `APPROVAL_REQUIRED` |
+| 无审批不落真仓 | apply 不 mutate 用户 portfolio-store；仅本地 mark |
+| executed 恒 false | 全路径 `executed=false`、`broker=null` |
 
 ### 聚焦测试命令
 
 ```bash
 AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q \
   tests/backend/unit/test_sprint2_intent_portfolio.py \
-  tests/backend/unit/test_agent_scorecard.py \
   tests/backend/unit/test_tool_guardrails.py \
   tests/backend/unit/test_hitl_gate.py \
   tests/backend/integration/test_hitl.py \
-  tests/backend/unit/test_analysis_risk_monitor.py \
-  tests/backend/unit/test_core_event_bus.py \
-  tests/backend/unit/test_core_conversation.py
+  tests/backend/unit/test_agent_scorecard.py \
+  --tb=short
 ```
+
+### 未纳入本 Sprint4 骨架
+
+- 真券商 / 真 mutate 用户持仓（需 Comdr 书面审批）
+- 市场 facade 余项 / P2 选修
+- provenance[] 结构化深化
 
 ### 回滚
 
 ```bash
 git revert <本批 commit>
-# 或：rm app/core/write_proposal.py；还原 tools.py / conversation.py / web_server.py / 测试与文档
+# 全回退骨架：git revert 78d6f34
+# 或：rm app/core/write_proposal.py；还原 tools.py / intent_router.py / conversation.py / web_server.py / 测试与文档
 ```
 
+---
+
+## Sprint4+ 薄切片：HITL 提案桥 + Plan DAG + Skill stub（2026-07-24 09:35 +08:00）
+
+**任务约束**：禁 push；禁启服；铁律 #1–3；优先现有文件 + 白名单 core 新模块。  
+**校时锚点**：本机 2026-07-23 18:29:49 -0700 ⇔ UTC 2026-07-24 01:29:53（Cloudflare Date）；偏差 ≤10s，通过。  
+**代表 commit message**：`feat(agent): plan dag thin slice + hitl proposal bridge + skill stub`
+
+### 落地项
+
+| 项 | 路径 | 说明 |
+|----|------|------|
+| HITL ↔ write_proposal 桥 | `app/agents/hitl.py` + `app/core/write_proposal.py` | propose 登记 `register_non_blocking_pending(task_id=approval_id)`；`get_pending` 合并 store；`submit_approval` ↔ `decide_approval` 同语义；decide 清 HITL pending |
+| Plan DAG 轻量模块 | `app/core/plan_dag.py` [NEW-FILE:#20260724-S4B] | 串行/depends_on 校验、环检测、状态机；不抓数不下单 |
+| Skills stub | `app/core/skill_loader.py` [NEW-FILE:#20260724-S4B] | builtin + 可选 `data/skills` + reflection/strategy 片段 → system_hint；**禁替代 adapters** |
+| 工具只读挂载 | `app/core/tools.py` | `create_analysis_plan` / `get_plan_status` / `load_agent_skill` / `list_agent_skills` |
+| 测试 | `tests/backend/unit/test_plan_dag_hitl_bridge.py` [NEW-FILE:#20260724-S4B] | 桥接 4 + DAG 5 + Skill 4 |
+
+### 语义铁证
+
+- propose 后 `approval_manager.get_pending_approvals()` 含 `task_id=approval_id`，`kind=portfolio_write_proposal`
+- `submit_approval(aid, True)` → store `status=approved`，pending 清空；`apply` 仍 `executed=false, broker=null`
+- 仅 store pending（无 HITL 本地项）时 submit 仍桥接成功；`get_pending` 可从 store 合并
+- Plan：未知 depend / 环 → 明确 error_code；依赖未完成 start → `DEPENDS_NOT_MET`；全完成 → plan `completed`
+- Skill：builtin 有 hint；未知 id → `SKILL_NOT_FOUND`；hint 无假行情数值
+
+### 聚焦测试（本批实测）
+
+```bash
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q \
+  tests/backend/unit/test_plan_dag_hitl_bridge.py \
+  tests/backend/unit/test_hitl_gate.py \
+  tests/backend/unit/test_sprint2_intent_portfolio.py
+# → 57 passed（2026-07-24 09:35 +08:00 当次）
+```
+
+### 特例登记
+
+- [NEW-FILE:#20260724-S4B] `app/core/plan_dag.py` / `skill_loader.py` / `test_plan_dag_hitl_bridge.py`
+- 触发：无既有 plan/skills 模块可只改；测试白名单 b + 全新 core e
+- 回滚：`git revert <commit>` 或删除三新文件并还原 hitl/write_proposal/tools/docs/README
+
+### 未纳入
+
+- Plan step 真执行 analyzer / 超时编排
+- Skills 替换数据 adapters / 新建 `data/skills` 内容包（目录可选，本次未强制新建）
+- 前端 pending-approvals UI 改 kind 展示（API 字段已扩展，UI 仍用 decision/reason）
+- 启服联调 / push
 
