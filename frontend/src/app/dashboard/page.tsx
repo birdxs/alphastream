@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
 import { StatsCard } from "@/components/common/stats-card";
 import { GlassCard } from "@/components/common/glass-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useWatchlistStore, type WatchItem } from "@/lib/stores/watchlist-store";
 import { usePortfolioStore } from "@/lib/stores/portfolio-store";
 import { useStockNames } from "@/lib/hooks/use-stock-names";
@@ -326,7 +327,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="ui-page-wide">
         {/* ---- 页头 ---- */}
         <div className="flex items-center justify-between">
           <div>
@@ -359,7 +360,7 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="h-4 w-4 text-[#6B5EE4]" />
-                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">市场概览</h2>
+                <h2 className="ui-section-title">市场概览</h2>
               </div>
 
               {indicesLoading && indices.length === 0 ? (
@@ -385,9 +386,10 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground dark:text-[#8888A0] text-center py-6">
-                  暂无指数数据
-                </p>
+                <div className="ui-empty py-6">
+                  <p className="ui-empty-title">暂无指数数据</p>
+                  <p className="ui-empty-hint">上游降级或暂无快照</p>
+                </div>
               )}
             </GlassCard>
           </div>
@@ -397,7 +399,7 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false} glow="ai" className="h-full">
               <div className="flex items-center gap-2 mb-4">
                 <Bot className="h-4 w-4 text-[#6B5EE4]" />
-                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
+                <h2 className="ui-section-title">
                   AI 快速分析
                 </h2>
               </div>
@@ -451,7 +453,7 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false}>
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
+                <h2 className="ui-section-title">
                   今日关注
                 </h2>
                 <span className="text-[10px] text-muted-foreground dark:text-[#8888A0] ml-1">
@@ -513,7 +515,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Star className="h-4 w-4 text-amber-400" />
-                  <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
+                  <h2 className="ui-section-title">
                     自选股行情
                   </h2>
                 </div>
@@ -526,9 +528,10 @@ export default function DashboardPage() {
               </div>
 
               {watchItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Star className="h-8 w-8 text-muted-foreground dark:text-[#8888A0]/30 mb-2" />
-                  <p className="text-sm text-muted-foreground dark:text-[#8888A0]">添加自选股开始追踪</p>
+                <div className="ui-empty py-8">
+                  <Star className="h-8 w-8 text-muted-foreground dark:text-[#8888A0]/30" />
+                  <p className="ui-empty-title">暂无自选股</p>
+                  <p className="ui-empty-hint">添加自选股开始追踪</p>
                   <button
                     onClick={() => router.push("/watchlist")}
                     className="mt-2 flex items-center gap-1 text-xs text-[#6B5EE4] hover:underline"
@@ -572,19 +575,19 @@ export default function DashboardPage() {
                               </td>
                               <td className="py-2.5 text-right font-mono text-foreground dark:text-[#F0F0F5]">
                                 {q.price !== undefined
-                                  ? q.price.toFixed(2)
+                                  ? <span className="ui-num">{q.price.toFixed(2)}</span>
                                   : watchLoading
-                                    ? "..."
-                                    : "--"}
+                                    ? <Skeleton className="ml-auto h-3 w-12" />
+                                    : <span className="ui-dash">—</span>}
                               </td>
                               <td
                                 className={`py-2.5 text-right font-mono ${pctColor}`}
                               >
                                 {pct !== undefined
-                                  ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`
+                                  ? <span className="ui-num">{`${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`}</span>
                                   : watchLoading
-                                    ? "..."
-                                    : "--"}
+                                    ? <Skeleton className="ml-auto h-3 w-12" />
+                                    : <span className="ui-dash">—</span>}
                               </td>
                               <td className="py-2.5 text-right">
                                 <button
@@ -611,7 +614,7 @@ export default function DashboardPage() {
             <GlassCard padding="lg" hover={false} className="h-full">
               <div className="flex items-center gap-2 mb-4">
                 <Newspaper className="h-4 w-4 text-sky-400" />
-                <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
+                <h2 className="ui-section-title">
                   最新新闻
                 </h2>
               </div>
@@ -620,8 +623,8 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <div key={i} className="space-y-1.5">
-                      <div className="h-3 w-full bg-foreground/[0.04] dark:bg-white/[0.04] rounded animate-pulse" />
-                      <div className="h-2.5 w-1/3 bg-foreground/[0.03] dark:bg-white/[0.03] rounded animate-pulse" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-2.5 w-1/3" />
                     </div>
                   ))}
                 </div>
@@ -651,9 +654,7 @@ export default function DashboardPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground dark:text-[#8888A0] text-center py-6">
-                  暂无新闻
-                </p>
+                <div className="ui-empty py-6"><p className="ui-empty-title">暂无新闻</p><p className="ui-empty-hint">稍后再试或检查网络</p></div>
               )}
             </GlassCard>
           </div>
@@ -665,7 +666,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <PieChart className="h-4 w-4 text-emerald-400" />
-                    <h2 className="text-sm font-semibold text-foreground dark:text-[#F0F0F5]">
+                    <h2 className="ui-section-title">
                       持仓概览
                     </h2>
                   </div>

@@ -178,10 +178,10 @@ export function PlanListPanel({ className }: { className?: string }) {
       data-testid="plan-list-panel"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+        <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <ListTree className="h-3.5 w-3.5 text-muted-foreground" />
           分析计划
-          <span className="text-[10px] font-normal text-muted-foreground">
+          <span className="text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
             只读 · 不执行
           </span>
         </div>

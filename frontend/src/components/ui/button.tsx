@@ -1,3 +1,6 @@
+// Input: variant/size + className + ButtonPrimitive props
+// Output: 语义按钮（含 S-UI up/down/ok/warn）
+// Pos: 通用 UI 原子；一旦修改请同步 components/ui README
 "use client"
 
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
@@ -6,7 +9,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 text-[length:var(--fs-sm)]",
   {
     variants: {
       variant: {
@@ -20,6 +23,11 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        /* S-UI 语义：涨/跌/成功/警告 */
+        up: "bg-[var(--up)]/10 text-[var(--up)] hover:bg-[var(--up)]/20 focus-visible:ring-[var(--up)]/30",
+        down: "bg-[var(--down)]/10 text-[var(--down)] hover:bg-[var(--down)]/20 focus-visible:ring-[var(--down)]/30",
+        ok: "bg-[var(--ok)]/10 text-[var(--ok)] hover:bg-[var(--ok)]/20 focus-visible:ring-[var(--ok)]/30",
+        warn: "bg-[var(--warn)]/10 text-[var(--warn)] hover:bg-[var(--warn)]/20 focus-visible:ring-[var(--warn)]/30",
       },
       size: {
         default:

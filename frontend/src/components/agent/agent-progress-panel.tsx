@@ -1,7 +1,7 @@
 /**
  * Input: agent-store中的agentProgresses、overallProgress、isAnalyzing、toolCalls、events流
  * Output: 实时数据流面板（总进度条 + 实时事件时间线流水 + 可选Agent状态网格）
- * Pos: chat-panel.tsx子组件，AgentSidePanel展开时显示，作为分析过程数据流主视图
+ * Pos: message-list / agent-log-drawer 子组件；S-UI-2 默认紧凑折叠条
  * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
 
@@ -443,7 +443,8 @@ export function AgentProgressPanel() {
   const overallProgress = useAgentStore(s => s.overallProgress);
   const isAnalyzing = useAgentStore(s => s.isAnalyzing);
   const events = useAgentStore(s => s.events);
-  const [expanded, setExpanded] = useState(true);
+  // S-UI-2：主区进度默认紧凑折叠条，展开后才显示时间线/网格
+  const [expanded, setExpanded] = useState(false);
   const [agentsExpanded, setAgentsExpanded] = useState(false);
 
   const completedCount = useMemo(
@@ -458,23 +459,32 @@ export function AgentProgressPanel() {
       {!expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="glass-card w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors animate-[glass-enter_300ms_ease-out_both]"
+          className="glass-card w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors animate-[glass-enter_300ms_ease-out_both]"
+          data-testid="agent-progress-compact"
         >
-          <span className="flex items-center gap-2">
-            <Bot className="h-3.5 w-3.5 text-[#3737CC] animate-pulse" />
-            <span className="font-mono">Agent分析中… {Math.round(overallProgress)}%</span>
+          <span className="flex items-center gap-2 min-w-0">
+            <Bot className={`h-3 w-3 text-[#3737CC] shrink-0 ${isAnalyzing ? "animate-pulse" : ""}`} />
+            <span className="font-mono truncate">
+              {isAnalyzing ? `Agent ${Math.round(overallProgress)}%` : "Agent 进度"}
+            </span>
+            <span className="hidden sm:inline-block w-16 max-w-[4.5rem] bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1 overflow-hidden shrink-0">
+              <span
+                className="block bg-gradient-to-r from-[#3737CC] via-[#A78BFA] to-[#46BEA3] h-1 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(0, Math.min(100, overallProgress))}%` }}
+              />
+            </span>
           </span>
-          <span className="text-muted-foreground font-mono">
-            {completedCount}/{agentProgresses.length || 10} · {events.length} 事件
+          <span className="text-muted-foreground font-mono text-[10px] tabular-nums shrink-0">
+            {completedCount}/{agentProgresses.length || 10} · {events.length}
           </span>
         </button>
       )}
 
       {expanded && (
-        <div className="glass-card rounded-xl p-3 space-y-2.5 animate-[glass-enter_300ms_ease-out_both]">
+        <div className="glass-card rounded-xl p-2 space-y-2 animate-[glass-enter_300ms_ease-out_both]" data-testid="agent-progress-expanded">
           {/* 头部：标题 + 折叠 */}
           <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpanded(false)}>
-            <span className="text-xs font-medium flex items-center gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide flex items-center gap-1.5">
               <Bot className={`h-3.5 w-3.5 text-[#3737CC] ${isAnalyzing ? 'animate-pulse' : ''}`} />
               Multi-Agent 实时数据流
             </span>
@@ -486,9 +496,9 @@ export function AgentProgressPanel() {
 
           {/* 总进度条 + 统计 */}
           <div className="space-y-1">
-            <div className="w-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-foreground/[0.06] dark:bg-white/[0.06] rounded-full h-1 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-[#3737CC] via-[#A78BFA] to-[#46BEA3] h-1.5 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(55,55,204,0.5)]"
+                className="bg-gradient-to-r from-[#3737CC] via-[#A78BFA] to-[#46BEA3] h-1 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(55,55,204,0.5)]"
                 style={{ width: `${overallProgress}%` }}
               />
             </div>
@@ -532,7 +542,7 @@ export function AgentProgressPanel() {
           {/* 实时事件流时间线（核心） */}
           <div className="pt-1 border-t border-foreground/[0.06] dark:border-white/[0.06]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1">
                 <Activity className="h-3 w-3" />
                 数据流
               </span>

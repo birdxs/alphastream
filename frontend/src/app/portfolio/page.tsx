@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { GlassCard } from "@/components/common/glass-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePortfolioStore, type HoldingMode } from "@/lib/stores/portfolio-store";
 import { useStockNames } from "@/lib/hooks/use-stock-names";
 import { useStockPrices } from "@/lib/hooks/use-stock-prices";
@@ -191,11 +192,11 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 pb-16 space-y-6">
+    <div className="ui-page">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">投资组合</h1>
-          <p className="text-xs text-muted-foreground dark:text-white/40 mt-1">
+          <h1 className="ui-page-title">投资组合</h1>
+          <p className="ui-page-desc">
             实盘 {liveCount} · 观察 {watchCount}
           </p>
         </div>
@@ -242,8 +243,8 @@ export default function PortfolioPage() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-muted-foreground dark:text-white/60" />
-            <h2 className="text-sm font-semibold">风险诊断</h2>
-            <span className="text-[10px] text-muted-foreground dark:text-white/35">
+            <h2 className="ui-section-title">风险诊断</h2>
+            <span className="ui-section-desc text-[10px]">
               仅统计实盘持仓
             </span>
           </div>
@@ -259,9 +260,10 @@ export default function PortfolioPage() {
         </div>
 
         {liveCount === 0 ? (
-          <p className="text-sm text-muted-foreground dark:text-white/40">
-            暂无实盘持仓，无法计算诊断（观察仓不参与加权）
-          </p>
+          <div className="ui-empty py-4">
+            <p className="ui-empty-title">暂无实盘持仓</p>
+            <p className="ui-empty-hint">无法计算诊断（观察仓不参与加权）</p>
+          </div>
         ) : diagLoading && !diagnosis ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Skeleton className="h-14" />
@@ -270,17 +272,17 @@ export default function PortfolioPage() {
             <Skeleton className="h-14" />
           </div>
         ) : diagError && !diagnosis ? (
-          <p className="text-sm text-muted-foreground dark:text-white/40 flex items-center gap-1">
+          <Alert variant="degraded" className="py-2">
             <AlertTriangle className="h-3.5 w-3.5" />
-            诊断暂时不可用
-          </p>
+            <AlertDescription className="text-xs">诊断暂时不可用</AlertDescription>
+          </Alert>
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] p-3">
                 <p className="text-[11px] text-muted-foreground dark:text-white/45">风险等级</p>
                 <p className="text-base font-semibold mt-0.5">
-                  {diagnosis?.riskLevel ?? "—"}
+                  {diagnosis?.riskLevel ?? <span className="ui-dash">—</span>}
                   {diagnosis?.riskScore != null ? (
                     <span className="text-xs font-mono text-muted-foreground ml-1">
                       ({fmtNumOrDash(diagnosis.riskScore)})
@@ -293,7 +295,7 @@ export default function PortfolioPage() {
                   最大行业敞口
                 </p>
                 <p className="text-base font-semibold mt-0.5 truncate">
-                  {diagnosis?.maxSector ?? "—"}
+                  {diagnosis?.maxSector ?? <span className="ui-dash">—</span>}
                 </p>
                 <p className="text-[11px] font-mono text-muted-foreground">
                   {fmtPctOrDash(diagnosis?.maxSectorWeight)}
@@ -444,14 +446,14 @@ export default function PortfolioPage() {
       <GlassCard padding="lg">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="h-4 w-4 text-muted-foreground dark:text-white/60" />
-          <h2 className="text-sm font-semibold">持仓明细</h2>
+          <h2 className="ui-section-title">持仓明细</h2>
         </div>
         <div className="space-y-2">
           {holdings.length === 0 ? (
             <div className="text-center py-12 space-y-4">
               <Briefcase className="h-12 w-12 text-muted-foreground dark:text-white/15 mx-auto" />
               <p className="text-muted-foreground dark:text-white/40">暂无持仓</p>
-              <p className="text-sm text-muted-foreground dark:text-white/25">
+              <p className="ui-empty-title dark:text-white/25">
                 点击上方&ldquo;添加持仓&rdquo;开始管理您的投资组合
               </p>
             </div>

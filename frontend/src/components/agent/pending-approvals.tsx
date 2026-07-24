@@ -273,7 +273,7 @@ export function PendingApprovalsPanel({
 
   return (
     <div className={className} data-testid="pending-approvals-panel">
-      <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         待确认 ({displayItems.length})
       </div>
       <div className="space-y-2">

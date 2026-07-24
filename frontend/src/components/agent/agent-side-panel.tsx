@@ -1,17 +1,12 @@
-// Input: agent-store 实时事件流 (events) + theme-store (light/dark) + 当前时间
-// Output: Mac风格终端Agent实时面板 — 毛玻璃主题(backdrop-blur+半透明+主题token) + 三点标题栏 + 等宽字体 + 树形日志
-// Pos: 首页第4列, 取代旧AgentSidePanel空态+AgentProgressPanel复合结构
+// Input: agent-store 实时事件流 (events) + isAnalyzing/progress + HITL/Plan 子面板
+// Output: Agent 工位侧栏 — 分区：待审批 / 计划 / 进度 / 洞察 / 日志(默认折叠)
+// Pos: 首页第3列 Agent 工位；S-UI-2 产品化：主次清晰、日志降权、限高内滚
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
-// [UI-Q2 2026-04-15 +08:00] 重构为毛玻璃(backdrop-blur-xl + bg-foreground/0.03 + 主题token色彩)，
-//   废弃硬编码 #1E1E1E/#F8F8F8 让项目 Dark Glassmorphism 统一。
-// [UI-Q4 2026-04-15 +08:00] 增加 TypewriterRow 打字机动画 — reasoning/tool_result/progress 文本逐字流入
-//   并识别 type=reasoning 的流式行 (meta.streaming=true) 实时追加 token。仅对最近3条活跃行做动画,
-//   更早的直接显示完成态, 避免百行同时打字机拖慢 UI。
 
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAgentStore, type AgentEvent } from "@/lib/stores/agent-store";
-import { ChevronRight, ChevronLeft, Trash2, Download, Circle } from "lucide-react";
+import { ChevronRight, ChevronLeft, ChevronDown, Trash2, Download, Circle } from "lucide-react";
 import { PendingApprovalsPanel } from "@/components/agent/pending-approvals";
 import { PlanListPanel } from "@/components/agent/plan-list-panel";
 
@@ -213,6 +208,8 @@ function TerminalRow({
 export function AgentSidePanel() {
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  // S-UI-2：日志区默认折叠，优先露出 Plan / HITL 分区
+  const [logCollapsed, setLogCollapsed] = useState(true);
   const [now, setNow] = useState<number | null>(null);
   const [cleared, setCleared] = useState(false);
   const events = useAgentStore((s) => s.events);
@@ -225,6 +222,7 @@ export function AgentSidePanel() {
   const memoryContext = useAgentStore((s) => s.memoryContext);
   const isAnalyzing = useAgentStore((s) => s.isAnalyzing);
   const agentProgresses = useAgentStore((s) => s.agentProgresses);
+  const overallProgress = useAgentStore((s) => s.overallProgress);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [startTime, setStartTime] = useState<number>(0);
 
@@ -395,7 +393,7 @@ export function AgentSidePanel() {
           ((memoryContext as { history_count?: number }).history_count ||
             (memoryContext as { semantic_context?: string }).semantic_context))) && (
         <div className="mx-2 mb-3 space-y-2 rounded-lg border border-[#3737CC]/25 bg-[#3737CC]/5 p-2.5 dark:border-[#7F7FFF]/25 dark:bg-[#7F7FFF]/10 max-h-[28%] min-h-0 overflow-y-auto overscroll-contain shrink-0">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#7F7FFF]">
+          <div className="text-xs font-medium uppercase tracking-wide text-[#3737CC] dark:text-[#7F7FFF]">
             Run Scorecard / 备忘
           </div>
           {scorecard && (
@@ -505,7 +503,7 @@ export function AgentSidePanel() {
           className="px-3 pb-2 shrink-0 border-b border-foreground/[0.06] space-y-1.5"
           data-testid="debate-turns-strip"
         >
-          <div className="text-[10px] uppercase tracking-wide text-foreground/45">Debate · 分歧扫读</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Debate · 分歧扫读</div>
           <div className="grid grid-cols-2 gap-1.5">
             {(["bull", "bear"] as const).map((side) => {
               const turn = debateTurns.find((t) => t.side === side);
@@ -553,24 +551,48 @@ export function AgentSidePanel() {
         </div>
       )}
 
-      <div
-        ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-0.5 agent-term-scroll bg-transparent"
-        style={{ fontSize: "12px", lineHeight: "1.65" }}
-      >
-        {lines.map((line, idx) => {
-          // 仅对"最近3条"做打字机动画, 更早的直接显示完成态, 防止百行同时打字机卡顿
-          const animate = isAnalyzing && idx >= lines.length - 3;
-          return (
-            <TerminalRow
-              key={line.id}
-              line={line}
-              isLast={idx === lines.length - 1 && isAnalyzing}
-              animate={animate}
-            />
-          );
-        })}
+      {/* S-UI-2：Stream Log 可折叠；默认收起，避免日志挤占 Plan/HITL */}
+      <div className="flex items-center justify-between px-3 h-7 shrink-0 border-t border-foreground/[0.06] dark:border-white/[0.06] bg-foreground/[0.02] dark:bg-white/[0.02]">
+        <button
+          type="button"
+          onClick={() => setLogCollapsed((v) => !v)}
+          className="flex items-center gap-1.5 min-w-0 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+          aria-expanded={!logCollapsed}
+          data-testid="agent-stream-log-toggle"
+        >
+          <ChevronDown
+            className={`h-3 w-3 shrink-0 transition-transform ${logCollapsed ? "-rotate-90" : ""}`}
+          />
+          <span className="truncate">Stream Log</span>
+          <span className="text-[10px] font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80">
+            {events.length}
+          </span>
+        </button>
+        {isAnalyzing && logCollapsed && (
+          <span className="text-[10px] font-mono text-[#46BEA3] tabular-nums shrink-0">streaming…</span>
+        )}
       </div>
+      {!logCollapsed && (
+        <div
+          ref={scrollRef}
+          className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-0.5 agent-term-scroll bg-transparent"
+          style={{ fontSize: "12px", lineHeight: "1.65" }}
+          data-testid="agent-stream-log"
+        >
+          {lines.map((line, idx) => {
+            // 仅对"最近3条"做打字机动画, 更早的直接显示完成态, 防止百行同时打字机卡顿
+            const animate = isAnalyzing && idx >= lines.length - 3;
+            return (
+              <TerminalRow
+                key={line.id}
+                line={line}
+                isLast={idx === lines.length - 1 && isAnalyzing}
+                animate={animate}
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* 底部状态栏 */}
       <div className="flex items-center justify-between px-3 h-6 shrink-0 border-t border-foreground/[0.06] dark:border-white/[0.06] bg-foreground/[0.02] dark:bg-white/[0.02] text-[10px] tabular-nums text-foreground/50">
