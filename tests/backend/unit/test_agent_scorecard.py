@@ -157,6 +157,50 @@ def test_decision_memo_evidence_and_veto_no_fake_numbers():
     # 不合成价量
     assert "last_price" not in memo
     assert memo["disclaimer"]
+    # G1 对齐：空 provenance → 空列表（不造假源）
+    assert isinstance(memo.get("provenance"), list)
+    assert memo["provenance"] == []
+
+
+def test_decision_memo_includes_provenance_from_state_and_fd():
+    """decision_memo.provenance 与 state/final_decision 摘要对齐（去重、无假行情）。"""
+    state = {
+        "stock_code": "600519",
+        "final_decision": {
+            "action": "BUY",
+            "confidence": 0.7,
+            "provenance": [
+                {"source": "akshare", "tool": "kline", "digest": "abc12345"},
+                {"source": "akshare", "tool": "kline", "digest": "abc12345"},  # 重复应去
+            ],
+        },
+        "provenance": [
+            {"source": "sina", "tool": "indices", "digest": "def67890"},
+            {"source": "", "tool": ""},  # 空源跳过
+        ],
+        "technical_report": {"summary": "ok"},
+        "fundamental_report": None,
+        "hitl": {"required": False},
+        "risk_assessment": {},
+        "degradations": [],
+        "scorecard": {
+            "data_coverage": 0.5,
+            "tool_success_rate": 1.0,
+            "role_agreement": 0.8,
+            "confidence_cap": 0.9,
+        },
+    }
+    memo = build_decision_memo(state)
+    assert memo["action"] == "BUY"
+    prov = memo.get("provenance")
+    assert isinstance(prov, list)
+    assert len(prov) == 2
+    sources = {p.get("source") for p in prov}
+    assert sources == {"akshare", "sina"}
+    for p in prov:
+        assert p.get("source")
+        assert "last_price" not in p
+        assert "price" not in p
 
 
 def test_reflection_summary_empty_is_none():

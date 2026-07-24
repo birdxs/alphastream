@@ -8,8 +8,8 @@ Pos: docs/design/DELIVERY-STATUS.md — 交付冲刺唯一状态入口
 
 | 字段 | 值 |
 |------|-----|
-| **文档版本** | `v1.3-sprint4-write-proposal` |
-| **交付锚点** | **2026-07-24 09:30:00 +08:00**（Sprint4 写仓提案闸门收尾；校时：本机 `2026-07-23 18:23:44 -0700` ≡ UTC 01:23；Cloudflare/GitHub Date `Fri, 24 Jul 2026 01:23:47 GMT`，偏差 ≤5s，通过） |
+| **文档版本** | `v1.4-sprint4c-pending-provenance` |
+| **交付锚点** | **2026-07-24 10:15:00 +08:00**（S4C：前端写仓 pending UI + decision_memo.provenance；校时：本机 ≡ Cloudflare/GitHub Date，偏差 ≤100s，通过） |
 | **分支** | `main`（本地 ahead origin，默认 **不 push**） |
 | **工作目录** | `/Users/panda/Downloads/StockAnal_Sys` |
 | **设计依据** | `docs/design/dojo-agents-absorption-plan.md` v1.2+ |
@@ -611,10 +611,70 @@ AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q \
 - 触发：无既有 plan/skills 模块可只改；测试白名单 b + 全新 core e
 - 回滚：`git revert <commit>` 或删除三新文件并还原 hitl/write_proposal/tools/docs/README
 
-### 未纳入
+### 未纳入（S4B 时点；部分已在 S4C 关闭）
 
 - Plan step 真执行 analyzer / 超时编排
 - Skills 替换数据 adapters / 新建 `data/skills` 内容包（目录可选，本次未强制新建）
-- 前端 pending-approvals UI 改 kind 展示（API 字段已扩展，UI 仍用 decision/reason）
+- ~~前端 pending-approvals UI 改 kind 展示~~ → **S4C 已关**
 - 启服联调 / push
+
+---
+
+## Sprint4+ 薄切片：前端写仓 pending + decision_memo.provenance（2026-07-24 02:15 UTC / 10:15 +08:00）
+
+**任务约束**：禁 push；禁启服（run.py/next/8888/3000）；铁律 #1–3；优先改现有文件。  
+**校时锚点**：本机 2026-07-23 18:xx -0700 ⇔ UTC 2026-07-24 01:xx（Cloudflare/GitHub Date）；偏差 ≤100s，通过。  
+**代表 commit message**：`feat(agent): pending write-proposal UI + decision_memo provenance align`
+
+### 落地项
+
+| 项 | 路径 | 说明 |
+|----|------|------|
+| ApprovalCard kind/approval_id | `frontend/src/components/agent/approval-card.tsx` | `portfolio_write_proposal` 紫系区分；展示 approval/proposal 短 id + code/shares/weight 结构摘要（零假价） |
+| Pending 归一化 | `frontend/src/components/agent/pending-approvals.tsx` | 解析 API `kind`/`approval_id`/`proposal_id`/`decision.*`；key 优先 approval_id |
+| decision_memo.provenance | `app/agents/scorecard.py` | `_collect_memo_provenance`：合并 state/fd provenance，去重，跳过空源；memo 挂 `provenance[]` |
+| 类型 + DecisionCard | `frontend/src/lib/types/index.ts` + `decision-card.tsx` | `DecisionMemo.provenance`；UI 回退 `memo.provenance` 若顶层缺省 |
+| 单测 | `tests/backend/unit/test_agent_scorecard.py` | 空 provenance=[]；state+fd 去重合并 2 源 |
+
+### 语义铁证（离线）
+
+- pending 项 `kind=portfolio_write_proposal` → 卡文案「写仓需确认」+ `data-approval-id` / `data-kind`
+- `build_decision_memo` 在无血统时 `provenance==[]`；有 state/fd 摘要时去重输出 `{source,tool,digest?}`，不含 price 字段
+- DecisionCard 顶层或 memo 任一有 provenance 即折叠展示「数据血统」
+
+### 聚焦测试（本批实测）
+
+```bash
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 pytest -q \
+  tests/backend/unit/test_agent_scorecard.py \
+  tests/backend/unit/test_sprint2_intent_portfolio.py \
+  tests/backend/unit/test_plan_dag_hitl_bridge.py \
+  tests/backend/unit/test_hitl_gate.py \
+  tests/backend/unit/test_tool_guardrails.py \
+  --tb=line
+# → 80 passed（scorecard 含新增 provenance 用例；2026-07-24 当次）
+
+cd frontend && node node_modules/typescript/bin/tsc --noEmit
+# → exit 0
+```
+
+### 未纳入
+
+- 启服浏览器复验 pending 真卡片
+- Plan step 真执行 / Skills 内容包 / 真券商
+- provenance OpenAPI schema 专项（运行时与类型已对齐，spec 字典可后补）
+
+### 回滚
+
+```bash
+git revert <本批 commit>
+# 或还原：approval-card / pending-approvals / decision-card / types / scorecard / test_agent_scorecard / 本节文档
+```
+
+### 下一批（仍可离线）
+
+1. OpenAPI 补 `/api/agent_pending_approvals` 响应字段 `kind`/`approval_id`/`proposal_id`（若 spec 仍旧）
+2. Plan step 纯状态工具深化（不抓数）
+3. Skills `data/skills` 最小 builtin 包（无假行情文案）
+4. 启服后：propose → pending 卡片 → approve → apply 本地 mark 联调（需 Comdr 授权启服）
 

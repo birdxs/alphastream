@@ -191,6 +191,8 @@ export interface DecisionMemo {
   veto_reasons?: string[];
   risk_reasons?: string[];
   evidence_pointers?: Array<{ slot: string; label: string; status: 'present' | 'missing' | string }>;
+  /** G1 数据血统摘要（与 final_decision.provenance 对齐，无假行情） */
+  provenance?: ProvenanceEntry[];
   scorecard?: {
     data_coverage?: number | null;
     tool_success_rate?: number | null;

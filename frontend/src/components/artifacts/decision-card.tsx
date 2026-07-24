@@ -30,6 +30,8 @@ interface DecisionMemoView {
   evidence_pointers?: Array<{ slot: string; label: string; status: string }>;
   reasoning?: string | null;
   disclaimer?: string;
+  /** G1 数据血统摘要（与 final_decision.provenance 对齐，无假行情） */
+  provenance?: ProvenanceEntry[];
 }
 
 interface ReflectionSummaryView {
@@ -247,26 +249,41 @@ export function DecisionCardArtifact({ data }: Props) {
       {/* 决策理由 */}
       {data.reasoning && <p className="text-sm leading-relaxed">{data.reasoning}</p>}
 
-      {/* G1 数据血统（可折叠，仅摘要无假行情） */}
-      {Array.isArray(data.provenance) && data.provenance.length > 0 && (
-        <details className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-          <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
-            数据血统 · {data.provenance.length} 源
-          </summary>
-          <ul className="mt-2 space-y-1.5 text-[11px] font-mono text-muted-foreground">
-            {data.provenance.map((p, i) => (
-              <li key={`${p.source || ''}-${p.tool || ''}-${p.digest || ''}-${i}`} className="flex flex-wrap gap-x-2 gap-y-0.5">
-                <span className="text-foreground/80">{p.source || p.tool || 'unknown'}</span>
-                {p.tool && p.source && p.tool !== p.source && (
-                  <span className="opacity-70">tool={p.tool}</span>
-                )}
-                {p.digest && <span className="opacity-60">#{p.digest.slice(0, 8)}</span>}
-                {p.ts && <span className="opacity-50">{p.ts}</span>}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      {/* G1 数据血统（可折叠，仅摘要无假行情；memo.provenance 与顶层对齐） */}
+      {(() => {
+        const prov =
+          (Array.isArray(data.provenance) && data.provenance.length > 0
+            ? data.provenance
+            : null) ||
+          (data.decision_memo &&
+          Array.isArray(data.decision_memo.provenance) &&
+          data.decision_memo.provenance.length > 0
+            ? data.decision_memo.provenance
+            : null);
+        if (!prov) return null;
+        return (
+          <details className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+            <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+              数据血统 · {prov.length} 源
+            </summary>
+            <ul className="mt-2 space-y-1.5 text-[11px] font-mono text-muted-foreground">
+              {prov.map((p, i) => (
+                <li
+                  key={`${p.source || ''}-${p.tool || ''}-${p.digest || ''}-${i}`}
+                  className="flex flex-wrap gap-x-2 gap-y-0.5"
+                >
+                  <span className="text-foreground/80">{p.source || p.tool || 'unknown'}</span>
+                  {p.tool && p.source && p.tool !== p.source && (
+                    <span className="opacity-70">tool={p.tool}</span>
+                  )}
+                  {p.digest && <span className="opacity-60">#{p.digest.slice(0, 8)}</span>}
+                  {p.ts && <span className="opacity-50">{p.ts}</span>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })()}
 
       {/* G6 Run scorecard */}
       {data.scorecard && (

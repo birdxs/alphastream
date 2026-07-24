@@ -193,12 +193,53 @@ def compute_run_scorecard(
     return scorecard
 
 
+def _collect_memo_provenance(state: Dict[str, Any], fd: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """汇总 state/final_decision 的 provenance（仅摘要字段，去重，无假行情）。"""
+    rows: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def _push(items: Any) -> None:
+        if not isinstance(items, list):
+            return
+        for p in items:
+            if not isinstance(p, dict):
+                continue
+            src = str(p.get("source") or "").strip()
+            tool = str(p.get("tool") or "").strip()
+            digest = str(p.get("digest") or "").strip()
+            key = (src, tool, digest)
+            if key in seen:
+                continue
+            # 至少有 source 或 tool 才收录，避免空行假摘要
+            if not src and not tool:
+                continue
+            seen.add(key)
+            entry: Dict[str, Any] = {}
+            if src:
+                entry["source"] = src
+            if tool:
+                entry["tool"] = tool
+            if digest:
+                entry["digest"] = digest
+            if p.get("ts") is not None:
+                entry["ts"] = p.get("ts")
+            if p.get("as_of") is not None:
+                entry["as_of"] = p.get("as_of")
+            if p.get("fetched_at") is not None:
+                entry["fetched_at"] = p.get("fetched_at")
+            rows.append(entry)
+
+    _push(fd.get("provenance"))
+    _push(state.get("provenance"))
+    return rows
+
+
 def build_decision_memo(
     state: Dict[str, Any],
     *,
     scorecard: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """G5：终局决策备忘 — action、否决/风险理由、evidence 指针（无假价）。"""
+    """G5：终局决策备忘 — action、否决/风险理由、evidence 指针、provenance 摘要（无假价）。"""
     state = state or {}
     fd = state.get("final_decision") if isinstance(state.get("final_decision"), dict) else {}
     risk = state.get("risk_assessment") if isinstance(state.get("risk_assessment"), dict) else {}
@@ -299,6 +340,8 @@ def build_decision_memo(
         memo["price_targets"] = fd["price_targets"]
     if fd.get("position_suggestion") is not None:
         memo["position_suggestion"] = fd.get("position_suggestion")
+    # G1 对齐：memo 挂载 provenance 摘要（与 final_decision.provenance 同源，无假行情）
+    memo["provenance"] = _collect_memo_provenance(state, fd)
     return memo
 
 

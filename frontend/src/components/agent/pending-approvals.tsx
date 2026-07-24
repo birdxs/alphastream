@@ -1,114 +1,184 @@
 /**
- * Input: GET /api/agent_pending_approvals 轮询结果
- * Output: 待确认 ApprovalCard 列表 + 提交审批
- * Pos: components/agent/pending-approvals.tsx — P0-5 HITL 确认面容器
- * 一旦我被修改，请更新头部注释与所属文件夹 md。
+ * Input: GET /api/agent_pending_approvals 轮询结果（含 kind / approval_id / proposal_id）
+ * Output: 待确认 ApprovalCard 列表 + 提交审批（写仓提案与决策确认同闸）
+ * Pos: agent 侧栏 HITL 确认面
+ * 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
  */
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import {
   ApprovalCard,
+  type ApprovalKind,
   type PendingApproval,
 } from "@/components/agent/approval-card";
 
-export function PendingApprovalsPanel() {
-  const [items, setItems] = useState<PendingApproval[]>([]);
-  const [submittingId, setSubmittingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function normalizePending(raw: unknown): PendingApproval | null {
+  if (!raw || typeof raw !== "object") return null;
+  const x = raw as Record<string, unknown>;
+  const taskId = String(x.task_id || x.taskId || x.approval_id || "").trim();
+  if (!taskId) return null;
 
-  const load = useCallback(async () => {
+  const decision =
+    x.decision && typeof x.decision === "object"
+      ? (x.decision as PendingApproval["decision"])
+      : undefined;
+
+  const kindRaw =
+    (typeof x.kind === "string" && x.kind) ||
+    (decision && typeof decision.kind === "string" && decision.kind) ||
+    undefined;
+
+  const approvalId =
+    (typeof x.approval_id === "string" && x.approval_id) ||
+    (typeof x.approvalId === "string" && x.approvalId) ||
+    (kindRaw === "portfolio_write_proposal" ? taskId : null);
+
+  const proposalId =
+    (typeof x.proposal_id === "string" && x.proposal_id) ||
+    (typeof x.proposalId === "string" && x.proposalId) ||
+    (decision && typeof decision.proposal_id === "string" && decision.proposal_id) ||
+    null;
+
+  const confRaw = x.confidence;
+  const confidence =
+    typeof confRaw === "number" && Number.isFinite(confRaw) ? confRaw : null;
+
+  return {
+    task_id: taskId,
+    risk_level: typeof x.risk_level === "string" ? x.risk_level : undefined,
+    reason: typeof x.reason === "string" ? x.reason : undefined,
+    action_type:
+      (typeof x.action_type === "string" && x.action_type) ||
+      (decision && typeof decision.action === "string" && decision.action) ||
+      undefined,
+    confidence,
+    created_at: typeof x.created_at === "string" ? x.created_at : undefined,
+    timeout_seconds:
+      typeof x.timeout_seconds === "number"
+        ? x.timeout_seconds
+        : typeof x.timeout === "number"
+          ? x.timeout
+          : undefined,
+    status: typeof x.status === "string" ? x.status : undefined,
+    kind: kindRaw as ApprovalKind | undefined,
+    approval_id: approvalId,
+    proposal_id: proposalId,
+    decision,
+  };
+}
+
+async function fetchPending(): Promise<PendingApproval[]> {
+  try {
+    const res = await fetch("/api/agent_pending_approvals", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const body = await res.json();
+    const list =
+      (Array.isArray(body?.data) && body.data) ||
+      (Array.isArray(body?.approvals) && body.approvals) ||
+      (Array.isArray(body) && body) ||
+      [];
+    return list
+      .map(normalizePending)
+      .filter((x: PendingApproval | null): x is PendingApproval => x != null);
+  } catch {
+    return [];
+  }
+}
+
+async function submitApproval(
+  taskId: string,
+  approved: boolean,
+  feedback?: string,
+): Promise<void> {
+  const res = await fetch("/api/agent_submit_approval", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      task_id: taskId,
+      approved,
+      feedback: feedback || "",
+    }),
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
     try {
-      const res = await fetch("/api/agent_pending_approvals", {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        setError(`加载失败 HTTP ${res.status}`);
-        return;
-      }
-      const data = await res.json();
-      const list = Array.isArray(data?.approvals) ? data.approvals : [];
-      setItems(
-        list.map((raw: PendingApproval) => ({
-          task_id: raw.task_id,
-          decision: raw.decision,
-          risk_level: raw.risk_level || "high",
-          created_at: raw.created_at,
-          reason: raw.reason || "",
-          action_type: raw.action_type,
-          confidence: raw.confidence ?? null,
-          timeout_seconds: raw.timeout_seconds,
-          status: raw.status,
-        })),
-      );
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "网络错误");
+      const j = await res.json();
+      msg = j?.error?.message || j?.message || j?.error || msg;
+    } catch {
+      /* ignore */
     }
+    throw new Error(typeof msg === "string" ? msg : "提交失败");
+  }
+}
+
+export function PendingApprovalsPanel({
+  pollMs = 4000,
+  className,
+}: {
+  pollMs?: number;
+  className?: string;
+}) {
+  const [items, setItems] = useState<PendingApproval[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const list = await fetchPending();
+    setItems(list);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    load();
-    const id = window.setInterval(load, 3000);
-    return () => window.clearInterval(id);
-  }, [load]);
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refresh();
+    };
+    void tick();
+    const id = window.setInterval(tick, Math.max(1500, pollMs));
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [pollMs, refresh]);
 
-  const onResolved = async (taskId: string, approved: boolean) => {
-    setSubmittingId(taskId);
-    try {
-      const res = await fetch("/api/agent_submit_approval", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task_id: taskId,
-          approved,
-          feedback: "",
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(
-          typeof body?.error === "string"
-            ? body.error
-            : typeof body?.message === "string"
-              ? body.message
-              : `提交失败 HTTP ${res.status}`,
-        );
-        return;
+  const onResolved = useCallback(
+    async (taskId: string, approved: boolean) => {
+      setSubmittingId(taskId);
+      try {
+        await submitApproval(taskId, approved);
+        await refresh();
+      } finally {
+        setSubmittingId(null);
       }
-      setItems((prev) => prev.filter((x) => x.task_id !== taskId));
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "提交失败");
-    } finally {
-      setSubmittingId(null);
-    }
-  };
+    },
+    [refresh],
+  );
 
-  if (items.length === 0 && !error) return null;
+  if (!loading && items.length === 0) return null;
 
   return (
-    <div
-      className="space-y-2 px-2 py-2 border-b border-border/40"
-      data-testid="hitl-pending-panel"
-    >
-      <div className="text-[11px] font-medium text-muted-foreground px-1">
-        待确认决策（HITL）
+    <div className={className} data-testid="pending-approvals-panel">
+      <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        待确认 ({items.length})
       </div>
-      {error && (
-        <div className="text-[11px] text-destructive px-1" role="alert">
-          {error}
-        </div>
-      )}
-      {items.map((item) => (
-        <ApprovalCard
-          key={item.task_id}
-          approval={item}
-          submitting={submittingId === item.task_id}
-          onResolved={onResolved}
-        />
-      ))}
+      <div className="space-y-2">
+        {items.map((it) => (
+          <ApprovalCard
+            key={it.approval_id || it.task_id}
+            approval={it}
+            submitting={submittingId === it.task_id}
+            onResolved={(id, approved) => void onResolved(id, approved)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

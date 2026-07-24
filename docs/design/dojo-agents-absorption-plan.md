@@ -34,7 +34,7 @@ Pos: docs/design/dojo-agents-absorption-plan.md — 设计层唯一入口；审�
 | **本轮绝对禁止** | `pip install dojoagents/strands-agents/dojosdk` 进主依赖；新建第二 HTTP 主入口；Vite 第二前端；替换 `coordinator.py` 主图；复制 Dojo monorepo；用假数 Demo Agent |
 | **Sprint0 进度** | **完成**（2026-07-23 15:33:50 +08:00）：事件 payload / terminal 态 / HITL 断点 / 风险分级 → `docs/design/sprint0-inventory.md` |
 | **Sprint1–3 进度** | **本地已落地**（详见 §11 状态表 + `DELIVERY-STATUS.md`）；P0-7 降级帽已 DONE（合约层）；provenance[] 与写仓 harness 属已知缺口/Sprint4 |
-| **下一步闸门** | handoff 后：provenance[] / 真写 harness / P1 Skills·Plan；默认仍 **禁 push** |
+| **下一步闸门** | S4C 已关：pending 写仓 UI + memo.provenance 对齐；下一批 OpenAPI pending 字段 / Plan 真 step / Skills 内容包 / 启服联调；默认仍 **禁 push** |
 
 > **铁律**：设计全文已批；实现按 Comdr 全权托管 + 分 Sprint 授权推进。伪修复（无铁证三件套）= 任务失败。
 
@@ -573,7 +573,8 @@ Python≥3.11 · FastAPI · strands-agents · React+Vite · APScheduler · uv �
   - HITL：`approval_id` = pending `task_id`；`agent_submit_approval` ↔ `decide_portfolio_proposal_approval`。
   - `app/core/plan_dag.py` [NEW-FILE:#20260724-S4B]：串行/depends_on/环检测/状态机；工具 `create_analysis_plan` / `get_plan_status`。
   - `app/core/skill_loader.py` [NEW-FILE:#20260724-S4B]：system_hint stub（builtin + 可选 data/skills + reflection 片段）；**不替代 adapters**。
-  - **仍未做**：真券商 / mutate portfolio-store / Plan 真执行 step / provenance[] / 市场 facade 余项 / P2 / 启服 / push。
+  - **S4C DONE（2026-07-24）**：前端 `pending-approvals`/`approval-card` 展示 `kind=portfolio_write_proposal` + `approval_id`/`proposal_id`；`build_decision_memo` 挂 `provenance[]`（与 state/fd 去重对齐）；decision-card 回退读 memo.provenance。
+- **仍未做**：真券商 / mutate portfolio-store / Plan 真执行 step / OpenAPI pending 字段补齐 / 市场 facade 余项 / P2 / 启服 / push。
 
 ### 每 Sprint DoD
 
