@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-24 — [S-UI-charts] + [S-UI-4] 部分终验（诚实范围）
+
+- **S-UI-charts**（`8ba801a`）：charts/artifacts 涨跌与置信/情感色绑定 design tokens（`--stock-up/down`、`--ok/warn/danger`，经 `css-var`/`stockPalette`）；去掉硬编码 `#ef4444`/`#22c55e` 等；`tsc --noEmit` exit 0。
+- **S-UI-4 启服 curl**（本轮授权）：后端 `AUTH_REQUIRED=false` `:8888` + 前端 `npm run dev` `:3000`。
+  - `GET :8888/health` → 200 `status=ok` version=3.1.0（首轮 `uptime_s≈17`）。
+  - `GET :3000/health`/`/` 冷启首轮曾超时（Turbopack）；热身后 `/health`、`/`、`/dashboard`、`/stock/600519`、`/portfolio`、`/settings` 均为 **200**。
+  - `GET :8888/api/market_indices` → **503 DEGRADED**（上游不可用/`stale_cache`，**无假指数**，守铁律 #1）。
+- **浏览器终验未完成**：CDP bridge 报 `No browser tabs connected`；free pages 一度 <5000；未产出 WebBridge 路由截图 / 假数多窗采样 / 主题无闪白证明。§8.1 与路由矩阵浏览器列保持 `[ ]`。
+- 文档：`TODO.md` / `ui-renovation-plan.md` → `v1.3-sui4-partial` / `docs/design/README.md` 同步；验收后停 8888/3000；**未 push**。
+
 ## 2026-07-24 — [S-UI-docs] 对齐 S-UI-0~3 已落地口径（docs only）
 
 - 修正滞后表述：S-UI-0~3 **代码已落地**（样例 commit：`972f3b8` / `9ec81f2` / `f8d0fe3` / `ddf1d50` / `3a5c6c7` 等）；**S-UI-4 终验待 WebBridge**（非「阻塞于 0~3」）。

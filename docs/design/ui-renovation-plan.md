@@ -1,8 +1,8 @@
 # StockAnal UI 改造方案 A–D
 
 **审批状态：已通过 2026-07-24 Comdr 全量 A–D**  
-**代码状态：S-UI-0~3 已落地 · S-UI-4 终验待 WebBridge（仍禁 push）**  
-版本：`v1.2-sui-code-landed` · 日期：`2026-07-24`  
+**代码状态：S-UI-0~3 + S-UI-charts 已落地 · S-UI-4 curl/启服已做 · 浏览器视觉终验未完成（仍禁 push）**  
+版本：`v1.3-sui4-partial` · 日期：`2026-07-24`  
 作者：香草少校（PM 方案稿）· 范围：本地开发 · **禁止 push**
 
 ---
@@ -18,7 +18,7 @@
 | 审批时间（+08:00） | 2026-07-24 | 全量 A–D 一次通过 |
 | 批注意见 | 全部审批通过，立即执行 | |
 
-**锁已解除**：Comdr 已通过；S-UI-0~3 代码已落地。剩余 **S-UI-4 浏览器终验**（WebBridge）。仍禁止 push；禁止启动全量 `npm run build` 做无关改造。
+**锁已解除**：Comdr 已通过；S-UI-0~3 + charts token 代码已落地。S-UI-4 **curl/启服预检已完成**；剩余 **浏览器视觉终验**（WebBridge/CDP 截图矩阵）。仍禁止 push；禁止启动全量 `npm run build` 做无关改造。
 
 ---
 
@@ -241,42 +241,44 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 
 ## 8. 验收总清单
 
-> **分层口径（禁止虚构完成）**  
-> - **代码层**：S-UI-0~3 已交付（见 §12 commit 样例）。  
-> - **工程静态预检**：S-UI-4 已做 tsc/eslint/长页滚动代码审（可勾）。  
-> - **浏览器终验**：WebBridge 路由矩阵 / 假数多窗采样 / Hydration **未跑** → 下列产品/视觉与路由矩阵保持 `[ ]`，标「待 S-UI-4」。
+> **分层口径（禁止虚构完成 · 2026-07-24 S-UI-4 诚实更新）**  
+> - **代码层**：S-UI-0~3 + **S-UI-charts** 已交付（charts/artifacts 绑 design tokens，commit `8ba801a`）。  
+> - **工程 + curl 启服**：`tsc --noEmit` 0；长页滚动代码审；本轮 **真启** 8888/3000 并 curl 路由矩阵（可勾工程项）。  
+> - **浏览器视觉终验**：CDP bridge 无连接 tab / free pages 一度 <5000 → 截图、Hydration、主题无闪白、假数多窗采样 **未做**，§8.1 与矩阵浏览器列保持 `[ ]`。
 
-### 8.1 产品/视觉（浏览器终验 · 待 S-UI-4）
+### 8.1 产品/视觉（浏览器终验 · **未完成**）
 
-- [ ] 首页职责一句话可解释（工位，非官网）· **待 WebBridge**
-- [ ] Token 语义色全站一致；涨红跌绿（A 股）无反 · **代码已绑 token；视觉待 WebBridge**
-- [ ] 指数 sticky 在 main 滚动下可见 · **代码已 sticky；浏览器待终验**
-- [ ] Agent 工位：输入 → 流式 → 工具/进度 → 结论/artifact 路径清晰 · **代码已落地；待 WebBridge**
-- [ ] HITL 批准/驳回控件可达、状态可读 · **代码已落地；待 WebBridge**
-- [ ] provenance 轻量展示（来源/时间）不挡主结论 · **待 WebBridge**
-- [ ] scorecard 维度可读（coverage/agreement/tool/confidence）· **待 WebBridge**
-- [ ] 空态/降级仅 Skeleton 或「—」，无假行情 · **代码层空态已 polish；假数采样待 WebBridge**
-- [ ] 日/夜切换无布局塌陷 · **FOUC 守卫已落地；亮暗终验待 WebBridge**
+- [ ] 首页职责一句话可解释（工位，非官网）· **浏览器未完成**
+- [ ] Token 语义色全站一致；涨红跌绿（A 股）无反 · **代码已绑 token（含 charts）；视觉未截图**
+- [ ] 指数 sticky 在 main 滚动下可见 · **代码已 sticky；浏览器未完成**
+- [ ] Agent 工位：输入 → 流式 → 工具/进度 → 结论/artifact 路径清晰 · **代码已落地；浏览器未完成**
+- [ ] HITL 批准/驳回控件可达、状态可读 · **代码已落地；浏览器未完成**
+- [ ] provenance 轻量展示（来源/时间）不挡主结论 · **浏览器未完成**
+- [ ] scorecard 维度可读（coverage/agreement/tool/confidence）· **浏览器未完成**
+- [ ] 空态/降级仅 Skeleton 或「—」，无假行情 · **curl 侧 market 503 DEGRADED 无假指数；SSR HTML 无 1174.06 类硬编码；多窗采样未做**
+- [ ] 日/夜切换无布局塌陷 · **FOUC 守卫代码已落地；亮暗终验未做**
 
 ### 8.2 工程/纪律
 
 - [x] 未批零编码（审批已通过后才编码）
-- [x] 改动仅 frontend 既有文件 + 本文档/TODO（S-UI-0~3 实现路径）
-- [x] `tsc --noEmit` = 0；改动文件 eslint 0 error（S-UI-4 静态预检）
+- [x] 改动仅 frontend 既有文件 + 本文档/TODO（含 S-UI-charts）
+- [x] `tsc --noEmit` = 0（S-UI-charts + S-UI-4）
 - [x] 未启 Playwright；未全量 vitest（铁律 #2/#3）
 - [x] **未 push**
-- [ ] 铁证：关键页前后截图 + curl 真数对照 · **待 S-UI-4 WebBridge**
+- [x] curl 真数对照：`/health` 200；路由 200；`market_indices` 503 DEGRADED（诚实降级）
+- [ ] 铁证：关键页前后浏览器截图 · **未完成（WebBridge/CDP tab 不可用）**
 
-### 8.3 回归路由矩阵（真测 · 待 S-UI-4 WebBridge）
+### 8.3 回归路由矩阵（curl 已做 · 浏览器视觉未做）
 
-| 路由 | 检查点 | 代码层 | 浏览器终验 |
-|---|---|---|---|
-| `/` | 工位 IA、指数、对话 | 已落地 | [ ] 待 WebBridge |
-| `/dashboard` | 与首页不打架 | 长页滚动代码审通过 | [ ] 待 WebBridge |
-| `/stock/600519` | 名/价/K 线无假数 | — | [ ] 待 WebBridge |
-| `/portfolio` | 皮肤 + 滚动 | 长页滚动代码审通过 | [ ] 待 WebBridge |
-| `/settings` | 主题/Wind 配额展示 | 空/错态代码已落地 | [ ] 待 WebBridge |
-| `/api-docs` 或兼容入口 | 不回归 404 | — | [ ] 待 WebBridge |
+| 路由 | 检查点 | 代码层 | curl HTTP | 浏览器终验 |
+|---|---|---|---|---|
+| `/` | 工位 IA、指数、对话 | 已落地 | [x] 200 | [ ] 未完成 |
+| `/dashboard` | 与首页不打架 | 长页滚动代码审通过 | [x] 200 | [ ] 未完成 |
+| `/stock/600519` | 名/价/K 线无假数 | charts token 已绑 | [x] 200 | [ ] 未完成 |
+| `/portfolio` | 皮肤 + 滚动 | 长页滚动代码审通过 | [x] 200 | [ ] 未完成 |
+| `/settings` | 主题/Wind 配额展示 | 空/错态代码已落地 | [x] 200 | [ ] 未完成 |
+| `/api-docs` 或兼容入口 | 不回归 404 | — | [ ] 本轮未 curl | [ ] 未完成 |
+| `/health`（前后端） | 存活 | — | [x] 8888+3000 200 | — |
 
 ---
 
@@ -304,9 +306,9 @@ UI 的成功标准 = 缩短「问题 → 有证据的决策」路径，而非堆
 
 ## 10. TODO 跟踪
 
-- 跟踪段落：根目录 `TODO.md` → **「UI改造A-D（S-UI-0~3 代码已落地 · 终验待办）」**
-- 方案路径：`docs/design/ui-renovation-plan.md`
-- 状态机：`待 Comdr 审批` → `已通过` → **S-UI-0~3 代码已落地** → `S-UI-4 静态预检完成` → `S-UI-4 终验（WebBridge）` → `关闭`
+- 跟踪段落：根目录 `TODO.md` → **「UI改造A-D … S-UI-charts 已提交 · 浏览器终验部分完成」**
+- 方案路径：`docs/design/ui-renovation-plan.md`（`v1.3-sui4-partial`）
+- 状态机：`待 Comdr 审批` → `已通过` → **S-UI-0~3 代码已落地** → **S-UI-charts 已落地** → `S-UI-4 curl/启服完成` → `S-UI-4 浏览器终验（待 WebBridge）` → `关闭`
 - 任何编码 PR/commit 信息须引用：`ui-renovation-plan.md §x` + 审批状态
 
 ---
