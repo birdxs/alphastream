@@ -59,13 +59,65 @@
    ═══════════════════════════════════════════════ */
 :root {
   --radius: 0.5rem;
-  /* ── 间距Token (V7) ── */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 12px;
-  --space-lg: 16px;
-  --space-xl: 24px;
-  --space-2xl: 32px;
+
+  /* ═══════════════════════════════════════════════
+     S-UI-0 Design Tokens（plan §5 冻结，语义名不可随意改）
+     日间默认；.dark 覆盖夜间值
+     ═══════════════════════════════════════════════ */
+  /* ── 色（语义）日间 ── */
+  --bg-canvas: #F7F8FA;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --border-subtle: #E6E8EF;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+  --accent: #4F46E5;
+  --accent-muted: #EEF2FF;
+  --up: #DC2626;
+  --down: #16A34A;
+  --warn: #D97706;
+  --danger: #B91C1C;
+  --ok: #059669;
+
+  /* ── 字号 ── */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-num: 15px;
+
+  /* ── 间距 space-1…8 ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --space-8: 48px;
+  /* 兼容旧名 → 新阶梯 */
+  --space-xs: var(--space-1);
+  --space-sm: var(--space-2);
+  --space-md: var(--space-3);
+  --space-lg: var(--space-4);
+  --space-xl: var(--space-5);
+  --space-2xl: var(--space-6);
+
+  /* ── 圆角 / 阴影 / z ── */
+  --radius-token-sm: 6px;
+  --radius-token-md: 10px;
+  --radius-token-lg: 16px;
+  --shadow-elev: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --z-sticky: 20;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  /* ── 运动 ── */
+  --ease-std: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-med: 200ms;
 
   /* ── Light模式 毛玻璃系统 ── */
   --glass-bg:           rgba(255, 255, 255, 0.7);
@@ -75,40 +127,40 @@
   --glass-blur:         20px;
   --glass-shadow:       0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
 
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #3737CC;
+  /* shadcn 映射：canvas/surface 对齐 S-UI-0，primary 跟 --accent */
+  --background: var(--bg-canvas);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent);
   --primary-foreground: #f8fafc;
   --secondary: #f1f5f9;
   --secondary-foreground: #1e293b;
   --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #f1f5f9;
+  --muted-foreground: var(--text-secondary);
   --accent-foreground: #1e293b;
-  --destructive: #dc2626;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #3737CC;
-  --chart-1: #3737CC;
-  --chart-2: #46BEA3;
-  --chart-3: #F59E0B;
+  --destructive: var(--danger);
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--accent);
+  --chart-1: var(--accent);
+  --chart-2: var(--down);
+  --chart-3: var(--warn);
   --chart-4: #FF8767;
   --chart-5: #6B5EE4;
   --sidebar: #f8fafc;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #3737CC;
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--accent);
   --sidebar-primary-foreground: #f8fafc;
   --sidebar-accent: #f1f5f9;
   --sidebar-accent-foreground: #1e293b;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #3737CC;
-  /* Stock colors — 默认中国模式 */
-  --stock-up: #EF4444;
-  --stock-down: #10B981;
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--accent);
+  /* Stock colors — 默认中国模式，绑定 S-UI --up/--down */
+  --stock-up: var(--up);
+  --stock-down: var(--down);
 }
 
 /* ═══════════════════════════════════════════════
@@ -116,8 +168,27 @@
    5层半透明背景 + 毛玻璃 + 钴蓝品牌 + AI紫
    ═══════════════════════════════════════════════ */
 .dark {
-  /* ── 背景层级 ── */
-  --bg-base:      #06060F;
+  /* ── S-UI-0 Design Tokens（夜间，plan §5） ── */
+  --bg-canvas: #06060F;
+  --bg-surface: #0E0E1A;
+  --bg-elevated: #16162A;
+  --border-subtle: #2A2A3D;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent: #818CF8;
+  --accent-muted: #1E1B4B;
+  --up: #F87171;
+  --down: #4ADE80;
+  --warn: #FBBF24;
+  --danger: #FCA5A5;
+  --ok: #34D399;
+  --shadow-elev: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --stock-up: var(--up);
+  --stock-down: var(--down);
+
+  /* ── 背景层级（兼容既有 glass/shimmer 工具类） ── */
+  --bg-base:      var(--bg-canvas);
   --bg-surface-0: #0A0A1A;
   --bg-surface-1: #0F0F23;
   --bg-surface-2: #14142B;
@@ -131,73 +202,68 @@
   --glass-blur:         20px;
   --glass-shadow:       inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px rgba(55,55,204,0.08), 0 8px 32px rgba(0,0,0,0.4);
 
-  /* ── 品牌色 ── */
-  --brand-primary:      #3737CC;
-  --brand-primary-light: #4F4FE6;
-  --brand-primary-glow: rgba(55, 55, 204, 0.25);
+  /* ── 品牌色（对齐 S-UI --accent） ── */
+  --brand-primary:      var(--accent);
+  --brand-primary-light: #A5B4FC;
+  --brand-primary-glow: rgba(129, 140, 248, 0.25);
 
   /* ── AI专属色 ── */
   --ai-purple:       #6B5EE4;
   --ai-purple-light: #8578F0;
   --ai-purple-glow:  rgba(107, 94, 228, 0.2);
 
-  /* ── 语义色 ── */
-  --color-up:      #46BEA3;
-  --color-down:    #FF8767;
-  --color-warning: #F59E0B;
-  --color-danger:  #EF4444;
-  --color-success: #10B981;
+  /* ── 语义色别名 → S-UI ── */
+  --color-up:      var(--up);
+  --color-down:    var(--down);
+  --color-warning: var(--warn);
+  --color-danger:  var(--danger);
+  --color-success: var(--ok);
 
-  /* ── 文本层级 ── */
-  --text-primary:   #F0F0F5;
-  --text-secondary: #8888A0;
-  --text-muted:     #707088;
-  --text-inverse:   #06060F;
+  --text-inverse:   var(--bg-canvas);
 
-  /* ── 动效时长 ── */
+  /* ── 动效时长（兼容旧名 + S-UI） ── */
   --duration-instant: 100ms;
-  --duration-fast:    200ms;
-  --duration-normal:  300ms;
+  --duration-fast:    var(--dur-fast);
+  --duration-normal:  var(--dur-med);
   --duration-slow:    500ms;
   --duration-slower:  800ms;
 
   /* ── 缓动函数 ── */
-  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out:    var(--ease-std);
   --ease-in:     cubic-bezier(0.7, 0, 0.84, 0);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── 映射到 shadcn/ui 变量 ── */
-  --background:           var(--bg-surface-0);
+  --background:           var(--bg-canvas);
   --foreground:           var(--text-primary);
-  --card:                 var(--glass-bg);
+  --card:                 var(--bg-surface);
   --card-foreground:      var(--text-primary);
-  --popover:              var(--bg-surface-2);
-  --popover-foreground:   #f1f5f9;
-  --primary:              var(--brand-primary);
-  --primary-foreground:   #f8fafc;
+  --popover:              var(--bg-elevated);
+  --popover-foreground:   var(--text-primary);
+  --primary:              var(--accent);
+  --primary-foreground:   #0F172A;
   --secondary:            var(--bg-surface-2);
   --secondary-foreground: var(--text-primary);
   --muted:                var(--bg-surface-1);
   --muted-foreground:     var(--text-secondary);
-  --accent:               var(--bg-surface-3);
   --accent-foreground:    var(--text-primary);
-  --destructive:          var(--color-danger);
-  --border:               var(--glass-border);
-  --input:                var(--glass-border);
-  --ring:                 var(--brand-primary);
-  --chart-1:              #3737CC;
-  --chart-2:              #46BEA3;
-  --chart-3:              #F59E0B;
+  --destructive:          var(--danger);
+  --border:               var(--border-subtle);
+  --input:                var(--border-subtle);
+  --ring:                 var(--accent);
+  --chart-1:              var(--accent);
+  --chart-2:              var(--down);
+  --chart-3:              var(--warn);
   --chart-4:              #FF8767;
   --chart-5:              #6B5EE4;
   --sidebar:              var(--bg-base);
   --sidebar-foreground:   var(--text-primary);
-  --sidebar-primary:      var(--brand-primary);
-  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-primary:      var(--accent);
+  --sidebar-primary-foreground: #0F172A;
   --sidebar-accent:       var(--bg-surface-2);
   --sidebar-accent-foreground: var(--text-primary);
-  --sidebar-border:       rgba(255, 255, 255, 0.06);
-  --sidebar-ring:         var(--brand-primary);
+  --sidebar-border:       var(--border-subtle);
+  --sidebar-ring:         var(--accent);
 }
 
 /* ═══════════════════════════════════════════════
@@ -239,20 +305,32 @@
 }
 
 /* ═══════════════════════════════════════════════
-   STOCK COLORS (涨跌色 — 双模式)
-   CN模式: 红涨绿跌 | US模式: 蓝绿涨橙跌
+   STOCK COLORS (涨跌色 — 双模式，绑定 S-UI --up/--down)
+   CN模式: 红涨绿跌 | US模式: 绿涨橙跌
    ═══════════════════════════════════════════════ */
 .stock-up   { color: var(--stock-up); }
 .stock-down { color: var(--stock-down); }
 
 :root,
 [data-color-scheme="cn"] {
-  --stock-up:   #EF4444;
-  --stock-down: #10B981;
+  --stock-up:   var(--up);
+  --stock-down: var(--down);
 }
 [data-color-scheme="us"] {
-  --stock-up:   #46BEA3;
+  --stock-up:   var(--down);
   --stock-down: #FF8767;
+}
+
+/* S-UI 语义工具类（涨跌/状态/数字） */
+.text-up { color: var(--up); }
+.text-down { color: var(--down); }
+.text-warn { color: var(--warn); }
+.text-ok { color: var(--ok); }
+.text-danger { color: var(--danger); }
+.bg-accent-muted { background-color: var(--accent-muted); }
+.font-num {
+  font-size: var(--fs-num);
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* ═══════════════════════════════════════════════
@@ -870,7 +948,104 @@
   .typing-cursor,
   .cursor-blink,
   .animate-shimmer,
-  .progress-indeterminate::after {
+  .progress-indeterminate::after,
+  .flash-up::before,
+  .flash-down::before,
+  .stagger-item {
     animation: none !important;
   }
+}
+
+/* ═══════════════════════════════════════════════
+   S-UI-3 — 页面壳 / section / 空态 / 缺少数值哨兵
+   plan: docs/design/ui-renovation-plan.md §5 + §7.3
+   Token 单源：仅用文件顶部 S-UI-0 :root/.dark 定义（禁止二次覆盖，避免循环引用）
+   铁律 #1：缺少数值用「—」，禁止假行情占位。
+   ═══════════════════════════════════════════════ */
+.ui-page {
+  max-width: 56rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding: var(--space-xl, 24px);
+  padding-bottom: 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl, 24px);
+}
+.ui-page-narrow {
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding: var(--space-xl, 24px);
+  padding-bottom: 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl, 24px);
+}
+.ui-page-wide {
+  max-width: 72rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding: var(--space-xl, 24px);
+  padding-bottom: 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl, 24px);
+}
+.ui-page-title {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  color: var(--text-primary, var(--foreground));
+}
+.ui-page-desc {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--text-secondary, var(--muted-foreground));
+  margin-top: 0.25rem;
+}
+.ui-section-title {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary, var(--foreground));
+}
+.ui-section-desc {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--text-secondary, var(--muted-foreground));
+}
+.ui-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg, 16px);
+}
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-2xl, 32px) var(--space-lg, 16px);
+  gap: var(--space-sm, 8px);
+}
+.ui-empty-title {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--text-secondary, var(--muted-foreground));
+}
+.ui-empty-hint {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--text-muted, var(--muted-foreground));
+  opacity: 0.85;
+}
+/* 金融缺少数值哨兵：统一 em dash */
+.ui-dash {
+  color: var(--text-muted, var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+.ui-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
