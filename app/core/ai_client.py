@@ -25,6 +25,9 @@ ERROR_MESSAGES = {
     'AuthenticationError': 'AI服务认证失败，请检查API密钥配置',
     'PermissionDeniedError': 'AI服务认证失败，请检查API密钥配置',
     'APIStatusError': 'AI服务暂时不可用，请稍后重试',
+    # OneAPI/上游 5xx（OpenAI SDK InternalServerError 等）— 勿回落裸 str(exc) 露出 "Error code: 502"
+    'InternalServerError': 'AI服务内部错误，请稍后重试',
+    'BadRequestError': 'AI请求参数错误，请检查输入后重试',
     # httpx 原生超时（流式 for chunk in stream 时可能直接冒泡，类名≠APITimeoutError）
     'ReadTimeout': 'AI分析超时，请稍后重试',
     'ConnectTimeout': '无法连接AI服务，请检查网络',
@@ -56,6 +59,11 @@ def map_ai_exception(exc: Exception, *, prefix: str = 'AI分析出错') -> str:
             return ERROR_MESSAGES['RateLimitError']
         if status is not None and int(status) in (401, 403):
             return ERROR_MESSAGES['AuthenticationError']
+        # 上游 OneAPI/网关 5xx：统一友好文案，避免前端展示裸 Error code: 502 / timeout 噪声
+        if status is not None and int(status) >= 500:
+            if error_type in ERROR_MESSAGES:
+                return ERROR_MESSAGES[error_type]
+            return ERROR_MESSAGES['InternalServerError']
     except (TypeError, ValueError):
         pass
 
@@ -82,6 +90,10 @@ def map_ai_exception(exc: Exception, *, prefix: str = 'AI分析出错') -> str:
         return ERROR_MESSAGES['AuthenticationError']
     if 'connect' in type_l or 'connection' in type_l:
         return ERROR_MESSAGES['APIConnectionError']
+    if 'error code: 502' in msg_l or 'error code: 503' in msg_l or 'error code: 504' in msg_l:
+        return ERROR_MESSAGES['InternalServerError']
+    if 'upstream request failed' in msg_l or 'upstream_error' in msg_l:
+        return ERROR_MESSAGES['InternalServerError']
 
     return f'{prefix}: {msg}' if msg else f'{prefix}: {error_type}'
 
