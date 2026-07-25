@@ -28,6 +28,8 @@ ERROR_MESSAGES = {
     # OneAPI/上游 5xx（OpenAI SDK InternalServerError 等）— 勿回落裸 str(exc) 露出 "Error code: 502"
     'InternalServerError': 'AI服务内部错误，请稍后重试',
     'BadRequestError': 'AI请求参数错误，请检查输入后重试',
+    # 上游容量/过载（OpenAI/OneAPI 等常以 503 原文 "The model is currently overloaded" 回吐）
+    'ModelOverloadedError': '模型繁忙，请稍后重试',
     # httpx 原生超时（流式 for chunk in stream 时可能直接冒泡，类名≠APITimeoutError）
     'ReadTimeout': 'AI分析超时，请稍后重试',
     'ConnectTimeout': '无法连接AI服务，请检查网络',
@@ -39,16 +41,41 @@ ERROR_MESSAGES = {
 }
 
 
+def _is_model_overloaded_message(msg_l: str) -> bool:
+    """识别上游模型过载/容量不足类原文（含半截英文，禁止原样回前端）。"""
+    if not msg_l:
+        return False
+    overloaded_tokens = (
+        'overloaded',
+        'model is currently',
+        'currently unavailable',
+        'capacity',
+        'no available',
+        'server is busy',
+        'too many concurrent',
+        'engine is currently',
+        'high demand',
+        'try again later',
+        'service unavailable',
+    )
+    return any(tok in msg_l for tok in overloaded_tokens)
+
+
 def map_ai_exception(exc: Exception, *, prefix: str = 'AI分析出错') -> str:
     """将 OpenAI/httpx 异常映射为前端可展示的友好文案。
 
-    覆盖：类名表、status_code=429、消息含 timeout/429、httpx.TimeoutException 子树。
+    覆盖：类名表、status_code=429、模型过载/capacity、消息含 timeout/429、httpx.TimeoutException 子树。
+    原始英文详情仅应由调用方 logger.error 保留，本函数不向用户透传半截上游原文。
     """
     if exc is None:
         return f'{prefix}: 未知错误'
     error_type = type(exc).__name__
     msg = str(exc) if exc is not None else ''
     msg_l = msg.lower()
+
+    # 0) 上游模型过载 / 容量类（可能伪装成 503/InternalServerError/APIError，优先于通用 5xx）
+    if _is_model_overloaded_message(msg_l) or 'overloaded' in error_type.lower():
+        return ERROR_MESSAGES['ModelOverloadedError']
 
     # 1) status_code 优先（APIStatusError 等通用类名需按码细分）
     status = getattr(exc, 'status_code', None)
@@ -59,6 +86,9 @@ def map_ai_exception(exc: Exception, *, prefix: str = 'AI分析出错') -> str:
             return ERROR_MESSAGES['RateLimitError']
         if status is not None and int(status) in (401, 403):
             return ERROR_MESSAGES['AuthenticationError']
+        # 503 常伴随 overloaded 文案；未命中 0) 时仍走通用内部错误/不可用
+        if status is not None and int(status) == 503:
+            return ERROR_MESSAGES['ModelOverloadedError']
         # 上游 OneAPI/网关 5xx：统一友好文案，避免前端展示裸 Error code: 502 / timeout 噪声
         if status is not None and int(status) >= 500:
             if error_type in ERROR_MESSAGES:
@@ -91,11 +121,21 @@ def map_ai_exception(exc: Exception, *, prefix: str = 'AI分析出错') -> str:
     if 'connect' in type_l or 'connection' in type_l:
         return ERROR_MESSAGES['APIConnectionError']
     if 'error code: 502' in msg_l or 'error code: 503' in msg_l or 'error code: 504' in msg_l:
+        if 'error code: 503' in msg_l:
+            return ERROR_MESSAGES['ModelOverloadedError']
         return ERROR_MESSAGES['InternalServerError']
     if 'upstream request failed' in msg_l or 'upstream_error' in msg_l:
         return ERROR_MESSAGES['InternalServerError']
 
-    return f'{prefix}: {msg}' if msg else f'{prefix}: {error_type}'
+    # 5) 兜底：仍带 prefix，但截断过长/半截英文原文，避免 UI 出现 "The model is currently"
+    if msg:
+        # 若仍像英文上游原文（首字母大写长句），用通用文案，不直接透传
+        if len(msg) > 12 and msg[:1].isupper() and any(c.isalpha() and c.isascii() for c in msg[:40]):
+            ascii_ratio = sum(1 for c in msg[:80] if ord(c) < 128) / max(1, min(80, len(msg)))
+            if ascii_ratio > 0.85 and not any('\u4e00' <= c <= '\u9fff' for c in msg):
+                return ERROR_MESSAGES['APIStatusError']
+        return f'{prefix}: {msg}'
+    return f'{prefix}: {error_type}'
 
 
 def get_ai_client():

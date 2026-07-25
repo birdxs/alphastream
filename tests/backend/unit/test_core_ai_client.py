@@ -363,6 +363,42 @@ def test_T017b_map_ai_exception_status_429(ai_client_mod):
     assert msg == '服务繁忙，请稍后重试（API限流）'
 
 
+def test_T017d_map_ai_exception_model_overloaded(ai_client_mod):
+    """上游 model overloaded / capacity 原文不得透传半截英文，须映射为中文友好文案。"""
+
+    class APIError(Exception):
+        def __init__(self, message, status_code=None):
+            super().__init__(message)
+            self.status_code = status_code
+
+    # 典型 OpenAI/OneAPI 原文（含半截截断场景）
+    msg = ai_client_mod.map_ai_exception(
+        APIError('The model is currently overloaded with other requests.'),
+        prefix='AI流式读取出错',
+    )
+    assert msg == '模型繁忙，请稍后重试'
+    assert 'currently' not in msg
+    assert 'overloaded' not in msg
+
+    msg_partial = ai_client_mod.map_ai_exception(
+        APIError('The model is currently'),
+        prefix='AI流式读取出错',
+    )
+    assert msg_partial == '模型繁忙，请稍后重试'
+
+    msg_503 = ai_client_mod.map_ai_exception(
+        APIError('service unavailable', status_code=503),
+        prefix='AI流式读取出错',
+    )
+    assert msg_503 == '模型繁忙，请稍后重试'
+
+    msg_capacity = ai_client_mod.map_ai_exception(
+        APIError('Insufficient capacity, please try again later'),
+        prefix='AI流式读取出错',
+    )
+    assert msg_capacity == '模型繁忙，请稍后重试'
+
+
 def test_T017c_chat_with_tools_stream_read_timeout_maps(ai_client_mod):
     """chat_with_tools_stream 迭代中 ReadTimeout 须返回友好超时，而非原始 traceback 文案。"""
     import httpx
