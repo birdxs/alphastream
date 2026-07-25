@@ -1,17 +1,18 @@
-// Input: 无 props；读取 chat-store（messages/isStreaming/artifacts）与 agent-store（isAnalyzing）驱动三栏
-// Output: 首页主工作台 — 顶栏指数 + 可拖拽三栏（对话主区 | 结果坞 | Agent 工位）
-// Pos: App Router `/` 入口；S-UI-2 IA：主次清晰（对话>结果>工位）；高度链 layout.tsx main overflow-y-auto
+// Input: 无 props；读取 chat-store（messages/isStreaming/artifacts）与 agent-store（isAnalyzing）驱动栏位
+// Output: 首页主工作台 — 顶栏指数 + 桌面四栏（历史侧栏 | 对话主区 | 结果坞 | Agent 工位）
+// Pos: App Router `/` 入口；S-UI-2 IA：主次清晰（对话>结果>工位）；挂载 ConversationSidebar 恢复「新对话」
 // 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { ChatPanel } from "@/components/chat/chat-panel";
+import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
 import { ArtifactPanel } from "@/components/chat/artifact-panel";
 import { AgentSidePanel } from "@/components/agent/agent-side-panel";
 import { MarketOverview } from "@/components/market/market-overview";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useAgentStore } from "@/lib/stores/agent-store";
-import { PanelLeft, PanelRight, MessageSquare, Bot } from "lucide-react";
+import { PanelLeft, PanelRight, MessageSquare, Bot, History } from "lucide-react";
 
 const STORAGE_KEY = "stockanal-chat-width";
 /** S-UI-2：对话主区默认略宽，突出主路径 */
@@ -23,6 +24,8 @@ export default function HomePage() {
   const [chatWidth, setChatWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  /** 桌面端对话历史侧栏：默认展开，保证「新对话」入口可见（S-UI 改版后曾未挂载） */
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [mobileTab, setMobileTab] = useState<"chat" | "artifact">("chat");
   const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -134,15 +137,58 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 桌面端：可拖拽三栏 — 对话主区 | 结果坞 | Agent 工位 */}
+      {/* 桌面端：历史侧栏 + 可拖拽栏 — 对话主区 | 结果坞 | Agent 工位 */}
       <div ref={containerRef} className="hidden md:flex flex-1 min-h-0 relative">
+        {/* 对话历史侧栏：含「新对话」主入口（组件既有；此前未挂载导致入口缺失） */}
+        {historyOpen ? (
+          <aside
+            className="h-full min-h-0 shrink-0"
+            data-region="conversation-history"
+            aria-label="对话历史"
+            id="conversation-history-panel"
+          >
+            <ConversationSidebar />
+          </aside>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="h-full w-9 shrink-0 border-r border-border/40 dark:border-white/[0.06] flex flex-col items-center pt-3 gap-2 text-muted-foreground hover:text-[#3737CC] hover:bg-[#3737CC]/5 transition-colors"
+            title="展开对话历史 / 新对话"
+            aria-label="展开对话历史"
+            aria-expanded={false}
+            aria-controls="conversation-history-panel"
+          >
+            <History className="h-4 w-4" />
+            <span
+              className="text-[10px] tracking-wide"
+              style={{ writingMode: "vertical-rl" }}
+            >
+              历史
+            </span>
+          </button>
+        )}
+
         {/* 对话主区 */}
         <section
-          className="h-full min-h-0 overflow-hidden border-r border-border/40 dark:border-white/[0.04]"
+          className="h-full min-h-0 overflow-hidden border-r border-border/40 dark:border-white/[0.04] relative"
           style={{ width: `${chatWidth}%`, transition: isDragging ? "none" : "width 0.15s ease" }}
           data-region="chat-primary"
           aria-label="对话主区"
         >
+          {historyOpen && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(false)}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 h-12 w-4 rounded-r-md flex items-center justify-center bg-foreground/[0.04] dark:bg-white/[0.04] text-muted-foreground hover:bg-[#3737CC]/10 hover:text-[#3737CC] transition-colors"
+              title="收起对话历史"
+              aria-label="收起对话历史"
+              aria-expanded={true}
+              aria-controls="conversation-history-panel"
+            >
+              <PanelLeft className="h-3 w-3 rotate-180" />
+            </button>
+          )}
           <ChatPanel />
         </section>
 

@@ -1,10 +1,11 @@
 // Input: chat-store + useChatStream（含 SSE meta.intent）
-// Output: 完整Chat面板 — 头部 + 消息/欢迎 + 建议 + 输入；intent badge 仅展示已知 IntentKind 中文标签
+// Output: 完整Chat面板 — 头部（含新对话）+ 消息/欢迎 + 建议 + 输入；intent badge 仅展示已知 IntentKind 中文标签
 // Pos: 首页中栏；G11 铁律名称：无 meta.intent / 未知 intent 则隐藏 badge，禁止 stock_code 冒充
 
 "use client";
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { MessageList } from "./message-list";
@@ -22,12 +23,25 @@ function ChatPanelInner() {
   const messages = useChatStore(s => s.messages);
   const isStreaming = useChatStore(s => s.isStreaming);
   const lastIntentMeta = useChatStore(s => s.lastIntentMeta);
+  const setActiveConversation = useChatStore(s => s.setActiveConversation);
+  const setMessages = useChatStore(s => s.setMessages);
+  const clearArtifacts = useChatStore(s => s.clearArtifacts);
+  const setFollowUps = useChatStore(s => s.setFollowUps);
   const searchParams = useSearchParams();
   const prefillHandled = useRef(false);
 
   const handleSend = (message: string, options: { stock_code?: string; market_type?: string }) => {
     sendMessage(message, options);
   };
+
+  /** 与 ConversationSidebar.newConversation 同源：清空本地态，下次发送建新会话 */
+  const handleNewConversation = useCallback(() => {
+    if (isStreaming) return;
+    setActiveConversation(null);
+    setMessages([]);
+    clearArtifacts();
+    setFollowUps([]);
+  }, [isStreaming, setActiveConversation, setMessages, clearArtifacts, setFollowUps]);
 
   // 处理 URL 查询参数预填充：?q= 直接发送，?prefill= 预填输入框
   useEffect(() => {
@@ -56,15 +70,15 @@ function ChatPanelInner() {
     <div className="flex flex-col h-full min-h-0 border-l-2 border-[#3737CC]/20 bg-gradient-to-b from-foreground/[0.02] dark:from-white/[0.02] to-transparent">
       {/* Header — h-10与artifact/agent对齐，shrink-0避免被squeeze；不用z-index避免覆盖sibling列 */}
       <div className="relative flex items-center justify-between px-3 h-10 border-b border-border/60 dark:border-white/[0.08] bg-background dark:bg-[#0A0A1A] shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="relative w-1.5 h-1.5 group/indicator cursor-default">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative w-1.5 h-1.5 group/indicator cursor-default shrink-0">
             <div className="absolute inset-0 rounded-full bg-[#3737CC] animate-ping opacity-75" />
             <div className="relative w-1.5 h-1.5 rounded-full bg-[#3737CC]" />
             <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 rounded-md bg-popover dark:bg-[#1a1a2e] border border-border dark:border-white/[0.1] text-[10px] text-[#46BEA3] whitespace-nowrap opacity-0 group-hover/indicator:opacity-100 transition-opacity duration-200 pointer-events-none z-50 shadow-lg">
               AI服务在线
             </div>
           </div>
-          <span className="text-xs font-medium text-foreground/80">AI分析助手</span>
+          <span className="text-xs font-medium text-foreground/80 truncate">AI分析助手</span>
           {/* G11：仅当 meta.intent 命中已知 IntentKind 时展示中文 badge；否则隐藏（铁律 #1 名称） */}
           {(() => {
             const raw = lastIntentMeta?.intent;
@@ -75,7 +89,7 @@ function ChatPanelInner() {
             return (
               <span
                 data-testid="chat-intent-badge"
-                className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#3737CC]/30 text-[#3737CC] dark:text-[#9aa0ff] bg-[#3737CC]/5"
+                className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#3737CC]/30 text-[#3737CC] dark:text-[#9aa0ff] bg-[#3737CC]/5 shrink-0"
                 title={
                   typeof lastIntentMeta?.confidence === 'number'
                     ? `intent conf=${lastIntentMeta.confidence}`
@@ -87,6 +101,18 @@ function ChatPanelInner() {
             );
           })()}
         </div>
+        <button
+          type="button"
+          onClick={handleNewConversation}
+          disabled={isStreaming}
+          data-testid="chat-panel-new-conversation"
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] font-medium text-[#3737CC] dark:text-[#9aa0ff] border border-[#3737CC]/25 bg-[#3737CC]/5 hover:bg-[#3737CC]/10 disabled:opacity-50 disabled:pointer-events-none transition-colors shrink-0"
+          title="新开对话（清空当前会话）"
+          aria-label="新开对话"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          新对话
+        </button>
       </div>
 
       {/* Content：单层滚动容器，避免与 MessageList 双滚动条 */}
