@@ -5204,7 +5204,12 @@ def ai_chat_stream():
                 raise TimeoutError(f"AI对话处理超时（已耗时{int(elapsed)}秒，限制{AI_CHAT_TIMEOUT}秒）")
 
         def emit(event_type, data):
-            return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
+            # 防御：usage 等嵌套 SDK 对象偶发不可 JSON 序列化时不中断 SSE
+            try:
+                body = _json.dumps(data, ensure_ascii=False)
+            except TypeError:
+                body = _json.dumps(data, ensure_ascii=False, default=str)
+            return f"event: {event_type}\ndata: {body}\n\n"
 
         # 全程绑定持仓 ContextVar（含 worker 线程 copy_context 语义靠 portfolio_context 外层 + worker 内 set）
         with portfolio_context(portfolio_snapshot):
@@ -5737,7 +5742,12 @@ def ai_agent_analyze_stream():
         import json as _json
 
         def emit(event_type, data):
-            return f"event: {event_type}\ndata: {_json.dumps(data, ensure_ascii=False)}\n\n"
+            # 防御：EVENT_TOKEN_GENERATED/usage 可能含 SDK nested 对象，避免中断整条 SSE
+            try:
+                body = _json.dumps(data, ensure_ascii=False)
+            except TypeError:
+                body = _json.dumps(data, ensure_ascii=False, default=str)
+            return f"event: {event_type}\ndata: {body}\n\n"
 
         # 创建SSE桥接队列
         event_bus = get_event_bus()

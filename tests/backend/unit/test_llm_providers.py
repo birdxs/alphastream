@@ -220,12 +220,40 @@ class TestStreamParsing:
         usage.prompt_cache_hit_tokens = 80
         usage.prompt_cache_miss_tokens = 20
         usage.completion_tokens_details = None
+        usage.prompt_tokens_details = None
         chunk = _make_chunk(usage=usage)
         chunk.choices = []
         _, _, _, u = a.parse_stream_chunk(chunk)
         assert u["prompt_cache_hit_tokens"] == 80
         assert u["prompt_cache_miss_tokens"] == 20
         assert u["prompt_tokens"] == 100
+
+    def test_usage_details_are_json_serializable(self):
+        """OpenAI CompletionTokensDetails 等 SDK 对象不得透传到 SSE json.dumps。"""
+        import json
+
+        a = DeepSeekV4Adapter()
+        details = MagicMock()
+        details.reasoning_tokens = 12
+        details.audio_tokens = None
+        details.model_dump = MagicMock(
+            return_value={"reasoning_tokens": 12, "audio_tokens": None}
+        )
+        usage = MagicMock()
+        usage.prompt_tokens = 10
+        usage.completion_tokens = 5
+        usage.total_tokens = 15
+        usage.prompt_cache_hit_tokens = None
+        usage.prompt_cache_miss_tokens = None
+        usage.completion_tokens_details = details
+        usage.prompt_tokens_details = None
+        chunk = _make_chunk(usage=usage)
+        chunk.choices = []
+        _, _, _, u = a.parse_stream_chunk(chunk)
+        assert isinstance(u["completion_tokens_details"], dict)
+        assert u["completion_tokens_details"]["reasoning_tokens"] == 12
+        # 关键：可直接 json.dumps，不会 TypeError
+        json.dumps(u, ensure_ascii=False)
 
     def test_empty_choices_safe(self):
         a = DeepSeekV4Adapter()

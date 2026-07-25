@@ -19,6 +19,47 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def _to_plain_jsonable(value: Any) -> Any:
+    """把 OpenAI SDK / Pydantic 嵌套对象压成 json.dumps 可序列化结构。
+
+    背景：stream chunk.usage.completion_tokens_details 常为
+    openai.types.completion_usage.CompletionTokensDetails，原样塞进 SSE
+    会触发 TypeError: Object of type CompletionTokensDetails is not JSON serializable，
+    导致 /api/ai/chat 与 /api/ai/agent-analyze 流式连接被服务端中断（前端 network error）。
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {k: _to_plain_jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_plain_jsonable(v) for v in value]
+    # Pydantic v2
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _to_plain_jsonable(model_dump())
+        except Exception:
+            pass
+    # Pydantic v1
+    as_dict = getattr(value, "dict", None)
+    if callable(as_dict):
+        try:
+            return _to_plain_jsonable(as_dict())
+        except Exception:
+            pass
+    # 普通对象：只取公开属性
+    if hasattr(value, "__dict__") and not isinstance(value, type):
+        try:
+            return {
+                k: _to_plain_jsonable(v)
+                for k, v in vars(value).items()
+                if not str(k).startswith("_")
+            }
+        except Exception:
+            pass
+    return str(value)
+
+
 class ReasoningAdapter:
     """provider 适配器基类。子类实现请求归一化与流式解码的差异。"""
 
@@ -95,8 +136,13 @@ class ReasoningAdapter:
                     # DeepSeek V4 prefix cache 字段透传
                     "prompt_cache_hit_tokens": getattr(u, "prompt_cache_hit_tokens", None),
                     "prompt_cache_miss_tokens": getattr(u, "prompt_cache_miss_tokens", None),
-                    # OpenAI o1 reasoning token 字段
-                    "completion_tokens_details": getattr(u, "completion_tokens_details", None),
+                    # OpenAI o1/reasoning token 字段（必须压成 plain dict，禁止 SDK 对象透传）
+                    "completion_tokens_details": _to_plain_jsonable(
+                        getattr(u, "completion_tokens_details", None)
+                    ),
+                    "prompt_tokens_details": _to_plain_jsonable(
+                        getattr(u, "prompt_tokens_details", None)
+                    ),
                 }
         except Exception:
             pass
