@@ -532,3 +532,50 @@ def test_concept_fund_flow_fallback_to_name_list(analyzer):
     # 净额不可假装为真实资金流
     assert result["data"][0].get("net_flow") is None
 
+
+# ============================================================================
+# [DP-P1-4] 个股资金流 Efinance 降级测试
+# ============================================================================
+
+def test_individual_fund_flow_akshare_success(analyzer):
+    """主源 AkShare 成功"""
+    df = _mock_flow_df(5)
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow", return_value=df):
+        result = analyzer.get_individual_fund_flow("600519", market_type="sh")
+
+    assert result is not None
+    assert isinstance(result.get("data"), list)
+    assert len(result["data"]) == 5
+    assert result.get("amount_unit") == "yuan"
+    # source 可能是 akshare 或 None（旧代码）
+    assert result.get("source") in ["akshare", None]
+
+
+def test_individual_fund_flow_akshare_empty_fallback_efinance(analyzer):
+    """AkShare 返回空 → Efinance 降级成功"""
+    empty_df = pd.DataFrame()
+    ef_df = _mock_flow_df(3)
+
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow", return_value=empty_df), \
+         patch("app.adapters.efinance_adapter.EfinanceAdapter.get_individual_fund_flow", return_value=ef_df):
+        result = analyzer.get_individual_fund_flow("600519", market_type="sh")
+
+    assert result is not None
+    assert isinstance(result.get("data"), list)
+    assert len(result["data"]) == 3
+    assert result.get("source") == "efinance"
+    assert result.get("amount_unit") == "yuan"
+
+
+def test_individual_fund_flow_both_sources_fail(analyzer):
+    """AkShare + Efinance 全失败 → 降级空数据"""
+    with patch("app.analysis.capital_flow_analyzer.ak.stock_individual_fund_flow", side_effect=Exception("网络错误")), \
+         patch("app.adapters.efinance_adapter.EfinanceAdapter.get_individual_fund_flow", side_effect=Exception("也挂了")):
+        result = analyzer.get_individual_fund_flow("600519", market_type="sh")
+
+    assert result is not None
+    assert result.get("data") == []
+    assert result.get("source") == "degraded"
+    assert result.get("amount_unit") == "yuan"
+    # 铁律 #1：不假造数据
+

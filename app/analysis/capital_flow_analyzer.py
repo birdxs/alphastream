@@ -595,18 +595,35 @@ class CapitalFlowAnalyzer:
                 if (now_cn() - cache_time).total_seconds() < 3600:
                     return cached_data
 
-            # 从akshare获取数据
+            # 主源：akshare
             flow_data = ak.stock_individual_fund_flow(stock=stock_code, market=market_type)
 
             # [I2-2026-04-15] None/空 guard: 某些股票/市场组合akshare会返回None而非抛异常
+            data_source = 'akshare'  # [DP-P1-4] 默认主源
             if flow_data is None or (hasattr(flow_data, 'empty') and flow_data.empty):
-                self.logger.warning(f"akshare 返回空数据 stock={stock_code} market={market_type}, 降级为空数据")
-                return {'data': [], 'source': 'degraded', 'reason': 'akshare_empty', 'amount_unit': 'yuan'}
+                self.logger.warning(f"akshare 返回空数据 stock={stock_code} market={market_type}, 尝试 Efinance 降级")
+                # [DP-P1-4] 降级：Efinance
+                try:
+                    from app.adapters.efinance_adapter import EfinanceAdapter
+                    ef_adapter = EfinanceAdapter()
+                    ef_df = ef_adapter.get_individual_fund_flow(stock_code)
+
+                    if ef_df is not None and not ef_df.empty:
+                        self.logger.info(f"Efinance 降级成功 stock={stock_code}")
+                        flow_data = ef_df
+                        data_source = 'efinance'  # 标记降级源
+                    else:
+                        self.logger.warning(f"Efinance 也返回空，降级为空数据")
+                        return {'data': [], 'source': 'degraded', 'reason': 'all_sources_empty', 'amount_unit': 'yuan'}
+                except Exception as ef_err:
+                    self.logger.warning(f"Efinance 降级失败 stock={stock_code}: {type(ef_err).__name__}: {ef_err}")
+                    return {'data': [], 'source': 'degraded', 'reason': 'all_sources_failed', 'amount_unit': 'yuan'}
 
             # 处理数据
             result = {
                 "stock_code": stock_code,
                 "amount_unit": "yuan",
+                "source": data_source,  # [DP-P1-4] 记录实际来源
                 "data": []
             }
 
@@ -653,6 +670,25 @@ class CapitalFlowAnalyzer:
             return result
         except Exception as e:
             self._log_upstream_failure("getting individual fund flow", e)
+            # [DP-P1-4] 异常时也尝试 Efinance 降级
+            try:
+                from app.adapters.efinance_adapter import EfinanceAdapter
+                ef_adapter = EfinanceAdapter()
+                ef_df = ef_adapter.get_individual_fund_flow(stock_code)
+
+                if ef_df is not None and not ef_df.empty:
+                    self.logger.info(f"Efinance 降级成功（异常路径） stock={stock_code}")
+                    # 简化处理 Efinance 数据
+                    result = {
+                        "stock_code": stock_code,
+                        "amount_unit": "yuan",
+                        "data": ef_df.to_dict('records'),
+                        "source": "efinance"
+                    }
+                    return result
+            except Exception as ef_err:
+                self.logger.warning(f"Efinance 降级失败（异常路径） stock={stock_code}: {type(ef_err).__name__}: {ef_err}")
+
             return {'data': [], 'source': 'degraded', 'reason': str(e), 'amount_unit': 'yuan'}
 
     def get_sector_stocks(self, sector):
