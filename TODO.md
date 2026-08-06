@@ -1,5 +1,22 @@
 # TODO
 
+## DP-P1-3 + DP-P2-1 实时数据与缓存优化（2026-08-05）
+
+**状态**：✅ **已完成**
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| DP-P1-3: quote_batch 接入实时域 | ✅ | A 股优先 `a_stock_realtime`，失败降级 K 线；添加 `source` 字段和 `X-Data-Source` header |
+| DP-P2-1: adapters/status 缓存 | ✅ | 60s TTL 缓存，`X-Cache` header，减少健康检查频率 |
+| 测试覆盖 | ✅ | `test_stock_quote_batch.py` (8 个) + `test_adapters_status_cache.py` (3 个) |
+| Commit | ✅ | `5977bcb` (主要代码) + `c01e0ef` (测试修复) |
+
+**遗留问题**：
+- 测试状态污染：批量运行时 `test_quote_batch_fallback_to_kline` 偶发失败（单独运行通过）
+- 建议：使用 `pytest --forked` 或按类隔离运行
+
+---
+
 ## Skill 吸收与处置（2026-08-05）
 
 **状态**：✅ **已完成删除与降级补强**

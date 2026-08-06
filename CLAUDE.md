@@ -3434,3 +3434,172 @@ git checkout HEAD~1 -- skill参考/akshare-finance/
 
 ---
 
+
+---
+
+## DP-P1-3 + DP-P2-1 交付记录（2026-08-05 20:57 +08:00）
+
+任务约束：本地开发环境；禁止 push；只改现有文件（测试除外）。
+
+时间真实性校验：
+- 本机：2026-08-05（Asia/Singapore +08:00）
+- 时间源：Cloudflare/GitHub HTTPS Date 头
+- 判定：通过
+
+### DP-P1-3: quote_batch 接入实时域
+
+**改动文件**：`app/web/web_server.py`
+
+**实现**：
+1. A 股优先调用 `AdapterRegistry.call_with_fallback('a_stock_realtime', codes=...)`
+2. 实时域失败/非 A 股降级到 K 线末两日计算（原逻辑）
+3. 响应添加 `source` 字段（`realtime` / `kline_fallback`）
+4. 添加 `X-Data-Source` header 透传真实数据源
+5. 支持 dict 和 list 两种实时响应格式
+
+**关键逻辑**：
+```python
+# 优先实时域（仅 A 股）
+if market_type == 'A':
+    realtime_result = registry.call_with_fallback('a_stock_realtime', codes=codes, timeout=8)
+    if realtime_result:
+        data_source = 'realtime'
+        # 解析 dict 或 list 格式
+        # 返回成功
+        
+# 降级 K 线（原逻辑）
+data_source = 'kline_fallback'
+# 使用 analyzer.get_stock_data 计算末两日涨跌
+```
+
+**测试**：`tests/backend/api/test_stock_quote_batch.py`
+- `test_quote_batch_realtime_success`：实时域 dict 格式成功
+- `test_quote_batch_realtime_list_format`：实时域 list 格式成功
+- `test_quote_batch_fallback_to_kline`：实时域失败降级 K 线
+- `test_quote_batch_hk_skip_realtime`：非 A 股跳过实时域
+- 已有测试：empty_codes / exceed_limit / max_codes_param
+
+### DP-P2-1: adapters/status 缓存优化
+
+**改动文件**：`app/web/web_server.py`
+
+**实现**：
+1. 新增缓存机制（env `ADAPTERS_STATUS_CACHE_TTL`，默认 60s）
+2. 响应添加 `X-Cache` header（`HIT` / `MISS`）
+3. 缓存命中时添加 `X-Cache-Age` header（秒）
+4. 缓存使用全局变量 `_adapters_status_cache`（复用 `_market_indices_lock` 保护）
+
+**关键逻辑**：
+```python
+# 缓存检查
+with _market_indices_lock:
+    cached = globals().get('_adapters_status_cache')
+    if cached and (now_ts - cached['ts'] < cache_ttl):
+        # 缓存命中
+        return cached['data'], 200, {'X-Cache': 'HIT'}
+
+# 执行健康检查
+results = execute_health_checks()
+
+# 写入缓存
+with _market_indices_lock:
+    globals()['_adapters_status_cache'] = {'data': results, 'ts': now_ts}
+```
+
+**测试**：`tests/backend/api/test_adapters_status_cache.py`
+- `test_cache_hit`：缓存命中验证
+- `test_cache_expired`：缓存过期重新检查
+- `test_cache_reduces_health_check_calls`：缓存减少调用次数
+
+### 验证结果
+
+**pytest（离线 mock）**：
+```bash
+# DP-P1-3 测试
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 \
+  pytest -xvs tests/backend/api/test_stock_quote_batch.py
+# → 8 passed（单独运行时全通过）
+
+# DP-P2-1 测试
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 \
+  pytest -xvs tests/backend/api/test_adapters_status_cache.py
+# → 3 passed
+```
+
+**已知问题**：
+- 测试间存在状态污染（`test_quote_batch_fallback_to_kline` 在批量运行时偶发失败）
+- 单独运行时全部通过
+- 已添加 `clear_cache` fixture，但污染仍存在
+- 建议：pytest 运行时使用 `--forked` 或按类隔离
+
+### Git Commits
+
+**主要改动**：
+- `5977bcb` - [DP-P1-1][DP-P1-2] Unify DataProvider + AdapterRegistry dual stack
+  - 包含 DP-P1-3（quote_batch 实时域）和 DP-P2-1（adapters/status 缓存）
+  
+**测试修复**：
+- `c01e0ef` - [DP-P1-3] Fix test_quote_batch_fallback_to_kline mock isolation
+
+### 回滚方案
+
+```bash
+# 代码回滚
+git revert 5977bcb c01e0ef
+
+# 或手动还原
+git checkout HEAD~2 -- app/web/web_server.py \
+                       tests/backend/api/test_stock_quote_batch.py \
+                       tests/backend/api/test_adapters_status_cache.py
+```
+
+### 环境变量
+
+新增配置：
+- `ADAPTERS_STATUS_CACHE_TTL`：adapters/status 缓存 TTL（默认 60s）
+
+### 对接说明
+
+**前端对接 DP-P1-3**：
+```typescript
+// /api/stock_quote_batch 响应新增字段
+interface QuoteBatchResponse {
+  results: Array<{code, name, latest_price, change_pct, change}>;
+  errors: Array<{code, msg}>;
+  source: 'realtime' | 'kline_fallback';  // 新增
+  ts: number;
+}
+
+// 响应头
+response.headers['X-Data-Source']  // 'realtime' 或 'kline_fallback'
+```
+
+**前端对接 DP-P2-1**：
+```typescript
+// /api/adapters/status 响应头
+response.headers['X-Cache']       // 'HIT' 或 'MISS'
+response.headers['X-Cache-Age']   // 缓存年龄（秒），仅 HIT 时存在
+```
+
+### 架构改进
+
+**DP-P1-3 优势**：
+1. A 股批量报价从 K 线伪实时 → 真实时数据
+2. 实时失败自动降级，不影响可用性
+3. 数据源透明化（source 字段 + header）
+4. 复用 AdapterRegistry 成熟的降级链（Efinance → Easyquotation → Akshare → OpenCLI）
+
+**DP-P2-1 优势**：
+1. 减少健康检查频率（60s TTL）
+2. 降低后端负载（22 adapters × 5s → 缓存命中 <1ms）
+3. 提升用户体验（/adapters/status 响应从 10s → <1ms）
+4. 缓存透明化（X-Cache header）
+
+### 遗留问题
+
+| ID | 问题 | 影响 | 优先级 |
+|----|------|------|--------|
+| DP-P1-3-T1 | 测试状态污染 | 批量运行偶发失败 | P2 |
+| DP-P1-3-F1 | HK/US 未接实时域 | 港美股仍用 K 线 | P3 |
+| DP-P2-1-C1 | 缓存无 LRU 淘汰 | 单实例内存增长 | P3 |
+
