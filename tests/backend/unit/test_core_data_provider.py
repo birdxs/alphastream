@@ -52,20 +52,26 @@ def test_singleton_identity():
 
 
 def test_get_stock_history_uses_fallback_and_cache():
-    """get_stock_history 走 fallback，第二次走缓存。"""
+    """get_stock_history 走 fallback，第二次走缓存（返回原始 source）。"""
     dp = _build_provider_with_mock_fallback()
     df = pd.DataFrame({"date": ["2025-01-01"], "open": [1.0],
                        "high": [2.0], "low": [0.9], "close": [1.5],
                        "volume": [100]})
-    dp.fallback.execute.return_value = df
 
-    r1 = dp.get_stock_history("600519", "2025-01-01", "2025-01-31")
-    assert not r1.empty
-    assert dp.fallback.execute.call_count == 1
-    # 第二次应命中缓存
-    r2 = dp.get_stock_history("600519", "2025-01-01", "2025-01-31")
-    assert dp.fallback.execute.call_count == 1
-    assert list(r2.columns) == list(df.columns)
+    # Mock Registry 抛异常，强制走 FallbackManager（整个测试期间有效）
+    with patch.object(dp._registry, 'call_with_fallback', side_effect=Exception("Registry failed")):
+        with patch.object(dp.fallback, 'execute', return_value=df) as mock_fallback:
+            # 第一次调用
+            r1, source1 = dp.get_stock_history("600519", "2025-01-01", "2025-01-31")
+            assert not r1.empty
+            assert source1 == 'fallback'
+            assert mock_fallback.call_count == 1
+
+            # 第二次调用：缓存命中，但返回原始 source（设计行为）
+            r2, source2 = dp.get_stock_history("600519", "2025-01-01", "2025-01-31")
+            assert mock_fallback.call_count == 1  # fallback 不再被调用
+            assert source2 == 'fallback'  # 缓存返回原始 source
+            assert list(r2.columns) == list(df.columns)
 
 
 def test_get_stock_info_caches_dict():
@@ -122,8 +128,10 @@ def test_empty_history_not_cached():
     """空 DataFrame 不应写入缓存。"""
     dp = _build_provider_with_mock_fallback()
     dp.fallback.execute.return_value = pd.DataFrame()
-    r1 = dp.get_stock_history("000001", "2025-01-01", "2025-01-31")
+    r1, source1 = dp.get_stock_history("000001", "2025-01-01", "2025-01-31")
     assert r1.empty
+    assert source1 == 'empty'
     # 第二次还会再调 fallback（未缓存）
-    r2 = dp.get_stock_history("000001", "2025-01-01", "2025-01-31")
+    r2, source2 = dp.get_stock_history("000001", "2025-01-01", "2025-01-31")
     assert dp.fallback.execute.call_count == 2
+    assert source2 == 'empty'
