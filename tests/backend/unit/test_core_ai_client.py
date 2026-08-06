@@ -713,3 +713,102 @@ def test_tool_call_payloads_normalize_provenance(ai_client_mod):
             assert e.get('source')
             assert 'price' not in e and 'close' not in e and 'pe' not in e
             assert set(e.keys()) <= {'source', 'tool', 'ts', 'digest'}
+
+
+# ============ T029 thinking mode: reasoning_content 提取与回传 ============
+def test_T029_thinking_mode_extracts_reasoning_content(ai_client_mod):
+    """thinking 模型（o1 系列）需从历史 assistant 消息提取 reasoning_content 回传。"""
+    client = mock.MagicMock()
+    client.chat.completions.create.return_value = _make_stream_chunks(["答案"])
+
+    # 构造历史消息（含 reasoning_content）
+    messages = [
+        {'role': 'user', 'content': '问题1'},
+        {'role': 'assistant', 'content': '回答1', 'reasoning_content': '推理过程1'},
+        {'role': 'user', 'content': '问题2'},
+    ]
+
+    # 模拟 o1 模型
+    import os
+    original_model = os.getenv('OPENAI_API_MODEL')
+    os.environ['OPENAI_API_MODEL'] = 'o1-preview'
+    importlib.reload(ai_client_mod)
+
+    stream, err = ai_client_mod.chat_completion_stream(client, messages)
+
+    # 恢复原模型
+    if original_model:
+        os.environ['OPENAI_API_MODEL'] = original_model
+    else:
+        os.environ.pop('OPENAI_API_MODEL', None)
+    importlib.reload(ai_client_mod)
+
+    assert err is None
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs.get('reasoning_content') == '推理过程1'
+
+
+def test_T029b_thinking_mode_no_reasoning_in_history(ai_client_mod):
+    """thinking 模型但历史无 reasoning_content → 不传该参数（首次对话）。"""
+    client = mock.MagicMock()
+    client.chat.completions.create.return_value = _make_stream_chunks(["首次"])
+
+    messages = [{'role': 'user', 'content': '首次问题'}]
+
+    import os
+    os.environ['OPENAI_API_MODEL'] = 'o1-mini'
+    importlib.reload(ai_client_mod)
+
+    stream, err = ai_client_mod.chat_completion_stream(client, messages)
+
+    os.environ['OPENAI_API_MODEL'] = 'gpt-test'
+    importlib.reload(ai_client_mod)
+
+    assert err is None
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert 'reasoning_content' not in kwargs
+
+
+def test_T029c_non_thinking_model_ignores_reasoning(ai_client_mod):
+    """非 thinking 模型（普通 gpt）不提取 reasoning_content。"""
+    client = mock.MagicMock()
+    client.chat.completions.create.return_value = _make_stream_chunks(["普通"])
+
+    messages = [
+        {'role': 'user', 'content': 'q'},
+        {'role': 'assistant', 'content': 'a', 'reasoning_content': 'should_ignore'},
+        {'role': 'user', 'content': 'q2'},
+    ]
+
+    stream, err = ai_client_mod.chat_completion_stream(client, messages)
+
+    assert err is None
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert 'reasoning_content' not in kwargs
+
+
+def test_T029d_thinking_mode_multiple_assistants_takes_latest(ai_client_mod):
+    """多轮对话中取最近的 assistant reasoning_content。"""
+    client = mock.MagicMock()
+    client.chat.completions.create.return_value = _make_stream_chunks(["答"])
+
+    messages = [
+        {'role': 'user', 'content': 'q1'},
+        {'role': 'assistant', 'content': 'a1', 'reasoning_content': '旧推理'},
+        {'role': 'user', 'content': 'q2'},
+        {'role': 'assistant', 'content': 'a2', 'reasoning_content': '新推理'},
+        {'role': 'user', 'content': 'q3'},
+    ]
+
+    import os
+    os.environ['OPENAI_API_MODEL'] = 'o3-preview'
+    importlib.reload(ai_client_mod)
+
+    stream, err = ai_client_mod.chat_completion_stream(client, messages)
+
+    os.environ['OPENAI_API_MODEL'] = 'gpt-test'
+    importlib.reload(ai_client_mod)
+
+    assert err is None
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs.get('reasoning_content') == '新推理'

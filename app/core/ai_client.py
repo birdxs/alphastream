@@ -673,6 +673,20 @@ def chat_completion_stream(client, messages, temperature=0.7, max_tokens=4096, t
         if tool_choice:
             kwargs['tool_choice'] = tool_choice
 
+        # [FIX-THINKING 2026-08-05] thinking 模型（o1 系列）需要从历史 assistant 消息中提取 reasoning_content
+        # 上游 LLM 400: "The reasoning_content in the thinking mode must be passed back to the API."
+        model_lower = model.lower()
+        is_thinking_model = any(marker in model_lower for marker in ['o1', 'o3', 'reasoning', 'think'])
+        if is_thinking_model:
+            # 从最近的 assistant 消息中提取 reasoning_content（多轮对话需回传）
+            for msg in reversed(messages):
+                if msg.get('role') == 'assistant':
+                    reasoning = msg.get('reasoning_content')
+                    if reasoning:
+                        kwargs['reasoning_content'] = reasoning
+                        logger.debug(f"thinking 模型 {model} 从历史提取 reasoning_content: {len(reasoning)} chars")
+                        break
+
         stream = client.chat.completions.create(**kwargs)
         return stream, None
     except Exception as e:
