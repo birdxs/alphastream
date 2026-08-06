@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-06 — 模型配置来源可观测性与启动一致性核验
+
+### 新增
+- 启动日志脱敏记录模型相关配置的最终值及来源；API URL 仅保留 scheme/host/port，永不记录 `OPENAI_API_KEY`。
+- 当前进程导入前环境与项目 `.env` 不一致时输出 WARNING，仅报告、不覆盖或修改模型。
+- 真实 AI 上游请求日志记录最终 model 与 request/conversation correlation 标识，不记录消息正文或完整请求头。
+
+### 验证
+- Python compile/import smoke 通过（174 routes）。
+- `tests/backend/unit/test_core_ai_client.py`：46 passed。
+
+---
+
+
 ## 2026-08-06 — DP-P1~P2 数据路径增强
 
 ### 新增

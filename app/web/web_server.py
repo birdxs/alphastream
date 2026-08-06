@@ -38,7 +38,7 @@ import threading
 import sys
 from flask_swagger_ui import get_swaggerui_blueprint
 from app.core.database import get_session, init_db, StockInfo, AnalysisResult, Portfolio, USE_DATABASE
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from app.analysis.industry_analyzer import IndustryAnalyzer
 from app.analysis.fundamental_analyzer import FundamentalAnalyzer
 from app.analysis.capital_flow_analyzer import CapitalFlowAnalyzer
@@ -59,7 +59,17 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../t
 
 
 # 加载环境变量（override=True 让 .env 成为单一真相源，覆盖 shell 注入的同名变量）
-load_dotenv(override=True)
+_MODEL_CONFIG_KEYS = (
+    'OPENAI_API_URL', 'OPENAI_API_MODEL', 'NEWS_MODEL', 'FUNCTION_CALL_MODEL',
+)
+_MODEL_ENV_BEFORE_DOTENV = {key: os.environ.get(key) for key in _MODEL_CONFIG_KEYS}
+_PROJECT_DOTENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', '.env'))
+_PROJECT_DOTENV_VALUES = {
+    key: value
+    for key, value in dotenv_values(_PROJECT_DOTENV_PATH).items()
+    if key in _MODEL_CONFIG_KEYS and value not in (None, '')
+}
+load_dotenv(_PROJECT_DOTENV_PATH, override=True)
 
 # ── Sprint 3-C 路由 schema 校验 & OpenAPI spec ────────────────────────────────
 from app.web.schema import (
@@ -567,6 +577,32 @@ console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(formatter)
 console_handler.addFilter(_cid_filter)
 root_logger.addHandler(console_handler)
+
+
+def _log_model_config_observability() -> None:
+    """记录当前进程最终模型配置，并警告导入前环境与项目 .env 的差异。"""
+    from app.core.ai_client import build_model_config_snapshot, find_model_config_mismatches
+
+    snapshot = build_model_config_snapshot(
+        effective_env=os.environ,
+        dotenv_values=_PROJECT_DOTENV_VALUES,
+        pre_load_env=_MODEL_ENV_BEFORE_DOTENV,
+    )
+    for key, item in snapshot.items():
+        logging.getLogger(__name__).info(
+            '模型配置 key=%s value=%s source=%s', key, item['value'], item['source']
+        )
+    for mismatch in find_model_config_mismatches(
+        snapshot, _MODEL_ENV_BEFORE_DOTENV, _PROJECT_DOTENV_VALUES
+    ):
+        logging.getLogger(__name__).warning(
+            '模型配置不一致 key=%s pre_load_env=%s dotenv=%s effective=%s '
+            '(仅报告；未修改模型选择逻辑)',
+            mismatch['key'], mismatch['pre_load_env'], mismatch['dotenv'], mismatch['effective'],
+        )
+
+
+_log_model_config_observability()
 
 # 将Flask的默认处理器移除，使其日志也遵循我们的配置
 from flask.logging import default_handler
@@ -5127,7 +5163,12 @@ def ai_chat_stream():
     """
     from flask import Response, stream_with_context
     import queue
-    from app.core.ai_client import get_ai_client, chat_with_tools_stream
+    from app.core.ai_client import (
+        get_ai_client,
+        chat_with_tools_stream,
+        set_ai_request_correlation_id,
+        reset_ai_request_correlation_id,
+    )
     from app.core.tools import (
         OPENAI_TOOLS_SCHEMA,
         normalize_portfolio_snapshot,
@@ -5151,6 +5192,7 @@ def ai_chat_stream():
     stock_code = data.get('stock_code', '')
     market_type = data.get('market_type', 'A')
     research_depth = data.get('research_depth', 3)
+    request_correlation_id = getattr(g, 'correlation_id', '-')
 
     if not message or not isinstance(message, str) or not message.strip():
         return jsonify({'error': '请输入消息'}), 400
@@ -5329,7 +5371,10 @@ def ai_chat_stream():
                 worker_result = {'content': None, 'tools_log': [], 'error': None, 'exc': None}
 
                 def _chat_worker():
-                    """后台线程执行真正的阻塞 LLM 调用（绑定请求级持仓 ContextVar）"""
+                    """后台线程执行真正的阻塞 LLM 调用（绑定请求级持仓与关联标识）"""
+                    correlation_token = set_ai_request_correlation_id(
+                        f'{request_correlation_id}:{conversation_id}'
+                    )
                     try:
                         with portfolio_context(_snap_for_worker):
                             c, t, e = chat_with_tools_stream(
@@ -5344,6 +5389,7 @@ def ai_chat_stream():
                     except Exception as ex:
                         worker_result['exc'] = ex
                     finally:
+                        reset_ai_request_correlation_id(correlation_token)
                         event_queue.put(('worker_done', None))
 
                 worker_th = _threading.Thread(target=_chat_worker, daemon=True)

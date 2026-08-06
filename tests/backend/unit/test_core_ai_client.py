@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Input: app/core/ai_client.py 单元测试
-Output: pytest 用例集（≥8 用例），覆盖 get_ai_client/chat_completion/chat_with_tools/stream
+Output: pytest 用例集，覆盖客户端、请求、流式、脱敏配置快照与关联日志
 Pos: tests/backend/unit/test_core_ai_client.py — BE-03b 最小批 Core 测试 #2
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
@@ -51,6 +51,64 @@ def _make_stream_chunks(text_parts, tool_calls_chunks=None):
             delta = types.SimpleNamespace(content=None, tool_calls=[tc_obj])
             chunks.append(types.SimpleNamespace(choices=[types.SimpleNamespace(delta=delta, finish_reason=None)]))
     return iter(chunks)
+
+
+# ============ 配置可观测性 ============
+class TestModelConfigObservability:
+    def test_snapshot_redacts_url_and_never_contains_api_key(self, ai_client_mod):
+        snapshot = ai_client_mod.build_model_config_snapshot(
+            effective_env={
+                'OPENAI_API_URL': 'https://user:pass@example.com:8443/v1/secret?token=x',
+                'OPENAI_API_MODEL': 'model-runtime',
+            },
+            dotenv_values={'OPENAI_API_MODEL': 'model-dotenv'},
+        )
+        assert snapshot['OPENAI_API_URL'] == {
+            'value': 'https://example.com:8443', 'source': 'runtime_env'
+        }
+        assert snapshot['OPENAI_API_MODEL'] == {
+            'value': 'model-runtime', 'source': 'runtime_env'
+        }
+        assert snapshot['NEWS_MODEL'] == {'value': None, 'source': 'code_default'}
+        assert 'OPENAI_API_KEY' not in snapshot
+        assert 'secret' not in repr(snapshot)
+        assert 'token=x' not in repr(snapshot)
+
+    def test_mismatch_is_report_only(self, ai_client_mod):
+        snapshot = ai_client_mod.build_model_config_snapshot(
+            effective_env={'OPENAI_API_MODEL': 'dotenv-model'},
+            dotenv_values={'OPENAI_API_MODEL': 'dotenv-model'},
+            pre_load_env={'OPENAI_API_MODEL': 'process-model'},
+        )
+        mismatches = ai_client_mod.find_model_config_mismatches(
+            snapshot,
+            {'OPENAI_API_MODEL': 'process-model'},
+            {'OPENAI_API_MODEL': 'dotenv-model'},
+        )
+        assert mismatches == [{
+            'key': 'OPENAI_API_MODEL',
+            'pre_load_env': 'process-model',
+            'dotenv': 'dotenv-model',
+            'effective': 'dotenv-model',
+        }]
+
+    def test_request_log_has_model_and_correlation_without_message(self, ai_client_mod, caplog):
+        client = mock.MagicMock()
+        client.chat.completions.create.return_value = _make_response('ok')
+        token = ai_client_mod.set_ai_request_correlation_id('cid-1:conv-2')
+        try:
+            with caplog.at_level('INFO', logger=ai_client_mod.__name__):
+                response, error = ai_client_mod.chat_completion(
+                    client, [{'role': 'user', 'content': 'sensitive-message'}]
+                )
+        finally:
+            ai_client_mod.reset_ai_request_correlation_id(token)
+        assert error is None
+        assert response is not None
+        assert 'model=gpt-test' in caplog.text
+        assert 'correlation_id=cid-1:conv-2' in caplog.text
+        assert 'sensitive-message' not in caplog.text
+        assert 'sk-test-key' not in caplog.text
 
 
 # ============ T001 get_ai_client / get_ai_model 初始化 ============

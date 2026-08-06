@@ -1,5 +1,18 @@
 # TODO
 
+## 模型配置来源可观测性（2026-08-06）
+
+**状态**：已完成
+
+- [x] 脱敏记录 OPENAI_API_URL、OPENAI_API_MODEL、NEWS_MODEL、FUNCTION_CALL_MODEL 最终值与来源
+- [x] 启动时只读比较导入前进程环境与项目 `.env`，不一致输出 WARNING
+- [x] 真实上游请求记录最终 model 与 request/conversation correlation 标识
+- [x] 不记录 API key、消息正文、完整请求头或 URL secret/query
+- [x] 聚焦测试 46 passed；compile/import smoke 通过
+
+---
+
+
 ## DP-P2-2 + Provenance 验证（2026-08-05）
 
 **状态**：✅ **已完成**

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Input: AI API配置（环境变量）、工具定义schema、消息列表
-Output: 统一的OpenAI客户端实例，带超时、重试、错误处理、Function Calling工具调用循环和流式输出
-Pos: app/core/ai_client.py - 所有AI调用的统一入口，支持被动问答、主动工具调用、流式输出三种模式
+Input: AI API配置（环境变量）、工具定义schema、消息列表与请求关联标识
+Output: 统一OpenAI客户端、脱敏配置快照及带模型/关联标识的AI调用日志
+Pos: app/core/ai_client.py - 所有AI调用与模型配置可观测性的统一入口
 
 一旦我被修改，请更新我的头部注释，以及所属文件夹的md。
 """
@@ -11,11 +11,134 @@ import json
 import time
 import logging
 import hashlib
+from contextvars import ContextVar
+from urllib.parse import urlsplit
 from typing import Any, Dict, Optional
 from openai import OpenAI
 import httpx
 
 logger = logging.getLogger(__name__)
+
+_AI_REQUEST_CORRELATION_ID: ContextVar[str] = ContextVar(
+    'ai_request_correlation_id', default='-'
+)
+_MODEL_CONFIG_DEFAULTS = {
+    'OPENAI_API_URL': 'https://api.openai.com/v1',
+    'OPENAI_API_MODEL': 'gpt-4o',
+    'NEWS_MODEL': None,
+    'FUNCTION_CALL_MODEL': 'gpt-4o',
+}
+
+
+def sanitize_api_endpoint(value: Optional[str]) -> str:
+    """仅保留 API URL 的 scheme/host/port，丢弃路径、query 与 fragment。"""
+    raw = (value or _MODEL_CONFIG_DEFAULTS['OPENAI_API_URL']).strip()
+    try:
+        parts = urlsplit(raw)
+        if not parts.scheme or not parts.hostname:
+            return '<invalid-url>'
+        host = parts.hostname
+        if ':' in host and not host.startswith('['):
+            host = f'[{host}]'
+        port = f':{parts.port}' if parts.port is not None else ''
+        return f'{parts.scheme}://{host}{port}'
+    except (TypeError, ValueError):
+        return '<invalid-url>'
+
+
+def build_model_config_snapshot(
+    effective_env: Optional[Dict[str, str]] = None,
+    dotenv_values: Optional[Dict[str, str]] = None,
+    pre_load_env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """构造可测试的脱敏模型配置快照，不读取或返回 OPENAI_API_KEY。
+
+    source 仅在有导入前环境或明确 .env 值时细分；否则诚实标记 runtime_env。
+    """
+    effective = effective_env if effective_env is not None else os.environ
+    dotenv_config = dotenv_values or {}
+    before = pre_load_env or {}
+    snapshot: Dict[str, Dict[str, Optional[str]]] = {}
+    for key, default in _MODEL_CONFIG_DEFAULTS.items():
+        raw_value = effective.get(key)
+        value = raw_value if raw_value not in (None, '') else default
+        if (
+            key in dotenv_config
+            and dotenv_config.get(key) not in (None, '')
+            and raw_value == dotenv_config.get(key)
+        ):
+            source = '.env'
+        elif (
+            key in before
+            and before.get(key) not in (None, '')
+            and raw_value == before.get(key)
+        ):
+            source = 'explicit_env'
+        elif raw_value not in (None, ''):
+            source = 'runtime_env'
+        else:
+            source = 'code_default'
+        display_value = sanitize_api_endpoint(value) if key == 'OPENAI_API_URL' else value
+        snapshot[key] = {'value': display_value, 'source': source}
+    return snapshot
+
+
+def find_model_config_mismatches(
+    snapshot: Dict[str, Dict[str, Optional[str]]],
+    pre_load_env: Optional[Dict[str, str]] = None,
+    dotenv_values: Optional[Dict[str, str]] = None,
+) -> list[Dict[str, Optional[str]]]:
+    """比较当前进程导入前环境与项目 .env；只报告，不修改任何值。"""
+    before = pre_load_env or {}
+    dotenv_config = dotenv_values or {}
+    mismatches = []
+    for key in _MODEL_CONFIG_DEFAULTS:
+        env_value = before.get(key)
+        dotenv_value = dotenv_config.get(key)
+        if env_value in (None, '') or dotenv_value in (None, '') or env_value == dotenv_value:
+            continue
+        mismatches.append({
+            'key': key,
+            'pre_load_env': sanitize_api_endpoint(env_value) if key == 'OPENAI_API_URL' else env_value,
+            'dotenv': sanitize_api_endpoint(dotenv_value) if key == 'OPENAI_API_URL' else dotenv_value,
+            'effective': snapshot[key]['value'],
+        })
+    return mismatches
+
+
+def set_ai_request_correlation_id(correlation_id: Optional[str]):
+    """设置当前调用链关联标识，返回 token 供调用方 finally reset。"""
+    return _AI_REQUEST_CORRELATION_ID.set(str(correlation_id or '-'))
+
+
+def reset_ai_request_correlation_id(token) -> None:
+    """恢复调用链之前的关联标识。"""
+    _AI_REQUEST_CORRELATION_ID.reset(token)
+
+
+def _resolve_request_correlation_id(explicit: Optional[str] = None) -> str:
+    if explicit:
+        return str(explicit)
+    contextual = _AI_REQUEST_CORRELATION_ID.get()
+    if contextual and contextual != '-':
+        return contextual
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            return str(getattr(g, 'correlation_id', '-') or '-')
+    except (ImportError, RuntimeError):
+        pass
+    return '-'
+
+
+def _log_upstream_request(model: str, *, correlation_id: Optional[str] = None, stream: bool) -> None:
+    """记录真实上游调用元数据；不记录消息、密钥、URL 路径或请求头。"""
+    logger.info(
+        'AI上游请求 model=%s correlation_id=%s stream=%s',
+        model,
+        _resolve_request_correlation_id(correlation_id),
+        stream,
+    )
 
 # 友好错误消息映射（按异常类名；流式 httpx 超时类名也覆盖）
 ERROR_MESSAGES = {
@@ -186,6 +309,7 @@ def chat_completion(client, messages, temperature=0.7, max_tokens=4096, tools=No
         if tool_choice:
             kwargs['tool_choice'] = tool_choice
 
+        _log_upstream_request(model, stream=False)
         response = client.chat.completions.create(**kwargs)
         return response, None
     except Exception as e:
@@ -687,6 +811,7 @@ def chat_completion_stream(client, messages, temperature=0.7, max_tokens=4096, t
                         logger.debug(f"thinking 模型 {model} 从历史提取 reasoning_content: {len(reasoning)} chars")
                         break
 
+        _log_upstream_request(model, stream=True)
         stream = client.chat.completions.create(**kwargs)
         return stream, None
     except Exception as e:

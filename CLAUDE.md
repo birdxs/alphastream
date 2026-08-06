@@ -1,5 +1,17 @@
 # StockAnal_Sys 项目级 CLAUDE.md
 
+## 模型配置来源可观测性与启动一致性核验（2026-08-06 18:05:35 +08:00）
+
+- 时间真实性校验：本机 `2026-08-06 03:05:27 -0700`（等效 `2026-08-06 18:05:27 +08:00`）；Cloudflare `2026-08-06 10:05:35 GMT`；GitHub `2026-08-06 10:05:27 GMT`；最大偏差 8 秒，判定通过。
+- `app/core/ai_client.py`：新增纯函数 `sanitize_api_endpoint`、`build_model_config_snapshot`、`find_model_config_mismatches`；快照不包含 `OPENAI_API_KEY`，URL 仅保留 scheme/host/port；真实 chat/stream 请求记录最终 model 与 correlation_id，不记录消息正文、密钥或请求头。
+- `app/web/web_server.py`：保留 `load_dotenv(override=True)` 与模型选择逻辑；导入前捕获当前进程环境、读取项目 `.env`，日志初始化后记录四项最终值/来源，并对 pre-load env 与 `.env` 差异发 WARNING。该检查仅观测当前新进程，不推断其他 PID，不修改 `.env` 或模型值。
+- 导入烟雾真实结果：`.env` 最终值为 `OPENAI_API_MODEL=deepseek/deepseek-v4-flash`；当前导入前环境为 `grok-4.5`，产生清晰 WARNING；API URL 日志仅显示 origin。
+- 验证：`py_compile` 通过；`pytest -q tests/backend/unit/test_core_ai_client.py` → 46 passed；`DISABLE_NETWORK=1 ... import app.web.web_server` → 174 routes。
+- 回滚：`git revert <本任务提交>`；无 schema、数据或 `.env` 迁移。
+
+---
+
+
 > 本文件为本项目专属纪律与上下文记忆，全局 `~/.pandacc/CLAUDE.md` 优先于本文件，但本文件中的硬性纪律不得被忽略。
 
 ---
