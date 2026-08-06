@@ -1932,6 +1932,9 @@ def get_stock_data():
             app.logger.warning(f"analyzer.get_stock_data 超时(30s)：{stock_code}")
             return custom_jsonify({'error': '数据源超时', 'stock_code': stock_code}), 504
 
+        # DP-P1-2: 提取真实 source（从 df.attrs 或默认值）
+        actual_source = df.attrs.get('_data_source', 'akshare' if market_type == 'A' else 'yfinance')
+
         # 检查数据是否为空
         if df.empty:
             app.logger.warning(f"股票 {stock_code} 的数据为空")
@@ -1979,7 +1982,7 @@ def get_stock_data():
             'stock_name': stock_name,
             'meta': {
                 'adjust_flag': _adjust_flag,
-                'source': 'akshare' if market_type == 'A' else 'yfinance',
+                'source': actual_source,  # DP-P1-2: 真实 adapter 名（如 'akshare' / 'baostock' / 'cache'）
             },
         })
     except Exception as e:
@@ -6371,11 +6374,14 @@ def _hc_one(cls_name: str, mod_path: str, timeout_s: float = 5.0) -> dict:
 @cache.cached(timeout=60, query_string=True)
 def stock_quote_batch():
     """
-    FIX-E5: 批量轻量行情接口
+    [DP-P1-3] 批量轻量行情接口：优先实时域，失败降级 K 线
     Input: codes=600519,000001,...  market_type=A|HK|US
-    Output: {results: [{code, name, latest_price, change_pct, change}], errors: [{code, msg}], ts}
-    思路: 复用 analyzer.get_stock_data 取最近 7 天 K 线, 用末两行 close 计算 change_pct;
-          单只硬超时 8s; 批量并发上限 8; 总响应应 <5s.
+    Output: {results: [{code, name, latest_price, change_pct, change}], errors: [{code, msg}], source, ts}
+
+    策略：
+    1. 优先调用 AdapterRegistry.call_with_fallback('a_stock_realtime', codes=...)
+    2. 实时失败时降级到 K 线末两日计算（原逻辑）
+    3. X-Data-Source 标记真实数据源
     """
     codes_raw = request.args.get('codes', '').strip()
     market_type = request.args.get('market_type', 'A')
@@ -6395,11 +6401,103 @@ def stock_quote_batch():
     if max_codes > 0 and len(codes) > max_codes:
         codes = codes[:max_codes]
 
+    # [DP-P1-3] 优先尝试实时域
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout, as_completed
+    data_source = 'kline_fallback'  # 默认降级源
+    results = []
+    errors = []
+
+    # 仅 A 股尝试实时域（HK/US 实时域支持有限）
+    if market_type == 'A':
+        try:
+            from app.adapters.adapter_registry import AdapterRegistry
+            registry = AdapterRegistry.default()
+
+            # 批量调用实时域（传入 codes 列表）
+            realtime_result = registry.call_with_fallback(
+                'a_stock_realtime',
+                codes=codes,
+                timeout=8  # 单次调用超时
+            )
+
+            # 解析实时响应（不同 adapter 返回格式可能不同，需兼容处理）
+            if realtime_result and isinstance(realtime_result, (list, dict)):
+                data_source = 'realtime'
+
+                # 如果是 dict（单股或按 code 索引）
+                if isinstance(realtime_result, dict):
+                    for code in codes:
+                        valid, normalized = validate_stock_code(code, market_type)
+                        if not valid:
+                            errors.append({'code': code, 'msg': str(normalized)})
+                            continue
+
+                        item = realtime_result.get(normalized) or realtime_result.get(code)
+                        if item and isinstance(item, dict):
+                            # 标准化字段名（适配不同 adapter）
+                            latest = item.get('price') or item.get('latest_price') or item.get('current')
+                            change_pct = item.get('change_pct') or item.get('pct_change')
+                            change = item.get('change') or item.get('change_amount')
+                            name = item.get('name') or _get_stock_name_safe(normalized, market_type)
+
+                            if latest is not None:
+                                results.append({
+                                    'code': normalized,
+                                    'name': name,
+                                    'latest_price': round(float(latest), 4),
+                                    'change': round(float(change or 0), 4),
+                                    'change_pct': round(float(change_pct or 0), 4),
+                                })
+                            else:
+                                errors.append({'code': normalized, 'msg': 'no price in realtime'})
+                        else:
+                            errors.append({'code': normalized, 'msg': 'not in realtime response'})
+
+                # 如果是 list（多股数组）
+                elif isinstance(realtime_result, list):
+                    code_set = set(codes)
+                    for item in realtime_result:
+                        if not isinstance(item, dict):
+                            continue
+                        code = item.get('code') or item.get('symbol')
+                        if code not in code_set:
+                            continue
+
+                        latest = item.get('price') or item.get('latest_price') or item.get('current')
+                        change_pct = item.get('change_pct') or item.get('pct_change')
+                        change = item.get('change') or item.get('change_amount')
+                        name = item.get('name') or _get_stock_name_safe(code, market_type)
+
+                        if latest is not None:
+                            results.append({
+                                'code': code,
+                                'name': name,
+                                'latest_price': round(float(latest), 4),
+                                'change': round(float(change or 0), 4),
+                                'change_pct': round(float(change_pct or 0), 4),
+                            })
+
+                # 成功获取部分实时数据，返回
+                if results:
+                    resp = custom_jsonify({
+                        'results': results,
+                        'errors': errors,
+                        'source': data_source,
+                        'ts': int(time.time()),
+                    })
+                    resp.headers['X-Data-Source'] = data_source
+                    return resp, 200
+
+        except Exception as e:
+            # 实时域失败，记录日志后降级 K 线
+            app.logger.warning(f"[DP-P1-3] 实时域失败，降级 K 线: {e}")
+            data_source = 'kline_fallback'
+
+    # [DP-P1-3] 降级：K 线末两日计算（原逻辑）
     end_date = now_cn().strftime('%Y%m%d')
     start_date = (now_cn() - timedelta(days=14)).strftime('%Y%m%d')
 
-    def _fetch_one(code):
+    def _fetch_one_kline(code):
         try:
             valid, normalized = validate_stock_code(code, market_type)
             if not valid:
@@ -6428,12 +6526,10 @@ def stock_quote_batch():
 
     results = []
     errors = []
-    # [REAL-01 2026-05-18] 用 try/except 包裹 as_completed，超时立即返回已完成部分
-    # [REAL-01 2026-05-18] 并发上限 20（原 8），整体 25s 超时（原 20s）
     # [BD-3] 使用全局线程池
     ex = get_global_thread_pool()
     try:
-        future_map = {ex.submit(_fetch_one, c): c for c in codes}
+        future_map = {ex.submit(_fetch_one_kline, c): c for c in codes}
         try:
             for fut in as_completed(future_map, timeout=25):
                 try:
@@ -6454,11 +6550,14 @@ def stock_quote_batch():
     finally:
         pass  # BD-3: 全局池不 shutdown
 
-    return custom_jsonify({
+    resp = custom_jsonify({
         'results': results,
         'errors': errors,
+        'source': data_source,
         'ts': int(time.time()),
-    }), 200
+    })
+    resp.headers['X-Data-Source'] = data_source
+    return resp, 200
 
 
 @app.route('/health', methods=['GET'])
@@ -6771,7 +6870,7 @@ def get_openapi_spec():
 @app.route('/api/adapters/status', methods=['GET'])
 @validate_schema(AdaptersStatusSchema)  # S3-G1: schema 校验扩展
 def adapters_status():
-    """遍历所有 adapter 调用 health_check, 返回逐个健康状态.
+    """[DP-P2-1] 遍历所有 adapter 调用 health_check, 返回逐个健康状态（带缓存）.
     2026-05-18 B1 修复：原串行循环最多 22×5s=110s 导致端点 HANG；
     改为 ThreadPoolExecutor 并行，每个 future 独立 timeout=5s，整体 10s 内必返回。
     超时的 adapter 标记 degraded，不阻塞整体响应。
@@ -6780,9 +6879,28 @@ def adapters_status():
     BaostockAdapter.health_check → bs.login() 无限阻塞），导致端点永久 HANG。
     改为 try/finally 手动管理 pool，finally 用 shutdown(wait=False, cancel_futures=True)
     确保超时后立即返回，不等待阻塞中的线程。
+    2026-08-05 [DP-P2-1] 添加缓存机制（TTL 60s），避免频繁健康检查。
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _FutTimeout
 
+    # [DP-P2-1] 缓存检查
+    cache_ttl = int(os.getenv('ADAPTERS_STATUS_CACHE_TTL', '60'))
+    cache_key = 'adapters_status_cache'
+    now_ts = time.time()
+
+    # 尝试从缓存读取
+    with _market_indices_lock:  # 复用现有锁
+        cached = globals().get('_adapters_status_cache')
+        if cached and isinstance(cached, dict):
+            cache_ts = cached.get('ts', 0)
+            if now_ts - cache_ts < cache_ttl:
+                # 缓存命中，直接返回
+                resp = jsonify(cached.get('data', {}))
+                resp.headers['X-Cache'] = 'HIT'
+                resp.headers['X-Cache-Age'] = str(int(now_ts - cache_ts))
+                return resp, 200
+
+    # 缓存未命中，执行健康检查
     total = len(_ADAPTER_SPECS)
     results: dict = {}
 
@@ -6817,14 +6935,25 @@ def adapters_status():
             results[cls_name] = {"ok": False, "latency_ms": None, "error": "overall_timeout", "status": "degraded"}
 
     ok_count = sum(1 for r in results.values() if r.get("ok"))
-    return jsonify({
+    response_data = {
         "status": "ok",
         "total": total,
         "healthy": ok_count,
         "unhealthy": total - ok_count,
         "adapters": results,
         "ts": int(time.time()),
-    }), 200
+    }
+
+    # [DP-P2-1] 写入缓存
+    with _market_indices_lock:
+        globals()['_adapters_status_cache'] = {
+            'data': response_data,
+            'ts': now_ts
+        }
+
+    resp = jsonify(response_data)
+    resp.headers['X-Cache'] = 'MISS'
+    return resp, 200
 
 
 @app.route('/api/registry/stats', methods=['GET'])

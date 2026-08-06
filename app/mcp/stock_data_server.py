@@ -87,7 +87,9 @@ def _handle_stock_history(stock_code: str, days: int = 120) -> dict:
     dp = get_data_provider()
     end_date = datetime.now(_tz).strftime('%Y%m%d')
     start_date = (datetime.now(_tz) - timedelta(days=days)).strftime('%Y%m%d')
-    df = dp.get_stock_history(stock_code, start_date, end_date)
+    # DP-P1-2: get_stock_history 返回 (df, source)
+    df, source = dp.get_stock_history(stock_code, start_date, end_date)
+
     if df is None or df.empty:
         return {'error': f'未获取到{stock_code}数据'}
     return {'data': df.tail(20).to_dict('records'), 'total_rows': len(df)}

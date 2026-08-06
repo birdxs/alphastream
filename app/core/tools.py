@@ -150,7 +150,8 @@ def get_stock_data(stock_code: str, market_type: str = 'A', days: int = 120) -> 
     end_date = datetime.now(_tz).strftime('%Y%m%d')
     start_date = (datetime.now(_tz) - timedelta(days=days)).strftime('%Y%m%d')
     try:
-        df = dp.get_stock_history(stock_code, start_date, end_date)
+        # DP-P1-2: get_stock_history 返回 (df, source)
+        df, source = dp.get_stock_history(stock_code, start_date, end_date)
         if df is None or df.empty:
             return f"未获取到{stock_code}的数据"
         latest = df.iloc[-1]

@@ -196,8 +196,12 @@ def get_kline(stock_code: str, market: str = 'A',
             # 委托 DataProvider (现有逻辑)
             from app.core.data_provider import DataProvider
             dp = DataProvider()
+            # DP-P1-2: resilient_call 需要适配返回元组 (df, source)
+            def _dp_wrapper(*args):
+                return dp.get_stock_history(*args)[0]  # 仅返回 df
+
             raw = resilient_call(
-                dp.get_stock_history, (stock_code, start_date, end_date),
+                _dp_wrapper, (stock_code, start_date, end_date),
                 per_call_timeout=45.0, cache_ttl=600,  # 2026-05-18 二次拉富足：3 源串行兜底 + KeyError/ProxyError 重试链需 >40s
             )
             return _normalize_kline_df(raw)

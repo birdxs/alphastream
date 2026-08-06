@@ -52,29 +52,63 @@ class DataProvider:
         self.akshare = AkshareAdapter()
         self.baostock = BaostockAdapter()
 
-        # 故障转移管理器：akshare优先，baostock备用
+        # DP-P1-1: 引入 AdapterRegistry（渐进统一）
+        from ..adapters.adapter_registry import AdapterRegistry
+        self._registry = AdapterRegistry.default()
+
+        # 故障转移管理器：保留（向后兼容）
         self.fallback = FallbackManager([
             self.akshare,
             self.baostock,
         ])
 
-        logger.info("DataProvider初始化完成，数据源: akshare(主), baostock(备)")
+        logger.info("DataProvider初始化完成，数据源: Registry(主), FallbackManager(备)")
 
     def get_stock_history(self, code: str, start_date: str, end_date: str,
-                          adjust: str = "qfq") -> pd.DataFrame:
-        """获取股票历史K线"""
+                          adjust: str = "qfq") -> tuple:
+        """
+        获取股票历史K线。
+
+        DP-P1-1/P1-2: 返回 (DataFrame, source) 元组。
+        - DataFrame: K线数据
+        - source: 实际命中的 adapter 名称（如 'akshare' / 'baostock' / 'cache'）
+        """
         self._rate_limit()
 
         cache_key = f"history_{code}_{start_date}_{end_date}_{adjust}"
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return pd.DataFrame(cached)
+            cached_source = cached.get('source', 'cache') if isinstance(cached, dict) else 'cache'
+            cached_data = cached.get('data', cached) if isinstance(cached, dict) else cached
+            return pd.DataFrame(cached_data), cached_source
 
-        result = self.fallback.execute('get_stock_history', code, start_date, end_date, adjust)
+        # DP-P1-1: 优先使用 Registry（a_stock_kline domain）
+        try:
+            result_dict = self._registry.call_with_fallback(
+                'a_stock_kline',
+                'get_stock_history',
+                stock_code=code,
+                start_date=start_date,
+                end_date=end_date,
+                adjust=adjust,
+                _return_metadata=True
+            )
+            df = result_dict['data']
+            source = result_dict['source']
+        except Exception as e:
+            logger.warning(f"[DataProvider] Registry 降级失败，回退 FallbackManager: {e}")
+            # 回退到旧 FallbackManager
+            df = self.fallback.execute('get_stock_history', code, start_date, end_date, adjust)
+            source = 'fallback'  # 标记降级路径
 
-        if result is not None and not result.empty:
-            self._cache.set(cache_key, result.to_dict('records'), ttl=1800)
-        return result
+        if df is not None and not df.empty:
+            self._cache.set(cache_key, {
+                'data': df.to_dict('records'),
+                'source': source
+            }, ttl=1800)
+            return df, source
+
+        return pd.DataFrame(), 'empty'
 
     def get_index_stocks(self, index_code: str) -> List[str]:
         """获取指数成分股"""

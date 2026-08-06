@@ -366,7 +366,8 @@ def _get_stock_data_structured(arguments: dict) -> Optional[Dict]:
         end_date = now_cn().strftime('%Y%m%d')
         start_date = (now_cn() - timedelta(days=days)).strftime('%Y%m%d')
 
-        df = dp.get_stock_history(stock_code, start_date, end_date)
+        # DP-P1-2: get_stock_history 返回 (df, source)
+        df, source = dp.get_stock_history(stock_code, start_date, end_date)
         if df is None or df.empty:
             return None
 

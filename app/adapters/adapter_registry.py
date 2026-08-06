@@ -153,7 +153,14 @@ class AdapterRegistry:
 
     # ==================== 调度 ====================
     def call_with_fallback(self, domain: str, method: str, **kwargs) -> Any:
-        """按domain降级调用 method(**kwargs)，首个有效结果即返回。"""
+        """
+        按domain降级调用 method(**kwargs)，首个有效结果即返回。
+
+        DP-P1-1/P1-2: 返回结构标准化为 dict（含 data + source）或原始结果（向后兼容）。
+        当 return_metadata=True 时，返回 {'data': result, 'source': adapter.name, 'domain': domain}
+        """
+        return_metadata = kwargs.pop('_return_metadata', False)
+
         adapters = self.get_adapters(domain)
         if not adapters:
             raise ValueError(f"domain={domain} 未注册任何适配器")
@@ -173,6 +180,14 @@ class AdapterRegistry:
                     if self._is_valid_result(result):
                         with self._lock:
                             self._fail_count[aname] = 0
+
+                        # DP-P1-2: 返回带元数据的结构（可选）
+                        if return_metadata:
+                            return {
+                                'data': result,
+                                'source': aname,
+                                'domain': domain
+                            }
                         return result
                 except Exception as e:
                     last_error = e
