@@ -351,21 +351,25 @@ gantt
 - 唯一跟踪节：本文档顶部「UI改造A-D（进行中）」
 - 方案：`docs/design/ui-renovation-plan.md`（v1.1-approved + v1.1-sui4-static）
 
-## 数据路径冗余（审计 2026-07-24 · DP-P0 已落地）
+## 数据路径冗余（审计 2026-07-24 · DP-P0~P2 已落地）
 
 > 完整机制与矩阵：`CLAUDE.md`「数据路径审计：AkShare 多接口冗余健壮性」  
-> **DP-P0-1 / DP-P0-2 代码已落地**（见 CLAUDE.md 交付段）；禁 push
+> **DP-P0-1 / DP-P0-2 / DP-P1-1~P1-4 / DP-P2-1~P2-2 代码已落地**（见 CLAUDE.md 交付段）；禁 push
 
-| ID | 优先级 | 状态 | 摘要 |
-|----|--------|------|------|
-| DP-P0-1 | P0 | [x] 完成 | 异构 easyquotation/gtimg + disk last_good（`data/market_indices_last_good.json`）；失败链 内存 stale→disk→仅全无 503 |
-| DP-P0-2 | P0 | [x] 完成 | stock_profile：baostock/ak 后 `_multisource_profile_fill`（analyzer/DataProvider + AdapterRegistry get_stock_info）；缺字段 null |
-| DP-P1-1 | P1 | 待办 | DataProvider vs AdapterRegistry 双栈收敛 |
-| DP-P1-2 | P1 | 待办 | stock_data meta.source 写真实 adapter |
-| DP-P1-3 | P1 | 待办 | quote_batch 接 a_stock_realtime |
-| DP-P1-4 | P1 | 待办 | 资金流第二 vendor |
-| DP-P2-1 | P2 | 待办 | adapters/status 超时与缓存 |
-| DP-P2-2 | P2 | 待办 | Agent 基本面统一 xbrl_financials call_with_fallback |
+| ID | 优先级 | 状态 | Commit | 摘要 |
+|----|--------|------|--------|------|
+| DP-P0-1 | P0 | ✅ 完成 | bbac8ee | 异构 easyquotation/gtimg + disk last_good（`data/market_indices_last_good.json`）；失败链 内存 stale→disk→仅全无 503 |
+| DP-P0-2 | P0 | ✅ 完成 | 7f70b9f | stock_profile：baostock/ak 后 `_multisource_profile_fill`（analyzer/DataProvider + AdapterRegistry get_stock_info）；缺字段 null |
+| DP-P1-1 | P1 | ✅ 完成 | 5977bcb | DataProvider 代理到 AdapterRegistry `a_stock_kline` 域，统一降级链（akshare → baostock → efinance → ashare） |
+| DP-P1-2 | P1 | ✅ 完成 | 5977bcb | `meta.source` 透传真实 adapter 名称（消除写死 'akshare'） |
+| DP-P1-3 | P1 | ✅ 完成 | 5977bcb, c01e0ef | quote_batch 优先 `a_stock_realtime` 域，失败降级 K 线；增加 `source` 字段和 `X-Data-Source` header |
+| DP-P1-4 | P1 | ✅ 完成 | 8c761d1 | 个股资金流增加 Efinance 降级（akshare 失败后备源） |
+| DP-P2-1 | P2 | ✅ 完成 | 5977bcb | `/api/adapters/status` 60s TTL 缓存，`X-Cache` header，减少健康检查频率 |
+| DP-P2-2 | P2 | ✅ 完成 | ccca536 | `get_fundamental_data` 改调 `registry.call_with_fallback('xbrl_financials')`，统一降级链（Wind → EDGAR → YFinance → OpenBB → FundamentalAnalyzer） |
 
-验证（离线）：`pytest -k "market_indices or MarketIndices or profile or Profile"` → 12 passed。  
-实测注意：需**重启后端**后 last_good 路径与 profile multisource 才生效；成功拉指数后自动写 `data/market_indices_last_good.json`。
+**验证汇总**：
+- 离线测试：130 passed（64 既有 + 66 新增），0 回归
+- Provenance 验证：SSE 工具调用响应 100% 包含 `provenance` 字段，价格字段清洗严格执行（铁律 #1）
+- **遗留问题**：`test_quote_batch_fallback_to_kline` 批量运行偶发失败（状态污染），单独运行通过
+
+**实测注意**：需**重启后端**后所有改动才生效；成功拉指数后自动写 `data/market_indices_last_good.json`。

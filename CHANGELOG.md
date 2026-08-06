@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-08-06 — DP-P1~P2 数据路径增强
+
+### 新增
+- **统一数据降级链**：A 股 K 线统一使用 AdapterRegistry 降级链（akshare → baostock → efinance → ashare），消除 DataProvider 与 Registry 双栈并存
+- **实时行情接入**：批量报价（`/api/stock_quote_batch`）优先使用 `a_stock_realtime` 域获取真实时数据，失败降级到 K 线路径
+- **资金流冗余**：个股资金流（`get_individual_fund_flow`）增加 Efinance 备用数据源，提高可用性
+- **基本面统一**：Agent 基本面数据统一调用 AdapterRegistry `xbrl_financials` 域（Wind → EDGAR → YFinance → OpenBB → FundamentalAnalyzer）
+- **adapters/status 缓存**：健康检查接口（`/api/adapters/status`）增加 60s TTL 缓存，减少重复探针开销
+
+### 改进
+- **真实数据源标签**：`meta.source` 字段现在显示真实命中的 adapter 名称（如 `sina`/`tencent`/`baostock`），不再写死 `'akshare'`
+- **响应头增强**：批量报价增加 `X-Data-Source` header（`realtime` / `kline_fallback`），adapters/status 增加 `X-Cache` header（`HIT` / `MISS`）
+- **Provenance 验证**：确认所有 SSE 工具调用响应 100% 包含 `provenance` 字段，价格字段清洗严格执行（铁律 #1）
+
+### 修复
+- 修复 REST K 线路径与 AdapterRegistry 双栈不一致问题（DP-P1-1）
+- 修复 `meta.source` 写死掩盖真实 adapter 问题（DP-P1-2）
+- 修复批量报价使用 K 线末两根伪造实时数据问题（DP-P1-3）
+- 修复资金流单源依赖导致代理失败即空问题（DP-P1-4）
+- 修复 adapters/status 高频调用性能瓶颈（DP-P2-1）
+- 修复 Agent 基本面调用与 registry 域不同步问题（DP-P2-2）
+
+### 技术细节
+- DataProvider 改为代理到 AdapterRegistry，保留缓存和限流优化
+- `get_stock_history` 返回 `(DataFrame, source)` 元组支持元数据透传
+- `capital_flow_analyzer` 在 akshare 失败后调用 Efinance `get_stock_quote` 提取资金流字段
+- `tools.py` `get_fundamental_data` 改调 `registry.call_with_fallback('xbrl_financials')`
+- 新增 66 个单元测试，覆盖降级链、元数据、缓存、Provenance 验证
+- **遗留问题**：`test_quote_batch_fallback_to_kline` 批量运行偶发状态污染（单独运行通过）
+
+**相关 Commits**：`5977bcb`, `c01e0ef`, `8c761d1`, `ccca536`, `58783fe`  
+**测试覆盖**：130 passed（64 既有 + 66 新增），0 回归  
+**状态**：未 push（本地开发环境）
+
+---
+
 ## 2026-08-05 — DP-P2-2 + Provenance 验证
 
 - **DP-P2-2: 基本面统一到 registry**：`app/core/tools.py` `get_fundamental_data` 改调 `AdapterRegistry.call_with_fallback('xbrl_financials')`，统一降级链：Wind → EDGAR → YFinance → OpenBB → FundamentalAnalyzer（最终兜底）。
