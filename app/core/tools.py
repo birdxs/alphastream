@@ -184,20 +184,36 @@ def get_technical_indicators(stock_code: str, market_type: str = 'A') -> str:
 
 @tool
 def get_fundamental_data(stock_code: str) -> str:
-    """获取股票基本面数据(PE/PB/ROE/净利润等财务指标)"""
+    """获取股票基本面数据(PE/PB/ROE/净利润等财务指标)
+
+    DP-P2-2：统一走 AdapterRegistry xbrl_financials 域（Wind→EDGAR→YFinance→OpenBB）
+    最终降级到 FundamentalAnalyzer
+    """
     from app.analysis.fundamental_analyzer import FundamentalAnalyzer
-    # P2a：Wind 优先源——需请求级 use_wind=true（或 WIND_USE_DEFAULT）+ 已配 key + 非空结果；
-    # 否则静默回落 FundamentalAnalyzer。不改工具签名与返回契约。
+
+    # DP-P2-2：统一走 AdapterRegistry xbrl_financials 域
     try:
-        from app.adapters.wind_adapter import WindAdapter, is_use_wind_enabled
-        if is_use_wind_enabled():
-            _wind = WindAdapter()
-            if _wind.health_check():  # 仅查 key，不连网
-                _wind_data = _wind.get_financial_data(stock_code)
-                if _wind_data:
-                    return str(_wind_data)
+        from app.adapters.adapter_registry import AdapterRegistry
+        registry = AdapterRegistry()
+
+        # 调用 registry 自动降级链：Wind → EDGAR → YFinance → OpenBB
+        result = registry.call_with_fallback(
+            domain='xbrl_financials',
+            method='get_financial_data',
+            stock_code=stock_code,
+            market_type='A'  # 默认 A 股
+        )
+
+        if result and isinstance(result, dict):
+            # registry 返回格式：{'data': ..., 'source': 'wind/edgar/...', ...}
+            data = result.get('data')
+            source = result.get('source', 'registry')
+            if data:
+                return f"基本面数据（来源：{source}）：{str(data)}"
     except Exception:
-        pass  # Wind 任何异常都不影响原路径
+        pass  # registry 异常不影响降级路径
+
+    # 最终降级到 FundamentalAnalyzer
     try:
         fa = FundamentalAnalyzer()
         result = fa.get_financial_indicators(stock_code)
