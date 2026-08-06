@@ -1,5 +1,19 @@
 # TODO
 
+## Skill 吸收与处置（2026-08-05）
+
+**状态**：✅ **已完成删除与降级补强**
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 删除 `skill参考/akshare-finance/` | ✅ | 100% 吸收到 adapters，skill 已删除 |
+| 保留 `skill参考/tencent-news/` | 🔵 | 作为备用参考 |
+| P1: NBS 宏观数据降级 | ✅ | `nbs_adapter.py` + AkShare (CPI/GDP/PMI/工业增加值) |
+| P2: CoinGecko 加密货币降级 | ✅ | `coingecko_adapter.py` + AkShare crypto_js_spot (实时价格) |
+| 测试覆盖 | ✅ | `test_adapters_nbs.py` (6 passed) + `test_adapters_coingecko.py` (7 passed) |
+
+---
+
 ## UI改造A-D（S-UI-0~3 代码已落地 · S-UI-charts 已提交 · S-UI-4 部分完成 · live/live2 连调已截图）
 
 > **状态**：**S-UI-0~3 + S-UI-charts 代码已提交** · Comdr **已通过 2026-07-24 全量 A–D** · **S-UI-4 curl+CDP 五路由 + 主题已做 · swagger 代理已修（`8cdfe24`）** · **[S-UI-live2] DP-P0 后全栈真重启 + CDP 截图 `/tmp/stockanal_ui/live2_*.png`** · **仍禁 push**  

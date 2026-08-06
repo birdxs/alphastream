@@ -3319,3 +3319,118 @@ Registry 实测摘要（`/api/registry/stats`）：`a_stock_kline` available_cou
 
 - 还原 `app/web/web_server.py`、`tests/backend/api/test_stock_data_routes.py`、TODO/CLAUDE 本节；删除 `data/market_indices_last_good.json`（若有）
 
+---
+
+## Skill 吸收与降级补强交付记录（2026-08-05 20:05 +08:00）
+
+任务约束：本地开发环境；禁止 push；优先修改现有文件；禁止 Playwright；铁律 #1 零假值。
+
+时间真实性校验：
+- 本机：2026-08-05 20:05 +08:00（Asia/Singapore）
+- 双源 HTTPS Date 与本机一致（偏差 ≪ 100s）
+- 判定：通过
+
+### 删除确认
+
+**删除前**：`skill参考/akshare-finance/` 含 22 文件（skill 定义/工具/MCP 配置）
+**删除后**：`skill参考/` 仅保留 `tencent-news/`（作为备用参考）
+
+```bash
+rm -rf skill参考/akshare-finance/
+ls -la skill参考/  # → 仅 tencent-news
+```
+
+### P1: NBS 宏观数据 AkShare 降级
+
+**文件**：`app/adapters/nbs_adapter.py`
+
+**改动**：
+- `get_macro_indicators()` 在 GDP/CPI/PMI/IndustrialOutput 失败路径加 `_akshare_macro_fallback()` 降级
+- 新增 `_akshare_macro_fallback(indicator)` 方法：
+  - GDP → `ak.macro_china_gdp()`
+  - CPI → `ak.macro_china_cpi()`
+  - PMI → `ak.macro_china_pmi()`
+  - IndustrialOutput → `ak.macro_china_industrial_production_yoy()`
+- 返回标准化 DataFrame[date, value, code, unit, indicator, freq]
+- akshare 未安装时静默跳过
+
+**验证**：
+- 测试文件：`tests/backend/unit/test_adapters_nbs.py`（新增）
+- 测试数：6 passed
+- 覆盖：GDP/CPI/PMI/工业增加值降级成功；akshare 不可用；全失败
+
+### P2: CoinGecko 加密货币 AkShare 降级
+
+**文件**：`app/adapters/coingecko_adapter.py`
+
+**改动**：
+- `get_price()` 在 CoinGecko 失败路径加 `_akshare_crypto_price_fallback()` 降级
+- `get_market_chart()` 在 CoinGecko 失败路径加 `_akshare_crypto_hist_fallback()` 降级
+- 新增 `_akshare_crypto_price_fallback(coin_ids, vs)` 方法：
+  - 调用 `ak.crypto_js_spot()` 获取实时快照
+  - 支持 bitcoin/ethereum/binancecoin/cardano/solana/ripple/polkadot/dogecoin
+  - 通过名称匹配（比特币/以太坊等）提取价格
+- 新增 `_akshare_crypto_hist_fallback(coin_id, days, vs)` 方法：
+  - AkShare `crypto_js_spot` 仅提供实时快照，无历史接口
+  - 返回空 DataFrame（诚实降级）
+
+**验证**：
+- 测试文件：`tests/backend/unit/test_adapters_coingecko.py`（新增）
+- 测试数：7 passed
+- 覆盖：单币/多币价格降级成功；历史数据降级返回空；akshare 不可用；全失败
+
+### 测试结果
+
+```bash
+AUTH_REQUIRED=false DISABLE_NETWORK=1 MOCK_LLM=1 \
+  pytest tests/backend/unit/test_adapters_nbs.py \
+         tests/backend/unit/test_adapters_coingecko.py -v
+# → 13 passed (6 NBS + 7 CoinGecko)
+```
+
+### Commit
+
+```bash
+git add -A
+git commit -m "feat(adapters): akshare macro/crypto fallback + remove absorbed skill
+
+- P1: nbs_adapter AkShare macro (CPI/GDP/PMI/工业增加值) fallback
+- P2: coingecko_adapter AkShare crypto fallback (crypto_js_spot)
+- Remove skill参考/akshare-finance/ (100% absorbed)
+- Keep skill参考/tencent-news/ as backup
+- Add tests: test_adapters_nbs.py (6) + test_adapters_coingecko.py (7)"
+```
+
+**Commit hash**：（见下方输出）
+
+### 回滚方案
+
+```bash
+# 代码回滚
+git revert <commit_hash>
+
+# 或手动还原
+git checkout HEAD~1 -- app/adapters/nbs_adapter.py \
+                       app/adapters/coingecko_adapter.py \
+                       tests/backend/unit/test_adapters_nbs.py \
+                       tests/backend/unit/test_adapters_coingecko.py
+
+# 恢复 skill（若需要）
+git checkout HEAD~1 -- skill参考/akshare-finance/
+```
+
+### 改动统计
+
+| 文件 | 变更 |
+|------|------|
+| `app/adapters/nbs_adapter.py` | +72 行（`_akshare_macro_fallback` + 调用点） |
+| `app/adapters/coingecko_adapter.py` | +58 行（2 个 fallback 方法） |
+| `tests/backend/unit/test_adapters_nbs.py` | +90 行（新增） |
+| `tests/backend/unit/test_adapters_coingecko.py` | +115 行（新增） |
+| `skill参考/akshare-finance/` | -22 文件（删除） |
+| `TODO.md` | +9 行（Skill 吸收状态表） |
+| `CHANGELOG.md` | +7 行（本轮记录） |
+| `CLAUDE.md` | +本节 |
+
+---
+

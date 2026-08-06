@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-05 — Skill 吸收与降级补强
+
+- **删除**：`skill参考/akshare-finance/` 已 100% 吸收到 adapters，目录已删除。
+- **P1: NBS 宏观数据降级**：`app/adapters/nbs_adapter.py` 在 `get_macro_indicators` 失败路径加 AkShare 降级（CPI/GDP/PMI/工业增加值），调用 `macro_china_cpi()`/`macro_china_gdp()`/`macro_china_pmi()`/`macro_china_industrial_production_yoy()`。
+- **P2: CoinGecko 加密货币降级**：`app/adapters/coingecko_adapter.py` 在 `get_price` / `get_market_chart` 失败路径加 AkShare 降级，调用 `crypto_js_spot()`（实时价格）；历史数据因 AkShare 无接口返回空。
+- **测试**：新增 `tests/backend/unit/test_adapters_nbs.py` (6 passed) + `tests/backend/unit/test_adapters_coingecko.py` (7 passed)，覆盖降级成功/失败/akshare 不可用等场景。
+- **未 push**。
+
 ## 2026-07-25 — [S-UI-live2] post DP-P0 fullstack CDP smoke
 
 - **启服**：真重启 BE PID **11292** `:8888` + FE PID **11324** `:3000`（`AUTH_REQUIRED=false DISABLE_NETWORK=0 MOCK_LLM=0`）；**服务保持运行**。

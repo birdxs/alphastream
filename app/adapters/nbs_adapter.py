@@ -192,6 +192,14 @@ class NBSAdapter(BaseAdapter):
                     out[k] = df
             except Exception as e:
                 logger.warning(f"[NBSAdapter] get_macro_indicators({k}) 失败: {type(e).__name__}: {e}")
+                # P1: AkShare 宏观数据降级 (2026-08-05)
+                try:
+                    df_fallback = self._akshare_macro_fallback(k)
+                    if isinstance(df_fallback, pd.DataFrame) and not df_fallback.empty:
+                        logger.info(f"[NBSAdapter] {k} AkShare降级成功")
+                        out[k] = df_fallback
+                except Exception as e_fallback:
+                    logger.error(f"[NBSAdapter] {k} AkShare降级失败: {type(e_fallback).__name__}: {e_fallback}")
         return out
 
     # ---------- BaseAdapter 抽象方法 (宏观源不提供个股) ----------
@@ -219,6 +227,75 @@ class NBSAdapter(BaseAdapter):
             return False
 
     # ---------- 内部 ----------
+
+    def _akshare_macro_fallback(self, indicator: str) -> pd.DataFrame:
+        """P1: AkShare 宏观数据降级 (2026-08-05)
+
+        Args:
+            indicator: "GDP"/"CPI"/"PMI"/"IndustrialOutput"
+
+        Returns:
+            标准化 DataFrame[date, code, value, unit, indicator, freq]
+        """
+        try:
+            import akshare as ak
+        except ImportError:
+            logger.warning("[NBSAdapter] akshare未安装，无法降级")
+            return pd.DataFrame()
+
+        try:
+            if indicator == "GDP":
+                # ak.macro_china_gdp() → 季度/年度值
+                df_raw = ak.macro_china_gdp()
+                df = pd.DataFrame({
+                    "date": df_raw.iloc[:, 0],  # 通常第一列为日期
+                    "value": df_raw.iloc[:, 1],  # GDP值
+                    "code": "GDP_AK",
+                    "unit": "亿元",
+                    "indicator": "GDP",
+                    "freq": "quarterly",
+                })
+            elif indicator == "CPI":
+                # ak.macro_china_cpi() → 月度CPI
+                df_raw = ak.macro_china_cpi()
+                df = pd.DataFrame({
+                    "date": df_raw.iloc[:, 0],
+                    "value": df_raw.iloc[:, 1],
+                    "code": "CPI_AK",
+                    "unit": "%",
+                    "indicator": "CPI_YoY",
+                    "freq": "monthly",
+                })
+            elif indicator == "PMI":
+                # ak.macro_china_pmi() → 制造业PMI
+                df_raw = ak.macro_china_pmi()
+                df = pd.DataFrame({
+                    "date": df_raw.iloc[:, 0],
+                    "value": df_raw.iloc[:, 1],
+                    "code": "PMI_AK",
+                    "unit": "",
+                    "indicator": "PMI_Manufacturing",
+                    "freq": "monthly",
+                })
+            elif indicator == "IndustrialOutput":
+                # ak.macro_china_industrial_production_yoy() → 工业增加值
+                df_raw = ak.macro_china_industrial_production_yoy()
+                df = pd.DataFrame({
+                    "date": df_raw.iloc[:, 0],
+                    "value": df_raw.iloc[:, 1],
+                    "code": "IndOutput_AK",
+                    "unit": "%",
+                    "indicator": "IndustrialOutput_YoY",
+                    "freq": "monthly",
+                })
+            else:
+                logger.warning(f"[NBSAdapter] 未知指标 {indicator}")
+                return pd.DataFrame()
+
+            return df.dropna().tail(13)  # 保留最近13期
+        except Exception as e:
+            logger.error(f"[NBSAdapter] AkShare {indicator} 解析失败: {type(e).__name__}: {e}")
+            return pd.DataFrame()
 
     def _get_json(self, url: str, params: Dict) -> Optional[Dict]:
         """K1: UA池轮询 + retry_with_backoff (429/5xx/403指数退避)，失败返回None"""

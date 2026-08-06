@@ -90,7 +90,15 @@ class CoinGeckoAdapter(BaseAdapter):
             "ids": ",".join(coin_ids),
             "vs_currencies": vs,
         })
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict) and data:
+            return data
+        # P2: AkShare 加密货币降级 (2026-08-05)
+        logger.warning(f"CoinGecko price失败，尝试AkShare降级 coin_ids={coin_ids}")
+        try:
+            return self._akshare_crypto_price_fallback(coin_ids, vs)
+        except Exception as e:
+            logger.error(f"AkShare加密货币price降级失败: {type(e).__name__}: {e}")
+            return {}
 
     def get_market_chart(self, coin_id: str, days: int = 30,
                          vs: str = "usd") -> pd.DataFrame:
@@ -104,7 +112,13 @@ class CoinGeckoAdapter(BaseAdapter):
             "days": days,
         })
         if not isinstance(data, dict) or not data.get("prices"):
-            return pd.DataFrame()
+            # P2: AkShare 加密货币历史降级 (2026-08-05)
+            logger.warning(f"CoinGecko market_chart失败({coin_id})，尝试AkShare降级")
+            try:
+                return self._akshare_crypto_hist_fallback(coin_id, days, vs)
+            except Exception as e:
+                logger.error(f"AkShare加密货币历史降级失败: {type(e).__name__}: {e}")
+                return pd.DataFrame()
         try:
             prices = data.get("prices", [])
             mcaps = data.get("market_caps", [])
@@ -170,6 +184,77 @@ class CoinGeckoAdapter(BaseAdapter):
             "markets": inner.get("markets"),
             "updated_at": inner.get("updated_at"),
         }
+
+    # ==================== BaseAdapter契约 ====================
+    def _akshare_crypto_price_fallback(self, coin_ids: List[str], vs: str = "usd") -> Dict:
+        """P2: AkShare 加密货币价格降级 (2026-08-05)
+
+        Args:
+            coin_ids: ["bitcoin", "ethereum", ...]
+            vs: 计价货币
+
+        Returns:
+            {"bitcoin": {"usd": 65000.0}, ...}
+        """
+        try:
+            import akshare as ak
+        except ImportError:
+            logger.warning("[CoinGecko] akshare未安装，无法降级")
+            return {}
+
+        result = {}
+        # AkShare crypto_js_spot() 返回实时快照
+        try:
+            df = ak.crypto_js_spot()
+            if df.empty:
+                return {}
+
+            # 映射币种名称
+            symbol_map = {
+                "bitcoin": ["比特币", "BTC"],
+                "ethereum": ["以太坊", "ETH"],
+                "binancecoin": ["币安币", "BNB"],
+                "cardano": ["艾达币", "ADA"],
+                "solana": ["SOL"],
+                "ripple": ["瑞波币", "XRP"],
+                "polkadot": ["DOT"],
+                "dogecoin": ["狗狗币", "DOGE"],
+            }
+
+            for coin_id in coin_ids:
+                keywords = symbol_map.get(coin_id.lower(), [])
+                if not keywords:
+                    continue
+
+                # 查找匹配行
+                for keyword in keywords:
+                    matched = df[df.iloc[:, 0].astype(str).str.contains(keyword, na=False)]
+                    if not matched.empty:
+                        # 假设第二列为价格
+                        latest_price = float(matched.iloc[0, 1])
+                        result[coin_id] = {vs: latest_price}
+                        break
+        except Exception as e:
+            logger.error(f"[CoinGecko] AkShare crypto_js_spot降级失败: {type(e).__name__}: {e}")
+
+        return result
+
+    def _akshare_crypto_hist_fallback(self, coin_id: str, days: int, vs: str) -> pd.DataFrame:
+        """P2: AkShare 加密货币历史降级 (2026-08-05)
+
+        Returns:
+            DataFrame columns: date, price, volume
+        """
+        try:
+            import akshare as ak
+        except ImportError:
+            logger.warning("[CoinGecko] akshare未安装，无法降级")
+            return pd.DataFrame()
+
+        # AkShare crypto_js_spot 仅返回实时快照，无历史接口
+        # 降级策略：返回空 DataFrame
+        logger.warning(f"[CoinGecko] AkShare不支持加密货币历史数据，coin_id={coin_id}")
+        return pd.DataFrame()
 
     # ==================== BaseAdapter契约 ====================
     def get_stock_history(self, code: str, start_date: str, end_date: str,
