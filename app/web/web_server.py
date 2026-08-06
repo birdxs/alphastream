@@ -62,12 +62,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../t
 _MODEL_CONFIG_KEYS = (
     'OPENAI_API_URL', 'OPENAI_API_MODEL', 'NEWS_MODEL', 'FUNCTION_CALL_MODEL',
 )
-_MODEL_ENV_BEFORE_DOTENV = {key: os.environ.get(key) for key in _MODEL_CONFIG_KEYS}
+_MODEL_ENV_BEFORE_DOTENV = {
+    key: os.environ[key] for key in _MODEL_CONFIG_KEYS if key in os.environ
+}
 _PROJECT_DOTENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', '.env'))
 _PROJECT_DOTENV_VALUES = {
     key: value
     for key, value in dotenv_values(_PROJECT_DOTENV_PATH).items()
-    if key in _MODEL_CONFIG_KEYS and value not in (None, '')
+    if key in _MODEL_CONFIG_KEYS
 }
 load_dotenv(_PROJECT_DOTENV_PATH, override=True)
 
@@ -5168,6 +5170,7 @@ def ai_chat_stream():
         chat_with_tools_stream,
         set_ai_request_correlation_id,
         reset_ai_request_correlation_id,
+        build_safe_request_correlation_id,
     )
     from app.core.tools import (
         OPENAI_TOOLS_SCHEMA,
@@ -5373,7 +5376,9 @@ def ai_chat_stream():
                 def _chat_worker():
                     """后台线程执行真正的阻塞 LLM 调用（绑定请求级持仓与关联标识）"""
                     correlation_token = set_ai_request_correlation_id(
-                        f'{request_correlation_id}:{conversation_id}'
+                        build_safe_request_correlation_id(
+                            request_correlation_id, conversation_id
+                        )
                     )
                     try:
                         with portfolio_context(_snap_for_worker):

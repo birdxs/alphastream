@@ -7,9 +7,14 @@
 - 当前进程导入前环境与项目 `.env` 不一致时输出 WARNING，仅报告、不覆盖或修改模型。
 - 真实 AI 上游请求日志记录最终 model 与 request/conversation correlation 标识，不记录消息正文或完整请求头。
 
+### 修复
+- 区分模型配置 key 缺失与显式空值，增加 `dotenv_explicit_empty`、`explicit_env_empty`、`runtime_env_empty` 来源；空 `.env` 覆盖非空环境时不再漏报冲突。
+- API endpoint 脱敏器仅接受 HTTP/HTTPS，拒绝 `javascript:`、`file:` 等 scheme。
+- 用户可控 `conversation_id` 改为不可逆摘要后再进入日志 correlation；ContextVar 只保存安全字符并限制长度，业务 conversation_id 保持原值。
+
 ### 验证
 - Python compile/import smoke 通过（174 routes）。
-- `tests/backend/unit/test_core_ai_client.py`：46 passed。
+- `tests/backend/unit/test_core_ai_client.py`：52 passed。
 
 ---
 

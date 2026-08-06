@@ -11,6 +11,7 @@ import json
 import time
 import logging
 import hashlib
+import re
 from contextvars import ContextVar
 from urllib.parse import urlsplit
 from typing import Any, Dict, Optional
@@ -31,17 +32,22 @@ _MODEL_CONFIG_DEFAULTS = {
 
 
 def sanitize_api_endpoint(value: Optional[str]) -> str:
-    """仅保留 API URL 的 scheme/host/port，丢弃路径、query 与 fragment。"""
-    raw = (value or _MODEL_CONFIG_DEFAULTS['OPENAI_API_URL']).strip()
+    """仅接受 HTTP(S) API URL，并只保留 scheme/host/port。"""
+    if value is None:
+        raw = _MODEL_CONFIG_DEFAULTS['OPENAI_API_URL']
+    elif not isinstance(value, str):
+        return '<invalid-url>'
+    else:
+        raw = value.strip()
     try:
         parts = urlsplit(raw)
-        if not parts.scheme or not parts.hostname:
+        if parts.scheme.lower() not in ('http', 'https') or not parts.hostname:
             return '<invalid-url>'
         host = parts.hostname
         if ':' in host and not host.startswith('['):
             host = f'[{host}]'
         port = f':{parts.port}' if parts.port is not None else ''
-        return f'{parts.scheme}://{host}{port}'
+        return f'{parts.scheme.lower()}://{host}{port}'
     except (TypeError, ValueError):
         return '<invalid-url>'
 
@@ -60,22 +66,15 @@ def build_model_config_snapshot(
     before = pre_load_env or {}
     snapshot: Dict[str, Dict[str, Optional[str]]] = {}
     for key, default in _MODEL_CONFIG_DEFAULTS.items():
+        key_present = key in effective
         raw_value = effective.get(key)
-        value = raw_value if raw_value not in (None, '') else default
-        if (
-            key in dotenv_config
-            and dotenv_config.get(key) not in (None, '')
-            and raw_value == dotenv_config.get(key)
-        ):
-            source = '.env'
-        elif (
-            key in before
-            and before.get(key) not in (None, '')
-            and raw_value == before.get(key)
-        ):
-            source = 'explicit_env'
-        elif raw_value not in (None, ''):
-            source = 'runtime_env'
+        value = raw_value if key_present else default
+        if key in dotenv_config and raw_value == dotenv_config.get(key):
+            source = '.env' if raw_value != '' else 'dotenv_explicit_empty'
+        elif key in before and raw_value == before.get(key):
+            source = 'explicit_env' if raw_value != '' else 'explicit_env_empty'
+        elif key_present:
+            source = 'runtime_env' if raw_value != '' else 'runtime_env_empty'
         else:
             source = 'code_default'
         display_value = sanitize_api_endpoint(value) if key == 'OPENAI_API_URL' else value
@@ -93,9 +92,11 @@ def find_model_config_mismatches(
     dotenv_config = dotenv_values or {}
     mismatches = []
     for key in _MODEL_CONFIG_DEFAULTS:
+        env_present = key in before
+        dotenv_present = key in dotenv_config
         env_value = before.get(key)
         dotenv_value = dotenv_config.get(key)
-        if env_value in (None, '') or dotenv_value in (None, '') or env_value == dotenv_value:
+        if not env_present or not dotenv_present or env_value == dotenv_value:
             continue
         mismatches.append({
             'key': key,
@@ -106,9 +107,32 @@ def find_model_config_mismatches(
     return mismatches
 
 
+_SAFE_CORRELATION_RE = re.compile(r'[^A-Za-z0-9._:-]+')
+_MAX_CORRELATION_LENGTH = 128
+
+
+def _sanitize_correlation_id(value: Optional[str]) -> str:
+    """将服务端关联标识限制为单行安全字符；不用于业务 conversation_id。"""
+    safe = _SAFE_CORRELATION_RE.sub('_', str(value or '-')).strip('._:')
+    return (safe or '-')[:_MAX_CORRELATION_LENGTH]
+
+
+def build_safe_request_correlation_id(
+    request_correlation_id: Optional[str], conversation_id: Optional[str] = None
+) -> str:
+    """组合日志关联标识；用户 conversation_id 仅以不可逆摘要出现。"""
+    request_part = _sanitize_correlation_id(request_correlation_id)
+    if conversation_id in (None, ''):
+        return request_part
+    conversation_digest = hashlib.sha256(
+        str(conversation_id).encode('utf-8', errors='replace')
+    ).hexdigest()[:16]
+    return f'{request_part}:conv-{conversation_digest}'
+
+
 def set_ai_request_correlation_id(correlation_id: Optional[str]):
-    """设置当前调用链关联标识，返回 token 供调用方 finally reset。"""
-    return _AI_REQUEST_CORRELATION_ID.set(str(correlation_id or '-'))
+    """设置安全的调用链关联标识，返回 token 供调用方 finally reset。"""
+    return _AI_REQUEST_CORRELATION_ID.set(_sanitize_correlation_id(correlation_id))
 
 
 def reset_ai_request_correlation_id(token) -> None:
@@ -118,14 +142,14 @@ def reset_ai_request_correlation_id(token) -> None:
 
 def _resolve_request_correlation_id(explicit: Optional[str] = None) -> str:
     if explicit:
-        return str(explicit)
+        return _sanitize_correlation_id(explicit)
     contextual = _AI_REQUEST_CORRELATION_ID.get()
     if contextual and contextual != '-':
-        return contextual
+        return _sanitize_correlation_id(contextual)
     try:
         from flask import g, has_request_context
         if has_request_context():
-            return str(getattr(g, 'correlation_id', '-') or '-')
+            return _sanitize_correlation_id(getattr(g, 'correlation_id', '-') or '-')
     except (ImportError, RuntimeError):
         pass
     return '-'

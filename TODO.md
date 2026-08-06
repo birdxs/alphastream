@@ -8,7 +8,10 @@
 - [x] 启动时只读比较导入前进程环境与项目 `.env`，不一致输出 WARNING
 - [x] 真实上游请求记录最终 model 与 request/conversation correlation 标识
 - [x] 不记录 API key、消息正文、完整请求头或 URL secret/query
-- [x] 聚焦测试 46 passed；compile/import smoke 通过
+- [x] 聚焦测试 52 passed；compile/import smoke 通过
+- [x] 显式空 `.env`/环境值保留真实语义，空值覆盖冲突不再漏报
+- [x] 非 HTTP(S) API endpoint 拒绝为 `<invalid-url>`
+- [x] 用户 conversation_id 仅以不可逆摘要进入安全 correlation，不改变业务参数
 
 ---
 

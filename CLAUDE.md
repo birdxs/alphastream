@@ -7,10 +7,12 @@
 - `app/web/web_server.py`：保留 `load_dotenv(override=True)` 与模型选择逻辑；导入前捕获当前进程环境、读取项目 `.env`，日志初始化后记录四项最终值/来源，并对 pre-load env 与 `.env` 差异发 WARNING。该检查仅观测当前新进程，不推断其他 PID，不修改 `.env` 或模型值。
 - 导入烟雾真实结果：`.env` 最终值为 `OPENAI_API_MODEL=deepseek/deepseek-v4-flash`；当前导入前环境为 `grok-4.5`，产生清晰 WARNING；API URL 日志仅显示 origin。
 - 验证：`py_compile` 通过；`pytest -q tests/backend/unit/test_core_ai_client.py` → 46 passed；`DISABLE_NETWORK=1 ... import app.web.web_server` → 174 routes。
+- 独立验收阻塞修复（2026-08-06 18:25:50 +08:00）：显式空 `.env`/环境值不再误报 `code_default`，分别标记 `dotenv_explicit_empty` / `explicit_env_empty` / `runtime_env_empty`；非空 pre-load 被空 `.env` 覆盖会报告冲突；仅缺失 key 才使用默认。
+- 安全加固：API endpoint 仅接受 HTTP/HTTPS；用户 `conversation_id` 不进入日志原文，只生成 SHA-256 前 16 位摘要，ContextVar 关联标识再限制为 `[A-Za-z0-9._:-]` 且最长 128 字符，业务参数保持不变。
+- 修复验证：本机 `2026-08-06 03:25:49 -0700`，Cloudflare/GitHub `2026-08-06 10:25:50/42 GMT`，最大偏差 8 秒；`py_compile` 通过；聚焦测试 **52 passed**；离线 import smoke **174 routes**。
 - 回滚：`git revert <本任务提交>`；无 schema、数据或 `.env` 迁移。
 
 ---
-
 
 > 本文件为本项目专属纪律与上下文记忆，全局 `~/.pandacc/CLAUDE.md` 优先于本文件，但本文件中的硬性纪律不得被忽略。
 

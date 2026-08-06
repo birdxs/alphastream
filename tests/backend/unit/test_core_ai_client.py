@@ -92,6 +92,92 @@ class TestModelConfigObservability:
             'effective': 'dotenv-model',
         }]
 
+    def test_explicit_empty_dotenv_preserves_runtime_semantics(self, ai_client_mod):
+        snapshot = ai_client_mod.build_model_config_snapshot(
+            effective_env={
+                'OPENAI_API_URL': '',
+                'OPENAI_API_MODEL': '',
+                'NEWS_MODEL': '',
+                'FUNCTION_CALL_MODEL': '',
+            },
+            dotenv_values={
+                'OPENAI_API_URL': '',
+                'OPENAI_API_MODEL': '',
+                'NEWS_MODEL': '',
+                'FUNCTION_CALL_MODEL': '',
+            },
+            pre_load_env={},
+        )
+        assert snapshot['OPENAI_API_URL'] == {
+            'value': '<invalid-url>', 'source': 'dotenv_explicit_empty'
+        }
+        for key in ('OPENAI_API_MODEL', 'NEWS_MODEL', 'FUNCTION_CALL_MODEL'):
+            assert snapshot[key] == {
+                'value': '', 'source': 'dotenv_explicit_empty'
+            }
+
+    def test_explicit_env_empty_is_not_code_default(self, ai_client_mod):
+        snapshot = ai_client_mod.build_model_config_snapshot(
+            effective_env={'OPENAI_API_MODEL': ''},
+            dotenv_values={},
+            pre_load_env={'OPENAI_API_MODEL': ''},
+        )
+        assert snapshot['OPENAI_API_MODEL'] == {
+            'value': '', 'source': 'explicit_env_empty'
+        }
+        assert snapshot['FUNCTION_CALL_MODEL'] == {
+            'value': 'gpt-4o', 'source': 'code_default'
+        }
+
+    def test_empty_dotenv_overrides_nonempty_environment_is_mismatch(self, ai_client_mod):
+        snapshot = ai_client_mod.build_model_config_snapshot(
+            effective_env={'OPENAI_API_MODEL': ''},
+            dotenv_values={'OPENAI_API_MODEL': ''},
+            pre_load_env={'OPENAI_API_MODEL': 'process-model'},
+        )
+        mismatches = ai_client_mod.find_model_config_mismatches(
+            snapshot,
+            {'OPENAI_API_MODEL': 'process-model'},
+            {'OPENAI_API_MODEL': ''},
+        )
+        assert mismatches == [{
+            'key': 'OPENAI_API_MODEL',
+            'pre_load_env': 'process-model',
+            'dotenv': '',
+            'effective': '',
+        }]
+
+    @pytest.mark.parametrize('url', [
+        'javascript://example.com/alert?secret=x',
+        'file://localhost/etc/passwd',
+    ])
+    def test_endpoint_rejects_non_http_schemes(self, ai_client_mod, url):
+        assert ai_client_mod.sanitize_api_endpoint(url) == '<invalid-url>'
+
+    def test_user_conversation_id_never_appears_in_request_log(self, ai_client_mod, caplog):
+        conversation_id = 'https://example.com/chat?api_key=secret\nINJECTED\x00'
+        safe_correlation = ai_client_mod.build_safe_request_correlation_id(
+            'request-123', conversation_id
+        )
+        assert safe_correlation.startswith('request-123:conv-')
+        assert conversation_id not in safe_correlation
+        assert '\n' not in safe_correlation
+        assert '?' not in safe_correlation
+
+        token = ai_client_mod.set_ai_request_correlation_id(safe_correlation)
+        try:
+            with caplog.at_level('INFO', logger=ai_client_mod.__name__):
+                ai_client_mod._log_upstream_request('safe-model', stream=True)
+        finally:
+            ai_client_mod.reset_ai_request_correlation_id(token)
+
+        assert 'correlation_id=request-123:conv-' in caplog.text
+        assert 'example.com' not in caplog.text
+        assert 'api_key' not in caplog.text
+        assert 'secret' not in caplog.text
+        assert 'INJECTED' not in caplog.text
+        assert '\x00' not in caplog.text
+
     def test_request_log_has_model_and_correlation_without_message(self, ai_client_mod, caplog):
         client = mock.MagicMock()
         client.chat.completions.create.return_value = _make_response('ok')
