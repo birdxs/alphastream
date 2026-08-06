@@ -109,6 +109,25 @@ class UnifiedCache:
             logger.info(f"清理了 {len(expired_keys)} 条过期缓存")
         return len(expired_keys)
 
+    def clear(self) -> None:
+        """清空所有缓存（测试用）"""
+        if self._redis:
+            try:
+                # Redis 使用 SCAN + DEL 清理 stockanal:* 键
+                cursor = 0
+                while True:
+                    cursor, keys = self._redis.scan(cursor, match='stockanal:*', count=100)
+                    if keys:
+                        self._redis.delete(*keys)
+                    if cursor == 0:
+                        break
+            except Exception as e:
+                logger.warning(f"Redis清空失败: {e}")
+
+        # 清空内存缓存
+        self._memory_cache.clear()
+        self._memory_ttl.clear()
+
     @property
     def is_redis(self) -> bool:
         return self._redis is not None

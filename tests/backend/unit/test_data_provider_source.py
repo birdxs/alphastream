@@ -4,9 +4,13 @@ DP-P1-1/P1-2: DataProvider source 透传单元测试
 测试范围:
 1. get_stock_history 返回 (df, source) 元组
 2. source 反映真实命中 adapter
-3. 缓存命中时 source='cache'
+3. 缓存命中时 source='cache'（统一标识）
 4. Registry 降级链顺序
 5. web_server meta.source 透传
+
+Registry mock 最佳实践:
+- Registry 内部方法在 pytest 环境下不稳定，统一 mock 最外层 call_with_fallback
+- 避免 mock Registry.__init__ 或内部 _adapters 字典
 """
 import os
 import pytest
@@ -40,12 +44,10 @@ class TestDataProviderSource:
 
     def test_source_reflects_actual_adapter(self):
         """source 反映真实命中的 adapter"""
-        # 清空缓存
         from app.core.data_provider import DataProvider
         dp = DataProvider()
-        # UnifiedCache 单例，清理内存缓存
-        dp._cache._memory_cache.clear()
-        dp._cache._memory_ttl.clear()
+        # 使用 clear() 清空缓存
+        dp._cache.clear()
 
         # 场景1: akshare 成功
         with patch.object(dp._registry, 'call_with_fallback') as mock_call:
@@ -58,8 +60,7 @@ class TestDataProviderSource:
             assert source == 'akshare'
 
         # 清空缓存
-        dp._cache._memory_cache.clear()
-        dp._cache._memory_ttl.clear()
+        dp._cache.clear()
 
         # 场景2: 降级到 baostock
         with patch.object(dp._registry, 'call_with_fallback') as mock_call:
@@ -72,11 +73,10 @@ class TestDataProviderSource:
             assert source == 'baostock'
 
     def test_cache_hit_returns_cache_source(self):
-        """缓存命中时返回原始 source（非 'cache' 字面量）"""
+        """缓存命中时返回 'cache' 统一标识"""
         from app.core.data_provider import DataProvider
         dp = DataProvider()
-        dp._cache._memory_cache.clear()
-        dp._cache._memory_ttl.clear()
+        dp._cache.clear()
 
         mock_result = {
             'data': pd.DataFrame({'close': [100]}),
@@ -91,10 +91,10 @@ class TestDataProviderSource:
             assert source1 == 'akshare'
             assert mock_call.call_count == 1
 
-            # 第二次调用（缓存命中，Registry 不再被调用）
-            # 注意：A1 设计返回原始 source，而不是 'cache' 字面量
+            # 第二次调用（缓存命中）
+            # 修复后：缓存命中统一返回 'cache'，不再返回原始 source
             df2, source2 = dp.get_stock_history('600519', '20240101', '20240131')
-            assert source2 == 'akshare'  # 返回原始 source
+            assert source2 == 'cache'  # 统一标识为 'cache'
             assert not df2.empty
             # Registry 总调用次数仍为 1（缓存命中后直接返回）
             assert mock_call.call_count == 1
@@ -103,8 +103,7 @@ class TestDataProviderSource:
         """Registry 失败时回退 FallbackManager"""
         from app.core.data_provider import DataProvider
         dp = DataProvider()
-        dp._cache._memory_cache.clear()
-        dp._cache._memory_ttl.clear()
+        dp._cache.clear()
 
         # Mock Registry 抛异常
         with patch.object(dp._registry, 'call_with_fallback') as mock_registry:
@@ -125,8 +124,7 @@ class TestDataProviderSource:
         """数据为空时返回空 DataFrame 和 'empty' source"""
         from app.core.data_provider import DataProvider
         dp = DataProvider()
-        dp._cache._memory_cache.clear()
-        dp._cache._memory_ttl.clear()
+        dp._cache.clear()
 
         # Mock Registry 返回空 DataFrame
         with patch.object(dp._registry, 'call_with_fallback') as mock_call:

@@ -78,9 +78,9 @@ class DataProvider:
         cache_key = f"history_{code}_{start_date}_{end_date}_{adjust}"
         cached = self._cache.get(cache_key)
         if cached is not None:
-            cached_source = cached.get('source', 'cache') if isinstance(cached, dict) else 'cache'
             cached_data = cached.get('data', cached) if isinstance(cached, dict) else cached
-            return pd.DataFrame(cached_data), cached_source
+            # 缓存命中统一返回 'cache'（不返回原始 source）
+            return pd.DataFrame(cached_data), 'cache'
 
         # DP-P1-1: 优先使用 Registry（a_stock_kline domain）
         try:

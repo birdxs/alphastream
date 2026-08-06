@@ -52,7 +52,7 @@ def test_singleton_identity():
 
 
 def test_get_stock_history_uses_fallback_and_cache():
-    """get_stock_history 走 fallback，第二次走缓存（返回原始 source）。"""
+    """get_stock_history 走 fallback，第二次走缓存（统一返回 'cache'）。"""
     dp = _build_provider_with_mock_fallback()
     df = pd.DataFrame({"date": ["2025-01-01"], "open": [1.0],
                        "high": [2.0], "low": [0.9], "close": [1.5],
@@ -67,10 +67,10 @@ def test_get_stock_history_uses_fallback_and_cache():
             assert source1 == 'fallback'
             assert mock_fallback.call_count == 1
 
-            # 第二次调用：缓存命中，但返回原始 source（设计行为）
+            # 第二次调用：缓存命中，统一返回 'cache'（A1 修复后的设计）
             r2, source2 = dp.get_stock_history("600519", "2025-01-01", "2025-01-31")
             assert mock_fallback.call_count == 1  # fallback 不再被调用
-            assert source2 == 'fallback'  # 缓存返回原始 source
+            assert source2 == 'cache'  # 缓存统一返回 'cache'
             assert list(r2.columns) == list(df.columns)
 
 
