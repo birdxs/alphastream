@@ -1,5 +1,30 @@
 # TODO
 
+## DP-P2-2 + Provenance 验证（2026-08-05）
+
+**状态**：✅ **已完成**
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| DP-P2-2: 基本面统一到 registry | ✅ | `get_fundamental_data` 改调 `registry.call_with_fallback('xbrl_financials')`；链：Wind → EDGAR → YFinance → OpenBB → FundamentalAnalyzer |
+| Provenance 强制注入验证 | ✅ | 确认 `ai_client._tool_call_result_payload` 强制调用 `normalize_provenance_list`；双重异常兜底 |
+| Provenance 字段清洗验证 | ✅ | 确认无价格字段（price/close/high/low/volume）；拒绝裸字符串 source；符合铁律 #1 |
+| 测试覆盖 | ✅ | `test_tools.py` (5 passed) + `test_provenance_validation.py` (5 passed) + 现有测试 (57 passed) |
+| Commit | ✅ | `ccca536` [DP-P2-2][provenance] |
+| 扫描报告 | ✅ | `docs/design/provenance-scan-report.md` |
+
+**关键验证**：
+- ✅ CLAUDE.md 声明"provenance[] 已强制"：**验证通过**
+- ✅ SSE 工具调用响应 100% 包含 `provenance` 字段
+- ✅ 铁律 #1（零假数据）：严格执行价格字段清洗
+- ✅ 测试覆盖：10/10 新增测试 + 57/57 回归测试
+
+**遗留（低优先级）**：
+- P3: OpenAPI schema 补充 `ProvenanceItem` 定义（文档完善）
+- P3: 前端 tool-call-card 显示 provenance 源标签（UX 优化）
+
+---
+
 ## DP-P1-3 + DP-P2-1 实时数据与缓存优化（2026-08-05）
 
 **状态**：✅ **已完成**

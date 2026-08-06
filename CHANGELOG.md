@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-05 — DP-P2-2 + Provenance 验证
+
+- **DP-P2-2: 基本面统一到 registry**：`app/core/tools.py` `get_fundamental_data` 改调 `AdapterRegistry.call_with_fallback('xbrl_financials')`，统一降级链：Wind → EDGAR → YFinance → OpenBB → FundamentalAnalyzer（最终兜底）。
+- **Provenance 强制注入验证**：确认 `app/core/ai_client.py` `_tool_call_result_payload` (行 288-319) 强制调用 `normalize_provenance_list`，双重异常兜底确保 `provenance` 字段存在。
+- **Provenance 字段清洗验证**：确认 `app/core/artifact_wrapper.py` `normalize_provenance_item` 清洗 8 个价格字段（price/close/high/low/open/volume/amount/turnover），拒绝裸字符串 source，符合铁律 #1（零假数据）。
+- **测试覆盖**：新增 `tests/core/test_tools.py` (5 个 DP-P2-2 测试) + `tests/core/test_provenance_validation.py` (5 个 provenance 测试)；回归测试 67/67 passed（test_analysis_fundamental.py 19 + tests/agents/ 38 + 新增 10）。
+- **扫描报告**：生成 `docs/design/provenance-scan-report.md`，确认 CLAUDE.md 历史声明"provenance[] 已强制"验证通过，SSE 工具调用响应 100% 包含 provenance 字段。
+- **Commit**: `ccca536` [DP-P2-2][provenance]。
+- **未 push**。
+
 ## 2026-08-05 — Skill 吸收与降级补强
 
 - **删除**：`skill参考/akshare-finance/` 已 100% 吸收到 adapters，目录已删除。
