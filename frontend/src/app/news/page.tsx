@@ -87,6 +87,9 @@ export default function NewsPage() {
   const seenKeysRef = useRef<Set<string>>(new Set());
   const isFirstLoadRef = useRef(true);
 
+  // 倒计时状态（3分钟 = 180秒）
+  const [countdown, setCountdown] = useState(180);
+
   /* 获取新闻 — 增量合并 + 去重 + 倒序，不清屏 */
   const fetchNews = useCallback(async () => {
     try {
@@ -164,6 +167,34 @@ export default function NewsPage() {
       requestAnimationFrame(() => { el.scrollTop = 0; });
     }
   }, [newestKey]);
+
+  /* 倒计时逻辑：每秒递减，到 0 时重置为 180 */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 0) {
+          return 180; // 重置为 3 分钟
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  /* 当新闻更新时重置倒计时 */
+  useEffect(() => {
+    if (allNews.length > 0) {
+      setCountdown(180); // 重置倒计时
+    }
+  }, [allNews.length]);
+
+  /* 格式化倒计时显示 */
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   /* 计算情绪分布：优先使用API数据，降级用前端计算 */
   const posPct = sentimentData ? sentimentData.bullish_pct : (() => {
@@ -270,6 +301,11 @@ export default function NewsPage() {
               <p>{">"} sentiment_agent v4.0 initialized</p>
               <p>{">"} scanning financial news feed...</p>
               <p>{">"} connected to data source [OK]</p>
+              <p>
+                <span className="text-yellow-500">{">"}</span>
+                <span className="text-gray-400"> next update in: </span>
+                <span className="text-cyan-400 font-mono">{formatCountdown(countdown)}</span>
+              </p>
               <p className="mb-3">---</p>
             </div>
 

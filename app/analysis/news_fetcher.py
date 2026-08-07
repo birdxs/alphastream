@@ -372,8 +372,8 @@ def start_news_scheduler():
         while True:
             try:
                 fetch_news_task()
-                # 等待10分钟
-                time.sleep(1800)
+                # 等待3分钟
+                time.sleep(180)
             except Exception as e:
                 logger.error(f"定时任务执行出错: {str(e)}")
                 time.sleep(60)  # 出错后等待1分钟再试

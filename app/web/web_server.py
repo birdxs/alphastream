@@ -5244,6 +5244,7 @@ def ai_chat_stream():
         # AI对话总超时（默认 1800s=30min，可经环境变量 AI_CHAT_TIMEOUT 配置）
         AI_CHAT_TIMEOUT = int(os.getenv('AI_CHAT_TIMEOUT', '1800'))
         chat_start_time = time.time()
+        error_sent = False  # 防止重复发送错误
 
         def check_timeout():
             """检查是否超时，超时则抛出TimeoutError"""
@@ -5467,7 +5468,10 @@ def ai_chat_stream():
                     # 用干净的原始messages，避免残留的tool_call消息导致API错误
                     stream, stream_err = chat_completion_stream(client, original_messages)
                     if stream_err:
-                        yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
+                        if not error_sent:
+                            yield emit('error', {'code': 'AI_ERROR', 'message': stream_err})
+                            error_sent = True
+                        yield emit('done', {'conversation_id': conversation_id})
                         return
                     # 收集流式响应 - 同样带心跳
                     collected = ""
@@ -5487,7 +5491,10 @@ def ai_chat_stream():
                     tools_log = []
 
                 if error:
-                    yield emit('error', {'code': 'AI_ERROR', 'message': error})
+                    if not error_sent:
+                        yield emit('error', {'code': 'AI_ERROR', 'message': error})
+                        error_sent = True
+                    yield emit('done', {'conversation_id': conversation_id})
                     return
 
                 final_content = content or full_content
@@ -5568,12 +5575,18 @@ def ai_chat_stream():
 
             except TimeoutError as te:
                 app.logger.warning(f"AI对话超时: {te}")
-                yield emit('error', {'code': 'TIMEOUT', 'message': 'AI响应超时，请稍后重试或缩短问题长度'})
+                if not error_sent:
+                    yield emit('error', {'code': 'TIMEOUT', 'message': 'AI响应超时，请稍后重试或缩短问题长度'})
+                    error_sent = True
+                yield emit('done', {'conversation_id': conversation_id})
             except GeneratorExit:
                 app.logger.debug("AI对话SSE连接已断开")
             except Exception as e:
                 app.logger.error(f"AI对话流式处理失败: {traceback.format_exc()}")
-                yield emit('error', {'code': 'STREAM_ERROR', 'message': 'AI服务处理异常，请稍后重试'})
+                if not error_sent:
+                    yield emit('error', {'code': 'STREAM_ERROR', 'message': 'AI服务处理异常，请稍后重试'})
+                    error_sent = True
+                yield emit('done', {'conversation_id': conversation_id})
 
     return Response(
         stream_with_context(generate()),
