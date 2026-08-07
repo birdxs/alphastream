@@ -2,8 +2,8 @@
 
 > 此项目的任何功能、架构更新，必须在结束后同步更新相关文档。这是我们契约的一部分。
 
-[![CI](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/ci.yml/badge.svg)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/ci.yml)
-[![Adapter Smoke (Weekly)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/adapter-smoke-weekly.yml/badge.svg)](https://github.com/LargeCupPanda/StockAnal_Sys/actions/workflows/adapter-smoke-weekly.yml)
+[![CI](https://github.com/lc2panda/alphastream/actions/workflows/ci.yml/badge.svg)](https://github.com/lc2panda/alphastream/actions/workflows/ci.yml)
+[![Adapter Smoke (Weekly)](https://github.com/lc2panda/alphastream/actions/workflows/adapter-smoke-weekly.yml/badge.svg)](https://github.com/lc2panda/alphastream/actions/workflows/adapter-smoke-weekly.yml)
 
 ![版本](https://img.shields.io/badge/版本-3.1.0-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-16.2.9-black.svg)
@@ -285,8 +285,8 @@ eventSource.addEventListener('agent.tool_call', (e) => {
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/LargeCupPanda/StockAnal_Sys.git
-cd StockAnal_Sys
+git clone https://github.com/lc2panda/alphastream.git
+cd alphastream
 
 # 2. 配置环境变量
 cp .env-example .env
@@ -666,8 +666,7 @@ GitHub Actions 自动化流程：
 
 ## 📧 联系方式
 
-- **Issues**: [GitHub Issues](https://github.com/LargeCupPanda/StockAnal_Sys/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/LargeCupPanda/StockAnal_Sys/discussions)
+- **Issues**: [GitHub Issues](https://github.com/lc2panda/alphastream/issues)
 
 ---
 

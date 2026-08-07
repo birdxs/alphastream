@@ -246,7 +246,7 @@ def _search_wikipedia(query: str, max_results: int) -> List[Dict]:
                 f"&format=json&srlimit={max_results}"
             )
             # Wikimedia 要求具体UA(项目名+联系方式) https://meta.wikimedia.org/wiki/User-Agent_policy
-            wiki_ua = "StockAnalSys/1.0 (https://github.com/LargeCupPanda/StockAnal_Sys; contact via GitHub) python-requests"
+            wiki_ua = "StockAnalSys/1.0 (https://github.com/lc2panda/alphastream; contact via GitHub) python-requests"
             r = requests.get(url, headers={"User-Agent": wiki_ua, "Accept": "application/json"}, timeout=8)
             try:
                 data = r.json()
