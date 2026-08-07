@@ -1,5 +1,140 @@
 # StockAnal_Sys 项目级 CLAUDE.md
 
+## Chat 错误处理修复（2026-08-07 11:30 +08:00）
+
+任务约束：本地开发；禁止 push；治本修复前端错误处理；CDP Bridge 浏览器调试。
+
+时间真实性校验：
+- 本机：2026-08-07 03:20:18 -0700 ≈ 2026-08-07 11:20:18 +08:00
+- Cloudflare：`Fri, 07 Aug 2026 03:20:18 GMT` = 2026-08-07 11:20:18 +08:00
+- 最大偏差：<5 秒；判定：通过
+
+### 问题诊断
+
+**用户报告**：页面显示 4 条相同错误消息："⚠️ AI请求参数错误，请检查输入后重试"
+
+**CDP Bridge 真实调试**：
+- 使用 `mcp__cdp-bridge__browser_*` 工具连接浏览器
+- 设置 fetch/EventSource 拦截器捕获完整请求/响应
+- 捕获到 localStorage 中的错误记录（message_id: error_1786072309766/774）
+- 触发消息：`"启动多Agent协作深度分析今天资本市场详细情况"`（03:11:28）
+
+**根本原因**：
+1. 后端返回详细 JSON 错误（400 Bad Request）：
+   ```json
+   {
+     "error": "参数校验失败：message: Length must be between 1 and 5000.",
+     "error_code": "INVALID_INPUT",
+     "success": false
+   }
+   ```
+2. 前端 `client.ts:206` 只提取 HTTP 状态码：`message: 'HTTP ${res.status}'`
+3. `use-chat-stream.ts` 收到简化错误，用户看到硬编码通用消息
+
+### 修复内容
+
+**文件**：`frontend/src/lib/api/client.ts` 第 206-209 行
+
+**改动前**：
+```typescript
+if (!res.ok || !res.body) {
+  if (attempt < MAX_RETRIES) { /* retry */ }
+  handlers.onError?.({ code: 'FETCH_ERROR', message: `HTTP ${res.status}` });
+  return;
+}
+```
+
+**改动后**：
+```typescript
+if (!res.ok || !res.body) {
+  if (attempt < MAX_RETRIES) { /* retry */ }
+  // 读取后端返回的详细错误信息
+  const errorMessage = await extractErrorMessage(res);
+  handlers.onError?.({ code: 'FETCH_ERROR', message: errorMessage });
+  return;
+}
+```
+
+**效果**：
+- 修复前：`"AI请求参数错误"` / `"HTTP 400"`
+- 修复后：`"参数校验失败：message: Length must be between 1 and 5000."`
+
+### 验证记录
+
+**后端测试**（`test-chat-error.sh`）：
+- ✅ 空消息 → `"Length must be between 1 and 5000"`
+- ✅ 缺少字段 → `"Missing data for required field"`
+- ✅ 无效范围 → `"Must be between 1 and 5"`
+- ✅ 正常消息 → SSE 流正常
+
+**前端构建**：
+```bash
+cd frontend && npm run build
+✓ Compiled successfully in 16.2s
+```
+
+**服务重启**：
+- 后端：uptime_s=14.043（真重启）
+- 前端：npm run dev（已启动）
+
+**CDP 验证**：
+- fetch 拦截器捕获到详细错误响应
+- 页面刷新后加载新代码
+- 历史错误保存在 localStorage（修复前产生）
+
+### 影响范围
+
+- **受影响**：所有使用 `streamPost` 的 SSE 端点（`/api/ai/chat`、`/api/ai/agent-analyze`）
+- **不受影响**：GET/POST 端点（已使用 `extractErrorMessage`）
+
+### 回滚方案
+
+```bash
+git checkout frontend/src/lib/api/client.ts
+cd frontend && npm run build
+```
+
+### 后续建议
+
+**P1**（立即）：
+1. 清理用户浏览器 localStorage 中的历史错误消息
+2. 添加错误消息去重逻辑
+
+**P2**（本周）：
+3. 统一所有错误消息格式
+4. 前端参数预校验
+5. 错误重试机制优化
+
+**P3**（长期）：
+6. 错误监控和统计
+7. 错误消息国际化
+8. 建立错误知识库
+
+### 附录：调试工具使用
+
+本次使用 CDP Bridge MCP 工具进行浏览器调试：
+```javascript
+// 获取标签页
+mcp__cdp-bridge__browser_get_tabs()
+
+// 扫描页面
+mcp__cdp-bridge__browser_scan({switch_tab_id: "..."})
+
+// 执行 JS 调试
+mcp__cdp-bridge__browser_execute_js({
+  script: "window.fetch = ...", // 拦截器
+  switch_tab_id: "..."
+})
+```
+
+关键收获：
+- 捕获真实网络请求/响应
+- 访问 localStorage 完整状态
+- 实时监控 console.error
+- 模拟用户交互触发错误
+
+---
+
 ## 模型配置来源可观测性与启动一致性核验（2026-08-06 18:05:35 +08:00）
 
 - 时间真实性校验：本机 `2026-08-06 03:05:27 -0700`（等效 `2026-08-06 18:05:27 +08:00`）；Cloudflare `2026-08-06 10:05:35 GMT`；GitHub `2026-08-06 10:05:27 GMT`；最大偏差 8 秒，判定通过。

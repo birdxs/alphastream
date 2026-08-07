@@ -1,5 +1,49 @@
 # TODO
 
+## Chat 错误处理修复（2026-08-07）
+
+**状态**：✅ **已完成**
+
+### 问题
+- 用户看到通用错误消息："⚠️ AI请求参数错误"
+- 后端返回了详细的校验错误，但前端未读取和显示
+- 4 条历史错误消息保存在 localStorage 中
+
+### 修复
+- [x] 修改 `frontend/src/lib/api/client.ts:206-209` 读取后端详细错误
+- [x] 使用 `extractErrorMessage()` 函数解析 JSON/文本错误响应
+- [x] 创建后端测试脚本 `test-chat-error.sh`（4 个测试用例）
+- [x] 前端构建并重启服务
+- [x] 使用 CDP Bridge 工具进行浏览器真实调试
+
+### 验证
+- ✅ 后端返回详细错误：`"参数校验失败：message: Length must be between 1 and 5000."`
+- ✅ 前端成功读取并传递错误消息
+- ✅ 4 种错误场景测试通过（空消息/缺字段/无效范围/正常请求）
+- ✅ TypeScript 编译零错误
+- ✅ npm run build 成功
+
+### 影响范围
+- 受影响：所有 SSE 端点（`/api/ai/chat`, `/api/ai/agent-analyze`）
+- 改善：用户可看到具体的参数错误，便于自行修正
+
+### 改动文件
+- `frontend/src/lib/api/client.ts`: 1 处修改（第 206-209 行）
+- `test-chat-error.sh`: 新增测试脚本
+- `CHAT_ERROR_FIX.md`: 完整修复文档
+
+### Commit
+未提交（本地开发环境）
+
+### 后续任务
+- [ ] P1: 清理 localStorage 历史错误消息的方法文档化
+- [ ] P1: 添加错误消息去重逻辑
+- [ ] P2: 统一所有错误消息格式
+- [ ] P2: 前端参数预校验
+- [ ] P3: 错误监控和统计
+
+---
+
 ## 模型配置来源可观测性（2026-08-06）
 
 **状态**：已完成

@@ -203,7 +203,9 @@ class ApiClient {
             await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
             continue;
           }
-          handlers.onError?.({ code: 'FETCH_ERROR', message: `HTTP ${res.status}` });
+          // 读取后端返回的详细错误信息
+          const errorMessage = await extractErrorMessage(res);
+          handlers.onError?.({ code: 'FETCH_ERROR', message: errorMessage });
           return;
         }
 
