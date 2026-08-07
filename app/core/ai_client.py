@@ -867,8 +867,8 @@ def chat_completion_stream(client, messages, temperature=0.7, max_tokens=4096, t
             kwargs['tool_choice'] = tool_choice
 
         # 获取当前模型的 adapter 并恢复 reasoning_content 到消息内部
-        from app.core.llm_providers import get_reasoning_adapter
-        adapter = get_reasoning_adapter(model)
+        from app.core.llm_providers import get_adapter
+        adapter = get_adapter(model)
         messages = _restore_reasoning_to_messages(messages, adapter)
 
         _log_upstream_request(model, stream=True)

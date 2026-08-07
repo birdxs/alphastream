@@ -271,13 +271,14 @@ class GenericOpenAIAdapter(ReasoningAdapter):
 # === 路由 ===
 
 _ADAPTER_PATTERNS = [
-    (re.compile(r"^deepseek-v4", re.I), DeepSeekV4Adapter),
-    (re.compile(r"^deepseek-v3", re.I), DeepSeekV3Adapter),
-    (re.compile(r"^deepseek-chat", re.I), DeepSeekV3Adapter),
-    (re.compile(r"^deepseek-r1", re.I), DeepSeekR1Adapter),
-    (re.compile(r"^deepseek-reasoner", re.I), DeepSeekR1Adapter),
-    (re.compile(r"^mimo", re.I), MimoAdapter),
-    (re.compile(r"^o[13](-|$)", re.I), OpenAIO1Adapter),
+    # 支持 OneAPI 的 "provider/model" 格式，如 "deepseek/deepseek-v4-flash"
+    (re.compile(r"^(?:\w+/)?deepseek-v4", re.I), DeepSeekV4Adapter),
+    (re.compile(r"^(?:\w+/)?deepseek-v3", re.I), DeepSeekV3Adapter),
+    (re.compile(r"^(?:\w+/)?deepseek-chat", re.I), DeepSeekV3Adapter),
+    (re.compile(r"^(?:\w+/)?deepseek-r1", re.I), DeepSeekR1Adapter),
+    (re.compile(r"^(?:\w+/)?deepseek-reasoner", re.I), DeepSeekR1Adapter),
+    (re.compile(r"^(?:\w+/)?mimo", re.I), MimoAdapter),
+    (re.compile(r"^(?:\w+/)?o[13](-|$)", re.I), OpenAIO1Adapter),
 ]
 
 
