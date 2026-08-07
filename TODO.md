@@ -15,6 +15,27 @@
 
 ---
 
+## A1 问题修复（2026-08-05）
+
+**状态**：✅ **已完成**
+
+| 问题 | 修复 | 验证 |
+|------|------|------|
+| 1. 缓存返回原始 source | 统一返回 `'cache'` | ✅ |
+| 2. UnifiedCache 无 clear() | 新增 clear() 方法 | ✅ |
+| 3. Registry mock 最佳实践 | 文档化到测试文件头部 | ✅ |
+
+**改动文件**：
+- `app/core/cache.py`: UnifiedCache.clear() 方法（支持内存+Redis）
+- `app/core/data_provider.py`: 缓存命中返回 `(df, 'cache')`
+- `tests/backend/unit/test_data_provider_source.py`: 更新断言 + mock 文档
+- `tests/backend/unit/test_core_data_provider.py`: 更新断言
+
+**测试结果**：pytest 16/16 passed
+
+**Commit**：`e672497` fix(data): unify cache source + add UnifiedCache.clear()
+
+---
 
 ## DP-P2-2 + Provenance 验证（2026-08-05）
 
@@ -389,3 +410,12 @@ gantt
 - **遗留问题**：`test_quote_batch_fallback_to_kline` 批量运行偶发失败（状态污染），单独运行通过
 
 **实测注意**：需**重启后端**后所有改动才生效；成功拉指数后自动写 `data/market_indices_last_good.json`。
+
+## ✅ 已完成（2026-08-05）
+
+### thinking mode reasoning_content 修复
+- 修复 o1/o3 等 thinking 模型 400 错误：`The reasoning_content in the thinking mode must be passed back to the API.`
+- chat_completion_stream 自动从历史 assistant 消息提取 reasoning_content
+- 识别 thinking 模型（o1/o3/reasoning/think 关键字）
+- 容错处理：首次对话或无 reasoning_content 时不传
+- 测试覆盖：4 个新增用例（test_T029*），43 个测试全通过

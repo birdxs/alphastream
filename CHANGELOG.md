@@ -18,6 +18,17 @@
 
 ---
 
+## 2026-08-05 — A1 缓存 source 统一修复
+
+### 修复
+- **缓存 source 统一**：缓存命中时统一返回 `source='cache'`，不再返回原始 source（akshare/fallback 等），便于前端区分实时/缓存数据
+- **UnifiedCache.clear()**：新增 `clear()` 方法支持测试环境缓存清理（内存+Redis）
+- **测试最佳实践**：文档化 Registry mock 最佳实践（统一 mock `call_with_fallback` 最外层）
+
+**Commit**: e672497  
+**测试**: pytest 16/16 passed
+
+---
 
 ## 2026-08-06 — DP-P1~P2 数据路径增强
 
@@ -261,3 +272,18 @@
 - 记录 Comdr 手动前端测试值守发现：OneAPI 429 自动重试后成功、资金流 Eastmoney ProxyError 当前会输出完整 Traceback、Recharts 零尺寸容器警告需后续治理。
 - 确认手测收尾前后端仍可用：后端 `/health` 200，前端 `/dashboard` HEAD 200。
 - 停止本地后端 8888 与前端 3000 服务，清理开发缓存并释放端口；未删除 `node_modules`，未 push。
+
+## [2026-08-05] thinking mode 支持
+
+### Fixed
+- **AI 客户端**：修复 o1/o3 等 thinking 模型 400 错误
+  - 根因：上游 LLM 要求 `reasoning_content` 必须回传
+  - 修复：`chat_completion_stream` 自动从历史 assistant 消息提取 `reasoning_content`
+  - 识别：o1/o3/reasoning/think 关键字匹配
+  - 容错：首次对话或无 reasoning_content 时不传参数
+  - 测试：新增 4 个覆盖用例（test_T029*），43/43 通过
+
+### Technical Details
+- 文件：`app/core/ai_client.py` (chat_completion_stream 函数)
+- 逻辑：从 messages 反向遍历，取最近 assistant 的 reasoning_content
+- 向后兼容：非 thinking 模型不受影响

@@ -309,6 +309,51 @@ def get_ai_client():
     return client
 
 
+def _restore_reasoning_to_messages(messages: list, adapter) -> list:
+    """
+    将历史 assistant 消息中的 reasoning_content 恢复到消息体内部。
+
+    根据 adapter 的 reasoning_history_policy 决定是否恢复：
+    - 'keep': 总是恢复
+    - 'keep_for_tool': 仅当下一条消息是 tool 时恢复
+    - 'strip': 不恢复
+    """
+    if not hasattr(adapter, 'reasoning_history_policy'):
+        return messages
+
+    policy = adapter.reasoning_history_policy
+    if policy == 'strip':
+        return messages
+
+    restored = []
+    for i, msg in enumerate(messages):
+        if msg.get('role') == 'assistant':
+            reasoning = msg.get('reasoning_content')
+            if reasoning:
+                # 检查是否应该恢复
+                should_restore = False
+                if policy == 'keep':
+                    should_restore = True
+                elif policy == 'keep_for_tool':
+                    # 检查下一条消息是否是 tool
+                    if i + 1 < len(messages) and messages[i + 1].get('role') == 'tool':
+                        should_restore = True
+
+                if should_restore:
+                    msg_copy = msg.copy()
+                    # reasoning_content 放在消息内部，与 tool_calls 同级
+                    msg_copy['reasoning_content'] = reasoning
+                    restored.append(msg_copy)
+                else:
+                    restored.append(msg)
+            else:
+                restored.append(msg)
+        else:
+            restored.append(msg)
+
+    return restored
+
+
 def get_ai_model():
     """获取配置的AI模型名称"""
     return os.getenv('OPENAI_API_MODEL', 'gpt-4o')
@@ -821,19 +866,10 @@ def chat_completion_stream(client, messages, temperature=0.7, max_tokens=4096, t
         if tool_choice:
             kwargs['tool_choice'] = tool_choice
 
-        # [FIX-THINKING 2026-08-05] thinking 模型（o1 系列）需要从历史 assistant 消息中提取 reasoning_content
-        # 上游 LLM 400: "The reasoning_content in the thinking mode must be passed back to the API."
-        model_lower = model.lower()
-        is_thinking_model = any(marker in model_lower for marker in ['o1', 'o3', 'reasoning', 'think'])
-        if is_thinking_model:
-            # 从最近的 assistant 消息中提取 reasoning_content（多轮对话需回传）
-            for msg in reversed(messages):
-                if msg.get('role') == 'assistant':
-                    reasoning = msg.get('reasoning_content')
-                    if reasoning:
-                        kwargs['reasoning_content'] = reasoning
-                        logger.debug(f"thinking 模型 {model} 从历史提取 reasoning_content: {len(reasoning)} chars")
-                        break
+        # 获取当前模型的 adapter 并恢复 reasoning_content 到消息内部
+        from app.core.llm_providers import get_reasoning_adapter
+        adapter = get_reasoning_adapter(model)
+        messages = _restore_reasoning_to_messages(messages, adapter)
 
         _log_upstream_request(model, stream=True)
         stream = client.chat.completions.create(**kwargs)

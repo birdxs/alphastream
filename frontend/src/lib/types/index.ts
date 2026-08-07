@@ -378,6 +378,7 @@ export interface ChatMessage {
   message_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  reasoning_content?: string;
   artifacts?: Artifact[];
   tool_calls?: ToolCallStart[];
   created_at: string;
