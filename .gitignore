@@ -45,6 +45,7 @@ myenv2/
 **/nginx/
 **/scripts/
 **/logs/
+**/node_modules
 **/node_modules/
 
 # IDE
