@@ -1,8 +1,6 @@
 // Input  : Vitest 加载每个测试文件前执行
 // Output : 全局 jest-dom matcher、Next.js navigation/router mock、window.matchMedia mock
 // Pos    : frontend/vitest.setup.ts；由 frontend/vitest.config.ts 的 setupFiles 引用
-//
-// 一旦此文件修改，请同步更新 tests/audit/test_framework.md。
 
 import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";

@@ -1,7 +1,6 @@
 [run]
 source = app
 omit =
-    tests/*
     */__init__.py
     app/tradingagents/*
 branch = True
@@ -17,4 +16,4 @@ show_missing = True
 skip_covered = False
 
 [html]
-directory = tests/audit/evidence/coverage_html
+directory = coverage/html

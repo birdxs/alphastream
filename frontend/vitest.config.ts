@@ -1,8 +1,6 @@
 // Input  : Vitest 启动时读取该配置
-// Output : 前端单元/组件测试环境（jsdom）、覆盖率（v8）输出目录
+// Output : 前端单元/组件测试环境（jsdom）、frontend/coverage/ 覆盖率
 // Pos    : frontend/ 根目录；与 next.config.ts / tsconfig.json 同级
-//
-// 一旦此文件修改，请同步更新 tests/audit/test_framework.md。
 
 import { defineConfig } from "vitest/config";
 import path from "node:path";
@@ -14,7 +12,6 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     include: [
       "tests/**/*.{test,spec}.{ts,tsx}",
-      "../tests/frontend/**/*.{test,spec}.{ts,tsx}",
       "src/**/*.{test,spec}.{ts,tsx}",
     ],
     exclude: [
@@ -26,7 +23,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json", "lcov"],
-      reportsDirectory: "../tests/audit/evidence/frontend_coverage",
+      reportsDirectory: "coverage",
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.d.ts",
@@ -39,12 +36,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  server: {
-    fs: {
-      // 允许访问父级 tests/ 目录（W1a 落盘的 tests/frontend/** 测试位于仓库根下）
-      allow: [path.resolve(__dirname, ".."), path.resolve(__dirname, ".")],
     },
   },
 });
