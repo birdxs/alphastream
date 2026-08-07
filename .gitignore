@@ -29,12 +29,23 @@ myenv/
 myenv2/
 .env
 
-# 本地开发文档（禁止提交）
-docs/
-*.local.md
-CLAUDE.md
-TODO.md
-CHANGELOG.md
+# 本地开发文档（docs 外仅 README.md 允许跟踪）
+*.[mM][dD]
+!README.md
+!**/README.md
+
+# docs 仅保留截图与效果文件
+/docs/*
+!/docs/screenshots/
+!/docs/screenshots/**
+
+# 本地开发目录（任意层级；置于所有反忽略规则之后）
+**/skill参考/
+**/tencent-news/
+**/nginx/
+**/scripts/
+**/logs/
+**/node_modules/
 
 # IDE
 .idea/
