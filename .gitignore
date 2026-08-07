@@ -29,6 +29,13 @@ myenv/
 myenv2/
 .env
 
+# 本地开发文档（禁止提交）
+docs/
+*.local.md
+CLAUDE.md
+TODO.md
+CHANGELOG.md
+
 # IDE
 .idea/
 .vscode/
@@ -88,7 +95,6 @@ dump.rdb
 .env.production.local 
 
 # md
-CLAUDE.md
 akshare.md
 .server.pid
 
