@@ -279,7 +279,7 @@ eventSource.addEventListener('agent.tool_call', (e) => {
 
 ## 🚀 快速启动
 
-### 方式一：Docker Compose（推荐）
+### 方式一：Docker Compose 一体化启动（推荐）
 
 最快捷的启动方式，一键启动所有服务：
 
@@ -296,13 +296,17 @@ cp .env-example .env
 #   - OPENAI_API_MODEL=deepseek-chat
 
 # 3. 启动所有服务
-docker-compose up -d
+docker compose up -d
 
-# 4. 访问应用
-# 前端: http://localhost:3000
-# 后端 API: http://localhost:8888
-# Nginx: http://localhost:80
+# 4. 查看状态和日志
+docker compose ps
+docker compose logs -f
+
+# 5. 停止服务
+docker compose down
 ```
+
+访问 http://localhost:3000 即可使用。
 
 服务说明：
 - **backend**：Flask 后端 + LangGraph Agent 系统（端口 8888）
@@ -310,7 +314,42 @@ docker-compose up -d
 - **redis**：缓存服务（端口 6379）
 - **nginx**：反向代理（端口 80）
 
-### 方式二：本地开发
+### 方式二：Docker Compose 前后端分离启动
+
+`docker-compose.frontend.yml` 用于本机或单机分离部署：后端发布 `8888`、前端发布 `3000`，最后由 Nginx 发布 `80`。前端镜像始终由已跟踪的 `frontend/Dockerfile` 构建；`NEXT_PUBLIC_API_URL` 与 `NEXT_PUBLIC_SSE_URL` 留空时不会把 Docker 内部的 `backend` DNS 暴露给浏览器。
+
+```bash
+# 1. 准备配置
+cp .env-example .env
+# 编辑 .env，填写 OPENAI_API_KEY、OPENAI_API_URL 和 OPENAI_API_MODEL
+
+# 2. 依次启动基础依赖和后端、前端、Nginx
+docker compose -f docker-compose.frontend.yml up -d --build redis backend
+docker compose -f docker-compose.frontend.yml up -d --build frontend
+docker compose -f docker-compose.frontend.yml up -d nginx
+
+# 3. 查看状态与日志
+docker compose -f docker-compose.frontend.yml ps
+docker compose -f docker-compose.frontend.yml logs -f backend frontend nginx
+
+# 4. 停止并移除本组容器
+docker compose -f docker-compose.frontend.yml down
+```
+
+启动后可分别访问前端 http://localhost:3000、后端健康检查 http://localhost:8888/health，或通过 Nginx 访问 http://localhost 。如果浏览器通过其他域名或 IP 访问且需绕过 Nginx，可在启动前把 `NEXT_PUBLIC_API_URL` 与 `NEXT_PUBLIC_SSE_URL` 设置为浏览器可解析的公开后端地址。
+
+`docker-compose.prod.yml` 用于生产部署：它启用生产 Nginx、持久化 Redis、健康检查与资源限制，并要求先准备 `.env` 和 `nginx/ssl/` 证书。启动顺序与服务名相同：
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build redis backend
+docker compose -f docker-compose.prod.yml up -d --build frontend
+docker compose -f docker-compose.prod.yml up -d nginx
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f backend frontend nginx
+docker compose -f docker-compose.prod.yml down
+```
+
+### 方式三：本地开发
 
 适合开发调试，分别启动前后端：
 

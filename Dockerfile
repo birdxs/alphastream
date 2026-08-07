@@ -35,8 +35,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制应用代码
 COPY . .
 
-# 暴露端口（假设Flask应用运行在5000端口）
+# 暴露 Flask/Gunicorn 服务端口
 EXPOSE 8888
+
+# 使用 Python 标准库执行健康检查，避免依赖镜像中未安装的 curl
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8888/health', timeout=5).status == 200 else 1)"
 
 # 使用gunicorn启动应用
 CMD ["gunicorn", "--bind", "0.0.0.0:8888", "--workers", "4", "app.web.web_server:app"]

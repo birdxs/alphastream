@@ -3,8 +3,6 @@
 # Pos: K2 生产级一键启动入口 [NEW-FILE:#20260415-46]
 # 一旦我被修改, 请同步更新 docs/OPERATIONS.md 第1章 Docker生产启动
 
-version: '3.8'
-
 # ─────────────────────────────────────────────────────────────
 # K2 生产级 docker-compose (2026-04-15 14:32 +08:00)
 #
@@ -59,10 +57,12 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./third_party:/app/third_party:ro
-    expose:
-      - "8888"
+    ports:
+      # 前端 SSE 默认使用浏览器当前主机的 8888 端口，不能暴露 Docker 内部 backend DNS。
+      - "8888:8888"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       # 对齐 K3 健康检查端点 (docs/OPERATIONS.md §6 /health <100ms)
@@ -84,14 +84,16 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-      # 容器内网指向backend (Nginx场景下此变量仅用于SSR fetch)
-      - NEXT_PUBLIC_API_BASE=http://backend:8888
+      # 留空时浏览器使用部署入口同源 API；如需绕过 Nginx，设置为浏览器可解析的公开 URL。
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
+      - NEXT_PUBLIC_SSE_URL=${NEXT_PUBLIC_SSE_URL:-}
       - PORT=3000
       - HOSTNAME=0.0.0.0
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - stockanal_net
@@ -126,8 +128,10 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro  # Comdr将cert/key放入此目录
       - ./logs/nginx:/var/log/nginx
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - stockanal_net
