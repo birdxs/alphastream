@@ -52,8 +52,8 @@ jobs:
           tags: |
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-backend:${{ inputs.tag }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-backend:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend:${{ inputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal:backend-${{ inputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal:backend-latest
 
   # ──────────────────────────────────────────────
   # Frontend image: stockanal-frontend
@@ -91,8 +91,8 @@ jobs:
           tags: |
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-frontend:${{ inputs.tag }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-frontend:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend:${{ inputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal:frontend-${{ inputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal:frontend-latest
 
   # ──────────────────────────────────────────────
   # Update Docker Hub repo descriptions from README
@@ -147,18 +147,10 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Update backend repo description
+      - name: Update Docker Hub repo description
         run: |
           curl -fsSL -X PATCH \
             -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
             -H "Content-Type: application/json" \
             -d "${{ steps.desc.outputs.description }}" \
-            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend/"
-
-      - name: Update frontend repo description
-        run: |
-          curl -fsSL -X PATCH \
-            -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
-            -H "Content-Type: application/json" \
-            -d "${{ steps.desc.outputs.description }}" \
-            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend/"
+            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal/"
