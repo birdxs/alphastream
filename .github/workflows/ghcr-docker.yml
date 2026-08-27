@@ -97,53 +97,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project description from README
-        id: desc
-        run: |
-          # 取 README 标题行作为项目名称
-          TITLE=$(head -1 README.md | sed 's/^#\s*//')
-          # 取 blockquote（> 开头）或第一个非空非标记行作为简介
-          DESCRIPTION=$(awk '
-            NR<=1 { next }
-            /^>/ { gsub(/^>\s*/, ""); print; exit }
-            /^\[/ || /^!/ || /^$/ || /^#/ { next }
-            { print; exit }
-          ' README.md | sed 's/\*//g')
-
-          # 如果没取到，用项目名称兜底
-          if [ -z "$DESCRIPTION" ]; then
-            DESCRIPTION="$TITLE"
-          fi
-
-          # 按字符截断到 25 个中文字符，避免切割多字节字符
-          DESCRIPTION=$(echo "$DESCRIPTION" | LC_ALL=C.UTF-8 cut -c1-25)
-
-          # 用 jq -c 构建紧凑 JSON 对象，自动处理转义
-          echo "description=$(jq -nc --arg d "$DESCRIPTION" '{"description": $d}')" >> "$GITHUB_OUTPUT"
-
-      - name: Get Docker Hub access token
-        id: token
-        run: |
-          TOKEN=$(curl -fsSL -X POST \
-            -H "Content-Type: application/json" \
-            -d "{\"username\":\"${{ secrets.DOCKERHUB_USERNAME }}\",\"password\":\"${{ secrets.DOCKERHUB_TOKEN }}\"}" \
-            "https://hub.docker.com/v2/users/login/" | jq -r '.token')
-
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "::error::Docker Hub 登录失败，请检查 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN"
-            exit 1
-          fi
-
-          {
-            echo "token<<EOF"
-            echo "$TOKEN"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Update Docker Hub repo description
-        run: |
-          curl -fsSL -X PATCH \
-            -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
-            -H "Content-Type: application/json" \
-            -d "${{ steps.desc.outputs.description }}" \
-            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal/"
+      - name: Update DockerHub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/stockanal
+          short-description: "AI-Native 智能金融分析平台"
+          readme-filepath: ./README.md
