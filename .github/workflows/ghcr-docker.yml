@@ -115,11 +115,11 @@ jobs:
             DESCRIPTION="$TITLE"
           fi
 
-          # 用 wc -m 按字符截断，避免切割多字节中文字符
-          DESCRIPTION=$(echo "$DESCRIPTION" | head -c 80)
+          # 按字符截断到 25 个中文字符，避免切割多字节字符
+          DESCRIPTION=$(echo "$DESCRIPTION" | LC_ALL=C.UTF-8 cut -c1-25)
 
-          # 用 jq 构建合法 JSON 对象，自动处理转义
-          echo "description=$(jq -n --arg d "$DESCRIPTION" '{"description": $d}')" >> "$GITHUB_OUTPUT"
+          # 用 jq -c 构建紧凑 JSON 对象，自动处理转义
+          echo "description=$(jq -nc --arg d "$DESCRIPTION" '{"description": $d}')" >> "$GITHUB_OUTPUT"
 
       - name: Get Docker Hub access token
         id: token
