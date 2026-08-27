@@ -1,0 +1,162 @@
+name: Build & Push Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag (e.g. v1.0.0)"
+        required: true
+        type: string
+
+env:
+  GHCR_REGISTRY: ghcr.io
+  GHCR_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Backend image: stockanal-backend
+  # ──────────────────────────────────────────────
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-backend:${{ inputs.tag }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend:${{ inputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend:latest
+
+  # ──────────────────────────────────────────────
+  # Frontend image: stockanal-frontend
+  # ──────────────────────────────────────────────
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-frontend:${{ inputs.tag }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_OWNER }}/stockanal-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend:${{ inputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend:latest
+
+  # ──────────────────────────────────────────────
+  # Update Docker Hub repo descriptions from README
+  # ──────────────────────────────────────────────
+  update-dockerhub-description:
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract project description from README
+        id: desc
+        run: |
+          # 取 README 标题行作为项目名称
+          TITLE=$(head -1 README.md | sed 's/^#\s*//')
+          # 取 badges 之后、第一个空行之前的第一段文字作为简介
+          # 跳过标题行和 badge 行，取第一个非空、非 badge、非 header 行
+          DESCRIPTION=$(awk '
+            NR<=1 { next }                          # 跳过标题
+            /^>/ { print; exit }                    # 取 blockquote
+            /^\[/ || /^!/ || /^$/ || /^#/ { next }  # 跳过 badge/空行/标题
+            { print; exit }
+          ' README.md | sed 's/^>\s*//;s/^\*//;s/\*$//')
+
+          # 如果没取到，用项目名称兜底
+          if [ -z "$DESCRIPTION" ]; then
+            DESCRIPTION="$TITLE"
+          fi
+
+          # 截断到 100 字符，避免 API 拒绝
+          DESCRIPTION=$(echo "$DESCRIPTION" | cut -c1-100)
+
+          # 写入 multiline output，支持特殊字符
+          {
+            echo "description<<EOF"
+            echo "$DESCRIPTION"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Get Docker Hub access token
+        id: token
+        run: |
+          TOKEN=$(curl -fsSL -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${{ secrets.DOCKERHUB_USERNAME }}\",\"password\":\"${{ secrets.DOCKERHUB_TOKEN }}\"}" \
+            "https://hub.docker.com/v2/users/login/" | jq -r '.token')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Docker Hub 登录失败，请检查 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN"
+            exit 1
+          fi
+
+          {
+            echo "token<<EOF"
+            echo "$TOKEN"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update backend repo description
+        run: |
+          curl -fsSL -X PATCH \
+            -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"description\":\"${{ steps.desc.outputs.description }}\"}" \
+            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend/"
+
+      - name: Update frontend repo description
+        run: |
+          curl -fsSL -X PATCH \
+            -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"description\":\"${{ steps.desc.outputs.description }}\"}" \
+            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend/"
