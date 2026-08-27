@@ -11,7 +11,7 @@ on:
         description: "NEXT_PUBLIC_API_URL for frontend build"
         required: false
         type: string
-        default: ""
+        default: "http://backend:8888"
 
 env:
   GHCR_REGISTRY: ghcr.io
