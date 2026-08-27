@@ -109,29 +109,24 @@ jobs:
         run: |
           # 取 README 标题行作为项目名称
           TITLE=$(head -1 README.md | sed 's/^#\s*//')
-          # 取 badges 之后、第一个空行之前的第一段文字作为简介
-          # 跳过标题行和 badge 行，取第一个非空、非 badge、非 header 行
+          # 取 blockquote（> 开头）或第一个非空非标记行作为简介
           DESCRIPTION=$(awk '
-            NR<=1 { next }                          # 跳过标题
-            /^>/ { print; exit }                    # 取 blockquote
-            /^\[/ || /^!/ || /^$/ || /^#/ { next }  # 跳过 badge/空行/标题
+            NR<=1 { next }
+            /^>/ { gsub(/^>\s*/, ""); print; exit }
+            /^\[/ || /^!/ || /^$/ || /^#/ { next }
             { print; exit }
-          ' README.md | sed 's/^>\s*//;s/^\*//;s/\*$//')
+          ' README.md | sed 's/\*//g')
 
           # 如果没取到，用项目名称兜底
           if [ -z "$DESCRIPTION" ]; then
             DESCRIPTION="$TITLE"
           fi
 
-          # 截断到 100 字符，避免 API 拒绝
-          DESCRIPTION=$(echo "$DESCRIPTION" | cut -c1-100)
+          # 用 wc -m 按字符截断，避免切割多字节中文字符
+          DESCRIPTION=$(echo "$DESCRIPTION" | head -c 80)
 
-          # 写入 multiline output，支持特殊字符
-          {
-            echo "description<<EOF"
-            echo "$DESCRIPTION"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          # 用 jq 构建合法 JSON 对象，自动处理转义
+          echo "description=$(jq -n --arg d "$DESCRIPTION" '{"description": $d}')" >> "$GITHUB_OUTPUT"
 
       - name: Get Docker Hub access token
         id: token
@@ -157,7 +152,7 @@ jobs:
           curl -fsSL -X PATCH \
             -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
             -H "Content-Type: application/json" \
-            -d "{\"description\":\"${{ steps.desc.outputs.description }}\"}" \
+            -d "${{ steps.desc.outputs.description }}" \
             "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal-backend/"
 
       - name: Update frontend repo description
@@ -165,5 +160,5 @@ jobs:
           curl -fsSL -X PATCH \
             -H "Authorization: Bearer ${{ steps.token.outputs.token }}" \
             -H "Content-Type: application/json" \
-            -d "{\"description\":\"${{ steps.desc.outputs.description }}\"}" \
+            -d "${{ steps.desc.outputs.description }}" \
             "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/stockanal-frontend/"
