@@ -21,6 +21,7 @@ flask_swagger_ui>=4.11.1
 sqlalchemy>=1.4.0,<2.1.0
 flask-cors>=4.0.0
 flask-caching>=2.1.0
+flask-limiter>=3.5.0
 gunicorn>=22.0.0
 PyYAML==6.0.2
 scikit-learn==1.2.2
